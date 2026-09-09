@@ -288,6 +288,24 @@ export class PosthogAnalytics {
     }
   }
 
+  /**
+   * Evaluate a PostHog feature flag. The distinct id is the CLI's telemetry
+   * id, so per-user targeting won't match platform user ids — pass the
+   * platform org id via `options.groups.organization` and target flags at
+   * the organization group. Fails closed (returns `false`) on any error.
+   */
+  async isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const result = await this.client.getFeatureFlag(flag, this.distinctId, {
+        groups: options?.groups,
+      });
+      return result === true;
+    } catch {
+      return false;
+    }
+  }
+
   // Ensure PostHog client is shutdown properly
   async shutdown(timeoutMs?: number): Promise<void> {
     if (!this.client) {

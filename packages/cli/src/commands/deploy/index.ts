@@ -31,7 +31,7 @@ import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchDatabases } from '../db/platform-api.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
 import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
-import { fetchEnvironmentsPage, fetchProjects, createEnvironment } from '../env/platform-api.js';
+import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
@@ -202,6 +202,33 @@ export async function suppressWorkersManifestForInlineMode(targetDir: string): P
     // Missing file is the desired end state — nothing to do.
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
+}
+
+/**
+ * Rollout gate: evaluate the `platform-workers` PostHog flag scoped to the
+ * org (the CLI's distinct id is the telemetry id, so the flag must target
+ * the `organization` group) and suppress the workers manifest when it is
+ * off, so the overview, the prompt, and the platform's provisioning
+ * behavior all agree: background tasks run in-process in the API container,
+ * exactly as before the workers stack.
+ *
+ * Fails closed — a PostHog error or disabled telemetry (`analytics` null)
+ * suppresses the manifest. The platform re-evaluates the same flag at
+ * deploy time as belt-and-suspenders.
+ */
+export async function applyPlatformWorkersFlagGate(deps: {
+  targetDir: string;
+  orgId: string;
+  analytics: {
+    isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean>;
+  } | null;
+}): Promise<'preserved' | 'suppressed'> {
+  const flagOn = deps.analytics
+    ? await deps.analytics.isFeatureEnabled('platform-workers', { groups: { organization: deps.orgId } })
+    : false;
+  if (flagOn) return 'preserved';
+  await suppressWorkersManifestForInlineMode(deps.targetDir);
+  return 'suppressed';
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
@@ -832,10 +859,9 @@ export async function resolveProject(
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
 
-type EnvironmentResolution = { platformWorkersEnabled: boolean } & (
+type EnvironmentResolution =
   | { existing: true; environment: Environment }
-  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string }
-);
+  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string };
 
 export async function resolveEnvironment(
   token: string,
@@ -845,17 +871,13 @@ export async function resolveEnvironment(
   autoAccept: boolean,
   requestedRegion?: string,
 ): Promise<EnvironmentResolution> {
-  const page = await fetchEnvironmentsPage(token, orgId, projectId);
-  const environments = page.environments;
-  // Fail closed: platforms that predate the field don't provision worker
-  // services, so shipping a manifest to them would be a silent no-op anyway.
-  const platformWorkersEnabled = page.platformWorkersEnabled === true;
+  const environments = await fetchEnvironments(token, orgId, projectId);
 
   // Try to find by name (case-insensitive)
   const existing = environments.find(env => env.name.toLowerCase() === envName.toLowerCase());
 
   if (existing) {
-    return { existing: true, environment: existing, platformWorkersEnabled };
+    return { existing: true, environment: existing };
   }
 
   // Environment doesn't exist - determine type and prepare to create
@@ -896,7 +918,7 @@ export async function resolveEnvironment(
     region = selectedRegion;
   }
 
-  return { existing: false, name: envName, type: envType, platformWorkersEnabled, ...(region ? { region } : {}) };
+  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1508,18 +1530,15 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   let workersConfig = await readWorkersConfig(targetDir);
   let workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
 
-  // Rollout gate: the platform evaluated the `platform-workers` flag for
-  // this user (fetched with the environment list). Flag off → don't ship
-  // the manifest at all, so the overview, the prompt, and the platform's
-  // provisioning behavior all agree: background tasks run in-process in
-  // the API container, exactly as before the workers stack.
-  if (workersEnabled && !envResolution.platformWorkersEnabled) {
-    await suppressWorkersManifestForInlineMode(targetDir);
-    p.log.warn(
-      'Background workers are not enabled for this account — the workers manifest will not be shipped and background tasks will run inside the API server container.',
-    );
-    workersConfig = await readWorkersConfig(targetDir);
-    workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  if (workersEnabled) {
+    const gate = await applyPlatformWorkersFlagGate({ targetDir, orgId, analytics: getAnalytics() });
+    if (gate === 'suppressed') {
+      p.log.warn(
+        'Background workers are not enabled for this account — the workers manifest will not be shipped and background tasks will run inside the API server container.',
+      );
+      workersConfig = await readWorkersConfig(targetDir);
+      workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+    }
   }
 
   const workersMode = await resolveWorkersDeployMode({

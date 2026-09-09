@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectDatabase } from '../db/platform-api.js';
 
-const { confirmMock, fetchEnvironmentsPageMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
+const { confirmMock, fetchEnvironmentsMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
-  fetchEnvironmentsPageMock: vi.fn(),
+  fetchEnvironmentsMock: vi.fn(),
   fetchProjectsMock: vi.fn(),
   selectMock: vi.fn(),
 }));
@@ -21,12 +21,13 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 vi.mock('../env/platform-api.js', () => ({
-  fetchEnvironmentsPage: fetchEnvironmentsPageMock,
+  fetchEnvironments: fetchEnvironmentsMock,
   fetchProjects: fetchProjectsMock,
   createEnvironment: vi.fn(),
 }));
 
 import {
+  applyPlatformWorkersFlagGate,
   deployBuildNeedsRefresh,
   hasEnabledWorkers,
   renderDeploymentArchitecture,
@@ -77,7 +78,7 @@ describe('project resolution', () => {
 describe('environment resolution', () => {
   beforeEach(() => {
     confirmMock.mockReset().mockResolvedValue(true);
-    fetchEnvironmentsPageMock.mockReset().mockResolvedValue({ environments: [] });
+    fetchEnvironmentsMock.mockReset().mockResolvedValue([]);
     selectMock.mockReset().mockResolvedValue('eu');
   });
 
@@ -87,7 +88,6 @@ describe('environment resolution', () => {
       name: 'preview',
       type: 'preview',
       region: 'eu',
-      platformWorkersEnabled: false,
     });
 
     expect(selectMock).toHaveBeenCalledWith({
@@ -106,7 +106,6 @@ describe('environment resolution', () => {
       name: 'production',
       type: 'production',
       region: 'eu',
-      platformWorkersEnabled: false,
     });
 
     expect(selectMock).not.toHaveBeenCalled();
@@ -117,32 +116,9 @@ describe('environment resolution', () => {
       existing: false,
       name: 'production',
       type: 'production',
-      platformWorkersEnabled: false,
     });
 
     expect(selectMock).not.toHaveBeenCalled();
-  });
-
-  it('surfaces the platform-evaluated workers flag on an existing environment', async () => {
-    const environment = { id: 'env-1', name: 'production' };
-    fetchEnvironmentsPageMock.mockResolvedValue({ environments: [environment], platformWorkersEnabled: true });
-
-    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true)).resolves.toEqual({
-      existing: true,
-      environment,
-      platformWorkersEnabled: true,
-    });
-  });
-
-  it('fails closed when the platform omits the workers flag (older platform)', async () => {
-    const environment = { id: 'env-1', name: 'production' };
-    fetchEnvironmentsPageMock.mockResolvedValue({ environments: [environment] });
-
-    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true)).resolves.toEqual({
-      existing: true,
-      environment,
-      platformWorkersEnabled: false,
-    });
   });
 });
 
@@ -394,6 +370,63 @@ describe('deploy artifact', () => {
       expect(diagram).toContain(colors.green(boxTop));
     },
   );
+});
+
+describe('applyPlatformWorkersFlagGate', () => {
+  let projectDir: string;
+  let manifestPath: string;
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'mastra-workers-gate-test-'));
+    const outputDir = join(projectDir, '.mastra', 'output');
+    mkdirSync(outputDir, { recursive: true });
+    manifestPath = join(outputDir, 'workers.json');
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      }),
+    );
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it('preserves the manifest when the flag is on, evaluated against the organization group', async () => {
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(true) };
+
+    await expect(applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics })).resolves.toBe(
+      'preserved',
+    );
+
+    expect(analytics.isFeatureEnabled).toHaveBeenCalledWith('platform-workers', {
+      groups: { organization: 'org-1' },
+    });
+    expect(readFileSync(manifestPath, 'utf-8')).toContain('orchestration');
+  });
+
+  it('suppresses the manifest when the flag is off', async () => {
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+
+    await expect(applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics })).resolves.toBe(
+      'suppressed',
+    );
+
+    expect(() => readFileSync(manifestPath, 'utf-8')).toThrow();
+  });
+
+  it('fails closed when telemetry is disabled (analytics null)', async () => {
+    await expect(
+      applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics: null }),
+    ).resolves.toBe('suppressed');
+
+    expect(() => readFileSync(manifestPath, 'utf-8')).toThrow();
+  });
 });
 
 describe('resolveWorkersDeployMode', () => {
