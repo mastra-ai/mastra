@@ -383,9 +383,15 @@ describe('Subconscious remind', () => {
     }
   });
 
-  it.each([undefined, 'OLDER_VISIBLE_FACT'])(
-    'shows recent messages and active observations (%s) to the reminder agent',
-    async activeObservations => {
+  it.each([
+    // No accumulated memory at all, accumulated memory that mentions the candidate, and accumulated
+    // memory that does not. Only the middle case can produce an excerpt.
+    [undefined, false],
+    ['The user already knows the moon has no weather worth planning around.', true],
+    ['OLDER_VISIBLE_FACT', false],
+  ])(
+    'projects what the parent already knows about the candidates (%s) for the reminder agent',
+    async (activeObservations, expectActiveExcerpt) => {
       const extractor = new SubconsciousRemindExtractor({
         name: 'remind',
         maxSteps: 3,
@@ -420,8 +426,15 @@ describe('Subconscious remind', () => {
 
       expect(prompts[0]).toContain('user: what is the weather like on the moon?');
       expect(prompts[0]).toContain('already visible');
-      expect(prompts[0]).toContain('Accumulated active observations already visible to the parent agent:');
-      expect(prompts[0]).toContain(activeObservations ?? '(none)');
+      expect(prompts[0]).toContain("What the parent's accumulated observations already say about these candidates:");
+      if (expectActiveExcerpt) {
+        expect(prompts[0]).toContain('no weather worth planning around');
+      } else {
+        // Unrelated or absent accumulated memory is reported as such, and is never carried wholesale
+        // into the prompt just because it exists.
+        expect(prompts[0]).toMatch(/no accumulated observations?[^\n]*(available|references it)/i);
+        expect(prompts[0]).not.toContain('OLDER_VISIBLE_FACT');
+      }
       expect(prompts[0]).toContain('Newly extracted observations:');
       expect(prompts[0]).toContain('compare each proposed fact against ALL supplied parent context');
       expect(prompts[0]).toContain('A different source ID or another conversation');

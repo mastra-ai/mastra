@@ -5,6 +5,7 @@ import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
+import { extractDistinctiveTerms, projectCandidateContext } from './candidate-context';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
@@ -32,40 +33,12 @@ function resolveScope(context: {
   return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`]);
 }
 
-const REMINDER_QUERY_STOP_WORDS = new Set([
-  'about',
-  'after',
-  'before',
-  'current',
-  'from',
-  'have',
-  'observations',
-  'that',
-  'their',
-  'there',
-  'they',
-  'this',
-  'user',
-  'what',
-  'when',
-  'where',
-  'which',
-  'with',
-]);
-
 async function findReminderSources(
   store: KnowledgeStorage,
   scope: KnowledgeScope,
   observations: string,
 ): Promise<SearchKnowledgeResult[]> {
-  const terms = [
-    ...new Set(
-      observations
-        .match(/[A-Za-z0-9][A-Za-z0-9_-]{3,}/g)
-        ?.map(term => term.toLowerCase())
-        .filter(term => !REMINDER_QUERY_STOP_WORDS.has(term)) ?? [],
-    ),
-  ].slice(0, 12);
+  const terms = [...extractDistinctiveTerms(observations)].slice(0, 12);
   const results = (await Promise.all(terms.map(query => store.search({ query, scope, limit: 5 })))).flat();
   return [...new Map(results.map(result => [`${result.type}:${result.id}`, result])).values()].slice(0, 10);
 }
@@ -144,7 +117,10 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             ),
           ];
           const recentMessages = context.recentMessages?.trim() || '(none)';
-          const activeObservations = context.activeObservations?.trim() || '(none)';
+          const candidateContext = projectCandidateContext({
+            activeObservations: context.activeObservations ?? '',
+            sources,
+          });
           const replyTool = context.mainAgent
             ? createReplyToMemoryQuestionTool({
                 memory: remindMemory,
@@ -168,7 +144,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           });
           const delivery = agent.sendMessage(
             {
-              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nNewly extracted observations:\n${context.rawObservations}\n\nAccumulated active observations already visible to the parent agent:\n${activeObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
+              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nNewly extracted observations:\n${context.rawObservations}\n\nWhat the parent's accumulated observations already say about these candidates:\n${candidateContext}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
               metadata: {
                 [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds },
               },
