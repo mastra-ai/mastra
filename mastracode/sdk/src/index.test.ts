@@ -1,3 +1,4 @@
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // Captures the createSession() args so tests can assert on wiring (e.g.
@@ -197,7 +198,7 @@ vi.mock('./utils/project.js', () => ({
 }));
 
 vi.mock('./utils/storage-factory.js', () => ({
-  createStorage: vi.fn(() => ({ storage: {}, backend: 'memory' })),
+  createStorage: vi.fn(() => ({ storage: new InMemoryStore({ id: 'startup-test' }), backend: 'memory' })),
   createVectorStore: vi.fn(() => ({})),
 }));
 
@@ -220,7 +221,7 @@ describe('createMastraCode startup performance', () => {
         }),
     );
     vi.mocked(createStorage).mockReturnValue({
-      storage: {},
+      storage: new InMemoryStore({ id: 'startup-test' }),
       backend: 'memory',
       warning: 'Storage fallback warning',
     } as never);
