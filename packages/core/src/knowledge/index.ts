@@ -394,6 +394,7 @@ export class Knowledge extends MastraBase {
 
   async setRecordScopes(input: {
     id: string;
+    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
