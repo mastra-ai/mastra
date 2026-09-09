@@ -32,7 +32,9 @@ export const useExperimentMetrics = ({ experimentId, experimentStatus }: UseExpe
     enabled: isEnabled,
     refetchInterval: isActive ? 2000 : false,
     queryFn: async (): Promise<ExperimentMetrics> => {
-      const filters = { experimentId: experimentId! };
+      // `enabled` already guards this; the check exists to narrow the type.
+      if (!experimentId) throw new Error('experimentId is required');
+      const filters = { experimentId };
 
       const [tokens, avgDuration, runs] = await Promise.all([
         client.getMetricAggregate({

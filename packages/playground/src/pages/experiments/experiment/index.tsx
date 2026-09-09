@@ -75,30 +75,23 @@ function ExperimentPage() {
     );
   }
 
-  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
-  // experimentId isn't present in the full experiments listing (so we can't
-  // resolve a datasetId for it).
-  if (
-    (experimentError && is404NotFoundError(experimentError)) ||
-    (!experimentsListLoading && !datasetId) ||
-    (!experimentLoading && !experimentError && !experiment)
-  ) {
-    return (
-      <ExperimentPageShell>
-        <EmptyState
-          iconSlot={<PlayCircle />}
-          titleSlot="Experiment not found"
-          descriptionSlot={`No experiment with id "${experimentId}".`}
-          actionSlot={
-            <Button as={Link} to="/experiments">
-              <ArrowLeft />
-              Back to Experiments
-            </Button>
-          }
-        />
-      </ExperimentPageShell>
-    );
-  }
+  const notFound = (
+    <ExperimentPageShell>
+      <EmptyState
+        iconSlot={<PlayCircle />}
+        titleSlot="Experiment not found"
+        descriptionSlot={`No experiment with id "${experimentId}".`}
+        actionSlot={
+          <Button as={Link} to="/experiments">
+            <ArrowLeft />
+            Back to Experiments
+          </Button>
+        }
+      />
+    </ExperimentPageShell>
+  );
+
+  if (experimentError && is404NotFoundError(experimentError)) return notFound;
 
   if (experimentError) {
     return (
@@ -115,11 +108,15 @@ function ExperimentPage() {
     );
   }
 
+  // Not found: the experimentId isn't present in the full experiments listing
+  // (so we can't resolve a datasetId for it), or the fetch resolved empty.
+  if (!datasetId || !experiment) return notFound;
+
   return (
     <ExperimentItemPanelProvider
       experimentId={experimentId}
       datasetId={datasetId}
-      experimentStatus={experiment!.status}
+      experimentStatus={experiment.status}
       results={results ?? []}
       isLoadingResults={resultsLoading}
       hasNextPage={hasNextPage}
@@ -127,7 +124,7 @@ function ExperimentPage() {
       <div className="h-full">
         <PageLayout height="full">
           <ExperimentTopArea
-            experiment={experiment!}
+            experiment={experiment}
             metrics={experimentMetrics}
             onDeleteClick={() => setDeleteDialogOpen(true)}
           />
@@ -136,7 +133,7 @@ function ExperimentPage() {
             <ExperimentResultsSection
               experimentId={experimentId}
               datasetId={datasetId}
-              experimentStatus={experiment!.status}
+              experimentStatus={experiment.status}
               results={results ?? []}
               isLoading={resultsLoading}
               setEndOfListElement={setEndOfListElement}
@@ -153,7 +150,7 @@ function ExperimentPage() {
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           experimentId={experimentId}
-          experimentName={experiment!.name ?? undefined}
+          experimentName={experiment.name ?? undefined}
           onSuccess={() => navigate('/experiments')}
         />
       </div>
