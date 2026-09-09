@@ -902,6 +902,47 @@ name: Tyler
       expect(status.record?.bufferedObservationChunks?.[0]?.observations).toContain('buffered and rewritten');
     });
 
+    it('advances resource-scoped cursors when every thread is filtered to an empty replacement array', async () => {
+      const resourceId = 'filtered-resource';
+      const ids = [threadId, `${threadId}-filtered`];
+      const messages = ids.flatMap(id => createBulkMessages(10, id).map(message => ({ ...message, resourceId })));
+      for (const id of ids) {
+        await storage.saveThread({
+          thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        });
+      }
+      await storage.saveMessages({ messages });
+      const beforeObservation = vi.fn(() => ({ messages: [] }));
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const resourceOm = createOM(storage, {
+        scope: 'resource',
+        messageTokens: 600,
+        observerModel,
+        hooks: { beforeObservation },
+      });
+      const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      await storage.setPendingMessageTokens(record.id, 600);
+      const result = await resourceOm.observe({
+        threadId,
+        resourceId,
+        messages: messages.filter(m => m.threadId === threadId),
+      });
+      expect(result.observed).toBe(true);
+      expect(beforeObservation).toHaveBeenCalledTimes(2);
+      expect(prompts()).toBe('[]');
+      expect(result.record.observedMessageIds).toEqual(expect.arrayContaining(messages.map(message => message.id)));
+      for (const id of ids) {
+        const thread = await storage.getThreadById({ threadId: id });
+        const lastMessage = messages.filter(message => message.threadId === id).at(-1)!;
+        expect(getThreadOMMetadata(thread?.metadata)?.lastObservedAt).toBe(lastMessage.createdAt.toISOString());
+      }
+      beforeObservation.mockClear();
+      const next = await resourceOm.observe({ threadId, resourceId });
+      expect(next.observed).toBe(false);
+      expect(beforeObservation).not.toHaveBeenCalled();
+    });
+
     it('fires transform hooks per thread on the resource-scoped multi-thread path', async () => {
       const resourceId = 'res-transform';
       const otherThreadId = `${threadId}-other`;
