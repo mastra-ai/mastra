@@ -1,4 +1,4 @@
-import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
+import type { AnyExportedSpan, TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +39,30 @@ describe('Tracing', () => {
 
   describe('Sensitive Data Filtering', () => {
     describe('SensitiveDataFilter Processor', () => {
+      it('redacts exported spans', () => {
+        const span: AnyExportedSpan = {
+          id: 'exported-span',
+          traceId: 'exported-trace',
+          name: 'exported span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          isEvent: false,
+          isRootSpan: true,
+          metadata: {
+            password: 'secret123',
+            visible: 'value',
+          },
+        };
+
+        const filtered = new SensitiveDataFilter().process(span);
+
+        expect(filtered).toBe(span);
+        expect(filtered.metadata).toEqual({
+          password: '[REDACTED]',
+          visible: 'value',
+        });
+      });
+
       describe('JSON candidates', () => {
         const markers = [
           '[MaxDepth]',
