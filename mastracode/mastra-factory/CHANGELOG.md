@@ -1,5 +1,27 @@
 # create-factory
 
+## 0.1.16-alpha.13
+
+### Patch Changes
+
+- Fixed local Factory setup to provision the production environment and write `MASTRA_ENVIRONMENT_ID` to `.env`, enabling PlatformSandbox without deploying the app. ([#23361](https://github.com/mastra-ai/mastra/pull/23361))
+
+  Added a template override to run sandbox commands locally while keeping cloud credentials configured:
+
+  ```dotenv
+  FACTORY_SANDBOX_PROVIDER=local
+  ```
+
+- Updated dependencies:
+  - mastra@1.28.0-alpha.13
+
+## 0.1.16-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`beecbfa`](https://github.com/mastra-ai/mastra/commit/beecbfa9c37bb60fd51973f0b6c4197898ac7365), [`4ccafcd`](https://github.com/mastra-ai/mastra/commit/4ccafcd6de94a7441ce97dd187a05c53d08a368d), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`ad4f1ce`](https://github.com/mastra-ai/mastra/commit/ad4f1ce80e19c385d5d7541e26cd7df6fa6075f5)]:
+  - mastra@1.28.0-alpha.12
+
 ## 0.1.16-alpha.11
 
 ### Patch Changes

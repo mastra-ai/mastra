@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 365 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 367 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -138,8 +138,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 2.5,
-    "outputCost": 14
+    "inputCost": 2.55,
+    "outputCost": 12.75
   },
   {
     "model": "kilo/~openai/gpt-latest",
@@ -185,9 +185,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.07125,
-    "outputCost": 0.2375
+    "maxOutput": 943718,
+    "inputCost": 0.075,
+    "outputCost": 0.25
   },
   {
     "model": "kilo/~z-ai/glm-latest",
@@ -1258,7 +1258,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.75
   },
   {
-    "model": "kilo/inception/mercury-2.5-preview",
+    "model": "kilo/inception/mercury-2.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1985,7 +1985,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 235929,
+    "maxOutput": 100352,
     "inputCost": 0.6,
     "outputCost": 2.5
   },
@@ -2060,6 +2060,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.9,
     "outputCost": 1.9
+  },
+  {
+    "model": "kilo/nex-agi/nex-n2.5-mini:free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kilo/nex-agi/nex-n2.5-pro:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kilo/nousresearch/hermes-3-llama-3.1-405b",

@@ -1,5 +1,14 @@
 # @mastra/platform
 
+## 1.6.0-alpha.2
+
+### Patch Changes
+
+- Fixed workspace providers to support `MASTRA_PLATFORM_SECRET_KEY` for local development while preserving precedence for explicit `accessToken` options and `MASTRA_PLATFORM_ACCESS_TOKEN`. ([#23361](https://github.com/mastra-ai/mastra/pull/23361))
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+
 ## 1.6.0-alpha.1
 
 ### Minor Changes

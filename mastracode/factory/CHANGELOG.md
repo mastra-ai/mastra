@@ -1,5 +1,59 @@
 # @mastra/factory
 
+## 0.13.0-alpha.18
+
+### Patch Changes
+
+- Fixed the sign-in callback redirecting straight back to the identity provider in a loop when it denies access (for example access_denied for an account that is not part of the organization). The denial now lands on the sign-in page with the error shown. ([#21188](https://github.com/mastra-ai/mastra/pull/21188))
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+  - @mastra/code-sdk@1.7.0-alpha.15
+
+## 0.13.0-alpha.17
+
+### Minor Changes
+
+- Added authenticated Factory web usage telemetry with account, project, deployment, and region attribution. Set `MASTRA_TELEMETRY_DISABLED=true` on the Factory Server to opt out. ([#23348](https://github.com/mastra-ai/mastra/pull/23348))
+
+- Added end-to-end execution for installed custom boards. Lifecycle and tool-result decisions can target custom phases, linked items use the target board’s initial phase, and bound tools retain live authorization and revision checks. ([#23357](https://github.com/mastra-ai/mastra/pull/23357))
+
+  Previously, installing a custom board did not enable decisions and tools to target its custom phases. Existing board configuration now runs through the shared Code Agent without a separate per-role agent API:
+
+  ```typescript
+  import { MastraFactory } from '@mastra/factory';
+  import type { MastraFactoryConfig } from '@mastra/factory';
+  import { defineBoard } from '@mastra/factory/boards';
+  import type { BoardPhaseDefinition } from '@mastra/factory/boards';
+
+  type ReleasePhase = 'queued' | 'shipped';
+  const board = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefinition<ReleasePhase>>>({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+      shipped: { title: 'Shipped', kind: 'terminal' },
+    },
+  });
+
+  export function createFactory(config: MastraFactoryConfig) {
+    return new MastraFactory({ ...config, boards: [board] });
+  }
+  ```
+
+  Custom boards do not inherit Work policy. Built-in board customization, the built-in UI pipeline, and completion metrics are unchanged.
+
+### Patch Changes
+
+- Stop rejecting `factory_transition_work_item` calls from non-triage agents that include a `triageType` key. Sessions are shared across role rotations, so a work or plan agent can copy the triage agent's earlier call shape from history; the strict schema then failed the whole transition with `Unrecognized key: "triageType"`. The key is now accepted and ignored for non-triage bindings; triage bindings still require it, and only they can forward a classification. ([#23278](https://github.com/mastra-ai/mastra/pull/23278))
+
+- Fixed Factory API transition validation to accept custom board and phase identifiers while retaining installed-board policy checks. ([#23357](https://github.com/mastra-ai/mastra/pull/23357))
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/code-sdk@1.7.0-alpha.14
+
 ## 0.13.0-alpha.16
 
 ### Patch Changes

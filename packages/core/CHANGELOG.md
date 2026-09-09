@@ -1,5 +1,42 @@
 # @mastra/core
 
+## 1.65.0-alpha.12
+
+### Patch Changes
+
+- Added Perplexity integration attribution while preserving custom headers. ([#22498](https://github.com/mastra-ai/mastra/pull/22498))
+
+## 1.65.0-alpha.11
+
+### Minor Changes
+
+- `dataset.deleteExperiment()` now also deletes the observability traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs. Experiment traces are excluded from normal trace reads, so leaving them behind kept data that was invisible but still retained. ([#22550](https://github.com/mastra-ai/mastra/pull/22550))
+
+  `mastra.datasets.deleteExperiment()` is new and does the same thing without requiring the experiment to still belong to a dataset, so experiments orphaned by dataset deletion can be cleaned up.
+
+  ```ts
+  // Both delete the experiment, its results, and its traces.
+  await dataset.deleteExperiment({ experimentId });
+  await mastra.datasets.deleteExperiment({ experimentId });
+  ```
+
+  Stores without an observability domain (or without tenant-scoped trace deletion) log a warning and skip the trace cascade so the experiment is still deleted.
+
+### Patch Changes
+
+- Fixed failed dataset experiment agent runs to retain their trace links. ([#22948](https://github.com/mastra-ai/mastra/pull/22948))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Fixed `CompositeAuth` resource mapping validation to reject invalid IDs from the authenticating provider while preserving providers without a mapper, including nested composites. ([#21722](https://github.com/mastra-ai/mastra/pull/21722))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
 ## 1.65.0-alpha.10
 
 ### Patch Changes
