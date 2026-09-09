@@ -1,16 +1,21 @@
 /**
  * React Query hooks for the knowledge graph page.
  *
- * The graph query keys on `(factoryProjectId, threadId)` so the default
+ * The graph query keys on `(factoryProjectId, threadId, knowledgeKey)` so the default
  * project view and each thread drill-down view are distinct cache entries —
  * switching views swaps payloads wholesale instead of mutating one entry.
  */
 
 import { skipToken, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchKnowledgeNode, fetchKnowledgeGraph } from '../ui/domains/factory/services/knowledge';
+import {
+  fetchKnowledgeActivity,
+  fetchKnowledgeNode,
+  fetchKnowledgeGraph,
+} from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -31,11 +36,13 @@ export function useKnowledgeGraph(
   options?: { paused?: boolean },
 ) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   const paused = options?.paused ?? false;
   return useQuery({
-    queryKey: queryKeys.knowledgeGraph(factoryProjectId, threadId),
+    queryKey: [...queryKeys.knowledgeGraph(factoryProjectId, threadId), knowledgeKey],
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, threadId, signal)
+      ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
       : skipToken,
     // Live: same 5s cadence as the board (useWorkItems precedent).
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
@@ -44,13 +51,28 @@ export function useKnowledgeGraph(
   });
 }
 
+export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
+  return useQuery({
+    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, threadId), knowledgeKey],
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
+      : skipToken,
+    refetchInterval: 5_000,
+  });
+}
+
 export function useKnowledgeNode(factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) {
   const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId),
+    queryKey: [...queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId), knowledgeKey],
     queryFn:
       factoryProjectId && nodeId
-        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, threadId, signal)
+        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, threadId, signal, knowledgeKey)
         : skipToken,
   });
 }
