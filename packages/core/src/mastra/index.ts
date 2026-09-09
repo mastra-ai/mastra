@@ -602,14 +602,8 @@ export interface Config<
    * - `MastraWorker[]`: Additional workers merged with the auto-created
    *   defaults. A custom worker replaces a default with the same `name`;
    *   duplicate names within the array throw. Use `false` to run no workers.
-   * - `'inline'`: Same runtime behavior as `undefined`, but declares that
-   *   workers must run inside this process. The deployer omits the
-   *   `workers.json` manifest, so managed deploys never provision a separate
-   *   worker service (and never prompt about one).
-   * - `{ mode: 'inline', workers?: MastraWorker[] }`: Like `'inline'`, with
-   *   custom workers merged into the defaults as with the array form.
    */
-  workers?: MastraWorker[] | false | 'inline' | { mode: 'inline'; workers?: MastraWorker[] };
+  workers?: MastraWorker[] | false;
 
   /**
    * Boot-time recovery behavior for orphaned agent/workflow runs.
@@ -1451,22 +1445,11 @@ export class Mastra<
     //     explicit `name` argument. Construction still creates all workers so
     //     a later explicit `startWorkers('foo')` still works.
     const rawWorkersEnv = process.env.MASTRA_WORKERS;
-    // Normalize the inline forms up front: `'inline'` and
-    // `{ mode: 'inline', workers }` are build/deploy-time declarations (they
-    // suppress the workers.json manifest); at runtime they behave like
-    // `undefined` / the plain array form.
-    const configuredWorkers = config?.workers;
-    const normalizedWorkers =
-      configuredWorkers === 'inline'
-        ? undefined
-        : typeof configuredWorkers === 'object' && configuredWorkers !== null && !Array.isArray(configuredWorkers)
-          ? configuredWorkers.workers
-          : configuredWorkers;
     let workersOption: MastraWorker[] | false | undefined;
     if (rawWorkersEnv === 'false') {
       workersOption = false;
     } else {
-      workersOption = normalizedWorkers;
+      workersOption = config?.workers;
       if (rawWorkersEnv && rawWorkersEnv !== 'false') {
         const names = rawWorkersEnv
           .split(',')
