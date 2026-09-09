@@ -20,7 +20,15 @@ describe.each(['memory', 'response'] as const)('tool mutation ordering from %s',
       { name: 'past message', created: 1000, edit: 2000, next: 2000, expected: 2001 },
       { name: 'future message', created: 3000, edit: 2000, next: 2000, expected: 3001 },
       { name: 'clock moves backward after edit', created: 1000, edit: 2000, next: 1500, expected: 2001 },
-    ])('preserves ordering with $name', ({ created, edit, next, expected }) => {
+      {
+        name: 'timestamp changed through the public getter',
+        created: 1000,
+        updatedCreatedAt: 3000,
+        edit: 2000,
+        next: 2000,
+        expected: 3001,
+      },
+    ])('preserves ordering with $name', ({ created, edit, next, expected, updatedCreatedAt }) => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(1000);
       const message: MastraDBMessage = {
@@ -40,11 +48,14 @@ describe.each(['memory', 'response'] as const)('tool mutation ordering from %s',
       };
       const list = new MessageList().add(message, source);
       list.drainUnsavedMessages();
+      if (updatedCreatedAt !== undefined) {
+        list.get.all.db()[0]!.createdAt.setTime(updatedCreatedAt);
+      }
       vi.setSystemTime(edit);
       expect(mutate(list)).toBe(true);
       const saved = list.drainUnsavedMessages();
       expect(saved.map(m => m.id)).toEqual(['assistant-1']);
-      expect(saved[0]?.createdAt.getTime()).toBe(created);
+      expect(saved[0]?.createdAt.getTime()).toBe(updatedCreatedAt ?? created);
 
       vi.setSystemTime(next);
       list.add({ role: 'user', content: 'next' }, 'input');
