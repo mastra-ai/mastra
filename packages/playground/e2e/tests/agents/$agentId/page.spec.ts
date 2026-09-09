@@ -16,7 +16,10 @@ test.describe('Agent detail page', () => {
       const newChatButton = page.locator('a:has-text("New Chat")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
-      await expect(page.getByTestId('thread-list')).toBeAttached();
+      // Thread history: either stored threads or the empty state on a fresh database
+      await expect(
+        page.getByTestId('thread-list').or(page.getByText('Your conversations will appear here')),
+      ).toBeAttached();
 
       // The chat page lives under the agent tabs; Chat is selected and Overview leads to settings details
       await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
