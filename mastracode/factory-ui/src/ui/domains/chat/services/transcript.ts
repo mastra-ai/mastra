@@ -1,11 +1,11 @@
-import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 
-import type { OMBudgets } from './runtime';
 import { sentByOther } from './message-author';
+import type { OMBudgets } from './runtime';
 
 /**
  * Transcript model + reducer.
@@ -506,7 +506,6 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
           followUpCount: ds.queuedFollowUps ?? state.followUpCount,
         },
         ds,
-        viewerId,
       );
     }
 
@@ -636,10 +635,13 @@ function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[
  * runs both ways: load-more delivers older history, revalidation after a route
  * revisit delivers everything the run produced meanwhile.
  */
-function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+function mergeServerWindow(
+  state: TranscriptState,
+  messages: MastraDBMessage[],
+  onScreenIndex = claimOnScreenEntries(state.entries, messages),
+): TranscriptState {
   if (messages.length === 0) return state;
 
-  const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
   const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
 
@@ -682,7 +684,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 function claimOnScreenEntries(
   entries: TimelineEntry[],
   messages: MastraDBMessage[],
-  eligible?: (entry: MessageEntry) => boolean,
+  canMatchText?: (entry: MessageEntry) => boolean,
 ): Map<MastraDBMessage, number> {
   const onScreen = entries.map(indexMessageEntry);
   const anchors = new Map<MastraDBMessage, number>();
@@ -696,12 +698,13 @@ function claimOnScreenEntries(
     const textClaim = (index: number) => `${index} ${texts.join('\n')}`;
 
     for (const [index, candidate] of onScreen.entries()) {
-      if (!candidate || (eligible && !eligible(candidate.entry))) continue;
+      if (!candidate) continue;
       const sameMessage =
         candidate.entry.id === message.id ||
         candidate.entry.message.id === message.id ||
         toolCallIds.some(toolCallId => candidate.toolCallIds.has(toolCallId));
-      const alreadyDrawn = redrawsEntry(candidate, displayed, texts, toolCallIds);
+      const alreadyDrawn =
+        (!canMatchText || canMatchText(candidate.entry)) && redrawsEntry(candidate, displayed, texts, toolCallIds);
 
       const claimsIdentity = sameMessage && !claimedEntries.has(index);
       const claimsText = alreadyDrawn && !claimedTexts.has(textClaim(index));
@@ -721,11 +724,15 @@ function isUnconfirmedSteer(entry: MessageEntry): boolean {
   return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
 }
 
+function isUnconfirmedUserMessage(entry: MessageEntry): boolean {
+  return isUnconfirmedSteer(entry) || (entry.message.role === 'user' && entry.message.id.startsWith('local-'));
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    if (current?.kind !== 'message' || !isUnconfirmedUserMessage(current)) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
@@ -901,23 +908,6 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   return changed ? { ...state, entries } : state;
 }
 
-/**
- * A user signal reaches us in two shapes. The persisted message carries ordinary
- * `text` parts, but the live `data-user-message` event carries the signal payload
- * as a single data part and keeps the text inside `data.contents`. Only the first
- * shape has a part the transcript knows how to draw, so a message that arrived
- * from a channel rendered as an empty row until the thread was refetched.
- *
- * Project the data part onto the persisted shape so both paths render the same
- * row — and so the live row does not visibly change when history catches up.
- *
- * Applied to signals the viewer did not type here (see `sentByOther`). A message
- * sent from the web composer is already on screen as an optimistic local echo
- * under a `local-…` id, while this event carries the signal's own id — two ids
- * mean `upsertMessage` cannot dedupe them, so drawing both yields a duplicate
- * bubble. Leaving composer-origin events unrenderable keeps the local echo the
- * single bubble until history replaces it.
- */
 function withRenderableSignalText(message: MastraDBMessage): MastraDBMessage {
   const parts = message.content.parts ?? [];
   const hasDrawableText = parts.some(part => part.type === 'text' && part.text.trim().length > 0);
@@ -970,8 +960,7 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const normalized =
-    isUserSignal && sentByOther(message, options.viewerId) ? withRenderableSignalText(message) : message;
+  const normalized = isUserSignal ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
   const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
@@ -1015,7 +1004,7 @@ function upsertMessage(
   );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
-    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    idx = claimOnScreenEntries(entries, [message], isUnconfirmedUserMessage).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -1257,37 +1246,34 @@ function dropPromptsFor(state: TranscriptState, toolCallId: string): TranscriptS
 
 type DisplayStateSnapshot = Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState'];
 
-/**
- * Fold the controller's display state into the transcript. The bus only forwards
- * future events, so this snapshot (sent as the first SSE frame, and again on every
- * live change) is how a late joiner learns about the in-flight tool, the partial
- * assistant text and the prompt the run is parked on.
- *
- * Non-regressive: it may arrive after live events already landed, or after a
- * reconnect. Anything already on screen wins — a `done` tool never goes back to
- * `running`, and a streaming message is never overwritten by an older copy.
- */
-function seedFromDisplayState(
-  state: TranscriptState,
-  ds: DisplayStateSnapshot,
-  viewerId?: string,
-): TranscriptState {
-  let next = state;
-
-  const current = ds.currentMessage;
-  if (current && current.role === 'assistant') {
-    const drawn = next.entries.some(
-      e => e.kind === 'message' && (e.id === current.id || e.message.id === current.id),
-    );
-    if (!drawn) {
-      next = upsertMessage(
-        next,
-        { ...current, createdAt: new Date(current.createdAt) } as MastraDBMessage,
-        true,
-        viewerId,
-      );
-    }
+function restoreSnapshotMessages(state: TranscriptState, ds: DisplayStateSnapshot): TranscriptState {
+  const messages = ds.messages ?? (ds.currentMessage ? [{ message: ds.currentMessage, streaming: ds.isRunning }] : []);
+  const snapshots = messages.map(entry => entry.message);
+  const previousAnchors = claimOnScreenEntries(state.entries, snapshots, isUnconfirmedUserMessage);
+  const reconciled = mergeServerWindow(state, snapshots, previousAnchors);
+  const anchors = claimOnScreenEntries(reconciled.entries, snapshots, isUnconfirmedUserMessage);
+  const streamingByIndex = new Map<number, boolean>();
+  for (const snapshot of messages) {
+    const index = anchors.get(snapshot.message);
+    if (index === undefined) continue;
+    const previousIndex = previousAnchors.get(snapshot.message);
+    const previous = previousIndex === undefined ? undefined : state.entries[previousIndex];
+    const alreadyFinished = previous?.kind === 'message' && previous.streaming === false;
+    streamingByIndex.set(index, ds.isRunning && snapshot.streaming && !alreadyFinished);
   }
+  return {
+    ...reconciled,
+    pending: ds.isRunning && reconciled.pending,
+    entries: reconciled.entries.map((entry, index) => {
+      if (entry.kind !== 'message') return entry;
+      const streaming = ds.isRunning ? (streamingByIndex.get(index) ?? entry.streaming) : false;
+      return streaming === entry.streaming ? entry : { ...entry, streaming };
+    }),
+  };
+}
+
+function seedFromDisplayState(state: TranscriptState, ds: DisplayStateSnapshot): TranscriptState {
+  let next = restoreSnapshotMessages(state, ds);
 
   for (const [toolCallId, tool] of Object.entries(ds.activeTools ?? {})) {
     next = withTool(

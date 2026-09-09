@@ -640,6 +640,7 @@ export interface AgentControllerDisplayState {
    * mutates as deltas arrive; copy it before retaining a point-in-time value.
    */
   currentMessage: MastraDBMessage | null;
+  messages?: { message: MastraDBMessage; streaming: boolean }[];
 
   // ── Follow-up queue ──────────────────────────────────────────────────
   /** Number of follow-up messages queued locally by the AgentController */
@@ -715,6 +716,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
+    messages: [],
     queuedFollowUps: 0,
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),

@@ -783,6 +783,8 @@ Return the current `AgentControllerDisplayState` snapshot for UI rendering.
 const displayState = session.displayState.get()
 ```
 
+`displayState.messages` contains the current run's messages in order, including input signals that haven't been saved to history yet. Each entry contains `message` and `streaming`. Entries remain available after the run finishes and reset when a new run starts or the thread changes. Use them with persisted history when restoring a conversation after reconnecting.
+
 ### `session.displayState.restoreTasks(tasks)`
 
 Restore the task portion of the snapshot after a UI replays persisted task tool history. This is a pure update of the snapshot and doesn't emit an event, so re-render explicitly after calling it.

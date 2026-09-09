@@ -335,6 +335,32 @@ describe('AgentController Resource', () => {
     }
   });
 
+  it('hydrates every message carried by a display snapshot', async () => {
+    const createdAt = '2026-09-09T10:00:00.000Z';
+    const message = { id: 'reply', role: 'assistant', createdAt, content: { format: 2, parts: [] } };
+    mockSse([
+      `data: ${JSON.stringify({
+        type: 'display_state_changed',
+        displayState: { currentMessage: message, messages: [{ message, streaming: true }] },
+      })}\n\n`,
+    ]);
+    const received: KnownAgentControllerEvent[] = [];
+    const subscription = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => {
+          if (isKnownAgentControllerEvent(event)) received.push(event);
+        },
+      });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    subscription.unsubscribe();
+    const snapshot = received[0];
+    if (snapshot?.type !== 'display_state_changed') throw new Error('Expected display snapshot');
+    expect(snapshot.displayState.currentMessage?.createdAt).toEqual(new Date(createdAt));
+    expect(snapshot.displayState.messages?.[0]?.message.createdAt).toEqual(new Date(createdAt));
+  });
+
   it('hydrates thread timestamps from SSE events', async () => {
     const createdAt = '2026-01-01T00:00:00.000Z';
     const updatedAt = '2026-01-02T03:04:05.000Z';

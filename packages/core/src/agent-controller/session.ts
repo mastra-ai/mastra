@@ -2293,6 +2293,7 @@ export class SessionDisplayState {
     ds.pendingSuspensions = new Map();
     ds.activeSubagents = new Map();
     ds.currentMessage = null;
+    ds.messages = [];
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
     ds.modifiedFiles = new Map();
@@ -2318,6 +2319,7 @@ export class SessionDisplayState {
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
+        ds.messages = [];
         ds.pendingApproval = null;
         // Parked tool suspensions are intentionally NOT cleared here: resuming
         // one parked tool restarts the run (a fresh agent_start) and the other
@@ -2326,6 +2328,7 @@ export class SessionDisplayState {
 
       case 'agent_end':
         ds.isRunning = false;
+        for (const entry of ds.messages ?? []) entry.streaming = false;
         ds.pendingApproval = null;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
@@ -2345,16 +2348,16 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
-        break;
-
       case 'message_update':
+      case 'message_end': {
         ds.currentMessage = event.message;
+        const messages = (ds.messages ??= []);
+        const index = messages.findIndex(entry => entry.message.id === event.message.id);
+        const entry = { message: event.message, streaming: event.type !== 'message_end' };
+        if (index === -1) messages.push(entry);
+        else messages[index] = entry;
         break;
-
-      case 'message_end':
-        ds.currentMessage = event.message;
-        break;
+      }
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
       case 'tool_input_start': {

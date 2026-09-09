@@ -1,4 +1,5 @@
 import type {
+  AgentControllerDisplayState,
   AgentControllerThread,
   AgentControllerWireEvent,
   MastraDBMessage,
@@ -81,7 +82,12 @@ type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
   : T extends { type: 'message_start' | 'message_update' | 'message_end' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
-    : T;
+    : T extends { type: 'display_state_changed'; displayState: infer DisplayState }
+      ? Omit<T, 'displayState'> & {
+          displayState: Omit<DisplayState, 'currentMessage' | 'messages'> &
+            Pick<AgentControllerDisplayState, 'currentMessage' | 'messages'>;
+        }
+      : T;
 
 /**
  * AgentController events the SDK types explicitly: the wire union `@mastra/core`
@@ -196,6 +202,15 @@ function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent):
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };
+    case 'display_state_changed':
+      return {
+        ...event,
+        displayState: {
+          ...event.displayState,
+          currentMessage: event.displayState.currentMessage ? hydrateMessage(event.displayState.currentMessage) : null,
+          messages: event.displayState.messages?.map(entry => ({ ...entry, message: hydrateMessage(entry.message) })),
+        },
+      };
     default:
       return event;
   }
