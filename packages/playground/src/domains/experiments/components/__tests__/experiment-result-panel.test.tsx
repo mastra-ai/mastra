@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
 import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
+import { server } from '@/test/msw-server';
 import { makeWrapper } from '@/test/render';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
@@ -24,6 +26,15 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   createdAt: new Date('2026-01-01T00:00:00Z'),
   updatedAt: new Date('2026-01-01T00:00:00Z'),
   ...overrides,
+});
+
+// The panel prefetches trace feedback for the needs-review dot.
+beforeEach(() => {
+  server.use(
+    http.get('*/api/observability/feedback', () =>
+      HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 50, hasMore: false } }),
+    ),
+  );
 });
 
 beforeAll(() => {

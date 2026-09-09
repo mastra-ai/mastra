@@ -25,6 +25,8 @@ export type ExperimentResultsListItem = {
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
 };
 
+const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'tags', 'scores']);
+
 export type ExperimentResultsListColumn = {
   /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | a scorer id */
   name: string;
@@ -58,7 +60,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   isLoading,
   featuredResultId,
   onResultClick,
-  columns,
+  columns: requestedColumns,
   scoresByItemId,
   scorerIds,
   setEndOfListElement,
@@ -71,6 +73,9 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
+  // Only columns the body knows how to render get a track + header; otherwise
+  // an unknown name would shift every following cell away from its header.
+  const columns = requestedColumns.filter(c => BUILT_IN_COLUMNS.has(c.name) || scorerIds?.includes(c.name));
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasColumn = (name: string) => columns.some(col => col.name === name);
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');

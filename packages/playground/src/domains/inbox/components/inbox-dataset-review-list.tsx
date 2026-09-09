@@ -13,7 +13,6 @@ const INBOX_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
   { name: 'status', label: 'Status', size: 'auto' },
   { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
-  { name: 'comment', label: 'Comment', size: 'minmax(0,16rem)' },
   { name: 'tags', label: 'Tags', size: 'auto' },
 ];
 const SKELETON_COLUMNS = INBOX_LIST_COLUMNS.map(c => c.size).join(' ');

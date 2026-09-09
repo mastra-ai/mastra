@@ -5,10 +5,11 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowUpRight } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { ALL_EXPERIMENTS, ExperimentCombobox } from '@/domains/experiments/components/experiment-combobox';
 import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
+import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Single review queue across the project. Lists every item awaiting review by default;
@@ -19,6 +20,7 @@ function ReviewQueuePage() {
   const selectedId = searchParams.get('experiment');
   const featuredResultId = searchParams.get('review');
 
+  const { Link, paths } = useLinkComponent();
   const { data, error } = useExperimentsForDatasetFilter(undefined);
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
@@ -65,7 +67,7 @@ function ReviewQueuePage() {
           </PageLayout.Column>
           {selectedId && (
             <PageLayout.Column className="justify-items-end">
-              <Button as={Link} to={`/experiments/${encodeURIComponent(selectedId)}`}>
+              <Button as={Link} href={paths.experimentLink(selectedId)}>
                 See experiment
                 <ArrowUpRight />
               </Button>
