@@ -23,7 +23,6 @@ import type {
 } from './chat-context';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
-import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
@@ -123,7 +122,6 @@ export function ChatProvider({
     },
   });
 
-  const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const queryClient = useQueryClient();
   const baseClient = useMastraClient();
 
@@ -292,7 +290,6 @@ export function ChatProvider({
     setMessages,
     setStreamErrors,
     refreshThreadList,
-    refreshWorkingMemory,
     handleObservationStart,
     handleProgressUpdate,
     refreshObservationalMemory,

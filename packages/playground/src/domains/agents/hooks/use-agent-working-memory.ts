@@ -10,8 +10,11 @@ interface WorkingMemoryTemplate {
   format?: 'json' | 'markdown';
 }
 
+/** Omit `resourceId` to build a prefix key that matches every resource for the thread. */
 export const workingMemoryQueryKey = (agentId: string, threadId: string, resourceId?: string) =>
-  ['working-memory', agentId, threadId, resourceId] as const;
+  resourceId === undefined
+    ? (['working-memory', agentId, threadId] as const)
+    : (['working-memory', agentId, threadId, resourceId] as const);
 
 const isTemplate = (value: unknown): value is WorkingMemoryTemplate => typeof value === 'object' && value !== null;
 

@@ -9,6 +9,7 @@ import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { ChatSendArgs } from './chat-context';
+import { workingMemoryQueryKey } from '@/domains/agents/hooks/use-agent-working-memory';
 import { injectBufferingEnds } from '@/services/om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,
@@ -86,7 +87,6 @@ interface UseChatSendHandlerArgs {
   setMessages: Dispatch<SetStateAction<MastraDBMessage[]>>;
   setStreamErrors: Dispatch<SetStateAction<MastraDBMessage[]>>;
   refreshThreadList?: () => void | Promise<void>;
-  refreshWorkingMemory?: () => void | Promise<unknown>;
   handleObservationStart: (operationType?: string) => void;
   handleProgressUpdate: (data: any) => void;
   refreshObservationalMemory: (operationType?: string) => void;
@@ -133,7 +133,6 @@ export const useChatSendHandler = ({
   setMessages,
   setStreamErrors,
   refreshThreadList,
-  refreshWorkingMemory,
   handleObservationStart,
   handleProgressUpdate,
   refreshObservationalMemory,
@@ -189,6 +188,15 @@ export const useChatSendHandler = ({
     [agentId, queryClient, signalTimelineRefresh],
   );
 
+  // Partial key: matches the working-memory query for this thread regardless of resourceId.
+  const refreshWorkingMemory = useCallback(
+    (currentThreadId?: string) => {
+      if (!currentThreadId) return;
+      void queryClient.invalidateQueries({ queryKey: workingMemoryQueryKey(agentId, currentThreadId) });
+    },
+    [agentId, queryClient],
+  );
+
   const completeObservationalMemoryBuffering = useCallback(
     (currentThreadId?: string) => {
       if (!currentThreadId || !sendDepsRef.current.isOMEnabled) return;
@@ -201,7 +209,7 @@ export const useChatSendHandler = ({
           // Refetch the panel again once buffering completes, so any records that
           // only landed after awaitBufferStatus resolved are reflected immediately.
           refreshTimelinePanel(currentThreadId);
-          void refreshWorkingMemory?.();
+          refreshWorkingMemory(currentThreadId);
         })
         .catch(() => {});
     },
@@ -227,7 +235,7 @@ export const useChatSendHandler = ({
         refreshObservationalMemory(handled.data?.operationType);
       }
       if (handled?.type === 'data-om-observation-end') {
-        void refreshWorkingMemory?.();
+        refreshWorkingMemory(sendDepsRef.current.threadId);
       }
       if (handled?.type === 'data-om-activation') {
         handleActivation(handled.data);
@@ -267,7 +275,7 @@ export const useChatSendHandler = ({
             tracingOptions: deps.tracingOptions,
             onNetworkChunk: async (chunk: any) => {
               if (didUpdateWorkingMemory(chunk)) {
-                void refreshWorkingMemory?.();
+                refreshWorkingMemory(deps.threadId);
               }
               if (chunk.type === 'network-execution-event-step-finish') {
                 void refreshThreadList?.();
@@ -310,7 +318,7 @@ export const useChatSendHandler = ({
                 completeObservationalMemoryBuffering(deps.threadId);
               }
               if (didUpdateWorkingMemory(chunk)) {
-                void refreshWorkingMemory?.();
+                refreshWorkingMemory(deps.threadId);
               }
               handleHandledChunk(asHandledStreamChunk(chunk));
             },
