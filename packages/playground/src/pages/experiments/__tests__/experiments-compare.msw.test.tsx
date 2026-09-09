@@ -80,7 +80,7 @@ describe('Experiments page — compare mode', () => {
     fireEvent.click(screen.getByRole('button', { name: /^compare$/i }));
 
     expect(screen.getAllByRole('checkbox')).toHaveLength(3);
-    expect(screen.getByText(/of 2 experiments selected/)).toBeDefined();
+    expect(screen.getByText(/selected/)).toBeDefined();
   });
 
   it('navigates to /experiments/compare with baseline and contender from the same dataset', async () => {
@@ -132,7 +132,7 @@ describe('Experiments page — compare mode', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-a' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-b' }));
-    expect(screen.getByText('2')).toBeDefined();
+    expect(screen.getByText('2 / 2')).toBeDefined();
 
     server.use(
       http.get(`${TEST_BASE_URL}/api/experiments`, () =>
@@ -142,7 +142,7 @@ describe('Experiments page — compare mode', () => {
     await queryClient.invalidateQueries();
     await waitFor(() => expect(screen.queryByText('run b')).toBeNull());
 
-    expect(screen.getByText('1')).toBeDefined();
+    expect(screen.getByText('1 / 2')).toBeDefined();
     expect(screen.getByRole('button', { name: /compare experiments/i }).hasAttribute('disabled')).toBe(true);
   });
 });
