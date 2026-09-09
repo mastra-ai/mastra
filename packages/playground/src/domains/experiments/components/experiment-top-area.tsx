@@ -9,11 +9,14 @@ import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-m
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 import { RenameExperimentButton } from '@/domains/experiments/components/rename-experiment-button';
 import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
+import type { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 import { experimentReviewQueueLink } from '@/lib/app-routing';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;
+  /** Experiment-scoped metrics resolved by the page; omitted where metrics are not surfaced. */
+  metrics?: ReturnType<typeof useExperimentMetrics>;
   /** When provided, renders a delete action in the header. */
   onDeleteClick?: () => void;
 }
@@ -23,7 +26,7 @@ export interface ExperimentTopAreaProps {
  * on the left, stats on the right. Wrapped in PageLayout primitives so it slots into
  * any consumer's PageLayout shell.
  */
-export function ExperimentTopArea({ experiment, onDeleteClick }: ExperimentTopAreaProps) {
+export function ExperimentTopArea({ experiment, metrics, onDeleteClick }: ExperimentTopAreaProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
 
   const versionLinkHref =
@@ -78,7 +81,7 @@ export function ExperimentTopArea({ experiment, onDeleteClick }: ExperimentTopAr
       </PageLayout.Row>
 
       {/* Full-bleed: cancel the PageLayout root's horizontal p-6 so the bar's borders span edge to edge. */}
-      <ExperimentMetaBar experiment={experiment} className="-mx-6 w-auto" />
+      <ExperimentMetaBar experiment={experiment} metrics={metrics} className="-mx-6 w-auto" />
     </PageLayout.TopArea>
   );
 }

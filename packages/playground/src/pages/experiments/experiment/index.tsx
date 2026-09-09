@@ -15,6 +15,7 @@ import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -52,6 +53,8 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
   });
+
+  const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
 
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
@@ -123,7 +126,11 @@ function ExperimentPage() {
     >
       <div className="h-full">
         <PageLayout height="full">
-          <ExperimentTopArea experiment={experiment!} onDeleteClick={() => setDeleteDialogOpen(true)} />
+          <ExperimentTopArea
+            experiment={experiment!}
+            metrics={experimentMetrics}
+            onDeleteClick={() => setDeleteDialogOpen(true)}
+          />
 
           <PageLayout.MainArea className="overflow-visible">
             <ExperimentResultsSection
