@@ -201,10 +201,7 @@ describe('MastraApiMCPServer over HTTP with protocol 2026-07-28', () => {
       }
       expect(transportErrors).toEqual([]);
     } finally {
-      await client.close();
-      await adapter?.close();
-      if (gateway) await close(gateway);
-      await close(target);
+      await Promise.allSettled([client.close(), adapter?.close(), gateway ? close(gateway) : undefined, close(target)]);
     }
   }, 20000);
 });
