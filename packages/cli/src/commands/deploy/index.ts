@@ -31,7 +31,7 @@ import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchDatabases } from '../db/platform-api.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
 import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
-import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
+import { fetchEnvironmentsPage, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
@@ -832,9 +832,10 @@ export async function resolveProject(
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
 
-type EnvironmentResolution =
+type EnvironmentResolution = { platformWorkersEnabled: boolean } & (
   | { existing: true; environment: Environment }
-  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string };
+  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string }
+);
 
 export async function resolveEnvironment(
   token: string,
@@ -844,13 +845,17 @@ export async function resolveEnvironment(
   autoAccept: boolean,
   requestedRegion?: string,
 ): Promise<EnvironmentResolution> {
-  const environments = await fetchEnvironments(token, orgId, projectId);
+  const page = await fetchEnvironmentsPage(token, orgId, projectId);
+  const environments = page.environments;
+  // Fail closed: platforms that predate the field don't provision worker
+  // services, so shipping a manifest to them would be a silent no-op anyway.
+  const platformWorkersEnabled = page.platformWorkersEnabled === true;
 
   // Try to find by name (case-insensitive)
   const existing = environments.find(env => env.name.toLowerCase() === envName.toLowerCase());
 
   if (existing) {
-    return { existing: true, environment: existing };
+    return { existing: true, environment: existing, platformWorkersEnabled };
   }
 
   // Environment doesn't exist - determine type and prepare to create
@@ -891,7 +896,7 @@ export async function resolveEnvironment(
     region = selectedRegion;
   }
 
-  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
+  return { existing: false, name: envName, type: envType, platformWorkersEnabled, ...(region ? { region } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1502,6 +1507,20 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   let workersConfig = await readWorkersConfig(targetDir);
   let workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+
+  // Rollout gate: the platform evaluated the `platform-workers` flag for
+  // this user (fetched with the environment list). Flag off → don't ship
+  // the manifest at all, so the overview, the prompt, and the platform's
+  // provisioning behavior all agree: background tasks run in-process in
+  // the API container, exactly as before the workers stack.
+  if (workersEnabled && !envResolution.platformWorkersEnabled) {
+    await suppressWorkersManifestForInlineMode(targetDir);
+    p.log.warn(
+      'Background workers are not enabled for this account — the workers manifest will not be shipped and background tasks will run inside the API server container.',
+    );
+    workersConfig = await readWorkersConfig(targetDir);
+    workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  }
 
   const workersMode = await resolveWorkersDeployMode({
     workersEnabled,

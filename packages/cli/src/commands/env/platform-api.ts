@@ -85,7 +85,23 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   return data.projects;
 }
 
-export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+export interface EnvironmentsPage {
+  environments: Environment[];
+  /**
+   * Whether the `platform-workers` rollout flag is enabled for the calling
+   * user, as evaluated by the platform (the same evaluation the deploy-time
+   * provisioning gate uses). Absent on platforms that predate the field; the
+   * CLI fails closed (treats missing as `false`) — such platforms don't
+   * provision worker services either.
+   */
+  platformWorkersEnabled?: boolean;
+}
+
+export async function fetchEnvironmentsPage(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<EnvironmentsPage> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -98,8 +114,12 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
     throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
-  const data = (await resp.json()) as { environments: Environment[] };
-  return data.environments;
+  return (await resp.json()) as EnvironmentsPage;
+}
+
+export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+  const page = await fetchEnvironmentsPage(token, orgId, projectId);
+  return page.environments;
 }
 
 export async function fetchEnvironmentDeploys(

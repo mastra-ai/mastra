@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectDatabase } from '../db/platform-api.js';
 
-const { confirmMock, fetchEnvironmentsMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
+const { confirmMock, fetchEnvironmentsPageMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
   confirmMock: vi.fn(),
-  fetchEnvironmentsMock: vi.fn(),
+  fetchEnvironmentsPageMock: vi.fn(),
   fetchProjectsMock: vi.fn(),
   selectMock: vi.fn(),
 }));
@@ -21,7 +21,7 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 vi.mock('../env/platform-api.js', () => ({
-  fetchEnvironments: fetchEnvironmentsMock,
+  fetchEnvironmentsPage: fetchEnvironmentsPageMock,
   fetchProjects: fetchProjectsMock,
   createEnvironment: vi.fn(),
 }));
@@ -77,7 +77,7 @@ describe('project resolution', () => {
 describe('environment resolution', () => {
   beforeEach(() => {
     confirmMock.mockReset().mockResolvedValue(true);
-    fetchEnvironmentsMock.mockReset().mockResolvedValue([]);
+    fetchEnvironmentsPageMock.mockReset().mockResolvedValue({ environments: [] });
     selectMock.mockReset().mockResolvedValue('eu');
   });
 
@@ -87,6 +87,7 @@ describe('environment resolution', () => {
       name: 'preview',
       type: 'preview',
       region: 'eu',
+      platformWorkersEnabled: false,
     });
 
     expect(selectMock).toHaveBeenCalledWith({
@@ -105,6 +106,7 @@ describe('environment resolution', () => {
       name: 'production',
       type: 'production',
       region: 'eu',
+      platformWorkersEnabled: false,
     });
 
     expect(selectMock).not.toHaveBeenCalled();
@@ -115,9 +117,32 @@ describe('environment resolution', () => {
       existing: false,
       name: 'production',
       type: 'production',
+      platformWorkersEnabled: false,
     });
 
     expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the platform-evaluated workers flag on an existing environment', async () => {
+    const environment = { id: 'env-1', name: 'production' };
+    fetchEnvironmentsPageMock.mockResolvedValue({ environments: [environment], platformWorkersEnabled: true });
+
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true)).resolves.toEqual({
+      existing: true,
+      environment,
+      platformWorkersEnabled: true,
+    });
+  });
+
+  it('fails closed when the platform omits the workers flag (older platform)', async () => {
+    const environment = { id: 'env-1', name: 'production' };
+    fetchEnvironmentsPageMock.mockResolvedValue({ environments: [environment] });
+
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true)).resolves.toEqual({
+      existing: true,
+      environment,
+      platformWorkersEnabled: false,
+    });
   });
 });
 
