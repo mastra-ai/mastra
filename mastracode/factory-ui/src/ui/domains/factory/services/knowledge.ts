@@ -78,6 +78,18 @@ export interface KnowledgeNodeRecord {
   metadata?: Record<string, unknown>;
 }
 
+export interface KnowledgeActivityEvent {
+  id: string;
+  action: string;
+  recordType: string;
+  scope: string[];
+  createdAt: string;
+}
+
+export interface KnowledgeActivityPayload {
+  events: KnowledgeActivityEvent[];
+}
+
 export interface KnowledgeNodePayload {
   node: {
     id: string;
@@ -96,8 +108,10 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function threadQuery(threadId: string | undefined): string {
-  return threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+function knowledgeQuery(knowledgeKey: string, threadId: string | undefined): string {
+  const query = new URLSearchParams({ knowledgeKey });
+  if (threadId) query.set('threadId', threadId);
+  return `?${query}`;
 }
 
 export async function fetchKnowledgeGraph(
@@ -105,9 +119,23 @@ export async function fetchKnowledgeGraph(
   factoryProjectId: string,
   threadId?: string,
   signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/graph${threadQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/graph${knowledgeQuery(knowledgeKey, threadId)}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  threadId?: string,
+  signal?: AbortSignal,
+  knowledgeKey = 'default',
+): Promise<KnowledgeActivityPayload> {
+  return requestJson<KnowledgeActivityPayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(knowledgeKey, threadId)}`,
     { signal },
   );
 }
@@ -118,9 +146,10 @@ export async function fetchKnowledgeNode(
   nodeId: string,
   threadId?: string,
   signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeNodePayload> {
   return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${threadQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery(knowledgeKey, threadId)}`,
     { signal },
   );
 }
