@@ -23,8 +23,7 @@ function createTask(status: BackgroundTask['status']): BackgroundTask {
   };
 }
 
-function createHarness() {
-  const accepted = Promise.resolve({ accepted: true as const });
+function createHarness(accepted = Promise.resolve({ accepted: true as const })) {
   const sendSignalToThread = vi.fn(() => ({ accepted }));
   const getSessionByResource = vi.fn(async () => ({ sendSignalToThread }) as unknown as Session<unknown>);
   const events = createBackgroundCompletionEvents();
@@ -91,6 +90,29 @@ describe('createBackgroundCompletionCallbacks', () => {
       toolName: 'mastra_expert',
       status: 'completed',
     });
+  });
+
+  it('publishes the process-local event and preserves a persistence failure', async () => {
+    const persistenceError = new Error('signal persistence failed');
+    const { callbacks, events, sendSignalToThread } = createHarness(Promise.reject(persistenceError));
+    const listener = vi.fn();
+    events.subscribe(listener);
+
+    await expect(callbacks.onTaskComplete?.(createTask('completed'))).rejects.toBe(persistenceError);
+
+    expect(sendSignalToThread).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith({
+      id: 'background-task:task-1:completed',
+      taskId: 'task-1',
+      originRunId: 'run-1',
+      originToolCallId: 'call-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'mastra_expert',
+      status: 'completed',
+    });
+    expect(sendSignalToThread.mock.invocationCallOrder[0]).toBeLessThan(listener.mock.invocationCallOrder[0]!);
   });
 
   it('skips delivery when the task has no durable conversation target', async () => {

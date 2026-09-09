@@ -310,9 +310,9 @@ export class MastraTUI {
   }
 
   private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
-    const manager = this.state.controller.getMastra()?.backgroundTaskManager;
-    if (!manager) return;
     try {
+      const manager = this.state.controller.getMastra()?.backgroundTaskManager;
+      if (!manager) return;
       await manager.cancel(activity.taskId);
     } catch (error) {
       showError(this.state, error instanceof Error ? error.message : 'Failed to cancel background task');

@@ -49,9 +49,8 @@ export function createBackgroundCompletionCallbacks(
   events?: BackgroundCompletionEvents,
 ): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed' | 'onTaskCancelled'> {
   const deliver = async (task: BackgroundTask, status: 'completed' | 'failed' | 'cancelled') => {
-    await persistBackgroundCompletion(getController(), task, status);
     if (!task.resourceId || !task.threadId) return;
-    events?.publish({
+    const event = {
       id: `background-task:${task.id}:${status}`,
       taskId: task.id,
       originRunId: task.runId,
@@ -60,7 +59,12 @@ export function createBackgroundCompletionCallbacks(
       threadId: task.threadId,
       toolName: task.toolName,
       status,
-    });
+    };
+    try {
+      await persistBackgroundCompletion(getController(), task, status);
+    } finally {
+      events?.publish(event);
+    }
   };
 
   return {

@@ -1011,6 +1011,21 @@ describe('background activity cancellation', () => {
     expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'cancel failed');
     expect(hideOverlay).toHaveBeenCalledOnce();
   });
+
+  it('closes the activity overlay when no background task manager exists', async () => {
+    mocks.showError.mockClear();
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => undefined },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(mocks.showError).not.toHaveBeenCalled();
+    expect(hideOverlay).toHaveBeenCalledOnce();
+  });
 });
 
 describe('consumePendingImages', () => {
