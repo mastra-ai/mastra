@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Check, Hammer, Map, Plus, Zap } from 'lucide-react';
@@ -14,27 +15,49 @@ import {
   useRemoveModelPack,
   useSaveModelPack,
 } from '../../../../hooks/use-model-packs';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
+
+type DraftThinkingLevel = ThinkingLevelSetting | 'inherit';
 
 interface DraftPack {
   name: string;
   build: string;
   plan: string;
   fast: string;
+  buildThinkingLevel: DraftThinkingLevel;
+  planThinkingLevel: DraftThinkingLevel;
+  fastThinkingLevel: DraftThinkingLevel;
 }
 
-const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
+const EMPTY_DRAFT: DraftPack = {
+  name: '',
+  build: '',
+  plan: '',
+  fast: '',
+  buildThinkingLevel: 'inherit',
+  planThinkingLevel: 'inherit',
+  fastThinkingLevel: 'inherit',
+};
+
+const THINKING_LEVELS: DraftThinkingLevel[] = ['inherit', 'off', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+function isDraftThinkingLevel(value: string): value is DraftThinkingLevel {
+  return THINKING_LEVELS.some(level => level === value);
+}
 
 interface ModelAssignmentProps {
   description: string;
   icon: LucideIcon;
   label: string;
   model: string;
+  thinkingLevel?: ThinkingLevelSetting;
 }
 
-function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignmentProps) {
+function ModelAssignment({ description, icon: Icon, label, model, thinkingLevel }: ModelAssignmentProps) {
   return (
     <span className="flex max-w-full min-w-0 items-center gap-0.5">
       <Tooltip>
@@ -55,6 +78,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
       </Tooltip>
       <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
         {model || '—'}
+        {thinkingLevel ? ` · ${thinkingLevel} thinking` : ''}
       </Txt>
     </span>
   );
@@ -116,9 +140,18 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
       setDraftError('Name and a model for each of build, plan and fast are required.');
       return;
     }
+    const thinkingLevels: Partial<Record<'build' | 'plan' | 'fast', ThinkingLevelSetting>> = {};
+    if (draft.buildThinkingLevel !== 'inherit') thinkingLevels.build = draft.buildThinkingLevel;
+    if (draft.planThinkingLevel !== 'inherit') thinkingLevels.plan = draft.planThinkingLevel;
+    if (draft.fastThinkingLevel !== 'inherit') thinkingLevels.fast = draft.fastThinkingLevel;
+
     setDraftError(null);
     try {
-      await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
+      await saveMutation.mutateAsync({
+        name,
+        models: { build: draft.build, plan: draft.plan, fast: draft.fast },
+        thinkingLevels,
+      });
       setDraft(null);
     } catch (e) {
       setDraftError(e instanceof Error ? e.message : String(e));
@@ -127,6 +160,26 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
   const modelSelect = (value: string, onChange: (v: string) => void) => (
     <ModelCombobox models={models} value={value} onValueChange={onChange} />
+  );
+
+  const thinkingSelect = (mode: string, value: DraftThinkingLevel, onChange: (v: DraftThinkingLevel) => void) => (
+    <Select
+      value={value}
+      onValueChange={nextValue => {
+        if (isDraftThinkingLevel(nextValue)) onChange(nextValue);
+      }}
+    >
+      <SelectTrigger variant="outline" size="sm" aria-label={`${mode} thinking level`} className="w-full">
+        {value === 'inherit' ? 'Use default' : value}
+      </SelectTrigger>
+      <SelectContent>
+        {THINKING_LEVELS.map(level => (
+          <SelectItem key={level} value={level}>
+            {level === 'inherit' ? 'Use default' : level}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 
   return (
@@ -155,24 +208,48 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
               autoFocus
             />
           </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
-              Build model
-            </Txt>
-            {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
-              Plan model
-            </Txt>
-            {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="ui-sm" className="text-icon5">
-              Fast model
-            </Txt>
-            {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
-          </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Build model
+              </Txt>
+              {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
+            </label>
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Build thinking
+              </Txt>
+              {thinkingSelect('Build', draft.buildThinkingLevel, v => setDraft({ ...draft, buildThinkingLevel: v }))}
+            </label>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Plan model
+              </Txt>
+              {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
+            </label>
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Plan thinking
+              </Txt>
+              {thinkingSelect('Plan', draft.planThinkingLevel, v => setDraft({ ...draft, planThinkingLevel: v }))}
+            </label>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Fast model
+              </Txt>
+              {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
+            </label>
+            <label className="flex flex-col gap-1">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                Fast thinking
+              </Txt>
+              {thinkingSelect('Fast', draft.fastThinkingLevel, v => setDraft({ ...draft, fastThinkingLevel: v }))}
+            </label>
+          </div>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveDraft()}>
               Add
@@ -213,18 +290,21 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                     label="Build"
                     description="Implementation with full tool access"
                     model={p.models.build}
+                    thinkingLevel={p.thinkingLevels?.build}
                   />
                   <ModelAssignment
                     icon={Map}
                     label="Plan"
                     description="Read-only analysis and planning"
                     model={p.models.plan}
+                    thinkingLevel={p.thinkingLevels?.plan}
                   />
                   <ModelAssignment
                     icon={Zap}
                     label="Fast"
                     description="Quick answers and small edits"
                     model={p.models.fast}
+                    thinkingLevel={p.thinkingLevels?.fast}
                   />
                 </div>
               </div>

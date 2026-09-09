@@ -5,6 +5,7 @@
  * plus an OM (observational memory) model.
  */
 import { DEFAULT_OM_MODEL_ID } from '../constants.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,6 +20,7 @@ export interface ModePack {
     plan: string;
     fast: string;
   };
+  thinkingLevels?: Partial<Record<'build' | 'plan' | 'fast', ThinkingLevelSetting>>;
 }
 
 export interface OMPack {

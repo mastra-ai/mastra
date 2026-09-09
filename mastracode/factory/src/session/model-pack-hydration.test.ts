@@ -14,6 +14,7 @@ const models = {
   plan: 'openai/gpt-5.6-sol',
   fast: 'anthropic/claude-sonnet-5',
 };
+const thinkingLevels = { build: 'high', plan: undefined, fast: 'low' } as const;
 
 function activePack(): ActiveModelPackRecord {
   return {
@@ -21,6 +22,7 @@ function activePack(): ActiveModelPackRecord {
     userId: 'user-1',
     packId: 'custom:pack-1',
     models,
+    thinkingLevels,
     updatedAt: new Date(),
   };
 }
@@ -81,11 +83,45 @@ describe('applyActiveModelPack', () => {
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_build', value: models.build });
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_plan', value: models.plan });
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeModelId_fast', value: models.fast });
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_build', value: 'high' });
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_plan', value: undefined });
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'modeThinkingLevel_fast', value: 'low' });
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'activeModelPackId', value: 'custom:pack-1' });
     expect(session.model.switch).toHaveBeenCalledExactlyOnceWith({ modelId: models.plan });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: models.fast, agentType: 'explore' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: models.plan, agentType: 'plan' });
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: models.build, agentType: 'execute' });
+  });
+
+  it('serializes concurrent pack applications for the same session', async () => {
+    const session = createSession();
+    let releaseFirstWrite!: () => void;
+    const firstWrite = new Promise<void>(resolve => {
+      releaseFirstWrite = resolve;
+    });
+    vi.mocked(session.thread.setSetting).mockImplementationOnce(() => firstWrite);
+    const secondPack = {
+      ...activePack(),
+      packId: 'custom:pack-2',
+      models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6-mini', fast: 'openai/gpt-5.6-nano' },
+    };
+
+    const firstApplication = applyActiveModelPack(session, activePack());
+    await vi.waitFor(() => expect(session.thread.setSetting).toHaveBeenCalledTimes(1));
+    const secondApplication = applyActiveModelPack(session, secondPack);
+    await Promise.resolve();
+    expect(session.thread.setSetting).toHaveBeenCalledTimes(1);
+
+    releaseFirstWrite();
+    await Promise.all([firstApplication, secondApplication]);
+
+    const markerCalls = vi
+      .mocked(session.thread.setSetting)
+      .mock.calls.filter(([{ key }]) => key === 'activeModelPackId');
+    expect(markerCalls).toEqual([
+      [{ key: 'activeModelPackId', value: 'custom:pack-1' }],
+      [{ key: 'activeModelPackId', value: 'custom:pack-2' }],
+    ]);
   });
 });
 

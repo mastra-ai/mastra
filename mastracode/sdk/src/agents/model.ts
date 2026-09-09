@@ -175,7 +175,7 @@ export function resolveModel(
 
 export interface ThinkingRequestContext {
   state?: { thinkingLevel?: unknown };
-  session?: { modeId?: string };
+  session?: { modeId?: string; packThinkingLevel?: unknown };
 }
 /**
  * Resolve the effective thinking level for the current request.
@@ -183,8 +183,9 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
- *   3. Global default (`preferences.thinkingLevel`).
+ *   2. Current mode's ModelPack thinking level.
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
@@ -197,6 +198,8 @@ export function resolveRequestThinkingLevel(
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
+  const packThinkingLevel = agentControllerContext?.session?.packThinkingLevel;
+  if (isThinkingLevelSetting(packThinkingLevel)) return packThinkingLevel;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }

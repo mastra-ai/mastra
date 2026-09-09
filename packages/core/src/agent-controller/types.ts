@@ -1010,6 +1010,8 @@ export interface AgentControllerRequestSession<TState = unknown> {
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */
   modelId: string;
+  /** Current mode's ModelPack thinking level, when the pack overrides deployment defaults. */
+  packThinkingLevel?: string;
   /**
    * Live session-owned controller state accessors.
    * @deprecated Prefer the top-level `getState()` / `setState()` / `updateState()`

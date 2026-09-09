@@ -2254,6 +2254,7 @@ export class AgentController<TState = {}> {
         ownerId: session.identity.getOwnerId(),
         modeId: session.mode.get(),
         modelId: session.model.get(),
+        packThinkingLevel: session.model.getPackThinkingLevel(),
         state: {
           get: () => session.state.get(),
           set: updates => session.state.set(updates),

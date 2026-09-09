@@ -1143,7 +1143,21 @@ describe('resolveRequestThinkingLevel', () => {
     expect(mockLoadSettings).not.toHaveBeenCalled();
   });
 
-  it('falls back to the mode default when no session override is set', () => {
+  it('falls back to the ModelPack level when no session override is set', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'medium' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({
+      state: {},
+      session: { modeId: 'build', packThinkingLevel: 'high' },
+    });
+
+    expect(level).toBe('high');
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the mode default when no session override or ModelPack level is set', () => {
     mockLoadSettings.mockImplementation(() =>
       settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
     );
