@@ -229,7 +229,11 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      if (unobservedMessages.length > 0) {
+      // Keep the whole candidate turn unobserved until client or provider tool calls complete.
+      const hasIncompleteToolCalls = unobservedMessages.some(message =>
+        message.content.parts?.some(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call'),
+      );
+      if (unobservedMessages.length > 0 && !hasIncompleteToolCalls) {
         void this.om.trackBackgroundWork(
           this.om
             .buffer({

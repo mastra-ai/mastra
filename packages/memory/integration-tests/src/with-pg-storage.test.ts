@@ -146,6 +146,43 @@ describe('PostgreSQL Storage Tests', () => {
     });
   }
 
+  it('22573 completed follow-up buffers after a deferred pending client call', async () => {
+    const fixture = await clientToolLifecycle(connectionString, true);
+    try {
+      await fixture.agent.generate('Make the client green.', fixture.options);
+      await fixture.memory.settled();
+      expect(fixture.observerPrompts).toHaveLength(0);
+      const saved = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+      const incoming = structuredClone(
+        saved.messages.find(message => message.content.parts?.some(part => part.type === 'tool-invocation'))!,
+      );
+      for (const part of incoming.content.parts ?? []) {
+        if (part.type === 'tool-invocation') {
+          expect(part.toolInvocation.state).toBe('call');
+          part.toolInvocation = {
+            ...part.toolInvocation,
+            state: 'result',
+            result: { confirmation: '22573-client-complete' },
+          };
+        }
+      }
+      await fixture.agent.generate([incoming], fixture.options);
+      await fixture.memory.settled();
+      expect(JSON.stringify(fixture.actorPrompts[1])).toContain('22573-client-complete');
+      expect(fixture.observerPrompts).toHaveLength(1);
+      const store = await fixture.storage.getStore('memory');
+      const record = await store!.getObservationalMemory(fixture.threadId, fixture.resourceId);
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
+      const final = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+      expect(JSON.stringify(final.messages.find(message => message.id === incoming.id))).toContain(
+        '22573-client-complete',
+      );
+    } finally {
+      await fixture.memory.settled();
+      await fixture.storage.close();
+    }
+  });
+
   it('22573 idle pending client call persists without observation', async () => {
     const fixture = await clientToolLifecycle(connectionString, true);
     try {
