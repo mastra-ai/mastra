@@ -9,6 +9,12 @@
 # `mastracode/web` is the API host and consumes the packages in this repo
 # through `link:` dependencies, so `@mastra/factory` must be built before the
 # API can see `src` changes.
+#
+# `~/justfile` carries the personal recipes. `allow-duplicate-recipes` gives
+# this file precedence, so a name defined in both is the repo's version
+# instead of a hard redefinition error that blocks every recipe.
+set allow-duplicate-recipes := true
+
 import? '~/justfile'
 
 web := justfile_directory() / "mastracode/web"
@@ -17,9 +23,8 @@ factory_ui := justfile_directory() / "mastracode/factory-ui"
 api_url := "http://localhost:4111"
 ui_url := "http://localhost:5173"
 
-# Show available recipes. Named `_default` because `~/justfile` owns `default`.
-[private]
-_default:
+# Show available recipes.
+default:
     @just --list
 
 # Build the factory and serve that build on :4111. Ignores later code changes.
