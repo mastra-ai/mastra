@@ -6,15 +6,17 @@
  * versions instead of `link:`/`latest`).
  *
  * Usage:
- *   node scripts/monorepo-deps.mjs pin              # link: -> exact monorepo versions
- *   node scripts/monorepo-deps.mjs run -- <cmd...>  # pin, run command, always restore
+ *   node scripts/monorepo-deps.mjs pin                 # link: -> exact monorepo versions
+ *   node scripts/monorepo-deps.mjs run -- <cmd...>     # pin, run command, always restore
+ *   node scripts/monorepo-deps.mjs build [-- <turbo>]  # turbo build every link: package
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const monorepoRoot = path.resolve(webRoot, '..', '..');
 const packageJsonPath = path.join(webRoot, 'package.json');
 
 function linkedPackages(manifest) {
@@ -66,6 +68,19 @@ function pin() {
       ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}`
       : 'monorepo-deps: already pinned',
   );
+}
+
+function build(turboArgs) {
+  const manifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const filters = [...linkedPackages(manifest).values()].flatMap(relPath => [
+    '--filter',
+    `./${path.relative(monorepoRoot, path.join(webRoot, relPath))}`,
+  ]);
+  const { status } = spawnSync('pnpm', ['turbo', 'build', ...filters, ...turboArgs], {
+    cwd: monorepoRoot,
+    stdio: 'inherit',
+  });
+  process.exit(status ?? 1);
 }
 
 async function run(command) {
@@ -122,7 +137,10 @@ switch (mode) {
   case 'run':
     await run(command);
     break;
+  case 'build':
+    build(command);
+    break;
   default:
-    console.error('monorepo-deps: usage: monorepo-deps.mjs <pin|run -- <cmd...>>');
+    console.error('monorepo-deps: usage: monorepo-deps.mjs <pin|run -- <cmd...>|build [-- <turbo args>]>');
     process.exit(1);
 }
