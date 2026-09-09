@@ -60,7 +60,9 @@ export function sandboxToModelOutput(output: unknown): unknown {
  */
 export function applyTail(output: string, tail: number | null | undefined): string {
   if (!output) return output;
-  const n = Math.abs(tail ?? DEFAULT_TAIL_LINES);
+  // Floor so a fractional `tail` cannot reach the notice: `slice` truncates
+  // toward zero, so `2.5` would keep 2 lines while claiming 2.5.
+  const n = Math.floor(Math.abs(tail ?? DEFAULT_TAIL_LINES));
   if (n === 0) return output; // 0 = no limit
   // Strip trailing newline before splitting so it doesn't count as a line
   const trailingNewline = output.endsWith('\n');

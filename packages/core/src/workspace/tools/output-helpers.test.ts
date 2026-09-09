@@ -172,6 +172,18 @@ describe('applyTail', () => {
   it('handles single line within limit', () => {
     expect(applyTail('only one line', 5)).toBe('only one line');
   });
+
+  it('keeps a whole number of lines when tail is fractional', () => {
+    const result = applyTail(makeLines(10), 2.5);
+    expect(result).toContain('[showing last 2 of 10 lines]');
+  });
+
+  it('keeps exactly as many lines as the notice claims when tail is fractional', () => {
+    const result = applyTail(makeLines(10), 2.5);
+    const [notice, ...body] = result.split('\n');
+    const claimed = Number(/last (\S+) of/.exec(notice)![1]);
+    expect(body).toHaveLength(claimed);
+  });
 });
 
 // ---------------------------------------------------------------------------
