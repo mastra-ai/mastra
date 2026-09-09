@@ -39,7 +39,7 @@ describe('maintainer provider commands', () => {
 
   beforeAll(async () => {
     packageRoot = mkdtempSync(resolve(tmpdir(), 'mastra-connect-provider-commands-'));
-    for (const providerId of ['first-provider', 'second-provider']) {
+    for (const providerId of ['first-provider', 'second-provider', 'google_drive']) {
       const actionDir = resolve(packageRoot, '.templates', 'integrations', providerId, 'actions');
       mkdirSync(actionDir, { recursive: true });
       writeFileSync(resolve(actionDir, 'echo.ts'), actionTemplate);
@@ -118,6 +118,18 @@ describe('maintainer provider commands', () => {
     const [header, ...body] = generatedTool.split('\n');
     expect(header).toContain('AUTO-GENERATED');
     expect(body.join('\n')).not.toMatch(/nango/i);
+  });
+
+  it('generates an injective env var for non-canonical provider ids', async () => {
+    await addProvider({
+      providerId: 'google_drive',
+      localId: 'google_drive',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const provider = readFileSync(resolve(packageRoot, 'src/providers/google_drive/index.ts'), 'utf8');
+    expect(provider).toContain('envVar: "MASTRA__676F6F676C655F6472697665_CONNECTION_ID"');
   });
 
   it('lists available providers and searches by installed alias', async () => {

@@ -35,6 +35,7 @@ import { format, resolveConfig } from 'prettier';
 import {
   calculateFileChecksums,
   currentTemplateSha,
+  providerConnectionEnvVar,
   providerDir,
   providerRegistrationName,
   providersDir,
@@ -338,7 +339,7 @@ ${toolEntries}
 }
 
 function emitIndexFile(integrationId: string): string {
-  const envVar = `MASTRA_${integrationId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
+  const envVar = providerConnectionEnvVar(integrationId);
   const factoryName = `create${toPascal(integrationId)}Tools`;
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).

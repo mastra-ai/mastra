@@ -61,6 +61,16 @@ export function providerRegistrationName(localId: string): string {
   return `${/^\d/.test(camel) ? `_${camel}` : camel}Provider`;
 }
 
+/** Must stay aligned with the platform's integrationConnectionEnvVar helper. */
+export function providerConnectionEnvVar(providerId: string): string {
+  const canonicalBody = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(providerId)
+    ? providerId.replaceAll('-', '_').toUpperCase()
+    : `_${Array.from(providerId, character => character.charCodeAt(0).toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase()}`;
+  return `MASTRA_${canonicalBody}_CONNECTION_ID`;
+}
+
 export function updateProviderIndex(): void {
   const installed = listInstalledProviderIds();
   const imports = installed.map(id => `import { ${providerRegistrationName(id)} } from './${id}/index.js';`);
