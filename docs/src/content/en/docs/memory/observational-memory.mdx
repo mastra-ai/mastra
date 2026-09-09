@@ -836,6 +836,46 @@ const memory = new Memory({
 - `previousObserverTokens: 0` → omit previous observations completely.
 - `previousObserverTokens: false` → disable truncation and keep full previous observations.
 
+## Hooks
+
+OM exposes two kinds of config-level hooks on `observationalMemory.hooks`:
+
+- **Lifecycle hooks** (`onObservationStart`, `onObservationEnd`, `onReflectionStart`, `onReflectionEnd`) are telemetry callbacks. They receive `threadId`, `resourceId`, and `trigger`, and the end hooks also receive the model call's `usage`, `providerMetadata`, and any `error`. They never change what OM stores.
+- **Transform hooks** (`beforeObservation`, `afterObservation`, `beforeReflection`, `afterReflection`) intercept the data flowing through a cycle. Return `void` to pass the input through unchanged, or return a replacement to change what the Observer/Reflector sees or what gets persisted.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+      hooks: {
+        // Drop or redact messages before the Observer sees them.
+        beforeObservation: ({ messages }) => ({
+          messages: messages.filter(m => !isSensitive(m)),
+        }),
+        // Rewrite observations before they are persisted.
+        afterObservation: ({ observations, threadId }) => ({
+          observations: redact(observations),
+        }),
+        // Rewrite the text the Reflector condenses, or its output.
+        beforeReflection: ({ observations }) => ({
+          observations: stripInternalNotes(observations),
+        }),
+        afterReflection: async ({ observations, resourceId }) => {
+          await syncToExternalStore(resourceId, observations)
+        },
+      },
+    },
+  },
+})
+```
+
+Transform hooks are always awaited, on every path (manual `observe()`/`reflect()`, turn-synchronous observation, and async buffering). If `beforeObservation` returns an empty `messages` array, the Observer model call is skipped and the filtered messages are still marked as observed. If a transform hook throws, the cycle fails before committing the transformed observation or reflection text. This doesn't roll back extractor callbacks or other side effects that have already run.
+
+`afterObservation` and `afterReflection` replace only the observation or reflection text. They don't recompute or redact the separate structured extractor results stored in thread metadata. Reflection extraction and its callbacks run before `afterReflection`, so rewriting the reflection doesn't rerun those callbacks. Use extractor configuration and callbacks to control structured values. Don't treat an after hook as a redaction boundary for all cycle data.
+
+Because hooks receive `threadId` and `resourceId`, you can also use them to update [working memory](/docs/memory/working-memory) via `memory.updateWorkingMemory()` during a cycle. These external updates aren't atomic with the OM text commit.
+
 ## Migrating existing threads
 
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
