@@ -29,6 +29,7 @@
  * that granularity would need per-user credentials, which this storage slot
  * does not model.
  */
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -56,8 +57,9 @@ import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext } from '../base.js';
-import { GitLabClient, parseIssueRef, type GitLabIssue } from './client.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { buildGitlabAgentTools } from './agent-tools.js';
+import { GitLabClient, formatIssueRef, parseIssueRef, parseIssueReference, type GitLabIssue } from './client.js';
 import { resolveGitlabRules, type GitlabEventRules, type GitlabRuleOverrides } from './default-rules.js';
 import { toIntakeIssue, toIntakeIssueDetail, toIntakeItem, toStateEvent } from './intake.js';
 import {
@@ -252,7 +254,6 @@ export class GitLabIntegration implements FactoryIntegration {
   private stateSigner: StateSigner | undefined;
   private contextBaseUrl: string | undefined;
   private intakeStorage: IntakeStorage | undefined;
-  private projectsStorage: FactoryProjectsStorage | undefined;
 
   /**
    * One in-flight refresh per org. GitLab rotates the refresh token on every
@@ -326,10 +327,6 @@ export class GitLabIntegration implements FactoryIntegration {
   // ---------------------------------------------------------------------------
 
   /**
-   * The org's usable credential: stored OAuth connection (refreshed when due)
-   * first, configured static token second.
-   */
-  /**
    * Username of the account this org's Factory acts as, when the connection
    * records one. Used to recognize Factory's own webhook deliveries. Resolved
    * from stored connection data only — no API call on the webhook path.
@@ -338,6 +335,10 @@ export class GitLabIntegration implements FactoryIntegration {
     return readConnectionData((await this.storageHandle?.connections.get(orgId))?.data)?.connectedAs;
   }
 
+  /**
+   * The org's usable credential: stored OAuth connection (refreshed when due)
+   * first, configured static token second.
+   */
   private async resolveConnectionData(orgId: string): Promise<GitLabConnectionData | null> {
     const stored = readConnectionData((await this.storageHandle?.connections.get(orgId))?.data);
 
@@ -535,6 +536,77 @@ export class GitLabIntegration implements FactoryIntegration {
   }
 
   // ---------------------------------------------------------------------------
+  // Agent tools
+  // ---------------------------------------------------------------------------
+
+  /** Whether this org has any usable GitLab credential. Gates the agent tools. */
+  async hasConnection(orgId: string): Promise<boolean> {
+    return (await this.bearerForOrg(orgId)) !== null;
+  }
+
+  readonly #orgIdByResourceId = new Map<string, string | null>();
+
+  /** Map a session's resourceId to its owning org, or `null` when it isn't a project. */
+  async resolveOrgId(resourceId: string): Promise<string | null> {
+    const cached = this.#orgIdByResourceId.get(resourceId);
+    if (cached !== undefined) return cached;
+    // A non-UUID resource id (local/dev resource) would make the uuid column
+    // comparison throw, and it is definitively "not a project" — cache that.
+    if (!UUID_RE.test(resourceId)) {
+      this.#orgIdByResourceId.set(resourceId, null);
+      return null;
+    }
+    let orgId: string | null;
+    try {
+      orgId = (await this.projects?.getById({ id: resourceId }))?.orgId ?? null;
+    } catch {
+      // Transient storage failure: skip the tools for this request but don't
+      // cache the miss, so the next request retries the lookup.
+      return null;
+    }
+    this.#orgIdByResourceId.set(resourceId, orgId);
+    return orgId;
+  }
+
+  /** Test hook: clear the resolved-org cache between specs. */
+  clearCaches(): void {
+    this.#orgIdByResourceId.clear();
+  }
+
+  /**
+   * `'disconnected'` distinguishes "this org has no GitLab" from "no such
+   * issue", so the tool can tell the model which of the two happened.
+   */
+  async agentGetIssue(orgId: string, issue: string): Promise<IntakeIssueDetail | null | 'disconnected'> {
+    const connection = await this.bearerForOrg(orgId);
+    if (!connection) return 'disconnected';
+    const ref = parseIssueReference(issue);
+    if (!ref) return null;
+    return this.getIssue({ connection, issueId: formatIssueRef(ref) });
+  }
+
+  async agentCreateComment(
+    orgId: string,
+    issue: string,
+    body: string,
+  ): Promise<CreatedIntakeComment | null | 'disconnected'> {
+    const connection = await this.bearerForOrg(orgId);
+    if (!connection) return 'disconnected';
+    const ref = parseIssueReference(issue);
+    if (!ref) return null;
+    return this.createComment({ connection, issueId: formatIssueRef(ref), body });
+  }
+
+  /**
+   * Issue read/write tools, offered only to sessions in an org with a GitLab
+   * connection. The rule family sends `factory-triage` after GitLab cards, and
+   * `gh` cannot read a GitLab issue — these are how that agent does its job.
+   */
+  async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
+    return buildGitlabAgentTools({ requestContext: args.requestContext, gitlab: this });
+  }
+
+  // ---------------------------------------------------------------------------
   // OAuth plumbing
   // ---------------------------------------------------------------------------
 
@@ -579,7 +651,6 @@ export class GitLabIntegration implements FactoryIntegration {
     this.stateSigner = ctx.stateSigner;
     this.contextBaseUrl = ctx.baseUrl;
     this.intakeStorage = ctx.storage.intake;
-    this.projectsStorage = ctx.storage.projects;
     // Undefined when the host runs without the work-item runtime (intake-only
     // deploys). The webhook then verifies and acknowledges without dispatching.
     const ingestFactoryEvent = attachGitlabRules(this, ctx);
@@ -671,7 +742,7 @@ export class GitLabIntegration implements FactoryIntegration {
           const sourceIds = factoryProjectId
             ? await scopeSourceIdsToProject({
                 intake,
-                projects: this.projectsStorage,
+                projects: this.projects,
                 orgId: resolved.orgId,
                 factoryProjectId,
                 selectedIds,

@@ -31,6 +31,28 @@ export function parseIssueRef(externalId: string): GitLabIssueRef | null {
   return Number.isSafeInteger(iid) && iid > 0 ? { projectId, iid } : null;
 }
 
+/**
+ * Accept the shapes a human or an agent actually types, not just the stored
+ * `externalId`. The canonical `42!7` is tried first; a URL or `group/project#7`
+ * yields a URL-encoded path, which GitLab's API accepts wherever it accepts a
+ * numeric project id.
+ */
+export function parseIssueReference(input: string): GitLabIssueRef | null {
+  const value = input.trim();
+  if (!value) return null;
+
+  const canonical = parseIssueRef(value);
+  if (canonical) return canonical;
+
+  const match = /^https?:\/\/[^/]+\/(.+?)\/-\/issues\/(\d+)/.exec(value) ?? /^([^\s#]+\/[^\s#]+)#(\d+)$/.exec(value);
+  if (!match) return null;
+
+  const iid = Number(match[2]);
+  if (!Number.isSafeInteger(iid) || iid <= 0) return null;
+  // GitLab accepts a URL-encoded path anywhere it accepts a numeric project id.
+  return { projectId: encodeURIComponent(match[1]!), iid };
+}
+
 export interface GitLabProject {
   id: number;
   name: string;

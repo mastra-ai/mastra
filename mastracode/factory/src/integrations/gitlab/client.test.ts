@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatIssueRef, GitLabApiError, GitLabClient, parseIssueRef } from './client.js';
+import { formatIssueRef, GitLabApiError, GitLabClient, parseIssueRef, parseIssueReference } from './client.js';
 import type { GitLabIssue, GitLabIssueRef, GitLabNote } from './client.js';
 
 // ── fetch harness ────────────────────────────────────────────────────────
@@ -100,6 +100,50 @@ describe('issue ref codec', () => {
     // A null here surfaces as "not found" at the capability boundary rather
     // than as a request to a nonsense URL.
     expect(parseIssueRef(externalId)).toBeNull();
+  });
+});
+
+// ── lenient reference parsing ────────────────────────────────────────────
+// An agent types what a human would paste, not the stored `externalId`.
+describe('lenient issue reference parsing', () => {
+  it('accepts the canonical stored external id', () => {
+    expect(parseIssueReference('42!7')).toEqual(ref);
+  });
+
+  it('tolerates surrounding whitespace', () => {
+    expect(parseIssueReference('  42!7  ')).toEqual(ref);
+  });
+
+  it.each([
+    'https://gitlab.com/acme/app/-/issues/7',
+    'http://gitlab.example.com/acme/app/-/issues/7',
+    'https://gitlab.com/acme/app/-/issues/7#note_3',
+  ])('parses the issue URL %j', url => {
+    // The path is URL-encoded because GitLab accepts an encoded path anywhere
+    // it accepts a numeric project id.
+    expect(parseIssueReference(url)).toEqual({ projectId: 'acme%2Fapp', iid: 7 });
+  });
+
+  it('keeps a nested subgroup path intact', () => {
+    expect(parseIssueReference('https://gitlab.com/acme/team/app/-/issues/7')).toEqual({
+      projectId: 'acme%2Fteam%2Fapp',
+      iid: 7,
+    });
+  });
+
+  it('parses the namespaced reference GitLab prints', () => {
+    expect(parseIssueReference('acme/app#7')).toEqual({ projectId: 'acme%2Fapp', iid: 7 });
+  });
+
+  it.each([
+    ['issue seven', 'prose'],
+    ['#7', 'no project'],
+    ['acme/app', 'no iid'],
+    ['acme/app#0', 'iid is not positive'],
+    ['https://gitlab.com/acme/app/-/merge_requests/7', 'a merge request, not an issue'],
+    ['https://gitlab.com/acme/app/issues/7', 'missing the /-/ segment'],
+  ])('rejects %j (%s)', input => {
+    expect(parseIssueReference(input)).toBeNull();
   });
 });
 

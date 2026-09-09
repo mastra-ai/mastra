@@ -354,8 +354,33 @@ describe('bundled Factory skill assets', () => {
 
     expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
     expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
-    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    // The label vocabulary is GitHub's; providers without it must be told to
+    // skip rather than left to invent an equivalent.
+    expect(phase1).toContain('For Linear and GitLab issues, skip this GitHub-only label mutation.');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+  });
+
+  it('routes each intake provider to a tool the agent actually has', async () => {
+    // The rule families send `factory-triage` and `factory-complete-issue`
+    // after GitLab cards, and `gh` cannot read a GitLab issue. Without a
+    // GitLab branch naming its tools, those runs would reach for `gh` and
+    // fail on an issue that does not exist in the repository.
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+
+    const triage = await read('factory-triage');
+    expect(triage).toContain('gitlab_get_issue');
+    expect(triage).toContain('gitlab_create_comment');
+    expect(triage).toContain('linear_get_issue');
+    expect(triage).toContain('gh issue view');
+
+    const complete = await read('factory-complete-issue');
+    expect(complete).toContain('gitlab_get_issue');
+    expect(complete).toContain('gitlab_create_comment');
+    expect(complete).toContain('linear_get_issue');
+    expect(complete).toContain('gh issue edit');
+    // Its description used to promise GitHub only.
+    expect(complete).not.toContain('description: Mark a GitHub issue');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -440,7 +465,7 @@ describe('bundled Factory skill assets', () => {
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
-      'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
+      'For Linear and GitLab issues, use the same structured handoff without attempting GitHub publication or label mutations;',
     );
 
     const plan = await read('factory-plan');
