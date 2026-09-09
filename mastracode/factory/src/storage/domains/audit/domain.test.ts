@@ -28,6 +28,32 @@ afterEach(() => {
 });
 
 describe('AuditDomain', () => {
+  it('persists and mirrors concurrent retries once while keeping distinct actions and tenants', async () => {
+    const seed = await createFactoryStorageForTests();
+    const mirror = vi.fn(async () => undefined);
+    const first = auditDomain(seed, { sinks: [{ id: 'mirror', audit: mirror }] });
+    const second = auditDomain(seed, { sinks: [{ id: 'mirror', audit: mirror }] });
+    const input = {
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      actorId: 'user-1',
+      action: 'factory.run.started' as const,
+      targets: [{ type: 'work_item', id: 'item-1' }],
+      idempotencyKey: 'kickoff-1',
+    };
+    const [original, duplicate] = await Promise.all([first.record(input), second.record(input)]);
+    expect(original).not.toBeNull();
+    expect(duplicate?.id).toBe(original?.id);
+    await first.record(input);
+    await vi.waitFor(() => expect(mirror).toHaveBeenCalledTimes(1));
+    expect((await seed.audit.list({ orgId: 'org-1' })).events).toHaveLength(1);
+
+    await first.record({ ...input, action: 'factory.run.ended' });
+    await first.record({ ...input, orgId: 'org-2' });
+    await first.record({ ...input, factoryProjectId: 'project-2' });
+    await vi.waitFor(() => expect(mirror).toHaveBeenCalledTimes(4));
+  });
+
   it('records locally before notifying configured sinks', async () => {
     const seed = await createFactoryStorageForTests();
     const audit = vi.fn(async () => undefined);

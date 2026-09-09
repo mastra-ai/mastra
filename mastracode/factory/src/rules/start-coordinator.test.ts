@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
-import { FACTORY_OPEN_RUN_SETTING } from '../session/run-end-capture.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -103,7 +102,6 @@ function startRequest(
   return {
     orgId: 'org-1',
     userId: 'user-1',
-    actor: { type: 'human' as const, id: 'user-1' },
     factoryProjectId: PROJECT_ID,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
@@ -138,11 +136,9 @@ describe('FactoryStartCoordinator', () => {
       storage,
       undefined,
       makeSourceControl() as never,
-      undefined,
-      seed.audit,
     );
 
-    const prepared = await coordinator.prepare({ ...startRequest(), actorProfile: { name: 'Ada' } });
+    const prepared = await coordinator.prepare(startRequest());
 
     expect(prepared).toMatchObject({
       threadId: 'session-1',
@@ -156,10 +152,6 @@ describe('FactoryStartCoordinator', () => {
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
       toolName: 'factory_transition_work_item',
       policy: 'allow',
-    });
-    expect(session.thread.setSetting).toHaveBeenCalledWith({
-      key: 'factoryOpenRun',
-      value: { bindingId: prepared.bindingId, role: 'work', startedBy: 'user-1' },
     });
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
@@ -175,22 +167,7 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
-    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([
-      expect.objectContaining({
-        action: 'factory.run.started',
-        actorId: 'user-1',
-        actorType: 'human',
-        targets: [{ type: 'work_item', id: prepared.workItemId, name: 'Fix issue 1' }],
-        metadata: {
-          role: 'work',
-          branch: 'factory/issue-1',
-          sessionId: 'session-1',
-          threadId: 'session-1',
-          bindingId: prepared.bindingId,
-          __actorProfile: { name: 'Ada' },
-        },
-      }),
-    ]);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
   it('seeds caller identity into an existing request context', async () => {
@@ -505,7 +482,7 @@ describe('FactoryStartCoordinator', () => {
         execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),
     });
-    const { controller, session, sendMessage } = makeController();
+    const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
@@ -520,56 +497,6 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
-    expect(session.thread.setSetting).not.toHaveBeenCalledWith(
-      expect.objectContaining({ key: FACTORY_OPEN_RUN_SETTING }),
-    );
-  });
-
-  it('leaves the kickoff retryable when the run marker cannot be written', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session, sendMessage } = makeController();
-    session.thread.setSetting.mockImplementation(async ({ key }: { key: string }) => {
-      if (key === FACTORY_OPEN_RUN_SETTING) throw new Error('setting write failed');
-    });
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
-
-    await expect(coordinator.prepare(startRequest())).rejects.toThrow('setting write failed');
-
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'pending' });
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
-
-  it('restores the marker and the run-start row when a kickoff is retried after the marker write failed', async () => {
-    const seed = await createFactoryStorageForTests();
-    const storage = seed.workItems;
-    const { controller, session } = makeController();
-    let markerWrites = 0;
-    session.thread.setSetting.mockImplementation(async ({ key }: { key: string }) => {
-      if (key === FACTORY_OPEN_RUN_SETTING && markerWrites++ === 0) throw new Error('setting write failed');
-    });
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-      undefined,
-      seed.audit,
-    );
-    const input = startRequest();
-
-    await expect(coordinator.prepare(input)).rejects.toThrow('setting write failed');
-    const retried = await coordinator.prepare(input);
-
-    expect(retried).toMatchObject({ replayed: true, kickoffStatus: 'sent' });
-    expect(markerWrites).toBe(2);
-    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events.map(e => e.action)).toEqual(
-      ['factory.run.started'],
-    );
   });
 
   it('never sends a kickoff when the binding transaction fails', async () => {
@@ -590,14 +517,12 @@ describe('FactoryStartCoordinator', () => {
   it('replays the same durable pending kickoff and binding without dispatching or auditing it again', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const { controller, sendMessage, session } = makeController();
+    const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
       undefined,
       makeSourceControl() as never,
-      undefined,
-      seed.audit,
     );
     const input = startRequest();
 
@@ -608,9 +533,7 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
-    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toHaveLength(1);
-    const openRunWrites = session.thread.setSetting.mock.calls.filter(([setting]) => setting.key === 'factoryOpenRun');
-    expect(openRunWrites).toHaveLength(1);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
   it('revokes only the prior binding for the same item role', async () => {

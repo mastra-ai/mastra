@@ -167,7 +167,10 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   async record(input: RecordAuditEventInput<AuditAction>): Promise<AuditEventRow | null> {
     try {
       await this.#audit.ensureReady();
-      const row = await this.#audit.record(input);
+      const { event: row, created } = input.idempotencyKey
+        ? await this.#audit.recordOnce(input)
+        : { event: await this.#audit.record(input), created: true };
+      if (!created) return row;
       for (const sink of this.#sinks) {
         if (!sink.audit) continue;
         void Promise.resolve()

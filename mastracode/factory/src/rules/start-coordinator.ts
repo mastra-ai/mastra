@@ -4,26 +4,17 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
-import { FACTORY_OPEN_RUN_SETTING } from '../session/run-end-capture.js';
-import type { AuditActorProfileInput, AuditContext } from '../storage/domains/audit/base.js';
-import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { auditActorOf } from './transition-service.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
+import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
   factoryProjectId: string;
   sessionId: string;
-  /** Who is starting the run, for the trail; `userId` owns the session and its credentials. */
-  actor: FactoryRuleActor;
-  actorProfile?: AuditActorProfileInput;
-  /** Where a browser request came from; rule-driven kickoffs carry none. */
-  context?: AuditContext;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -95,7 +86,6 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
-  readonly #audit?: AuditRecorder;
 
   constructor(
     controller: FactoryController,
@@ -103,14 +93,12 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
-    audit?: AuditRecorder,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
-    this.#audit = audit;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -220,27 +208,8 @@ export class FactoryStartCoordinator {
       revision = transition.revision;
     }
 
-    // The marker opens the run, so it lands after the transition that could
-    // reject and before the kickoff row goes terminal. A replay of a row that
-    // never reached `sent` is a retry of that kickoff, not a duplicate of it.
-    const handedOff = prepared.pendingStart.status === 'sent';
-    if (!handedOff) {
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUN_SETTING,
-        value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
-      });
-    }
     await storage.markPendingStart(prepared.binding.id, 'sent');
     prepared.pendingStart.status = 'sent';
-    if (!handedOff) {
-      await this.#recordRunStart(request, {
-        item: prepared.item,
-        bindingId: prepared.binding.id,
-        branch: sourceSession.branch,
-        sessionId: sourceSession.sessionId,
-        threadId,
-      });
-    }
 
     return {
       workItemId: prepared.item.id,
@@ -253,33 +222,5 @@ export class FactoryStartCoordinator {
       kickoffStatus: prepared.pendingStart.status,
       replayed: prepared.replayed,
     };
-  }
-
-  async #recordRunStart(
-    request: FactoryStartRequest,
-    run: {
-      item: { id: string; title: string };
-      bindingId: string;
-      branch: string;
-      sessionId: string;
-      threadId: string;
-    },
-  ): Promise<void> {
-    if (!this.#audit) return;
-    const { item, ...metadata } = run;
-    await this.#audit
-      .record({
-        orgId: request.orgId,
-        factoryProjectId: request.factoryProjectId,
-        ...auditActorOf(request.actor),
-        actorProfile: request.actorProfile,
-        ...(request.context ? { context: request.context } : {}),
-        action: 'factory.run.started',
-        targets: [{ type: 'work_item', id: item.id, name: item.title }],
-        metadata: { role: request.workItem.role, ...metadata },
-      })
-      .catch(error => {
-        console.warn(`[factory] audit failed for run start ${run.bindingId}:`, error);
-      });
   }
 }

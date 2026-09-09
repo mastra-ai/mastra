@@ -146,9 +146,7 @@ function parseStartBody(
   factoryProjectId: string,
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
-  return parsed.success
-    ? { ...tenant, factoryProjectId, ...parsed.data, actor: { type: 'human', id: tenant.userId } }
-    : null;
+  return parsed.success ? { ...tenant, factoryProjectId, ...parsed.data } : null;
 }
 
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
@@ -623,7 +621,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
-          Object.assign(input, auditRequestOrigin(loose(c)));
           await workItems.ensureReady();
           let prepared: FactoryStartPreparedResult;
           try {

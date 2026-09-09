@@ -289,6 +289,7 @@ export class FactoryTransitionService {
         actorProfile: request.actorProfile,
         ...(request.context ? { context: request.context } : {}),
         action,
+        idempotencyKey: result.transitionId,
         targets: [{ type: 'work_item', id: item?.id ?? request.workItemId, ...(item ? { name: item.title } : {}) }],
         metadata: {
           transitionId: result.transitionId,

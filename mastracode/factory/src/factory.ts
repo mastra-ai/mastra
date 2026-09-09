@@ -81,7 +81,7 @@ import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
-import { observeSessionRunEnd } from './session/run-end-capture.js';
+import { observeSessionRunEnd } from './session/run-audit.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -942,6 +942,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                audit: auditDomain,
                 boards: this.#boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {

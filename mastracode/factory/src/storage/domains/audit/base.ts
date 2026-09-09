@@ -14,7 +14,9 @@
  * whose message drove the run. Rule-driven events carry `actor_type = 'system'`.
  */
 
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { createHash } from 'node:crypto';
+
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { AuditActorType } from './actors.js';
@@ -85,6 +87,7 @@ export interface AuditEventRow {
 }
 
 export interface RecordAuditEventInput<Action extends string = string> {
+  idempotencyKey?: string;
   orgId: string;
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
@@ -233,7 +236,29 @@ export class AuditStorage extends FactoryStorageDomain {
 
   /** Append one audit event. Throws on failure — swallow-on-failure lives in the caller. */
   async record(input: RecordAuditEventInput): Promise<AuditEventRow> {
+    if (input.idempotencyKey) return (await this.recordOnce(input)).event;
+    return this.#insert(input);
+  }
+
+  async recordOnce(input: RecordAuditEventInput): Promise<{ event: AuditEventRow; created: boolean }> {
+    if (!input.idempotencyKey) throw new Error('An audit idempotency key is required');
+    const hash = createHash('sha256')
+      .update(JSON.stringify([input.orgId, input.factoryProjectId ?? null, input.action, input.idempotencyKey]))
+      .digest('hex');
+    const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    try {
+      return { event: await this.#insert(input, id), created: true };
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const existing = await this.#db.findOne<AuditEventDbRow>('audit_events', { id, org_id: input.orgId });
+      if (!existing) throw error;
+      return { event: toRow(existing), created: false };
+    }
+  }
+
+  async #insert(input: RecordAuditEventInput, id?: string): Promise<AuditEventRow> {
     const inserted = await this.#db.insertOne<AuditEventDbRow>('audit_events', {
+      ...(id ? { id } : {}),
       org_id: input.orgId,
       actor_id: input.actorId,
       actor_type: input.actorType ?? 'human',

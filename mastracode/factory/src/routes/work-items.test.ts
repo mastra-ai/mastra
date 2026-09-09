@@ -847,9 +847,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     });
 
     expect(res.status).toBe(202);
-    expect(prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org1', userId: 'u1', actor: { type: 'human', id: 'u1' } }),
-    );
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', userId: 'u1' }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {

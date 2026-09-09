@@ -1618,6 +1618,21 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['triage']);
   });
 
+  it('audits a transition once when its ingress is delivered concurrently', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage: seed.workItems,
+      audit: seed.audit,
+    });
+    const input = request(item, { stage: 'triage', identity: 'concurrent-ingress' });
+    const [first, second] = await Promise.all([service.transition(input), service.transition(input)]);
+    expect(first.status).toBe('accepted');
+    expect(second).toEqual(first);
+    expect((await seed.audit.list({ orgId: 'org-1' })).events).toHaveLength(1);
+  });
+
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const first = await createItem(storage, { board: 'lifecycle-test', orgId: 'org-1', sourceKey: 'github-issue:one' });
