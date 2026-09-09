@@ -1117,7 +1117,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               toolName,
               args,
               errorText,
-              ...(toolName.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
+              ...(toolName?.startsWith('agent-') ? { result: toolPart.toolInvocation.result } : {}),
             } as MastraToolInvocation,
           };
         } else {

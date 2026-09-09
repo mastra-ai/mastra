@@ -840,6 +840,20 @@ describe('accumulateChunk - tool calls', () => {
     });
   });
 
+  it('records a tool error when the stored invocation has no tool name', () => {
+    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'search', {})]);
+    const part = initial[0].content.parts.find(p => p.type === 'tool-invocation');
+    if (!part || part.type !== 'tool-invocation') throw new Error('Missing tool invocation');
+    Reflect.deleteProperty(part.toolInvocation, 'toolName');
+
+    const out = reduce([toolErrorChunk('tc-1', 'boom')], streamMeta(), initial);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'output-error', toolCallId: 'tc-1', errorText: 'boom' }),
+      }),
+    );
+  });
+
   it('retains partial child output when a delegation fails', () => {
     const out = reduce([
       startChunk(),
