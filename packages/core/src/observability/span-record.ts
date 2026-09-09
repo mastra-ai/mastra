@@ -78,7 +78,7 @@ const MESSAGE_LIST_INPUT_SPANS: readonly SpanType[] = [
  * - `text`: a plain string, such as the prompt passed to an agent
  * - `messages`: a message list, unwrapped from the `{ messages }` envelope
  *   model generation spans and legacy agent spans record
- * - `agent-run-resume`: the resume data of a resumed agent run
+ * - `agent-run-resume`: the resume data of a resumed agent run, whatever keys it carries
  * - `json`: anything else, such as tool arguments or workflow step data
  */
 export function describeSpanInput(span: SpanRecord): SpanInputDescription | undefined {
@@ -93,6 +93,11 @@ export function describeSpanInput(span: SpanRecord): SpanInputDescription | unde
   if (!isRecord(input)) return { type: 'json', value: input };
 
   const isAgentRun = span.spanType === SpanType.AGENT_RUN;
+  // A resumed run's input is resume data, whatever keys it happens to carry, so the
+  // resumed marker settles it before any shape check.
+  if (isAgentRun && span.metadata?.resumed === true) {
+    return { type: 'agent-run-resume', value: input as AgentRunResumeInput };
+  }
   if ((isAgentRun || span.spanType === SpanType.MODEL_GENERATION) && 'messages' in input) {
     const { messages } = input;
     if (typeof messages === 'string') return { type: 'text', value: messages };
@@ -100,7 +105,6 @@ export function describeSpanInput(span: SpanRecord): SpanInputDescription | unde
     if (isRecord(messages)) return { type: 'messages', value: [messages as SpanInputMessage] };
   }
   if (isAgentRun) {
-    if (span.metadata?.resumed === true) return { type: 'agent-run-resume', value: input as AgentRunResumeInput };
     if (typeof input.role === 'string') return { type: 'messages', value: [input as SpanInputMessage] };
     if ('toolCallId' in input || 'toolName' in input || 'resumeData' in input) {
       return { type: 'agent-run-resume', value: input as AgentRunResumeInput };

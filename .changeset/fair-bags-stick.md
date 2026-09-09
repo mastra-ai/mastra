@@ -15,4 +15,4 @@ if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
 
 A resumed agent run now always records its resume data as an object on the span input, wrapping a primitive or array under `resumeData` the way it already did when the suspended tool was known.
 
-For rendering, `describeSpanInput`, `describeSpanOutput` and `describeSpanError` return the payload tagged by what it holds (`messages`, `agent-run-resume`, `interrupted`, `model-generation-result`, `json`, ...), so a UI can switch on `type` instead of checking shapes. The tag is derived at read time and never stored.
+For rendering, `describeSpanInput` and `describeSpanOutput` return the payload tagged by what it holds (`messages`, `agent-run-resume`, `interrupted`, `model-generation-result`, `json`, ...), so a UI can switch on `type` instead of checking shapes. The tag is derived at read time and never stored. `describeSpanError` returns the span's error info, typed.

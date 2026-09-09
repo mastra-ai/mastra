@@ -94,6 +94,25 @@ describe('describeSpanInput', () => {
     });
   });
 
+  it('tags a resumed run by its marker, whatever keys the resume data carries', () => {
+    const resumed = { metadata: { resumed: true } };
+
+    // Resume data that happens to carry `messages` is still resume data.
+    expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { messages: ['approved'] }, ...resumed }))).toEqual({
+      type: 'agent-run-resume',
+      value: { messages: ['approved'] },
+    });
+    expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { resumeData: 'Yes' }, ...resumed }))).toEqual({
+      type: 'agent-run-resume',
+      value: { resumeData: 'Yes' },
+    });
+    // Without the marker, a `{ messages }` envelope is still a message list.
+    expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { messages: ['approved'] } }))).toEqual({
+      type: 'messages',
+      value: ['approved'],
+    });
+  });
+
   it('keeps caller-defined payloads as json, even when they are arrays', () => {
     expect(describeSpanInput(span(SpanType.TOOL_CALL, { input: { city: 'Paris' } }))).toEqual({
       type: 'json',
