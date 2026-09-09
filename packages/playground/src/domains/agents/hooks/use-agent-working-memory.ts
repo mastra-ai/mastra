@@ -10,12 +10,6 @@ interface WorkingMemoryTemplate {
   format?: 'json' | 'markdown';
 }
 
-/** Omit `resourceId` to build a prefix key that matches every resource for the thread. */
-export const workingMemoryQueryKey = (agentId: string, threadId: string, resourceId?: string) =>
-  resourceId === undefined
-    ? (['working-memory', agentId, threadId] as const)
-    : (['working-memory', agentId, threadId, resourceId] as const);
-
 const isTemplate = (value: unknown): value is WorkingMemoryTemplate => typeof value === 'object' && value !== null;
 
 const templateOf = (res: WorkingMemoryResponse): WorkingMemoryTemplate | null =>
@@ -47,7 +41,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { requestContext } = usePlaygroundStore();
-  const queryKey = workingMemoryQueryKey(agentId, threadId, resourceId);
+  const queryKey = ['working-memory', agentId, threadId, resourceId, requestContext];
 
   const query = useQuery<WorkingMemoryResponse>({
     queryKey,

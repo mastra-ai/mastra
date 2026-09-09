@@ -9,7 +9,6 @@ import { useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { ChatSendArgs } from './chat-context';
-import { workingMemoryQueryKey } from '@/domains/agents/hooks/use-agent-working-memory';
 import { injectBufferingEnds } from '@/services/om-parts-converter';
 import {
   buildMaxStepsStreamErrorMessage,
@@ -177,7 +176,7 @@ export const useChatSendHandler = ({
   const refreshWorkingMemory = useCallback(
     (currentThreadId?: string) => {
       if (!currentThreadId) return;
-      void queryClient.invalidateQueries({ queryKey: workingMemoryQueryKey(agentId, currentThreadId) });
+      void queryClient.invalidateQueries({ queryKey: ['working-memory', agentId, currentThreadId] });
     },
     [agentId, queryClient],
   );
