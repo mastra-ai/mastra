@@ -163,8 +163,8 @@ export const mcpDisableEnableScenario = {
     );
     terminal.write('\r');
     await runtime.waitForScreenText(/Use global default \(disabled\)/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Enable by default for all projects/i, terminal, 10_000);
-    await runtime.waitForScreenTextAbsent(/Disable by default for all projects/i, terminal, 1_000);
+    await runtime.waitForScreenText(/Enable globally \(all projects\)/i, terminal, 10_000);
+    await runtime.waitForScreenTextAbsent(/Disable globally \(all projects\)/i, terminal, 1_000);
     runtime.printScreen('mcp project setting enabled over global default', terminal);
     terminal.write('\x1b');
     terminal.write('\x1b');

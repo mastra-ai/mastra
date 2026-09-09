@@ -84,9 +84,9 @@ const NEEDS_AUTH_ACTIONS: ServerAction[] = [
 function getSettingActions(status: McpServerStatus): ServerAction[] {
   const actions: ServerAction[] = [];
   if (status.projectOverride === 'enabled' || (!status.projectOverride && !status.disabled)) {
-    actions.push({ label: 'Disable in this project', key: 'disable' });
+    actions.push({ label: 'Disable (this project)', key: 'disable' });
   } else {
-    actions.push({ label: 'Enable in this project', key: 'enable' });
+    actions.push({ label: 'Enable (this project)', key: 'enable' });
   }
 
   if (status.projectOverride) {
@@ -95,8 +95,8 @@ function getSettingActions(status: McpServerStatus): ServerAction[] {
 
   actions.push(
     status.globalDefault === 'disabled'
-      ? { label: 'Enable by default for all projects', key: 'enable-global' }
-      : { label: 'Disable by default for all projects', key: 'disable-global' },
+      ? { label: 'Enable globally (all projects)', key: 'enable-global' }
+      : { label: 'Disable globally (all projects)', key: 'disable-global' },
   );
   return actions;
 }
