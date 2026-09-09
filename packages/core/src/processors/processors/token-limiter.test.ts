@@ -44,6 +44,112 @@ describe('TokenLimiterProcessor', () => {
     vi.clearAllMocks();
   });
 
+  describe('memory-only mode', () => {
+    describe.each(['processInput', 'processInputStep'] as const)('%s', phase => {
+      it('removes remembered history but preserves every current-turn source even above budget', async () => {
+        const messageList = new MessageList();
+        messageList.addSystem('Protected system instructions');
+        const history = createTestMessage('Old history', 'user', 'history');
+        const input = createTestMessage('Current input', 'user', 'input');
+        const response = createTestMessage('Current response', 'assistant', 'response');
+        const context = createTestMessage('Current context', 'user', 'context');
+        messageList.add([history, input, response, context], 'memory');
+        messageList.add(input, 'input');
+        messageList.add(response, 'response');
+        messageList.add(context, 'context');
+        const onMemoryTrim = vi.fn();
+        const limiter = new TokenLimiterProcessor({
+          limit: 1,
+          trimMode: 'memory-only',
+          tokenCounter: { countMessage: () => 10 },
+          onMemoryTrim,
+        });
+        const args = {
+          messageList,
+          messages: messageList.get.all.db(),
+          systemMessages: messageList.getAllSystemMessages(),
+          state: {},
+          retryCount: 0,
+          abort: mockAbort,
+        };
+        if (phase === 'processInput') {
+          await limiter.processInput(args);
+        } else {
+          await limiter.processInputStep({ ...args, stepNumber: 1, steps: [], model: 'openai/gpt-4o' });
+        }
+        expect(messageList.get.all.db().map(message => message.id)).toEqual(['input', 'response', 'context']);
+        expect(messageList.getAllSystemMessages()).toEqual(args.systemMessages);
+        expect(onMemoryTrim).toHaveBeenCalledWith([history], undefined);
+        expect(mockAbort).not.toHaveBeenCalled();
+      });
+
+      it('drops oldest messages to the headroom target and leaves an under-budget tail unchanged', async () => {
+        const messageList = new MessageList();
+        const history = [0, 1, 2, 3].map(index => ({
+          ...createTestMessage('History', 'user', `history-${index}`),
+          createdAt: new Date(index * 1000),
+        }));
+        messageList.add([...history].reverse(), 'memory');
+        const onMemoryTrim = vi.fn();
+        const limiter = new TokenLimiterProcessor({
+          limit: 60,
+          atMaxRemoveTokens: 15,
+          trimMode: 'memory-only',
+          tokenCounter: { countMessage: () => 10 },
+          onMemoryTrim,
+        });
+        const run = async () => {
+          const args = {
+            messageList,
+            messages: messageList.get.all.db(),
+            systemMessages: [],
+            state: {},
+            retryCount: 0,
+            abort: mockAbort,
+          };
+          if (phase === 'processInput') await limiter.processInput(args);
+          else await limiter.processInputStep({ ...args, stepNumber: 1, steps: [], model: 'openai/gpt-4o' });
+        };
+        await run();
+        expect(
+          messageList.get.all
+            .db()
+            .map(message => message.id)
+            .sort(),
+        ).toEqual(['history-2', 'history-3']);
+        expect(onMemoryTrim).toHaveBeenCalledWith(history.slice(0, 2), undefined);
+        await run();
+        expect(onMemoryTrim).toHaveBeenCalledTimes(1);
+        expect(messageList.get.all.db()).toHaveLength(2);
+      });
+    });
+
+    it('returns non-streaming output unchanged even above the memory budget', async () => {
+      const limiter = new TokenLimiterProcessor({ limit: 1, trimMode: 'memory-only' });
+      const messages = [createTestMessage('A complete answer that must never be truncated by the memory budget')];
+      const original = structuredClone(messages);
+      expect(await limiter.processOutputResult({ messages, abort: mockAbort })).toBe(messages);
+      expect(messages).toEqual(original);
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+
+    it('passes every streaming text chunk through without accumulating output tokens', async () => {
+      const limiter = new TokenLimiterProcessor({ limit: 1, trimMode: 'memory-only' });
+      const state = {};
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'A complete answer above the memory budget', id: 'answer' },
+        runId: 'run',
+        from: ChunkFrom.AGENT,
+      };
+      for (let index = 0; index < 2; index++) {
+        expect(await limiter.processOutputStream({ part, streamParts: [part], state, abort: mockAbort })).toBe(part);
+      }
+      expect(state).toEqual({});
+      expect(mockAbort).not.toHaveBeenCalled();
+    });
+  });
+
   describe('basic functionality', () => {
     it('should allow chunks within token limit', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
