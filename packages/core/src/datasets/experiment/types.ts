@@ -1,6 +1,7 @@
 import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type {
@@ -275,6 +276,14 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   agentVersion?: string;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
+  /**
+   * Override the target agent's model for this run only. Only valid with
+   * `targetType: 'agent'`. The registered agent is not mutated: a forked copy
+   * with the same id is executed, so `targetId`, traces and scores keep
+   * pointing at the same agent. Use with `grouping.comparisonId` to run the
+   * same dataset (and its `toolMocks`) against several models.
+   */
+  model?: MastraModelConfig;
   /**
    * Tenancy read-scope for the parent dataset. When set, the storage-backed
    * dataset load is scoped to this tenant — a cross-tenant `datasetId` fails

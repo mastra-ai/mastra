@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
+import type { OpenAICompatibleConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
@@ -826,6 +827,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        model,
         maxConcurrency,
         provenance,
         grouping,
@@ -842,6 +844,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        model?: string | OpenAICompatibleConfig;
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -863,6 +866,11 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
       if (start === false) {
+        if (model) {
+          throw new HTTPException(400, {
+            message: 'model override requires start: true (create-only experiments have no runner to apply it to)',
+          });
+        }
         const created = await ds.createExperiment({
           id,
           targetType,
@@ -899,6 +907,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        model,
         maxConcurrency,
         provenance,
         grouping,

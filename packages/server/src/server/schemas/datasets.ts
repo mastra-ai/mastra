@@ -372,6 +372,20 @@ export const triggerExperimentBodySchema = z.object({
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+  model: z
+    .union([
+      z.string(),
+      z.object({
+        id: z.string().regex(/^[^/]+\/.+$/, 'Expected "provider/model-id"'),
+        url: z.string().optional(),
+        apiKey: z.string().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+      }),
+    ])
+    .optional()
+    .describe(
+      'Model override for the target agent (agent targets only, requires start: true). Router id string (e.g. "openai/gpt-4o") or provider config object. The registered agent is not mutated.',
+    ),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   provenance: z
     .object({
