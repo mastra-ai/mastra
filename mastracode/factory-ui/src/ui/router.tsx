@@ -18,6 +18,7 @@ import Chat from './domains/chat/Chat';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
 import { AuditPage } from './pages/AuditPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { AttentionPage } from './pages/AttentionPage';
 import { KnowledgePage } from './pages/KnowledgePage';
@@ -184,6 +185,7 @@ export function createAppRoutes(): RouteObject[] {
                 { path: 'metrics', element: <MetricsRedirect /> },
                 { path: 'rules', element: <RulesPage /> },
                 { path: 'audit', element: <AuditPage /> },
+                { path: 'docs', element: <DocumentsPage /> },
                 { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
                   path: 'settings',

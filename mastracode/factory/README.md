@@ -334,6 +334,31 @@ Intake bindings are explicit. A Linear project (Settings › Intake › Linear r
 - **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
+### Factory documents
+
+A factory project keeps its essential documents as markdown in the repository under `docs/factory/`, mapped to a fixed catalog of kinds by `docs/factory/manifest.yaml`. The repository is the source of truth; the factory keeps a synced copy so the UI, agent kickoffs, and the read tool never need a checkout.
+
+**Catalog.** Business: `product-vision`, `personas`, `user-stories`, `business-rules`, `glossary`, `process-flows`. Technical: `architecture`, `adrs`, `data-model`, `api-spec`, `coding-standards`, `testing-strategy`, `runbook`, `security-compliance`. Each kind has a default path (`docs/factory/<kind>.md`); the manifest overrides it:
+
+```yaml
+version: 1
+documents:
+  architecture: docs/factory/architecture/overview.md
+  adrs: docs/factory/adrs/index.md
+```
+
+Paths must be markdown files under `docs/factory/`. Unknown kinds are ignored with a warning; a missing or invalid manifest falls back to the defaults and is reported as such.
+
+**Sync.** Every time a session sandbox materializes the repository, the factory reads the manifest and every catalog kind with `git show origin/<default-branch>:<path>` and replaces the project snapshot in the `documents` domain (`factory_documents` table): title, first-paragraph summary, content hash, size, body (up to 256 KiB; larger files are indexed as `oversize`), and the commit it came from. Reads never touch the working tree, so a PR-sourced or session branch is never recorded as default-branch truth. The sync is best-effort and never fails a session start.
+
+**Routes.** `GET /web/factory/projects/:id/documents` returns the catalog, one entry per synced kind (`present` / `missing` / `oversize`, no bodies), and the sync state. `GET /web/factory/projects/:id/documents/:kind` returns one document with its markdown body. `POST /web/factory/projects/:id/documents/refresh` fetches the default branch in a live session sandbox for a linked repository and re-syncs; it answers `409 no_active_sandbox` when no running sandbox holds the repository (the index then updates on the next run), `409 no_repository` when the project has no linked repository, and `503` when no sandbox is configured.
+
+**Agents.** Every skill-invocation kickoff carries a `<factory-docs>` block after the work-item feed: one line per kind with path, title, and summary, labelled as data rather than instructions. Bound sessions get a `factory_read_document` tool that returns a document by kind or path from the synced copy. The bundled triage, plan, and review skills read the relevant documents and require code changes to update affected documents (and the manifest) in the same branch and pull request; documents are never a separate work item.
+
+**UI.** Factory › Documents lists the catalog by group with each kind's status, renders the selected document as markdown (`?doc=<kind>` deep links), and offers Refresh. Missing kinds show the expected path and that agents create them alongside the code change that touches the area.
+
+Not yet supported: editing documents in the UI, a per-factory docs folder or catalog, refresh without a live sandbox, and GitLab-linked repositories (sync runs through the GitHub sandbox path).
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.

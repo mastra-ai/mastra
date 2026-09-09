@@ -5,6 +5,7 @@ import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-uti
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { observeSessionRunEnd } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import { FactoryDocsReader } from '../storage/domains/documents/prompt-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -1572,6 +1573,92 @@ describe('FactoryDecisionDispatcher', () => {
       expect.anything(),
     );
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
+  it('appends the project document index after the work item feed', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-docs',
+    });
+    await seed.comments.create({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
+      body: 'see the architecture doc',
+    });
+    await seed.documents.replaceSnapshot({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      sourceRef: 'origin/main',
+      sourceSha: 'abc1234def',
+      manifestStatus: 'ok',
+      documents: [
+        {
+          kind: 'architecture',
+          path: 'docs/factory/architecture.md',
+          status: 'present',
+          title: 'System Architecture',
+          summary: 'Two services.',
+          content: '# System Architecture\n\nTwo services.',
+        },
+        { kind: 'glossary', path: 'docs/factory/glossary.md', status: 'missing' },
+      ],
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      feedReader: new FactoryFeedReader(seed.comments),
+      docsReader: new FactoryDocsReader(seed.documents),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.stringMatching(
+          /<\/skill>\n\n<work-item-feed>\n[\s\S]*<\/work-item-feed>\n\n<factory-docs>\n[\s\S]*origin\/main@abc1234[\s\S]*- glossary \(Glossary\) · docs\/factory\/glossary\.md — MISSING: [^\n]+\n- architecture \(Architecture overview\) · docs\/factory\/architecture\.md · "System Architecture" — Two services\.\n<\/factory-docs>$/,
+        ),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('leaves the kickoff untouched when the project has never synced documents', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-docs-unsynced',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      docsReader: new FactoryDocsReader(seed.documents),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.not.stringContaining('<factory-docs>') }),
+      expect.anything(),
+    );
   });
 
   it('still honors the delivery-id replay guard with a feed reader wired', async () => {

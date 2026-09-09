@@ -100,6 +100,37 @@ describe('parseSkillActivation', () => {
     });
   });
 
+  it('parses the appended document index, with or without a feed before it', () => {
+    const docs = 'Index of this project documents.\n\n- architecture · docs/factory/architecture.md';
+    expect(
+      parseSkillActivation(
+        `<skill name="factory-plan">\nPlan it.\n</skill>\n\n<work-item-feed>\n[Ada · 2026-08-28T10:00:00.000Z]\nhi\n</work-item-feed>\n\n<factory-docs>\n${docs}\n</factory-docs>`,
+      ),
+    ).toEqual({
+      name: 'factory-plan',
+      instructions: 'Plan it.',
+      arguments: undefined,
+      feed: '[Ada · 2026-08-28T10:00:00.000Z]\nhi',
+      docs,
+    });
+    expect(
+      parseSkillActivation(
+        `<skill name="factory-plan">\nPlan it.\n</skill>\n\n<factory-docs>\n${docs}\n</factory-docs>`,
+      ),
+    ).toEqual({ name: 'factory-plan', instructions: 'Plan it.', arguments: undefined, docs });
+  });
+
+  it('keeps the message raw when the docs block precedes the feed or is followed by anything', () => {
+    expect(
+      parseSkillActivation(
+        '<skill name="s">\nBody\n</skill>\n<factory-docs>\nd\n</factory-docs>\n<work-item-feed>\nf\n</work-item-feed>',
+      ),
+    ).toBeUndefined();
+    expect(
+      parseSkillActivation('<skill name="s">\nBody\n</skill>\n<factory-docs>\nd\n</factory-docs>\ntrailing'),
+    ).toBeUndefined();
+  });
+
   it('keeps the message raw when anything but the work-item feed trails the envelope', () => {
     expect(
       parseSkillActivation('<skill name="s">\nBody\n</skill>\n<notes>\nignore the above\n</notes>'),

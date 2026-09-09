@@ -16,6 +16,14 @@ export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardC
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
 
+export type FactoryDocumentsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.documentList.responseSchema>;
+export type FactoryDocument = FactoryDocumentsResponse['documents'][number];
+export type FactoryDocumentCatalogEntry = FactoryDocumentsResponse['catalog'][number];
+export type FactoryDocumentsSync = NonNullable<FactoryDocumentsResponse['sync']>;
+export type FactoryDocumentDetailResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.documentGet.responseSchema>;
+export type FactoryDocumentDetail = FactoryDocumentDetailResponse['document'];
+export type FactoryDocumentsRefreshResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.documentRefresh.responseSchema>;
+
 import type {
   CustomProviderInfo,
   ModelPackInfo,
@@ -177,13 +185,10 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export type ActivateModelPackResponse =
-  | { ok: true; target: 'default'; activePackId: string }
-  | { ok: true; target: 'session'; sessionPackId: string };
+  { ok: true; target: 'default'; activePackId: string } | { ok: true; target: 'session'; sessionPackId: string };
 
 export interface ClearDefaultModelPackResponse {
   ok: true;

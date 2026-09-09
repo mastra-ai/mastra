@@ -66,6 +66,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { getFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
@@ -97,6 +98,9 @@ import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
 import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { createFactoryDocumentTools } from './storage/domains/documents/agent-tool.js';
+import { FactoryDocumentsStorage } from './storage/domains/documents/base.js';
+import { FactoryDocsReader } from './storage/domains/documents/prompt-context.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
@@ -441,6 +445,8 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
+    // Synced copy of the repo's docs/factory documents (Documents page, kickoff index, read tool).
+    const factoryDocumentsStorage = storage.registerDomain(new FactoryDocumentsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -455,6 +461,7 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
+      documents: factoryDocumentsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -743,6 +750,7 @@ export class MastraFactory {
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
+          documents: factoryDocumentsStorage,
           workspaceRegistry,
         }),
         disableGithubSignals: true,
@@ -812,6 +820,19 @@ export class MastraFactory {
                         : {}),
                     }),
                   );
+                  // Bound factory sessions can read the project's synced
+                  // documents; the kickoff `<factory-docs>` index tells them what
+                  // exists. Scope comes from the session address, never input.
+                  const documentScope = getFactorySessionAddress(requestContext);
+                  if (documentScope) {
+                    mergeTools(
+                      'factory-documents',
+                      createFactoryDocumentTools({
+                        scope: { orgId: documentScope.orgId, factoryProjectId: documentScope.factoryProjectId },
+                        documents: factoryDocumentsStorage,
+                      }),
+                    );
+                  }
                   // The supervisor session has no seat, so it never gets the
                   // transition tool above; it gets the read surface instead,
                   // and only once the caller's org is shown to own the project.
@@ -966,6 +987,7 @@ export class MastraFactory {
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
+                docsReader: new FactoryDocsReader(factoryDocumentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;

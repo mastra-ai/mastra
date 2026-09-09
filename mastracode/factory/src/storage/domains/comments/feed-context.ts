@@ -1,6 +1,6 @@
 import type { WorkItemCommentRow, WorkItemCommentsStorage } from './base.js';
 
-/** The one block that may trail a skill envelope in a kickoff; both transcript renderers allow only it. */
+/** The first block that may trail a skill envelope in a kickoff (followed only by `<factory-docs>`); the transcript renderers allow exactly these two. */
 export const WORK_ITEM_FEED_TAG = 'work-item-feed';
 
 const MAX_FEED_COMMENTS = 20;

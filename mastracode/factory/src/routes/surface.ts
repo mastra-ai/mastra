@@ -31,6 +31,8 @@ import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.j
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { FactoryDocumentsStorage } from '../storage/domains/documents/base.js';
+import { createFactoryDocumentsRefresher } from '../storage/domains/documents/refresh.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
@@ -50,6 +52,7 @@ import {
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
+import { DocumentRoutes } from './documents.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
@@ -108,6 +111,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    documents: FactoryDocumentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -568,6 +572,22 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
+        }).routes()
+      : []),
+    ...(deps.factoryReady
+      ? new DocumentRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          documents: deps.domains.documents,
+          ...(githubIntegration && githubStorage && deps.sandbox
+            ? {
+                refresh: createFactoryDocumentsRefresher({
+                  sourceControl: githubStorage,
+                  getRepositoryAccess: input => githubIntegration.versionControl.getRepositoryAccess(input),
+                  documents: deps.domains.documents,
+                }),
+              }
+            : {}),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.knowledgeEnabled

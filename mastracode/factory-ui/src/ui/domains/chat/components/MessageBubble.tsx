@@ -197,12 +197,17 @@ export function MessageBubble({
       ? parseSkillActivation(parts[0].text)
       : undefined;
   if (skillActivation) {
-    return skillActivation.feed === undefined ? (
+    return skillActivation.feed === undefined && skillActivation.docs === undefined ? (
       <SkillMessage activation={skillActivation} />
     ) : (
       <div className="flex flex-col">
         <SkillMessage activation={skillActivation} />
-        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
+        {skillActivation.feed !== undefined ? (
+          <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
+        ) : null}
+        {skillActivation.docs !== undefined ? (
+          <SignalRow kind="reactive" label="Project documents" message={skillActivation.docs} />
+        ) : null}
       </div>
     );
   }

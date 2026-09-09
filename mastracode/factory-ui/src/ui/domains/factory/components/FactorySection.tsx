@@ -1,5 +1,5 @@
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
+import { Brain, FileText, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router';
 
@@ -45,6 +45,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
         )}
         <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
         <FactoryLink to={`/factories/${factoryId}/audit`} icon={Logs} label="Audit log" />
+        <FactoryLink to={`/factories/${factoryId}/docs`} icon={FileText} label="Documents" />
         {features.data?.knowledge ? (
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
         ) : null}

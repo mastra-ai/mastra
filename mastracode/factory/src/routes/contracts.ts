@@ -37,6 +37,26 @@ const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSch
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
+const factoryDocumentEntrySchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  path: z.string(),
+  title: z.string().nullable(),
+  summary: z.string().nullable(),
+  status: z.enum(['present', 'missing', 'oversize']),
+  contentHash: z.string().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+  sourceRef: z.string(),
+  sourceSha: z.string().nullable(),
+  syncedAt: z.string(),
+});
+const factoryDocumentsSyncSchema = z.object({
+  sourceRef: z.string(),
+  sourceSha: z.string().nullable(),
+  manifestStatus: z.enum(['ok', 'missing', 'invalid']),
+  syncedAt: z.string(),
+});
+
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
 const workItemResponseSchema = z.object({ workItem: entitySchema });
@@ -526,6 +546,45 @@ export const FACTORY_ROUTE_CONTRACTS = {
       checkedAt: z.string(),
       findings: z.array(entitySchema),
       counts: z.record(z.string(), z.number().int().nonnegative()),
+    }),
+  },
+  documentList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/documents',
+    description: 'List the Factory project document inventory (synced from docs/factory)',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      docsRoot: z.string(),
+      manifestPath: z.string(),
+      catalog: z.array(
+        z.object({
+          kind: z.string(),
+          group: z.enum(['ba', 'tech']),
+          label: z.string(),
+          defaultPath: z.string(),
+          purpose: z.string(),
+        }),
+      ),
+      documents: z.array(factoryDocumentEntrySchema),
+      sync: factoryDocumentsSyncSchema.nullable(),
+    }),
+  },
+  documentGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/documents/:kind',
+    description: 'Get one Factory project document with its markdown body',
+    pathSchema: z.object({ id: uuidSchema, kind: z.string() }),
+    responseSchema: z.object({ document: factoryDocumentEntrySchema.extend({ content: z.string().nullable() }) }),
+  },
+  documentRefresh: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/documents/refresh',
+    description: 'Re-sync the Factory project documents from a live sandbox checkout',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      ok: z.literal(true),
+      outcome: z.enum(['synced', 'unchanged']),
+      sync: factoryDocumentsSyncSchema.nullable(),
     }),
   },
 } as const satisfies Record<string, FactoryRouteContract>;

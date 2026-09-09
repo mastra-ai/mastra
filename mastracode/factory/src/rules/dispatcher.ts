@@ -19,6 +19,8 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import type { FactoryDocsReader } from '../storage/domains/documents/prompt-context.js';
+import { withFactoryDocs } from '../storage/domains/documents/prompt-context.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -269,6 +271,8 @@ export interface FactoryDecisionDispatcherOptions {
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
+  /** Injects the project's document index into skill-invocation kickoffs, after the feed. */
+  docsReader?: FactoryDocsReader;
   resolveLinkedWorkItemParentId?: (input: {
     orgId: string;
     factoryProjectId: string;
@@ -410,6 +414,7 @@ export class FactoryDecisionDispatcher {
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
+  readonly #docsReader?: FactoryDocsReader;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
@@ -436,6 +441,7 @@ export class FactoryDecisionDispatcher {
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
+    this.#docsReader = options.docsReader;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
@@ -784,10 +790,14 @@ export class FactoryDecisionDispatcher {
         const delivered = await session.thread.listActiveMessages();
         if (delivered.some(message => message.id === deliveryId)) return;
         // Safe under the replay guard above: it matches deliveryId, never prompt content.
-        const kickoffContents = await withWorkItemFeed(
-          this.#feedReader,
-          { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-          resolved.message,
+        const kickoffContents = await withFactoryDocs(
+          this.#docsReader,
+          { orgId: record.orgId, factoryProjectId: record.factoryProjectId },
+          await withWorkItemFeed(
+            this.#feedReader,
+            { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
+            resolved.message,
+          ),
         );
         if (decision.cancelInFlight && session.stream.isActive()) session.abort();
         const precedingMessage = decision.precedingMessage;

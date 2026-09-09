@@ -41,6 +41,8 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactoryDocumentsStorage } from './storage/domains/documents/base.js';
+import { syncFactoryDocuments } from './storage/domains/documents/sync.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -243,6 +245,11 @@ export interface CreateWorkspaceFactoryOptions {
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /**
+   * Documents storage; when present, every repo materialization re-syncs the
+   * project's `docs/factory` snapshot from the remote default branch.
+   */
+  documents?: Pick<FactoryDocumentsStorage, 'replaceSnapshot' | 'syncState'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -284,7 +291,7 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, documents } = options;
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
@@ -654,6 +661,37 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         repoFullName: repoFullName,
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
       });
+      if (documents) {
+        // Best-effort: the docs index must never wedge a session start. Reads
+        // go through `git show origin/<default>:…`, so the working tree — a
+        // PR-sourced (untrusted) checkout or the session's own branch — is
+        // never recorded as default-branch truth.
+        try {
+          const result = await timedPhase('workspace.docs-sync', () =>
+            syncFactoryDocuments({
+              orgId: session.orgId,
+              factoryProjectId: connection.factoryProjectId,
+              sandbox: target,
+              workdir,
+              ref: `origin/${repository.defaultBranch}`,
+              storage: documents,
+            }),
+          );
+          if (result.outcome === 'ref-unavailable') {
+            console.warn('[Mastra Factory] Documents sync skipped: default branch ref unavailable', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              reason: result.reason,
+            });
+          }
+        } catch (error) {
+          console.warn('[Mastra Factory] Documents sync failed', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            error: error instanceof Error ? error.message.slice(-2000) : String(error),
+          });
+        }
+      }
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the

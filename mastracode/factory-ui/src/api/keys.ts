@@ -65,6 +65,13 @@ export const queryKeys = {
     ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
+  /** Every documents query for a project — the invalidation target after a refresh. */
+  factoryDocumentsRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'documents', factoryProjectId ?? null] as const,
+  factoryDocuments: (factoryProjectId: string | undefined) =>
+    [...queryKeys.factoryDocumentsRoot(factoryProjectId), 'list'] as const,
+  factoryDocument: (factoryProjectId: string | undefined, kind: string | undefined) =>
+    [...queryKeys.factoryDocumentsRoot(factoryProjectId), 'doc', kind ?? null] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,

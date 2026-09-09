@@ -173,6 +173,20 @@ describe('TranscriptEntries skill rows', () => {
     expect(screen.queryByText(/<work-item-feed>/)).not.toBeInTheDocument();
   });
 
+  it('renders the appended document index as a collapsed documents row', async () => {
+    const docs =
+      'Index of essential documents.\n\n- architecture · docs/factory/architecture.md · "System Architecture"';
+    renderEntries([userMessageEntry('msg-1', `${SKILL_WITH_ARGS}\n\n<factory-docs>\n${docs}\n</factory-docs>`)]);
+
+    expect(screen.getByRole('group', { name: 'Skill: triage-issue' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Signal: Work item feed' })).not.toBeInTheDocument();
+    const docsRow = screen.getByRole('group', { name: 'Signal: Project documents' });
+
+    await userEvent.click(within(docsRow).getByRole('button'));
+    expect(within(docsRow).getByText(/System Architecture/)).toBeInTheDocument();
+    expect(screen.queryByText(/<factory-docs>/)).not.toBeInTheDocument();
+  });
+
   it('renders the agent activating a skill itself as the same row, not a raw tool card', async () => {
     renderEntries([
       {
