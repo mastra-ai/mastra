@@ -1,5 +1,52 @@
 # @mastra/memory
 
+## 1.29.0-alpha.0
+
+### Minor Changes
+
+- Added transform hooks to Observational Memory so applications can intercept and reshape data before it reaches the Observer/Reflector models or storage. `observationalMemory.hooks` now accepts `beforeObservation` (filter or redact messages before observation; returning no messages skips the model call), `afterObservation` (rewrite observations before they are persisted), `beforeReflection` (rewrite the observations sent to the Reflector), and `afterReflection` (rewrite the reflection before it is persisted). Transform hooks are always awaited, `void` passes data through unchanged, and a thrown error fails the cycle before committing its transformed observation or reflection text. After hooks replace text only: they don't recompute separate structured extractor results or undo callbacks and other side effects that already ran. Per-call `observe({ hooks })` now accepts lifecycle hooks only. Fixes #15626. ([#23167](https://github.com/mastra-ai/mastra/pull/23167))
+
+  Previously, lifecycle hooks could report cycle activity but could not replace the messages sent to the Observer. Configure a transform hook to filter those messages:
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        hooks: {
+          beforeObservation: ({ messages }) => ({
+            messages: messages.filter(message => message.role === 'user'),
+          }),
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
 ## 1.28.3
 
 ### Patch Changes
