@@ -55,36 +55,29 @@ function ReviewQueuePage() {
 
   return (
     <PageLayout height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column className="justify-items-start">
-            <ExperimentCombobox
-              allOption
-              value={selectedId ?? undefined}
-              onValueChange={selectExperiment}
-              className="w-80"
-            />
-          </PageLayout.Column>
-          {selectedId && (
-            <PageLayout.Column className="justify-items-end">
-              <Button as={Link} href={paths.experimentLink(selectedId)}>
-                See experiment
-                <ArrowUpRight />
-              </Button>
-            </PageLayout.Column>
-          )}
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
-      <PageLayout.MainArea className="overflow-visible">
-        <DatasetReview
-          key={selectedId ?? ALL_EXPERIMENTS}
-          datasetId={selected?.datasetId ?? undefined}
-          experimentId={selectedId ?? undefined}
-          featuredItemId={featuredResultId}
-          detailPanelVariant="overlay"
-        />
-      </PageLayout.MainArea>
+      <DatasetReview
+        key={selectedId ?? ALL_EXPERIMENTS}
+        datasetId={selected?.datasetId ?? undefined}
+        experimentId={selectedId ?? undefined}
+        featuredItemId={featuredResultId}
+        detailPanelVariant="overlay"
+        toolbarStart={
+          <ExperimentCombobox
+            allOption
+            value={selectedId ?? undefined}
+            onValueChange={selectExperiment}
+            className="w-72"
+          />
+        }
+        toolbarEnd={
+          selectedId ? (
+            <Button as={Link} href={paths.experimentLink(selectedId)}>
+              See experiment
+              <ArrowUpRight />
+            </Button>
+          ) : undefined
+        }
+      />
     </PageLayout>
   );
 }

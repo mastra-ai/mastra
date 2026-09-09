@@ -130,7 +130,7 @@ describe('Review Queue page', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();
 
-      const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
       await screen.findByRole('option', { name: 'All experiments' });
       expect(select.value).toBe('all');
 
@@ -144,7 +144,7 @@ describe('Review Queue page', () => {
     it('preselects it in the combobox and shows only its review queue', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
       await waitFor(() => expect(select.value).toBe(EXPERIMENT_ID));
 
       await screen.findByText(/third question/);
@@ -182,7 +182,7 @@ describe('Review Queue page', () => {
     it('clears ?experiment and shows every queue', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = await screen.findByRole('combobox');
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
       await screen.findByRole('option', { name: 'All experiments' });
       fireEvent.change(select, { target: { value: 'all' } });
 
@@ -196,7 +196,7 @@ describe('Review Queue page', () => {
     it('updates ?experiment and drops ?review', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);
 
-      const select = await screen.findByRole('combobox');
+      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
       await screen.findByRole('option', { name: 'entity-extraction / model-b' });
       fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
 

@@ -1,8 +1,6 @@
 'use client';
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
@@ -10,23 +8,17 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { format } from 'date-fns/format';
-import {
-  CheckCircle,
-  ClipboardCheck,
-  FlaskConical,
-  FileCodeIcon,
-  FileOutputIcon,
-  TargetIcon,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@/lib/framework';
@@ -70,8 +62,6 @@ export type ExperimentResultPanelProps = {
   experimentLink?: string;
   /** Renders a "Mark as reviewed" header action for `needs-review` results. */
   onComplete?: () => void | Promise<void>;
-  /** Renders a confirmable "Remove from review" footer action. */
-  onRemoveFromReview?: () => void;
   /**
    * When provided (and the result has a trace), the body splits into Details and
    * Feedback tabs; this renders the feedback tab, keyed by trace id.
@@ -97,7 +87,6 @@ export function ExperimentResultPanel({
   isUpdatingTags = false,
   experimentLink,
   onComplete,
-  onRemoveFromReview,
   feedbackTabSlot,
 }: ExperimentResultPanelProps) {
   const hasError = Boolean(result?.error);
@@ -112,6 +101,7 @@ export function ExperimentResultPanel({
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
   // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
   const { data: traceFeedback } = useTraceFeedback({ traceId: feedbackTraceId });
+  const usage = useExperimentResultUsage(result.traceId);
 
   const details = (
     <DataPanel.Content>
@@ -133,14 +123,7 @@ export function ExperimentResultPanel({
             <>
               <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                <Badge
-                  size="xs"
-                  variant={
-                    result.status === 'needs-review' ? 'orange' : result.status === 'complete' ? 'green' : 'neutral'
-                  }
-                >
-                  {result.status}
-                </Badge>
+                <ReviewStatusBadge status={result.status} />
               </DataKeysAndValues.Value>
             </>
           )}
@@ -175,6 +158,22 @@ export function ExperimentResultPanel({
                     />
                   )}
                 </div>
+              </DataKeysAndValues.Value>
+            </>
+          )}
+          {usage && (
+            <>
+              <DataKeysAndValues.Key>Input tokens</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>
+                {usage.inputTokens !== undefined ? formatCompact(usage.inputTokens) : '—'}
+              </DataKeysAndValues.Value>
+              <DataKeysAndValues.Key>Output tokens</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>
+                {usage.outputTokens !== undefined ? formatCompact(usage.outputTokens) : '—'}
+              </DataKeysAndValues.Value>
+              <DataKeysAndValues.Key>Cost</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>
+                {usage.estimatedCost !== undefined ? formatCost(usage.estimatedCost, usage.costUnit) : '—'}
               </DataKeysAndValues.Value>
             </>
           )}
@@ -228,15 +227,14 @@ export function ExperimentResultPanel({
           <DataPanel.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
         )}
       </div>
-
-      {onRemoveFromReview && <RemoveFromReviewAction onRemove={onRemoveFromReview} />}
     </DataPanel.Content>
   );
 
   return (
     <DataPanel collapsed={collapsed} className={className}>
-      <DataPanel.Header>
-        <DataPanel.Heading className="shrink-0 whitespace-nowrap">
+      {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
+      <DataPanel.Header className="items-start">
+        <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
           Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto flex-wrap justify-end">
@@ -270,8 +268,8 @@ export function ExperimentResultPanel({
               Mark as reviewed
             </Button>
           )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         </ButtonsGroup>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
       </DataPanel.Header>
 
       {!collapsed && (
@@ -300,41 +298,6 @@ export function ExperimentResultPanel({
         </SplitWithScorePanel>
       )}
     </DataPanel>
-  );
-}
-
-function RemoveFromReviewAction({ onRemove }: { onRemove: () => void }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="border-border1 mt-4 flex items-center gap-2 border-t pt-4">
-      <Button variant="outline" size="md" onClick={() => setOpen(true)}>
-        <Trash2 />
-        Remove from review
-      </Button>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Remove from Review</AlertDialog.Title>
-            <AlertDialog.Description>
-              This will remove the item from the review queue. The experiment result will remain but will no longer be
-              flagged for review.
-            </AlertDialog.Description>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action
-              onClick={() => {
-                onRemove();
-                setOpen(false);
-              }}
-            >
-              Remove
-            </AlertDialog.Action>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
-    </div>
   );
 }
 
