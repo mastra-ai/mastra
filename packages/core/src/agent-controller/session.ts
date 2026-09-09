@@ -3829,7 +3829,8 @@ export class Session<TState = unknown> {
     if (!resolvedToolCallId) return;
 
     const suspension = this.suspensions.get({ toolCallId: resolvedToolCallId });
-    const operationId = this.run.nextOperation();
+    // Answers to different tools belong to the same operation, not replacement runs.
+    const operationId = this.run.getOperationId();
     const context = {
       threadId: this.thread.getId(),
       resourceId: this.identity.getResourceId(),

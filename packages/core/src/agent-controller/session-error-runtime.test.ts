@@ -114,6 +114,39 @@ describe('session error production paths', () => {
     await controller.deleteSession({ resourceId: 'resource', scope: 'first' });
   });
 
+  it('dispatches both pending tool responses when their context preparation overlaps', async () => {
+    const { controller, session, agent } = await setup('tool');
+    await session.sendMessage({ content: 'Ask for confirmation' });
+    const suspension = session.suspensions.get({ toolCallId: 'call-1' })!;
+    session.suspensions.register({ toolCallId: 'call-2', ...suspension });
+    const preparation = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const dispatched = Promise.withResolvers<never>();
+    const build = session.machinery.buildRequestContext.bind(session.machinery);
+    vi.spyOn(session.machinery, 'buildRequestContext').mockImplementationOnce(async input => {
+      entered.resolve();
+      await preparation.promise;
+      return build(input);
+    });
+    const resume = vi.spyOn(agent, 'sendStreamResume').mockImplementation(() => dispatched.promise);
+    const first = session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: { approved: true } });
+    await entered.promise;
+    const second = session.respondToToolSuspension({ toolCallId: 'call-2', resumeData: { approved: false } });
+    await vi.waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    preparation.resolve();
+    try {
+      await vi.waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
+      expect(resume.mock.calls.map(([input]) => [input.toolCallId, input.resumeData])).toEqual([
+        ['call-2', { approved: false }],
+        ['call-1', { approved: true }],
+      ]);
+    } finally {
+      dispatched.reject(new Error('End test resumes'));
+      await Promise.all([first, second]);
+      await controller.deleteSession({ resourceId: 'resource', scope: 'first' });
+    }
+  });
+
   it('does not reinstall the old subscription after a thread switch during resume preparation', async () => {
     const { controller, session, agent } = await setup('tool');
     await session.sendMessage({ content: 'Ask for confirmation' });
