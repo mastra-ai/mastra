@@ -37,6 +37,7 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
 }
 
 async function enterCustomModel(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, modelId: string) {
+  await waitFor(() => expect(screen.queryByPlaceholderText('Search models…')).not.toBeInTheDocument());
   await user.click(trigger);
   await user.type(await screen.findByPlaceholderText('Search models…'), modelId);
   const option = await screen.findByRole('option', { name: `Use “${modelId}”` });
