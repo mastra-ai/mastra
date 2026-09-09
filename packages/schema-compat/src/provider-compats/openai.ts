@@ -308,6 +308,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               delete propSchema.anyOf;
               delete propSchema.type;
               delete prop.type;
+              delete prop.const;
+              delete prop.enum;
               prop.anyOf = [
                 {
                   ...propSchema,
