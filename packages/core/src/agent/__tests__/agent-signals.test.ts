@@ -1084,7 +1084,11 @@ describe('Agent signals', () => {
       readNextRunWithParts(liveSubscription.stream[Symbol.asyncIterator]()),
       'Timed out waiting for live local run',
     );
-    expect(liveRun.value.parts).toEqual(expected);
+    expect(liveRun.value.parts).toEqual(
+      expected.map(part =>
+        part.type === 'finish' ? { ...part, occurrenceId: expect.any(String), occurredAt: expect.any(Number) } : part,
+      ),
+    );
     liveSubscription.unsubscribe();
 
     await pubsub.flush();
@@ -1098,12 +1102,17 @@ describe('Agent signals', () => {
         readNextRunWithParts(replayIterator),
         'Timed out waiting for completed same-runtime replay',
       );
-      expect(replayedRun.value.parts).toEqual(expected);
+      expect(replayedRun.value.parts).toEqual(liveRun.value.parts);
 
       const nextRunPromise = readNextRunWithParts(replayIterator);
       const nextExpected = registerRun('retained-run-2', 'second');
       const nextRun = await withTimeout(nextRunPromise, 'Timed out waiting for run after replay');
-      expect(nextRun.value.parts).toEqual(nextExpected);
+      expect(nextRun.value.parts).toEqual(
+        nextExpected.map(part =>
+          part.type === 'finish' ? { ...part, occurrenceId: expect.any(String), occurredAt: expect.any(Number) } : part,
+        ),
+      );
+      expect(nextRun.value.parts.at(-1)?.occurrenceId).not.toBe(liveRun.value.parts.at(-1)?.occurrenceId);
     } finally {
       replaySubscription.unsubscribe();
       await pubsub.flush();
