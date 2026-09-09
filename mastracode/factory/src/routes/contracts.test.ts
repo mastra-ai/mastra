@@ -22,6 +22,7 @@ import {
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
+import { DocumentRoutes } from './documents.js';
 import { ProjectRoutes } from './projects.js';
 import { buildSupervisorRoutes } from './supervisor.js';
 import { WorkItemRoutes } from './work-items.js';
@@ -58,7 +59,12 @@ function registeredFactoryRoutes() {
     workItems: workItems as never,
     resolveProject: async () => ({}) as never,
   });
-  return [...projects, ...work, ...attention, ...supervisor];
+  const documents = new DocumentRoutes({
+    auth: {},
+    projects: {},
+    documents: {},
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...supervisor, ...documents];
 }
 
 describe('Factory route contracts', () => {
