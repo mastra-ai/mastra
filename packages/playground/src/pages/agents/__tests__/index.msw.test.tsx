@@ -114,6 +114,16 @@ describe('Agents page', () => {
       expect(await screen.findByText('Find reliable sources and summarize the evidence.')).not.toBeNull();
     });
 
+    it('links each table row to a new chat thread for the agent', async () => {
+      useAgentsResponse();
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
+
+      const row = await screen.findByRole('link', { name: /Research Agent/ });
+      expect(row.getAttribute('href')).toBe(paths.agentNewThreadLink('researcher'));
+    });
+
     it('shows model details when the provider is hovered', async () => {
       useAgentsResponse();
       renderPage();
