@@ -86,6 +86,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/boards": {
+    "contractKey": "boardCatalog",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/boards",
+    "description": "List installed Factory boards",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "boards"
+    }
+  },
   "GET /web/factory/projects/:id/decisions": {
     "contractKey": "decisionList",
     "method": "GET",
@@ -693,6 +710,109 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "items",
         "kinds",
         "hasMore"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/boards": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "initialPhase": {
+                "type": "string"
+              },
+              "phases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "resting",
+                        "working",
+                        "terminal"
+                      ]
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "transitions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "outcome": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "outcome",
+                          "to"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "kind",
+                    "transitions"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "initialPhase",
+              "phases"
+            ]
+          }
+        }
+      },
+      "required": [
+        "boards"
       ]
     }
   },
@@ -2002,22 +2122,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "board": {
           "type": "string",
-          "enum": [
-            "work",
-            "review"
-          ]
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "stage": {
           "type": "string",
-          "enum": [
-            "intake",
-            "triage",
-            "planning",
-            "execute",
-            "review",
-            "done",
-            "canceled"
-          ]
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "expectedRevision": {
           "type": "integer",
@@ -2060,6 +2171,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectList": "GET /web/factory/projects",
   "projectGet": "GET /web/factory/projects/:id",
   "attentionList": "GET /web/factory/projects/:id/attention",
+  "boardCatalog": "GET /web/factory/projects/:id/boards",
   "decisionList": "GET /web/factory/projects/:id/decisions",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",

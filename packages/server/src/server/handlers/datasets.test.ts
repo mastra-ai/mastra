@@ -6,7 +6,11 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
+import {
+  listExperimentResultsQuerySchema,
+  listExperimentsQuerySchema,
+  triggerExperimentBodySchema,
+} from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
@@ -21,6 +25,7 @@ import {
   LIST_DATASETS_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
+  PURGE_ITEM_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
   RUN_EXPERIMENT_ITEM_ROUTE,
   SUBMIT_EXPERIMENT_RESULT_ROUTE,
@@ -28,6 +33,7 @@ import {
   LIST_EXPERIMENT_RESULTS_ROUTE,
   UPDATE_DATASET_ROUTE,
   UPDATE_EXPERIMENT_ROUTE,
+  UPDATE_EXPERIMENT_RESULT_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
@@ -381,6 +387,77 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('filters listed results by tags (all must match)', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const r1 = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      const r2 = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item2.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: r1.id,
+        tags: ['a'],
+      } as any);
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: r2.id,
+        tags: ['a', 'b'],
+      } as any);
+
+      const list = async (tags?: string[]) =>
+        (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          page: 0,
+          perPage: 10,
+          tags,
+        } as any)) as any;
+
+      const both = await list(['a', 'b']);
+      expect(both.results.map((r: any) => r.id)).toEqual([r2.id]);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await list(['a']);
+      expect(onlyA.results).toHaveLength(2);
+
+      const all = await list();
+      expect(all.results).toHaveLength(2);
+    });
+
+    it('listExperimentResultsQuerySchema coerces a single tag string into an array', () => {
+      expect(listExperimentResultsQuerySchema.parse({ tags: 'a' }).tags).toEqual(['a']);
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['a', 'b'] }).tags).toEqual(['a', 'b']);
+      expect(listExperimentResultsQuerySchema.parse({}).tags).toBeUndefined();
+    });
+
+    it('listExperimentResultsQuerySchema treats blank tags as no filter', () => {
+      expect(listExperimentResultsQuerySchema.parse({ tags: '' }).tags).toBeUndefined();
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['', ''] }).tags).toBeUndefined();
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['a', '', 'b'] }).tags).toEqual(['a', 'b']);
     });
 
     it('create is idempotent on a caller-supplied id', async () => {
@@ -1559,6 +1636,108 @@ describe('Datasets Handlers', () => {
       expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
       expect(byInput.get('disabled')?.scorerIds).toEqual([]);
       expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+    });
+  });
+
+  describe('PURGE_ITEM_ROUTE', () => {
+    it('returns 501 when dataset item purge is unavailable in core', async () => {
+      coreFeatures.delete('dataset-item-purge');
+
+      try {
+        await expect(
+          PURGE_ITEM_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: 'dataset-id',
+            itemId: 'item-id',
+          } as any),
+        ).rejects.toMatchObject({
+          status: 501,
+          message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+        });
+      } finally {
+        coreFeatures.add('dataset-item-purge');
+      }
+    });
+
+    it('purges item history after the item has been soft deleted', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Purge route dataset' });
+      const item = await dataset.addItem({
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      await dataset.updateItem({ itemId: item.id, input: { patient: 'Bob' } });
+      await dataset.deleteItem({ itemId: item.id });
+
+      const result = await PURGE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: item.id,
+      } as any);
+
+      expect(result).toEqual({ success: true });
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(3);
+      expect(history.every(row => row.input === null)).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+    });
+
+    it('does not purge item or experiment data when tenancy does not match', async () => {
+      const dataset = await mastra.datasets.create({
+        name: 'Tenant-scoped purge dataset',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const item = await dataset.addItem({ input: { patient: 'Alice' } });
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const experiment = await experimentsStore!.createExperiment({
+        datasetId: dataset.id,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+      const experimentResult = await experimentsStore!.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: 1,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'private' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: item.id,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(1);
+      expect(history[0]?.input).toEqual({ patient: 'Alice' });
+      const storedResult = await experimentsStore!.getExperimentResultById({ id: experimentResult.id });
+      expect(storedResult?.input).toEqual({ patient: 'Alice' });
+      expect(storedResult?.output).toEqual({ diagnosis: 'private' });
+    });
+
+    it('returns 404 when no item history exists', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Missing purge item dataset' });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: 'missing-item',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 });

@@ -3798,6 +3798,18 @@ describe('Agent signals', () => {
       const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
       expect(streamCount).toBe(0);
       expect(recalled.messages).toHaveLength(1);
+      // The synthesized `start` chunk must match the shape of every real start emitter
+      // (from + payload.id/messageId) so chunk consumers don't crash on `payload.messageId`.
+      expect(subscribedRun.value.parts[0]).toEqual({
+        type: 'start',
+        runId: expect.any(String),
+        from: 'AGENT',
+        payload: { id: 'idle-persist-agent', messageId: `persisted-signal:${recalled.messages[0]?.id}` },
+      });
+      expect(new Set(subscribedRun.value.parts.map(part => part.runId))).toEqual(
+        new Set([subscribedRun.value.part.runId]),
+      );
+      expect((subscribedRun.value.parts[0] as any).payload.messageId).not.toBe(recalled.messages[0]?.id);
       // Stash dropped; payload lives in content.parts now.
       expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
       expect(recalled.messages[0]?.content.parts).toEqual(

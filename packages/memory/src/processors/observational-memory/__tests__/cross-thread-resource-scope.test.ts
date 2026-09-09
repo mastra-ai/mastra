@@ -118,6 +118,45 @@ const omTriggerTool = createTool({
   execute: async () => ({ success: true }),
 });
 
+describe('count-free observational memory context', () => {
+  it.each(['thread', 'resource'] as const)('loads %s-scoped messages without totals', async scope => {
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          scope,
+          model: createSimpleModel(observerText) as any,
+        },
+      },
+    });
+    const threadId = `count-free-${scope}`;
+    const resourceId = `resource-${scope}`;
+    await memory.createThread({ threadId, resourceId });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: `message-${scope}`,
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Unobserved message' }] },
+        },
+      ],
+    });
+    await (await memory.omEngine)!.getOrCreateRecord(threadId, resourceId);
+    const memoryStore = await store.getStore('memory');
+    const listMessages = vi.spyOn(memoryStore!, scope === 'resource' ? 'listMessagesByResourceId' : 'listMessages');
+
+    const context = await memory.getContext({ threadId, resourceId });
+
+    expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ perPage: false, includeTotal: false }));
+    expect(context.messages.map(message => message.id)).toContain(`message-${scope}`);
+  });
+});
+
 describe('repro #15367 — cross-thread messages with resource-scoped OM', () => {
   it('does not throw wrong threadId when generating on thread B with history on thread A', async () => {
     const store = new InMemoryStore();

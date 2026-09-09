@@ -12,11 +12,10 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
-import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
@@ -152,7 +151,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
       )}
     >
       <div ref={listRef} className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
-        <div className="relative min-h-full">
+        <div className="relative min-h-full py-4">
           {/* Same rail as the chat page: one stop per turn, pinned mid-height while the page scrolls. */}
           <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
             <ThreadRail
@@ -166,10 +165,12 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
           {/* Pages load older traces, and the list reads oldest-first, so the sentinel sits at the top.
               Scroll anchoring keeps the viewport in place when a page is prepended. */}
           <div ref={setEndOfListElement} />
-          {traces.map(trace => (
+          {traces.map((trace, index) => (
             <TraceThreadRow
               key={trace.traceId}
               traceId={trace.traceId}
+              isFirst={index === 0}
+              isLast={index === traces.length - 1}
               selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
               isCurrent={currentTraceId === trace.traceId}
@@ -201,6 +202,10 @@ interface TraceThreadRowProps {
   featuredSpanIds?: string[];
   isCurrent: boolean;
   isExpanded: boolean;
+  /** The oldest trace; its timeline column gets the rounded top edge of the list. */
+  isFirst: boolean;
+  /** The newest trace; its timeline column gets the rounded bottom edge. Can be the same row as `isFirst`. */
+  isLast: boolean;
   /** The row the reader came from via "View full thread"; scrolled into view once it mounts. */
   isAnchor: boolean;
   onExpandedChange: (expanded: boolean) => void;
@@ -219,6 +224,8 @@ function TraceThreadRow({
   featuredSpanIds,
   isCurrent,
   isExpanded,
+  isFirst,
+  isLast,
   isAnchor,
   onExpandedChange,
   onSpanSelect,
@@ -255,9 +262,9 @@ function TraceThreadRow({
       data-active={isActive || undefined}
       ref={isAnchor ? scrollIntoViewOnMount : undefined}
     >
-      {/* The messages column has no bottom border so consecutive turns read as one
-          continuous conversation; the vertical border separates it from the trace. */}
-      <div className="border-border1 relative min-h-[240px] min-w-0 border-r pr-4">
+      {/* The messages column has no borders so consecutive turns read as one continuous
+          conversation; the timeline column carries the divider and the bottom border. */}
+      <div className="relative min-h-[240px] min-w-0 pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
         <div ref={messages.ref} className="sticky top-0 flex flex-col gap-2 py-4" data-testid="trace-row-messages">
           <div
@@ -275,16 +282,6 @@ function TraceThreadRow({
             >
               <MessageSquare />
             </Button>
-            <Button
-              as={Link}
-              to={`/traces?traceId=${encodeURIComponent(traceId)}`}
-              variant="ghost"
-              size="icon-sm"
-              tooltip="Go to trace"
-              aria-label="Go to trace"
-            >
-              <TraceIcon />
-            </Button>
           </div>
           <div className="min-h-0">
             <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
@@ -296,7 +293,13 @@ function TraceThreadRow({
           )}
         </div>
       </div>
-      <div className="border-border1 min-w-0 border-b">
+      <div
+        className={cn(
+          'border-border1 min-w-0 overflow-hidden border-b border-l',
+          isFirst && 'rounded-tl-xl border-t',
+          isLast && 'rounded-bl-xl',
+        )}
+      >
         <div
           className="relative overflow-hidden"
           style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}

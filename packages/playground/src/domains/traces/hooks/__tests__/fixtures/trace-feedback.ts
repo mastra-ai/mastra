@@ -48,6 +48,11 @@ export const authoredFeedbackResponse = listFeedbackResponse([
   }),
 ]);
 
+/** Trace-level record that has already been reviewed. */
+export const reviewedFeedbackResponse = listFeedbackResponse([
+  feedbackRecord({ feedbackId: 'reviewed', feedbackType: 'comment', value: 'All good', reviewStatus: 'reviewed' }),
+]);
+
 export const otherSpanFeedbackResponse = listFeedbackResponse([
   feedbackRecord({ feedbackId: 'span-b-feedback', spanId: OTHER_SPAN_ID, value: 0 }),
 ]);

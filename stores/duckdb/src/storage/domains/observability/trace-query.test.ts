@@ -21,7 +21,18 @@ describe('DuckDB advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR TRUE --" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -34,6 +45,107 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.sql).toContain('s.traceId = r.traceId');
     expect(compiled.sql).toContain('FROM current_scores s');
+    expect(compiled.sql).toContain('s.scorerVersion IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.scoreSource IS NOT NULL AND s.scoreSource IN (?)');
+    expect(compiled.sql).toContain('s.timestamp IS NOT NULL AND s.timestamp >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.spanId IS NOT NULL');
+    expect(compiled.sql).toContain('s.entityVersionId IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.parentEntityVersionId IS NOT NULL');
+    expect(compiled.sql).toContain('s.rootEntityVersionId IS NULL OR s.rootEntityVersionId NOT IN (?)');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
+    expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
+    expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+    expect(compiled.values).toContain(5000);
+  });
+
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.sql).toContain(
+      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+    );
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `$.${JSON.stringify(key)}`,
+      `$.${JSON.stringify(key)}`,
+      value,
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      'assistant',
+      'tool',
+      '$."parentMessageId"',
+      '$."parentMessageId"',
+      101,
+    ]);
+  });
+
+  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+    const key = ` latency'ms `;
+    const path = `$.${JSON.stringify(key)}`;
+    const trusted = plan({
+      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
+    });
+    const ordered = {
+      ...trusted,
+      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
+    } as TrustedTraceQueryPlan;
+
+    const compiled = compileDuckDBTraceQuery(ordered);
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
   it('selects the latest logical root before applying completion and time filters', () => {

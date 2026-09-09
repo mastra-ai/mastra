@@ -43,6 +43,8 @@ export function useCreateFactoryFromDraft({
       integrationId: 'linear',
       sourceId: linear.sourceId,
       factoryProjectId: linear.factoryProjectId,
+      // A fresh Factory only has its built-in boards; issues belong on Work.
+      board: 'work',
     });
     const config = await fetchIntakeConfig(baseUrl);
     const linearSelection = selectIntakeSource(config.linear, linear.sourceId);

@@ -38,7 +38,18 @@ describe('ClickHouse advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR 1" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -50,6 +61,86 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain("factuality' OR 1");
     expect(compiled.query.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toContain('LIMIT 1 BY scoreId');
+    expect(compiled.query).toContain('scorerVersion,');
+    expect(compiled.query).toContain('scoreSource,');
+    expect(compiled.query).toContain('timestamp,');
+    expect(compiled.query).toContain('spanId,');
+    expect(compiled.query).toContain('entityVersionId,');
+    expect(compiled.query).toContain('parentEntityVersionId,');
+    expect(compiled.query).toContain('rootEntityVersionId');
+    expect(compiled.query).toMatch(/s\.timestamp >= \{trace_query_6:DateTime64\(3, 'UTC'\)\}/);
+    expect(compiled.query).toContain('isNotNull(s.spanId)');
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
+  });
+
+  it('projects canonical span values with guarded JSON strings and typed parameters', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.query.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.query).toContain(`JSONType(attributes, 'model') = 'String'`);
+    expect(compiled.query).toContain(`JSONExtractString(attributes, 'model')`);
+    expect(compiled.query).toContain(`JSONType(attributes, 'provider') = 'String'`);
+    expect(compiled.query).toContain(`dateDiff('millisecond', startedAt, endedAt) AS durationMs`);
+    expect(compiled.query).toMatch(/s\.startedAt >= \{trace_query_6:DateTime64\(3, 'UTC'\)\}/);
+    expect(compiled.query).toMatch(/s\.durationMs > \{trace_query_7:Float64\}/);
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
+    expect(Object.values(compiled.query_params)).toContain(5000);
+  });
+
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR 1`;
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).not.toContain(key);
+    expect(compiled.query).not.toContain(value);
+    expect(compiled.query).toContain(
+      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
+    );
+    expect(compiled.query).toContain('ifNull(');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_3: key,
+      trace_query_4: value,
+      trace_query_5: 'actorRole',
+      trace_query_6: 'assistant',
+      trace_query_7: 'tool',
+      trace_query_8: 'parentMessageId',
+      trace_query_9: 101,
+    });
   });
 
   it('deduplicates completed span deliveries without relying on background merges', () => {

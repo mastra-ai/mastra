@@ -1,5 +1,148 @@
 # @mastra/client-js
 
+## 1.44.1-alpha.1
+
+### Patch Changes
+
+- Added a `tags` option to `listDatasetExperimentResults()` so you can restrict results to those that carry every listed tag. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results } = await client.listDatasetExperimentResults('dataset-id', 'exp-id', {
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+
+## 1.44.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
+## 1.44.0
+
+### Minor Changes
+
+- Added typed optional author profiles to listFeedback(), without additional network requests. Profiles are available when the server authentication provider supports user lookup. ([#23201](https://github.com/mastra-ai/mastra/pull/23201))
+
+  ```ts
+  const result = await client.listFeedback();
+  // Before: only the stored author ID was typed.
+  console.log(result.feedback[0]?.feedbackUserId);
+  // Now: the resolved profile is also typed when available.
+  console.log(result.feedback[0]?.author?.name);
+  ```
+
+- Added `deleteTraces()` to delete traces and their linked observability signals. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+  ```typescript
+  await mastraClient.deleteTraces({ traceIds: ['trace-1'] });
+  ```
+
+- Added queryTraces for querying completed traces with recursive predicates and thread grouping. ([#22728](https://github.com/mastra-ai/mastra/pull/22728))
+
+- Added methods to delete experiments. Deletion attempts to remove the observability traces produced by the experiment, including their spans and trace-linked signals. Unsupported observability storage leaves the traces in place and logs a warning. ([#22550](https://github.com/mastra-ai/mastra/pull/22550))
+
+  **Delete an experiment from a dataset**
+
+  ```ts
+  await client.deleteDatasetExperiment(datasetId, experimentId, {
+    organizationId,
+    projectId,
+  });
+  ```
+
+  **Delete any experiment, including orphaned experiments whose dataset was already deleted**
+
+  ```ts
+  await client.deleteExperiment(experimentId);
+  ```
+
+- Added `updateDatasetExperiment()` to rename an experiment or change its description and metadata. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+  ```typescript
+  const experiment = await client.updateDatasetExperiment({
+    datasetId: 'dataset-id',
+    experimentId: 'exp-id',
+    name: 'Baseline vs. new prompt',
+  });
+  ```
+
+### Patch Changes
+
+- Include `requestContext` in dataset item version history responses (`GET /api/datasets/:datasetId/items/:itemId/versions` and the single version endpoint). The field was stored but stripped from the response, so it could not be compared between versions. ([#23234](https://github.com/mastra-ai/mastra/pull/23234))
+
+- Preserve arbitrary provider namespaces in agent execution `providerOptions` instead of silently stripping providers outside the built-in allowlist. Validate provider option values as JSON and update the generated client route types to match the open provider contract. ([#23221](https://github.com/mastra-ai/mastra/pull/23221))
+
+- `getSystemPackages()` now returns `liveKitConnectionRouteEnabled`, true when the default `@mastra/livekit` connection route is mounted on the server. ([#19496](https://github.com/mastra-ai/mastra/pull/19496))
+
+  ```ts
+  const { liveKitConnectionRouteEnabled } = await client.getSystemPackages();
+  ```
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Regenerated route types: workflow step-graph entries now expose optional `id`, `description`, and `metadata` fields. ([#22633](https://github.com/mastra-ai/mastra/pull/22633))
+
+  ```typescript
+  const workflow = await client.getWorkflow('my-workflow').details();
+  for (const entry of workflow.stepGraph) {
+    // id, description, and metadata are now typed on every entry
+    console.log(entry.id, entry.description, entry.metadata);
+  }
+  ```
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+  - @mastra/schema-compat@1.3.9
+
+## 1.44.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+
+## 1.44.0-alpha.11
+
+### Minor Changes
+
+- Added methods to delete experiments. Deletion attempts to remove the observability traces produced by the experiment, including their spans and trace-linked signals. Unsupported observability storage leaves the traces in place and logs a warning. ([#22550](https://github.com/mastra-ai/mastra/pull/22550))
+
+  **Delete an experiment from a dataset**
+
+  ```ts
+  await client.deleteDatasetExperiment(datasetId, experimentId, {
+    organizationId,
+    projectId,
+  });
+  ```
+
+  **Delete any experiment, including orphaned experiments whose dataset was already deleted**
+
+  ```ts
+  await client.deleteExperiment(experimentId);
+  ```
+
+### Patch Changes
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/schema-compat@1.3.9-alpha.0
+
 ## 1.44.0-alpha.10
 
 ### Patch Changes

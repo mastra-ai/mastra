@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 type FeedbackThreadProps = {
@@ -40,7 +41,21 @@ type FeedbackThreadProps = {
    * `embed` renders a compact card suitable for inline use.
    */
   variant?: CommentVariant;
+  /** When provided, unreviewed rows get a "Mark reviewed" action. */
+  onMarkReviewed?: (feedbackId: string) => void;
+  /** feedbackId whose review-status update is in flight (disables its action). */
+  pendingFeedbackId?: string;
 };
+
+// The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
+function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  const resolved = status === 'reviewed' ? 'reviewed' : 'needs-review';
+  return (
+    <ReviewStatusBadge data-slot="feedback-review-status" status={resolved}>
+      {resolved === 'reviewed' ? 'Reviewed' : 'Needs review'}
+    </ReviewStatusBadge>
+  );
+}
 
 function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
@@ -49,17 +64,21 @@ function formatBody(fb: FeedbackItem): string {
   return String(fb.value ?? '');
 }
 
+type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
+  variant: CommentVariant;
+  items: FeedbackItem[];
+  onRequestDelete?: (feedbackId: string) => void;
+  isDeleting: boolean;
+};
+
 function FeedbackItems({
   variant,
   items,
   onRequestDelete,
   isDeleting,
-}: {
-  variant: CommentVariant;
-  items: FeedbackItem[];
-  onRequestDelete?: (feedbackId: string) => void;
-  isDeleting: boolean;
-}) {
+  onMarkReviewed,
+  pendingFeedbackId,
+}: FeedbackItemsProps) {
   const rows = items.map((fb, index) => {
     const ts = new Date(fb.timestamp);
     const author = feedbackAuthorLabel(fb);
@@ -69,32 +88,48 @@ function FeedbackItems({
       <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const actions =
-      onRequestDelete && feedbackId ? (
-        <CommentItemActions className="ml-auto">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Delete feedback"
-            disabled={isDeleting}
-            onClick={() => onRequestDelete(feedbackId)}
-          >
-            <Trash2Icon />
-          </Button>
-        </CommentItemActions>
-      ) : null;
+    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
+    const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pendingFeedbackId === feedbackId}
+        onClick={() => onMarkReviewed(feedbackId)}
+      >
+        Mark reviewed
+      </Button>
+    );
+    const deleteAction = onRequestDelete && feedbackId && (
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label="Delete feedback"
+        disabled={isDeleting}
+        onClick={() => onRequestDelete(feedbackId)}
+      >
+        <Trash2Icon />
+      </Button>
+    );
+    const actions = (markReviewed || deleteAction) && (
+      <CommentItemActions className="ml-auto">
+        {markReviewed}
+        {deleteAction}
+      </CommentItemActions>
+    );
     const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
     const key = feedbackId ?? `${fb.traceId}-${index}`;
 
     // The thread variant lays the row out as avatar gutter + content column.
+    // Without an author there is nothing to align under, so skip the gutter entirely.
     if (variant === 'thread') {
       return (
         <CommentItem key={key}>
-          <CommentItemAvatar>{avatar}</CommentItemAvatar>
+          {avatar && <CommentItemAvatar>{avatar}</CommentItemAvatar>}
           <CommentItemContent>
             <CommentItemHeader>
               {name}
               {timestamp}
+              {status}
               {actions}
             </CommentItemHeader>
             {body}
@@ -110,6 +145,7 @@ function FeedbackItems({
           {avatar}
           {name}
           {timestamp}
+          {status}
           {actions}
         </CommentItemHeader>
         {body}
@@ -123,7 +159,7 @@ function FeedbackItems({
 
 /**
  * Feedback rendered as a comment thread: existing records above, a composer below.
- * Pagination, submission, and deletion are driven by the caller.
+ * Pagination, submission, deletion, and review status are driven by the caller.
  */
 export function FeedbackThread({
   feedbackData,
@@ -134,6 +170,8 @@ export function FeedbackThread({
   onDelete,
   isDeleting = false,
   variant = 'thread',
+  onMarkReviewed,
+  pendingFeedbackId,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
@@ -171,6 +209,8 @@ export function FeedbackThread({
             items={feedbackItems}
             onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
             isDeleting={isDeleting}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
           />
         )}
       </div>

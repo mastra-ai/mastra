@@ -163,32 +163,42 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             traceId: span.traceId!,
             spanId: span.spanId,
             parentSpanId: span.parentSpanId,
-            name: span.spanId,
+            name: span.name,
             spanType: span.spanType as SpanType,
             isEvent: false,
             startedAt: new Date(span.startedAt),
             endedAt: span.endedAt ? new Date(span.endedAt) : null,
             threadId: span.threadId,
             resourceId: span.resourceId,
-            entityName: span.entityName,
             entityType: span.entityType as EntityType,
+            entityId: span.entityId,
+            entityName: span.entityName,
+            entityVersionId: span.entityVersionId,
+            parentEntityVersionId: span.parentEntityVersionId,
+            rootEntityVersionId: span.rootEntityVersionId,
             environment: span.environment,
+            attributes: span.attributes,
+            metadata: span.metadata,
             error: span.error as CreateSpanRecord['error'],
           }));
         for (const span of records) await storage.createSpan({ span });
 
         const scores = fixture.scores
-          .filter(score => score.traceId !== null && score.score !== null)
+          .filter(score => score.score !== null)
           .map(score => {
-            const timestamp = score.timestamp
-              ? new Date(score.timestamp)
-              : new Date(Date.UTC(2026, 7, 1, 0, 0, 0, score.cursorId));
+            const timestamp = new Date(score.timestamp);
             return {
               id: score.scoreId,
               scoreId: score.scoreId,
-              traceId: score.traceId!,
+              traceId: score.traceId,
+              spanId: score.spanId,
               scorerId: score.scorerId,
+              scorerVersion: score.scorerVersion,
+              scoreSource: score.scoreSource,
               score: score.score!,
+              entityVersionId: score.entityVersionId,
+              parentEntityVersionId: score.parentEntityVersionId,
+              rootEntityVersionId: score.rootEntityVersionId,
               timestamp,
               createdAt: timestamp,
               updatedAt: null,

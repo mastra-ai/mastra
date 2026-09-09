@@ -966,7 +966,7 @@ const fullText = await stream.text
 
 ### Limiting execution time
 
-Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it.
+Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it. `firstChunkMs` only applies to streaming calls and limits how long the model may take to emit its first content-bearing chunk.
 
 ```ts title="index.ts"
 const stream = await agent.stream('Tell me a story', {
@@ -974,15 +974,19 @@ const stream = await agent.stream('Tell me a story', {
     timeout: {
       totalMs: 30000, // fail the run if it takes longer than 30s
       stepMs: 10000, // fail an individual model call after 10s
+      firstChunkMs: 3000, // fail a model call that produces no content within 3s
     },
   },
 })
 ```
 
-Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+Exceeding a budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'`, `'step'` or `'firstChunk'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
 
 - A `totalMs` timeout ends the run immediately and doesn't try the next model, because it's a hard deadline for the run as a whole.
 - A `stepMs` timeout isn't retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+- A `firstChunkMs` timeout behaves like `stepMs`: it isn't retried against the same model, but does advance to the next model. Stream-start and metadata chunks don't satisfy the budget; only the first text, reasoning, tool call, file or source chunk does. Once content begins, only `stepMs` and `totalMs` remain active. Each provider retry attempt gets a fresh `firstChunkMs` budget.
+
+Nested `timeout` settings are merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override keeps a call-time `firstChunkMs`.
 
 ### AI SDK v5+ Format
 

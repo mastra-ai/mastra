@@ -76,6 +76,8 @@ export interface IntakeSourceBinding {
   integrationId: string;
   sourceId: string;
   factoryProjectId: string;
+  /** Installed board the source feeds; `null` keeps the built-in routing (issues → Work, PRs → Review). */
+  board: string | null;
 }
 
 async function requestIntakeBindings(baseUrl: string, init?: RequestInit): Promise<IntakeSourceBinding[]> {
@@ -104,10 +106,57 @@ export async function fetchIntakeBindings(baseUrl: string): Promise<IntakeSource
   return requestIntakeBindings(baseUrl);
 }
 
+/** One GitHub label routed to an installed board within a Factory project. */
+export interface IntakeLabelRoute {
+  factoryProjectId: string;
+  integrationId: string;
+  /** Normalized (trimmed, lower-cased) label name. */
+  label: string;
+  board: string;
+}
+
+async function requestIntakeLabelRoutes(
+  baseUrl: string,
+  query: string,
+  init?: RequestInit,
+): Promise<IntakeLabelRoute[]> {
+  const res = await fetch(`${baseUrl}/web/intake/label-routes${query}`, {
+    headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
+    credentials: 'include',
+    ...init,
+  });
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string; message?: string };
+      if (body.message) message = body.message;
+      else if (body.error) message = body.error;
+    } catch {
+      /* ignore non-JSON */
+    }
+    throw new Error(message);
+  }
+  const { routes } = (await res.json()) as { routes?: IntakeLabelRoute[] };
+  return routes ?? [];
+}
+
+/** Read the label → board routes of one Factory project. */
+export async function fetchIntakeLabelRoutes(baseUrl: string, factoryProjectId: string): Promise<IntakeLabelRoute[]> {
+  return requestIntakeLabelRoutes(baseUrl, `?factoryProjectId=${encodeURIComponent(factoryProjectId)}`);
+}
+
+/** Route a label to a board, or clear it with `board: null`. Resolves to the project's routes. */
+export async function saveIntakeLabelRoute(
+  baseUrl: string,
+  route: { factoryProjectId: string; integrationId: string; label: string; board: string | null },
+): Promise<IntakeLabelRoute[]> {
+  return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
+}
+
 /** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */
 export async function saveIntakeBinding(
   baseUrl: string,
-  binding: { integrationId: string; sourceId: string; factoryProjectId: string | null },
+  binding: { integrationId: string; sourceId: string; factoryProjectId: string | null; board?: string | null },
 ): Promise<IntakeSourceBinding[]> {
   return requestIntakeBindings(baseUrl, { method: 'PUT', body: JSON.stringify(binding) });
 }
