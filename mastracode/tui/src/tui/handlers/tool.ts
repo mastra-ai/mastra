@@ -12,6 +12,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parseJsonRiver } from 'jsonriver';
 
 import { ensureAssistantRenderSegment } from '../assistant-render-registry.js';
+import { parseBackgroundToolTaskId } from '../background-tool-result.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -318,7 +319,7 @@ function isToolResultError(result: unknown): boolean {
 }
 
 export function getBackgroundToolTaskId(result: unknown): string | undefined {
-  return formatToolResult(result).match(/^Background task started\. Task ID: ([^.\s]+)/)?.[1];
+  return parseBackgroundToolTaskId(formatToolResult(result));
 }
 
 export function isBackgroundToolPlaceholder(result: unknown): boolean {

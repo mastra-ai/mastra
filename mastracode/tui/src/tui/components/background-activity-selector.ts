@@ -7,6 +7,7 @@ import { WrappingSelectList } from './wrapping-select-list.js';
 export interface BackgroundActivitySelectorOptions {
   tui: TUI;
   activities: BackgroundActivity[];
+  getActivity: (taskId: string) => BackgroundActivity | undefined;
   onCancel: () => void;
   onAbort: (activity: BackgroundActivity) => void;
 }
@@ -14,13 +15,13 @@ export interface BackgroundActivitySelectorOptions {
 export class BackgroundActivitySelectorComponent extends Box {
   focused = false;
   private readonly list: WrappingSelectList;
-  private readonly activitiesById: Map<string, BackgroundActivity>;
+  private readonly getActivity: (taskId: string) => BackgroundActivity | undefined;
   private readonly onAbort: (activity: BackgroundActivity) => void;
 
   constructor(options: BackgroundActivitySelectorOptions) {
     super(4, 2, text => theme.bg('overlayBg', text));
     const byId = new Map(options.activities.map(activity => [activity.taskId, activity]));
-    this.activitiesById = byId;
+    this.getActivity = options.getActivity;
     this.onAbort = options.onAbort;
     const items: SelectItem[] = options.activities.map(activity => ({
       value: activity.taskId,
@@ -64,7 +65,7 @@ export class BackgroundActivitySelectorComponent extends Box {
     if (!this.focused) return;
     if (data.toLowerCase() === 'd') {
       const item = this.list.getSelectedItem();
-      const activity = item ? this.activitiesById.get(item.value) : undefined;
+      const activity = item ? this.getActivity(item.value) : undefined;
       if (activity?.status === 'accepted') this.onAbort(activity);
       return;
     }

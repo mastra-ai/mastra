@@ -301,6 +301,7 @@ export class MastraTUI {
     const selector = new BackgroundActivitySelectorComponent({
       tui: this.state.ui,
       activities,
+      getActivity: taskId => this.state.backgroundActivities.get(taskId),
       onCancel: () => this.state.ui.hideOverlay(),
       onAbort: activity => void this.abortBackgroundActivity(activity),
     });
@@ -311,8 +312,13 @@ export class MastraTUI {
   private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
     const manager = this.state.controller.getMastra()?.backgroundTaskManager;
     if (!manager) return;
-    await manager.cancel(activity.taskId);
-    this.state.ui.hideOverlay();
+    try {
+      await manager.cancel(activity.taskId);
+    } catch (error) {
+      showError(this.state, error instanceof Error ? error.message : 'Failed to cancel background task');
+    } finally {
+      this.state.ui.hideOverlay();
+    }
   }
 
   private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {

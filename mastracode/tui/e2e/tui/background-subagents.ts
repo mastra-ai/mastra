@@ -97,7 +97,7 @@ export const backgroundSubagentsScenario = {
     );
 
     terminal.write('\x05');
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await runtime.waitForScreenText(/notification from background-work/i, terminal, 10_000);
     const expandedOutput = terminal.serialize().view;
     check(
       !expandedOutput.includes('invocation · {"label":"failed","fail":true}') &&

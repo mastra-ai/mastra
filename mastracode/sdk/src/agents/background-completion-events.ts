@@ -19,7 +19,13 @@ export function createBackgroundCompletionEvents(): BackgroundCompletionEvents {
 
   return {
     publish(event) {
-      for (const listener of listeners) listener(event);
+      for (const listener of listeners) {
+        try {
+          listener(event);
+        } catch {
+          // A listener must not prevent other subscribers from receiving the completion.
+        }
+      }
     },
     subscribe(listener) {
       listeners.add(listener);

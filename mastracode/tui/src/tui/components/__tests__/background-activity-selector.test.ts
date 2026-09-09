@@ -21,14 +21,16 @@ function activity(overrides: Partial<BackgroundActivity> = {}): BackgroundActivi
 
 describe('BackgroundActivitySelectorComponent', () => {
   it('renders every current-thread task as inspectable activity', () => {
+    const activities = [
+      activity(),
+      activity({ taskId: 'task-2', toolName: 'search_content', status: 'completed' }),
+      activity({ taskId: 'task-3', toolName: 'mastra_expert', status: 'failed' }),
+      activity({ taskId: 'task-4', toolName: 'find_files', status: 'cancelled' }),
+    ];
     const component = new BackgroundActivitySelectorComponent({
       tui: { requestRender: vi.fn() } as unknown as TUI,
-      activities: [
-        activity(),
-        activity({ taskId: 'task-2', toolName: 'search_content', status: 'completed' }),
-        activity({ taskId: 'task-3', toolName: 'mastra_expert', status: 'failed' }),
-        activity({ taskId: 'task-4', toolName: 'find_files', status: 'cancelled' }),
-      ],
+      activities,
+      getActivity: taskId => activities.find(activity => activity.taskId === taskId),
       onCancel: vi.fn(),
       onAbort: vi.fn(),
     });
@@ -47,9 +49,11 @@ describe('BackgroundActivitySelectorComponent', () => {
 
   it('aborts only the selected running task', () => {
     const onAbort = vi.fn();
+    const currentActivity = activity();
     const component = new BackgroundActivitySelectorComponent({
       tui: { requestRender: vi.fn() } as unknown as TUI,
-      activities: [activity()],
+      activities: [currentActivity],
+      getActivity: () => currentActivity,
       onCancel: vi.fn(),
       onAbort,
     });
@@ -58,5 +62,23 @@ describe('BackgroundActivitySelectorComponent', () => {
     component.handleInput('d');
 
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', status: 'accepted' }));
+  });
+
+  it('does not abort a task that completed after the selector opened', () => {
+    const onAbort = vi.fn();
+    const initialActivity = activity();
+    const currentActivity = activity({ status: 'completed' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [initialActivity],
+      getActivity: () => currentActivity,
+      onCancel: vi.fn(),
+      onAbort,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+
+    expect(onAbort).not.toHaveBeenCalled();
   });
 });
