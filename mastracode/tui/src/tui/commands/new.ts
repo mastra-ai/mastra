@@ -11,6 +11,8 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // on the same thread from pushing output into this TUI.
   state.session.thread.detachFromCurrent();
 
+  state.liveSessionErrors.clear();
+  state.renderedSessionErrorIds.clear();
   state.pendingNewThread = true;
   setCurrentThreadTitle(state, undefined);
   disposeAssistantRenderState(state);

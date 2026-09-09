@@ -244,7 +244,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string }
-  | { type: 'run-failed'; runId: string; streamId?: string; error: string }
+  | { type: 'run-failed'; runId: string; streamId?: string; error: string; occurrenceId?: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
 
 function createRuntimeState(): AgentThreadRuntimeState {
@@ -614,6 +614,7 @@ export class AgentThreadStreamRuntime {
   }
 
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
+    if (event.type === 'run-failed') event = { ...event, occurrenceId: event.occurrenceId ?? randomUUID() };
     await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
       type: event.type,
       runId: event.runId,
@@ -664,7 +665,19 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
-      const part = sanitizeBroadcastPart(rawPart);
+      let part = sanitizeBroadcastPart(rawPart);
+      if (
+        part &&
+        typeof part === 'object' &&
+        'type' in part &&
+        (part.type === 'error' ||
+          part.type === 'finish' ||
+          part.type === 'data-om-observation-failed' ||
+          part.type === 'data-om-buffering-failed')
+      ) {
+        // Assign before local/remote fan-out so every consumer records the same occurrence.
+        part = { ...part, occurrenceId: randomUUID() };
+      }
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -2279,6 +2292,7 @@ export class AgentThreadStreamRuntime {
         clearActiveIfCurrent(runId, streamId);
         remoteRun.parts.push({
           type: 'error',
+          occurrenceId: `lease-lost:${streamId}`,
           payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
         });
         remoteRun.done = true;
@@ -2411,7 +2425,11 @@ export class AgentThreadStreamRuntime {
           remoteRun = remoteRuns.get(eventStreamId);
         }
         if (remoteRun) {
-          remoteRun.parts.push({ type: 'error', payload: { error: new Error(data.error) } });
+          remoteRun.parts.push({
+            type: 'error',
+            occurrenceId: data.occurrenceId ?? `run-failed:${eventStreamId}`,
+            payload: { error: new Error(data.error) },
+          });
           remoteRun.done = true;
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();

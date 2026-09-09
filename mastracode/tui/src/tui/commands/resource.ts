@@ -34,6 +34,8 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   }
 
   await controller.setResourceId(session, { resourceId: newId });
+  state.liveSessionErrors.clear();
+  state.renderedSessionErrorIds.clear();
 
   // Try to resume the most recent thread for this resource
   const threads = await session.thread.list();

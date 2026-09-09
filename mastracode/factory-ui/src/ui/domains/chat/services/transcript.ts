@@ -120,12 +120,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -524,7 +519,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
 
     // Workspace lifecycle.
     case 'workspace_error': {
-      const occurrenceId = 'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
       return pushNotice(
         state,
         'error',
@@ -534,7 +530,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     }
     case 'workspace_status_changed': {
       if (event.status !== 'error' || !event.error) return state;
-      const occurrenceId = 'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
       return pushNotice(
         state,
         'error',
@@ -547,8 +544,14 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error': {
-      const occurrenceId = 'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
-      return pushNotice(state, 'error', describeErrorEvent(event), occurrenceId ? sessionErrorNoticeId(occurrenceId) : undefined);
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      return pushNotice(
+        state,
+        'error',
+        describeErrorEvent(event),
+        occurrenceId ? sessionErrorNoticeId(occurrenceId) : undefined,
+      );
     }
 
     default:
@@ -594,7 +597,16 @@ function sessionErrorData(part: MastraMessagePart): SessionErrorData | undefined
 function persistedSessionErrorNotices(message: MastraDBMessage): NoticeEntry[] {
   return message.content.parts.flatMap(part => {
     const data = sessionErrorData(part);
-    return data ? [{ kind: 'notice' as const, id: sessionErrorNoticeId(data.occurrenceId), level: 'error' as const, text: data.message }] : [];
+    return data
+      ? [
+          {
+            kind: 'notice' as const,
+            id: sessionErrorNoticeId(data.occurrenceId),
+            level: 'error' as const,
+            text: data.message,
+          },
+        ]
+      : [];
   });
 }
 
@@ -739,6 +751,17 @@ function claimOnScreenEntries(
   const claimedTexts = new Set<string>();
 
   for (const message of messages) {
+    if (!eligible && !hasNonSessionErrorPart(message)) {
+      const notices = persistedSessionErrorNotices(message);
+      const index = entries.findIndex(
+        entry => entry.kind === 'notice' && notices.some(notice => notice.id === entry.id),
+      );
+      if (index !== -1 && !claimedEntries.has(index)) {
+        anchors.set(message, index);
+        claimedEntries.add(index);
+        continue;
+      }
+    }
     const displayed = toMessageEntry(message).message;
     const toolCallIds = toolCallIdsOf(displayed.content.parts);
     const texts = drawableTexts(message);

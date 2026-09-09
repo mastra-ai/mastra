@@ -1463,6 +1463,10 @@ export class SessionRun {
     return this.#operationId;
   }
 
+  getOperationId(): number {
+    return this.#operationId;
+  }
+
   /**
    * Lazily create (if needed) and return the AbortController for the current
    * run. Callers pass its `.signal` into the underlying stream.
@@ -3007,23 +3011,36 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const operationId = this.run.getOperationId();
+    const threadId = this.thread.getId();
+    const resourceId = this.identity.getResourceId();
+    const isCurrent = () =>
+      this.run.getOperationId() === operationId &&
+      this.thread.getId() === threadId &&
+      this.identity.getResourceId() === resourceId;
     const event = { type: 'agent_end', reason } as const;
-    await this.#drainErrorPersistence();
+    await this.drainErrorPersistence();
     for (const listener of this.#beforeAgentEndListeners) {
+      if (!isCurrent()) return false;
       try {
         await listener(event);
       } catch (error) {
         console.error('Error in before-agent-end listener:', error);
       }
     }
+    if (!isCurrent()) return false;
     this.emit(event);
+    return isCurrent();
   }
 
-  #recordSessionError(event: Extract<AgentControllerEvent, { type: 'error' }>): AgentControllerEvent {
+  recordSessionError(
+    event: Extract<AgentControllerEvent, { type: 'error' }>,
+    context = { threadId: this.thread.getId(), resourceId: this.identity.getResourceId(), runId: this.run.getRunId() },
+  ): AgentControllerEvent {
     const occurrenceId = event.occurrenceId ?? this.#machinery?.generateId();
     const emitted = occurrenceId ? { ...event, occurrenceId } : event;
-    const threadId = this.thread.getId();
+    const { threadId, resourceId, runId } = context;
     const machinery = this.#machinery;
     const persistenceKey = occurrenceId && threadId ? `${threadId.length}:${threadId}${occurrenceId}` : undefined;
     if (
@@ -3038,7 +3055,6 @@ export class Session<TState = unknown> {
 
     this.#recordedErrorOccurrences.add(persistenceKey);
     const createdAt = new Date();
-    const runId = this.run.getRunId();
     const data: SessionErrorData = {
       occurrenceId,
       name: event.error.name || 'Error',
@@ -3056,13 +3072,14 @@ export class Session<TState = unknown> {
       .saveSessionError({
         id: `session-error-${persistenceKey}`,
         threadId,
-        resourceId: this.identity.getResourceId(),
+        resourceId,
         data,
         createdAt,
       })
       .then(() => undefined)
       .catch(error => {
-        console.error('Failed to persist session error:', error);
+        this.#recordedErrorOccurrences.delete(persistenceKey);
+        machinery.getAgent().getMastraInstance()?.getLogger()?.error('Failed to persist session error', { error });
       })
       .finally(() => this.#pendingErrorPersistence.delete(persistence));
     this.#pendingErrorPersistence.add(persistence);
@@ -3070,7 +3087,7 @@ export class Session<TState = unknown> {
   }
 
   #recordWorkspaceError(error: Error, occurrenceId?: string): string | undefined {
-    const event = this.#recordSessionError({
+    const event = this.recordSessionError({
       type: 'error',
       error: new Error(`Workspace: ${error.message}`),
       ...(occurrenceId ? { occurrenceId } : {}),
@@ -3078,7 +3095,7 @@ export class Session<TState = unknown> {
     return event.type === 'error' ? event.occurrenceId : undefined;
   }
 
-  async #drainErrorPersistence(): Promise<void> {
+  async drainErrorPersistence(): Promise<void> {
     while (this.#pendingErrorPersistence.size > 0) {
       await Promise.allSettled(this.#pendingErrorPersistence);
     }
@@ -3091,7 +3108,7 @@ export class Session<TState = unknown> {
    */
   emit(event: AgentControllerEvent): void {
     if (event.type === 'error') {
-      this.#bus.emit(this.#recordSessionError(event));
+      this.#bus.emit(this.recordSessionError(event));
       return;
     }
     if (event.type === 'workspace_error') {
@@ -3812,6 +3829,12 @@ export class Session<TState = unknown> {
     if (!resolvedToolCallId) return;
 
     const suspension = this.suspensions.get({ toolCallId: resolvedToolCallId });
+    const operationId = this.run.nextOperation();
+    const context = {
+      threadId: this.thread.getId(),
+      resourceId: this.identity.getResourceId(),
+      runId: suspension?.runId ?? this.run.getRunId(),
+    };
 
     try {
       if (suspension?.toolName === 'submit_plan') {
@@ -3830,8 +3853,13 @@ export class Session<TState = unknown> {
       });
     } catch (error) {
       const err = getErrorFromUnknown(error);
-      this.emit({ type: 'error', error: err });
-      await this.finishAgentRun('error');
+      const event = this.recordSessionError({ type: 'error', error: err }, context);
+      if (this.thread.getId() === context.threadId && this.run.getOperationId() === operationId) {
+        this.#bus.emit(event);
+        await this.finishAgentRun('error');
+      } else {
+        await this.drainErrorPersistence();
+      }
     }
   }
 
@@ -4014,17 +4042,25 @@ export class Session<TState = unknown> {
     this.suspensions.delete({ toolCallId });
     this.displayState.deletePendingSuspension(toolCallId);
 
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const threadId = this.thread.getId();
+    const resourceId = this.identity.getResourceId();
+    const operationId = this.run.getOperationId();
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     if (!threadId) {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
+    const isCurrent = () =>
+      this.thread.getId() === threadId &&
+      this.identity.getResourceId() === resourceId &&
+      this.run.getOperationId() === operationId;
+    if (!isCurrent()) return;
     await this.thread.ensureSubscription(threadId, agent);
+    if (!isCurrent()) return;
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+    let completed = false;
 
     try {
-      const resourceId = this.identity.getResourceId();
       const sharedOptions = this.machinery.buildSharedRunOptions();
       // Interactive builtins suspend to collect user input, not for approval.
       // The resume data is the user's answer (a bare string), which the approval
@@ -4034,6 +4070,8 @@ export class Session<TState = unknown> {
       if (isInteractive) {
         sharedOptions.requireToolApproval = false;
       }
+      const toolsets = await this.machinery.buildToolsets(requestContext);
+      if (!isCurrent()) return;
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -4045,13 +4083,21 @@ export class Session<TState = unknown> {
           memory: { thread: threadId, resource: resourceId },
           abortSignal: this.run.ensureAbortController().signal,
           requestContext,
-          toolsets: await this.machinery.buildToolsets(requestContext),
+          toolsets,
         },
       });
       await resumedSubscriptionBoundary.promise;
+      completed = true;
     } finally {
       resumedSubscriptionBoundary.cancel();
-      await this.thread.ensureSubscription(threadId);
+      if (
+        this.thread.getId() === threadId &&
+        this.identity.getResourceId() === resourceId &&
+        (this.run.getOperationId() === operationId ||
+          (completed && (!this.run.isRunning() || this.run.getRunId() === suspension.runId)))
+      ) {
+        await this.thread.ensureSubscription(threadId);
+      }
     }
   }
 

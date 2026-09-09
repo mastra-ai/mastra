@@ -32,6 +32,7 @@ type StreamChunkBase<TType extends string> = {
   type: TType;
   runId?: string | null;
   metadata?: unknown;
+  occurrenceId?: string;
 };
 type StreamPayloadChunk<TType extends string> = StreamChunkBase<TType> & { payload?: unknown };
 type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object?: unknown };
@@ -238,6 +239,7 @@ type StreamState = {
    * into an explicit terminal error state instead of silently completing.
    */
   terminalError?: string;
+  terminalErrorOccurrenceId?: string;
 };
 
 /**
@@ -392,12 +394,22 @@ export class SessionRunEngine {
     this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
-  private emitRunError(error: Error): void {
-    this.#session.emit({ type: 'error', error, occurrenceId: this.#machinery.generateId() });
+  private emitRunError(error: Error, occurrenceId?: string): void {
+    this.#session.emit({ type: 'error', error, occurrenceId: occurrenceId ?? this.#machinery.generateId() });
   }
 
-  private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
-    this.emitRunError(new Error(`Observational memory ${operationType} ${stage} failed: ${error}`));
+  private abortForOmFailure({
+    operationType,
+    stage,
+    error,
+    occurrenceId,
+  }: {
+    operationType: string;
+    stage: string;
+    error: string;
+    occurrenceId?: string;
+  }) {
+    this.emitRunError(new Error(`Observational memory ${operationType} ${stage} failed: ${error}`), occurrenceId);
     this.#session.abortRun();
   }
 
@@ -461,10 +473,10 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.emitRunError(new Error(state.terminalError));
+      this.emitRunError(new Error(state.terminalError), state.terminalErrorOccurrenceId);
     }
 
-    await this.#session.finishAgentRun(
+    const finished = await this.#session.finishAgentRun(
       error
         ? 'error'
         : result.suspended
@@ -474,8 +486,10 @@ export class SessionRunEngine {
             : 'complete',
     );
 
-    this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
+    if (finished) {
+      this.#session.run.reset();
+      await this.#session.drainFollowUpQueue();
+    }
 
     return result;
   }
@@ -815,7 +829,7 @@ export class SessionRunEngine {
 
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
-        this.emitRunError(streamError);
+        this.emitRunError(streamError, chunk.occurrenceId);
 
         // A run that dies after emitting `tool_suspended` (e.g. persisting the
         // suspended snapshot failed) leaves its parked suspensions unresumable:
@@ -912,6 +926,7 @@ export class SessionRunEngine {
             this.setStopReason(state.currentMessage, 'error', true);
             this.setErrorMessage(state.currentMessage, errorMessage);
             state.terminalError = errorMessage;
+            state.terminalErrorOccurrenceId = chunk.occurrenceId;
           } else {
             this.setStopReason(state.currentMessage, 'complete', true);
           }
@@ -1048,7 +1063,7 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error });
+          this.abortForOmFailure({ operationType, stage: 'run', error, occurrenceId: chunk.occurrenceId });
           return { message: state.currentMessage };
         }
         break;
@@ -1095,7 +1110,7 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
+          this.abortForOmFailure({ operationType, stage: 'buffering', error, occurrenceId: chunk.occurrenceId });
           return { message: state.currentMessage };
         }
         break;
@@ -1273,17 +1288,17 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
-    await this.#session.finishAgentRun(reason);
+    if (!(await this.#session.finishAgentRun(reason))) return;
     this.#session.run.reset();
     await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      await this.#session.finishAgentRun('aborted');
+      if (!(await this.#session.finishAgentRun('aborted'))) return;
     } else {
       this.emitRunError(getErrorFromUnknown(error));
-      await this.#session.finishAgentRun('error');
+      if (!(await this.#session.finishAgentRun('error'))) return;
     }
     this.#session.stream.detach();
     this.#session.run.reset();
@@ -1292,6 +1307,19 @@ export class SessionRunEngine {
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
+    const errorContext = {
+      threadId: this.#session.thread.getId(),
+      resourceId: this.#session.identity.getResourceId(),
+      runId: subscription.activeRunId(),
+    };
+    const handleError = async (error: unknown) => {
+      if (this.#session.stream.isCurrent({ subscription })) {
+        await this.handleSubscribedStreamError(error);
+      } else if (!(error instanceof Error && error.name === 'AbortError')) {
+        this.#session.recordSessionError({ type: 'error', error: getErrorFromUnknown(error) }, errorContext);
+        await this.#session.drainErrorPersistence();
+      }
+    };
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
@@ -1306,12 +1334,17 @@ export class SessionRunEngine {
 
         if (!currentRun) {
           const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
+          errorContext.runId = runId;
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
           requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
+          if (!this.#session.stream.isCurrent({ subscription })) {
+            subscription.unsubscribe();
+            return;
+          }
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1321,6 +1354,7 @@ export class SessionRunEngine {
 
         try {
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
+          if (!this.#session.stream.isCurrent({ subscription })) return;
           if (
             streamResult ||
             chunk.type === 'finish' ||
@@ -1345,13 +1379,14 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.emitRunError(new Error(currentRun.terminalError));
+              this.emitRunError(new Error(currentRun.terminalError), currentRun.terminalErrorOccurrenceId);
             }
             await this.finishSubscribedStreamRun({
               suspended,
               error: isError,
               aborted,
             });
+            if (!this.#session.stream.isCurrent({ subscription })) return;
             currentRun = undefined;
             if (aborted) {
               // The abort chunk terminates this consumer loop, so the live
@@ -1365,7 +1400,8 @@ export class SessionRunEngine {
             }
           }
         } catch (error) {
-          await this.handleSubscribedStreamError(error);
+          await handleError(error);
+          if (!this.#session.stream.isCurrent({ subscription })) return;
           currentRun = undefined;
         }
       }
@@ -1397,9 +1433,7 @@ export class SessionRunEngine {
         this.#session.stream.detach();
       }
     } catch (error) {
-      if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error);
-      }
+      await handleError(error);
     }
   }
 }

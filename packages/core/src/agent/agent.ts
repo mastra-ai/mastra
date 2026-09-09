@@ -56,7 +56,6 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { getMemoryRunState } from '../memory/run-state';
-import { isSessionErrorMessage } from '../memory/system-reminders';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
   resolveDeliveryFailureUpdate,
@@ -4570,33 +4569,17 @@ export class Agent<
       return { messages: [] };
     }
 
-    const recallPage = (page?: number) =>
-      memory.recall({
-        threadId,
-        resourceId,
-        // When lastMessages is false (disabled), don't pass perPage so recall()
-        // can detect the disabled state from config and return empty history.
-        // When lastMessages is a number, pass it as perPage to limit results.
-        ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
-        ...(page !== undefined ? { page } : {}),
-        threadConfig: memoryConfig,
-        // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-        vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-      });
-    if (typeof threadConfig.lastMessages !== 'number') {
-      const recalled = await recallPage();
-      return { messages: recalled.messages.filter(message => !isSessionErrorMessage(message)) };
-    }
-
-    const messages: MastraDBMessage[] = [];
-    for (let page = 0; ; page += 1) {
-      const recalled = await recallPage(page);
-      messages.push(...recalled.messages);
-      const usableMessages = messages.filter(message => !isSessionErrorMessage(message));
-      if (usableMessages.length >= threadConfig.lastMessages || !recalled.hasMore) {
-        return { messages: usableMessages.slice(0, threadConfig.lastMessages) };
-      }
-    }
+    return memory.recall({
+      threadId,
+      resourceId,
+      // When lastMessages is false (disabled), don't pass perPage so recall()
+      // can detect the disabled state from config and return empty history.
+      // When lastMessages is a number, pass it as perPage to limit results.
+      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      threadConfig: memoryConfig,
+      // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
+    });
   }
 
   /**

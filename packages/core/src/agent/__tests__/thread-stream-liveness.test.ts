@@ -17,6 +17,15 @@ describe('thread stream remote-run liveness', () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-lost');
     const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const second = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const otherParts: any[] = [];
+    const otherConsumed = (async () => {
+      for await (const part of second.stream) otherParts.push(part);
+    })();
     const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
     pubsub.owners.set(key, harness.runId);
 
@@ -44,9 +53,12 @@ describe('thread stream remote-run liveness', () => {
     expect(collected[2].payload.error).toEqual(
       new Error(`Thread run ${harness.runId} lost its lease before publishing a terminal event`),
     );
+    expect(collected[2].occurrenceId).toEqual(expect.any(String));
+    expect(otherParts.find(part => part.type === 'error')?.occurrenceId).toBe(collected[2].occurrenceId);
 
     subscription.unsubscribe();
-    await consumed;
+    second.unsubscribe();
+    await Promise.all([consumed, otherConsumed]);
   });
 
   it('keeps a quiet remote stream open while its producer still owns the lease', async () => {

@@ -199,6 +199,51 @@ describe('session error persistence', () => {
     expect(events).toContain('agent_end');
   });
 
+  it('retries a failed persistence write when the same occurrence is delivered again', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage);
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const memoryStorage = storage.stores.memory!;
+    const save = vi.spyOn(memoryStorage, 'saveMessages').mockRejectedValueOnce(new Error('storage unavailable'));
+    const event = { type: 'error' as const, error: new Error('provider failed'), occurrenceId: 'retry-write' };
+    session.emit(event);
+    await session.finishAgentRun('error');
+    expect(sessionErrorParts(await session.thread.listActiveMessages())).toHaveLength(0);
+    session.emit(event);
+    await session.finishAgentRun('error');
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(sessionErrorParts(await session.thread.listActiveMessages())).toHaveLength(1);
+  });
+
+  it('waits for pending error persistence before deleting and replacing a session', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController(storage);
+    await controller.init();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const threadId = session.thread.getId()!;
+    const gate = Promise.withResolvers<void>();
+    const memoryStorage = storage.stores.memory!;
+    const originalSave = memoryStorage.saveMessages.bind(memoryStorage);
+    vi.spyOn(memoryStorage, 'saveMessages').mockImplementationOnce(async input => {
+      await gate.promise;
+      return originalSave(input);
+    });
+    session.emit({ type: 'error', error: new Error('pending failure'), occurrenceId: 'pending' });
+    let deleted = false;
+    const deletion = controller.deleteSession({ resourceId: 'resource-1' }).then(() => {
+      deleted = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(deleted).toBe(false);
+    gate.resolve();
+    await deletion;
+    const reopened = await controller.createSession({ resourceId: 'resource-1', threadId });
+    expect(sessionErrorParts(await reopened.thread.listActiveMessages())).toEqual([
+      expect.objectContaining({ occurrenceId: 'pending', message: 'pending failure' }),
+    ]);
+  });
+
   it('keeps errors live-only when no storage machinery or thread is available', () => {
     const session = new Session({
       id: 'unbound-session',

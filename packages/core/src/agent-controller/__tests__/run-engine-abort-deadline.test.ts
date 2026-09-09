@@ -53,6 +53,70 @@ function chunk(value: StreamChunk): StreamChunk {
 }
 
 describe('SessionRunEngine — abort deadline', () => {
+  it('keeps a replacement subscription attached when an old abort finishes after a terminal hook', async () => {
+    const { engine, session, events } = createHarness();
+    const blocked = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    session.onBeforeAgentEnd(async () => {
+      entered.resolve();
+      await blocked.promise;
+    });
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'abort', payload: {} });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await entered.promise;
+    session.thread.set({ threadId: 'thread-2' });
+    const replacement = { ...subscription, activeRunId: () => 'run-2', unsubscribe: vi.fn() };
+    session.stream.attach({ subscription: replacement, key: 'thread-2' });
+    session.run.nextOperation();
+    session.run.setRunId({ runId: 'run-2' });
+    blocked.resolve();
+    await processed;
+    expect(session.stream.isCurrent({ subscription: replacement })).toBe(true);
+    expect(session.run.getRunId()).toBe('run-2');
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
+  });
+
+  it('records a rejected old approval on its originating thread without ending the replacement run', async () => {
+    const { engine, session, events } = createHarness();
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const failure = Promise.withResolvers<void>();
+    const approve = vi.spyOn(session, 'approveToolCall').mockImplementationOnce(() => failure.promise);
+    const record = vi.spyOn(session, 'recordSessionError');
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'tool-call-approval', payload: { toolCallId: 'call-1', toolName: 'confirm', args: {} } });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await vi.waitFor(() => expect(approve).toHaveBeenCalled());
+    session.thread.set({ threadId: 'thread-2' });
+    const replacement = { ...subscription, activeRunId: () => 'run-2', unsubscribe: vi.fn() };
+    session.stream.attach({ subscription: replacement, key: 'thread-2' });
+    session.run.nextOperation();
+    session.run.setRunId({ runId: 'run-2' });
+    failure.reject(new Error('Approval dispatch failed'));
+    await processed;
+    expect(record).toHaveBeenCalledWith(
+      { type: 'error', error: expect.objectContaining({ message: 'Approval dispatch failed' }) },
+      { threadId: 'thread-1', resourceId: 'resource-1', runId: 'run-1' },
+    );
+    expect(events.some(event => event.type === 'error' || event.type === 'agent_end')).toBe(false);
+    expect(session.stream.isCurrent({ subscription: replacement })).toBe(true);
+    expect(session.run.getRunId()).toBe('run-2');
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

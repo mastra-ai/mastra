@@ -148,6 +148,32 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('anchors a live error after newly fetched preceding messages and before the next turn', () => {
+    const user = dbMessage('preceding-user', 'user', [{ type: 'text', text: 'Fail now' }]);
+    const following = dbMessage('following-user', 'user', [{ type: 'text', text: 'Try again' }]);
+    const error = dbMessage('stored-error', 'assistant', [
+      { type: 'data-session-error', data: { occurrenceId: 'first', name: 'Error', message: 'Failed' } },
+    ]);
+    const second = dbMessage('stored-error-2', 'assistant', [
+      { type: 'data-session-error', data: { occurrenceId: 'second', name: 'Error', message: 'Failed' } },
+    ]);
+    let live = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', occurrenceId: 'first', error: { name: 'Error', message: 'Failed' } },
+    });
+    live = transcriptReducer(live, { type: 'event', event: { type: 'message_end', message: following } });
+    const messages = [user, error, following, second];
+    const merged = transcriptReducer(live, { type: 'mergeWindow', messages });
+    expect(merged.entries.map(entry => entry.id)).toEqual([
+      'preceding-user',
+      'session-error-first',
+      'following-user',
+      'session-error-second',
+    ]);
+    expect(transcriptReducer(merged, { type: 'mergeWindow', messages }).entries).toEqual(merged.entries);
+    expect(createInitialTranscript({ messages }).entries).toEqual(merged.entries);
+  });
+
   it('restores suspended tool prompts from persisted assistant metadata', () => {
     const message = dbMessage('assistant-ask', 'assistant', [
       {

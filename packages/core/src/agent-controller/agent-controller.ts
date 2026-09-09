@@ -769,6 +769,7 @@ export class AgentController<TState = {}> {
       session.abort();
       session.thread.cleanupSubscription();
       try {
+        await session.drainErrorPersistence();
         await session.thread.clearAndReleaseLock();
       } finally {
         // Notify inside the finally: even when lock release fails the session
