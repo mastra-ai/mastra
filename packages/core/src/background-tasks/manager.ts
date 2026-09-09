@@ -135,7 +135,12 @@ export class BackgroundTaskManager {
     // to receive completion/failure notifications for dispatched tasks.
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
-        await this.handleResult(event);
+        try {
+          await this.handleResult(event);
+        } finally {
+          await ack?.();
+        }
+        return;
       }
       await ack?.();
     };
@@ -1396,10 +1401,12 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
 
-    if (task?.completedAt) {
-      // Look up per-task hooks
-      const ctx = this.taskContexts.get(taskId);
+    if (!task?.completedAt) return;
 
+    // Look up per-task hooks
+    const ctx = this.taskContexts.get(taskId);
+
+    try {
       if (event.type === 'task.completed') {
         ctx?.onChunk?.({
           type: 'background-task-completed',
@@ -1428,9 +1435,18 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        if (task) {
-          await Promise.all([ctx?.onComplete?.(task), this.config.onTaskComplete?.(task)]);
-        }
+        await Promise.all([
+          ctx?.onComplete?.(task),
+          (async () => {
+            try {
+              await this.config.onTaskComplete?.(task);
+            } catch (error) {
+              this.#mastra
+                ?.getLogger?.()
+                ?.warn(`background-task completion callback failed for ${taskId}:`, error as any);
+            }
+          })(),
+        ]);
       }
 
       if (event.type === 'task.failed') {
@@ -1461,11 +1477,18 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        if (task) {
-          await Promise.all([ctx?.onFailed?.(task), this.config.onTaskFailed?.(task)]);
-        }
+        await Promise.all([
+          ctx?.onFailed?.(task),
+          (async () => {
+            try {
+              await this.config.onTaskFailed?.(task);
+            } catch (error) {
+              this.#mastra?.getLogger?.()?.warn(`background-task failure callback failed for ${taskId}:`, error as any);
+            }
+          })(),
+        ]);
       }
-
+    } finally {
       // Clean up context after terminal result and admit the next task owned
       // by this manager. Portable tasks may have completed on another process,
       // so the result fan-out is the origin manager's queue-drain signal.

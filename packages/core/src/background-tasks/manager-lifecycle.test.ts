@@ -55,9 +55,11 @@ class ResultGatedPubSub extends EventEmitterPubSub {
 
 class CapturingPubSub extends EventEmitterPubSub {
   dispatchCallback?: EventCallback;
+  resultCallback?: EventCallback;
 
   override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     if (topic === 'background-tasks') this.dispatchCallback = cb;
+    if (topic === 'background-tasks-result') this.resultCallback = cb;
     await super.subscribe(topic, cb, options);
   }
 }
@@ -452,6 +454,145 @@ describe('BackgroundTaskManager lifecycle', () => {
     await pubsub.close();
     await mastra.shutdown();
     mastra.__unregisterHooks();
+  });
+
+  it('acknowledges completed results and cleans up when the global completion callback rejects', async () => {
+    const pubsub = new CapturingPubSub();
+    const mockStore = new MockStore();
+    const mastra = new Mastra({ logger: false, storage: mockStore, workers: false });
+    const error = new Error('completion callback failed');
+    const manager = new BackgroundTaskManager({
+      enabled: true,
+      recoverStaleTasksOnStart: false,
+      onTaskComplete: async () => {
+        throw error;
+      },
+    });
+    manager.__registerMastra(mastra);
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const drainPending = vi.spyOn(manager as any, 'drainPending').mockResolvedValue(undefined);
+    const storage = await mockStore.getStore('backgroundTasks');
+    if (!storage) throw new Error('Background task storage is unavailable');
+    const task = makeRunningTask({ status: 'completed', completedAt: new Date(), result: { ok: true } });
+    await storage.createTask(task);
+    manager.registerTaskContext(task.id, { executor: { execute: vi.fn() } });
+
+    try {
+      await manager.init(pubsub);
+      const ack = vi.fn(async () => {});
+      const event: Event = {
+        type: 'task.completed',
+        id: 'event-1',
+        data: { ...task, taskId: task.id },
+        runId: task.runId,
+        createdAt: new Date(),
+      };
+
+      await expect(pubsub.resultCallback!(event, ack)).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalledWith(`background-task completion callback failed for ${task.id}:`, error);
+      expect(manager.taskContexts.has(task.id)).toBe(false);
+      expect(drainPending).toHaveBeenCalledOnce();
+      expect(ack).toHaveBeenCalledOnce();
+    } finally {
+      await manager.shutdown();
+      await pubsub.close();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('acknowledges failed results and cleans up when the global failure callback rejects', async () => {
+    const pubsub = new CapturingPubSub();
+    const mockStore = new MockStore();
+    const mastra = new Mastra({ logger: false, storage: mockStore, workers: false });
+    const error = new Error('failure callback failed');
+    const manager = new BackgroundTaskManager({
+      enabled: true,
+      recoverStaleTasksOnStart: false,
+      onTaskFailed: async () => {
+        throw error;
+      },
+    });
+    manager.__registerMastra(mastra);
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const drainPending = vi.spyOn(manager as any, 'drainPending').mockResolvedValue(undefined);
+    const storage = await mockStore.getStore('backgroundTasks');
+    if (!storage) throw new Error('Background task storage is unavailable');
+    const task = makeRunningTask({
+      status: 'failed',
+      completedAt: new Date(),
+      error: { message: 'task failed' },
+    });
+    await storage.createTask(task);
+    manager.registerTaskContext(task.id, { executor: { execute: vi.fn() } });
+
+    try {
+      await manager.init(pubsub);
+      const ack = vi.fn(async () => {});
+      const event: Event = {
+        type: 'task.failed',
+        id: 'event-1',
+        data: { ...task, taskId: task.id },
+        runId: task.runId,
+        createdAt: new Date(),
+      };
+
+      await expect(pubsub.resultCallback!(event, ack)).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalledWith(`background-task failure callback failed for ${task.id}:`, error);
+      expect(manager.taskContexts.has(task.id)).toBe(false);
+      expect(drainPending).toHaveBeenCalledOnce();
+      expect(ack).toHaveBeenCalledOnce();
+    } finally {
+      await manager.shutdown();
+      await pubsub.close();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('acknowledges and cleans up before propagating a per-task completion callback rejection', async () => {
+    const pubsub = new CapturingPubSub();
+    const mockStore = new MockStore();
+    const mastra = new Mastra({ logger: false, storage: mockStore, workers: false });
+    const manager = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: false });
+    manager.__registerMastra(mastra);
+    const drainPending = vi.spyOn(manager as any, 'drainPending').mockResolvedValue(undefined);
+    const storage = await mockStore.getStore('backgroundTasks');
+    if (!storage) throw new Error('Background task storage is unavailable');
+    const task = makeRunningTask({ status: 'completed', completedAt: new Date(), result: { ok: true } });
+    const error = new Error('per-task callback failed');
+    await storage.createTask(task);
+    manager.registerTaskContext(task.id, {
+      executor: { execute: vi.fn() },
+      onComplete: async () => {
+        throw error;
+      },
+    });
+
+    try {
+      await manager.init(pubsub);
+      const ack = vi.fn(async () => {});
+      const event: Event = {
+        type: 'task.completed',
+        id: 'event-1',
+        data: { ...task, taskId: task.id },
+        runId: task.runId,
+        createdAt: new Date(),
+      };
+
+      await expect(pubsub.resultCallback!(event, ack)).rejects.toThrow(error);
+
+      expect(manager.taskContexts.has(task.id)).toBe(false);
+      expect(drainPending).toHaveBeenCalledOnce();
+      expect(ack).toHaveBeenCalledOnce();
+    } finally {
+      await manager.shutdown();
+      await pubsub.close();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
   });
 
   it('fails and acknowledges a claimed dispatch when Mastra is not registered', async () => {
