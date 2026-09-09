@@ -2347,6 +2347,7 @@ ${formattedMessages}
           opts.writer,
           opts.unbufferedPendingTokens,
           opts.requestContext,
+          opts.observabilityContext,
         ),
       );
     }
