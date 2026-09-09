@@ -210,10 +210,14 @@ describe('session error persistence', () => {
     session.emit(event);
     await session.finishAgentRun('error');
     expect(sessionErrorParts(await session.thread.listActiveMessages())).toHaveLength(0);
+    const originalTime = save.mock.calls[0]![0].messages[0]!.createdAt;
+    await vi.waitFor(() => expect(Date.now()).toBeGreaterThan(originalTime.getTime()));
     session.emit(event);
     await session.finishAgentRun('error');
     expect(save).toHaveBeenCalledTimes(2);
-    expect(sessionErrorParts(await session.thread.listActiveMessages())).toHaveLength(1);
+    const messages = await session.thread.listActiveMessages();
+    expect(sessionErrorParts(messages)).toHaveLength(1);
+    expect(messages[0]!.createdAt).toEqual(originalTime);
   });
 
   it('waits for pending error persistence before deleting and replacing a session', async () => {

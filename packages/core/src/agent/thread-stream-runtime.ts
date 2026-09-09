@@ -244,7 +244,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string }
-  | { type: 'run-failed'; runId: string; streamId?: string; error: string; occurrenceId?: string }
+  | { type: 'run-failed'; runId: string; streamId?: string; error: string; occurrenceId?: string; occurredAt?: number }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
 
 function createRuntimeState(): AgentThreadRuntimeState {
@@ -614,7 +614,13 @@ export class AgentThreadStreamRuntime {
   }
 
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
-    if (event.type === 'run-failed') event = { ...event, occurrenceId: event.occurrenceId ?? randomUUID() };
+    if (event.type === 'run-failed') {
+      event = {
+        ...event,
+        occurrenceId: event.occurrenceId ?? randomUUID(),
+        occurredAt: event.occurredAt ?? Date.now(),
+      };
+    }
     await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
       type: event.type,
       runId: event.runId,
@@ -676,7 +682,7 @@ export class AgentThreadStreamRuntime {
           part.type === 'data-om-buffering-failed')
       ) {
         // Assign before local/remote fan-out so every consumer records the same occurrence.
-        part = { ...part, occurrenceId: randomUUID() };
+        part = { ...part, occurrenceId: randomUUID(), occurredAt: Date.now() };
       }
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
@@ -2428,6 +2434,7 @@ export class AgentThreadStreamRuntime {
           remoteRun.parts.push({
             type: 'error',
             occurrenceId: data.occurrenceId ?? `run-failed:${eventStreamId}`,
+            occurredAt: data.occurredAt,
             payload: { error: new Error(data.error) },
           });
           remoteRun.done = true;

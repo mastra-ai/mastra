@@ -2856,7 +2856,7 @@ export class Session<TState = unknown> {
   /** Error persistence writes still in flight; terminal runs await these before completing. */
   readonly #pendingErrorPersistence = new Set<Promise<void>>();
   /** Avoid duplicate writes when the same upstream error event is delivered again. */
-  readonly #recordedErrorOccurrences = new Set<string>();
+  readonly #recordedErrorOccurrences = new Map<string, { occurredAt: number; persisted: boolean }>();
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -3039,22 +3039,19 @@ export class Session<TState = unknown> {
     context = { threadId: this.thread.getId(), resourceId: this.identity.getResourceId(), runId: this.run.getRunId() },
   ): AgentControllerEvent {
     const occurrenceId = event.occurrenceId ?? this.#machinery?.generateId();
-    const emitted = occurrenceId ? { ...event, occurrenceId } : event;
     const { threadId, resourceId, runId } = context;
     const machinery = this.#machinery;
     const persistenceKey = occurrenceId && threadId ? `${threadId.length}:${threadId}${occurrenceId}` : undefined;
-    if (
-      !occurrenceId ||
-      !threadId ||
-      !machinery ||
-      !persistenceKey ||
-      this.#recordedErrorOccurrences.has(persistenceKey)
-    ) {
+    const recorded = persistenceKey ? this.#recordedErrorOccurrences.get(persistenceKey) : undefined;
+    const occurredAt = recorded?.occurredAt ?? event.occurredAt ?? Date.now();
+    const emitted = occurrenceId ? { ...event, occurrenceId, occurredAt } : event;
+    if (!occurrenceId || !threadId || !machinery || !persistenceKey || recorded?.persisted) {
       return emitted;
     }
 
-    this.#recordedErrorOccurrences.add(persistenceKey);
-    const createdAt = new Date();
+    const occurrence = { occurredAt, persisted: true };
+    this.#recordedErrorOccurrences.set(persistenceKey, occurrence);
+    const createdAt = new Date(occurredAt);
     const data: SessionErrorData = {
       occurrenceId,
       name: event.error.name || 'Error',
@@ -3078,7 +3075,7 @@ export class Session<TState = unknown> {
       })
       .then(() => undefined)
       .catch(error => {
-        this.#recordedErrorOccurrences.delete(persistenceKey);
+        occurrence.persisted = false;
         machinery.getAgent().getMastraInstance()?.getLogger()?.error('Failed to persist session error', { error });
       })
       .finally(() => this.#pendingErrorPersistence.delete(persistence));

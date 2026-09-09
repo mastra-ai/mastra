@@ -841,6 +841,8 @@ export type AgentControllerEvent =
       error: Error;
       /** Stable identity shared with the persisted `data-session-error` part. */
       occurrenceId?: string;
+      /** Producer-owned occurrence time in milliseconds since the Unix epoch. */
+      occurredAt?: number;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;

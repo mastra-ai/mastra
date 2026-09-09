@@ -33,6 +33,7 @@ type StreamChunkBase<TType extends string> = {
   runId?: string | null;
   metadata?: unknown;
   occurrenceId?: string;
+  occurredAt?: number;
 };
 type StreamPayloadChunk<TType extends string> = StreamChunkBase<TType> & { payload?: unknown };
 type StreamObjectChunk<TType extends string> = StreamChunkBase<TType> & { object?: unknown };
@@ -240,6 +241,7 @@ type StreamState = {
    */
   terminalError?: string;
   terminalErrorOccurrenceId?: string;
+  terminalErrorOccurredAt?: number;
 };
 
 /**
@@ -394,8 +396,13 @@ export class SessionRunEngine {
     this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
-  private emitRunError(error: Error, occurrenceId?: string): void {
-    this.#session.emit({ type: 'error', error, occurrenceId: occurrenceId ?? this.#machinery.generateId() });
+  private emitRunError(error: Error, occurrenceId?: string, occurredAt?: number): void {
+    this.#session.emit({
+      type: 'error',
+      error,
+      occurrenceId: occurrenceId ?? this.#machinery.generateId(),
+      occurredAt,
+    });
   }
 
   private abortForOmFailure({
@@ -403,13 +410,19 @@ export class SessionRunEngine {
     stage,
     error,
     occurrenceId,
+    occurredAt,
   }: {
     operationType: string;
     stage: string;
     error: string;
     occurrenceId?: string;
+    occurredAt?: number;
   }) {
-    this.emitRunError(new Error(`Observational memory ${operationType} ${stage} failed: ${error}`), occurrenceId);
+    this.emitRunError(
+      new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      occurrenceId,
+      occurredAt,
+    );
     this.#session.abortRun();
   }
 
@@ -473,7 +486,7 @@ export class SessionRunEngine {
     // silently stops without a visible terminal state.
     if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
-      this.emitRunError(new Error(state.terminalError), state.terminalErrorOccurrenceId);
+      this.emitRunError(new Error(state.terminalError), state.terminalErrorOccurrenceId, state.terminalErrorOccurredAt);
     }
 
     const finished = await this.#session.finishAgentRun(
@@ -829,7 +842,7 @@ export class SessionRunEngine {
 
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
-        this.emitRunError(streamError, chunk.occurrenceId);
+        this.emitRunError(streamError, chunk.occurrenceId, chunk.occurredAt);
 
         // A run that dies after emitting `tool_suspended` (e.g. persisting the
         // suspended snapshot failed) leaves its parked suspensions unresumable:
@@ -927,6 +940,7 @@ export class SessionRunEngine {
             this.setErrorMessage(state.currentMessage, errorMessage);
             state.terminalError = errorMessage;
             state.terminalErrorOccurrenceId = chunk.occurrenceId;
+            state.terminalErrorOccurredAt = chunk.occurredAt;
           } else {
             this.setStopReason(state.currentMessage, 'complete', true);
           }
@@ -1063,7 +1077,13 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error, occurrenceId: chunk.occurrenceId });
+          this.abortForOmFailure({
+            operationType,
+            stage: 'run',
+            error,
+            occurrenceId: chunk.occurrenceId,
+            occurredAt: chunk.occurredAt,
+          });
           return { message: state.currentMessage };
         }
         break;
@@ -1110,7 +1130,13 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error, occurrenceId: chunk.occurrenceId });
+          this.abortForOmFailure({
+            operationType,
+            stage: 'buffering',
+            error,
+            occurrenceId: chunk.occurrenceId,
+            occurredAt: chunk.occurredAt,
+          });
           return { message: state.currentMessage };
         }
         break;
@@ -1379,7 +1405,11 @@ export class SessionRunEngine {
               !suspended
             ) {
               isError = true;
-              this.emitRunError(new Error(currentRun.terminalError), currentRun.terminalErrorOccurrenceId);
+              this.emitRunError(
+                new Error(currentRun.terminalError),
+                currentRun.terminalErrorOccurrenceId,
+                currentRun.terminalErrorOccurredAt,
+              );
             }
             await this.finishSubscribedStreamRun({
               suspended,

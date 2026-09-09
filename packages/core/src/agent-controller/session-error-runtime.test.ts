@@ -199,6 +199,73 @@ describe('session error production paths', () => {
     await controller.deleteSession({ resourceId: 'resource', scope: 'second' });
   });
 
+  it.each(['error', 'partial', 'finish', 'startup'] as const)(
+    'keeps the %s producer timestamp and history order when a second observer is delayed',
+    async kind => {
+      const { controller, session, storage, agent } = await setup(kind === 'startup' ? 'success' : kind);
+      if (kind === 'startup') vi.spyOn(agent, 'stream').mockRejectedValueOnce(new Error('Startup unavailable'));
+      const threadId = session.thread.getId()!;
+      const second = await controller.createSession({ resourceId: 'resource', scope: 'second', threadId });
+      const preparation = Promise.withResolvers<void>();
+      const entered = Promise.withResolvers<void>();
+      const build = second.machinery.buildRequestContext.bind(second.machinery);
+      vi.spyOn(second.machinery, 'buildRequestContext').mockImplementationOnce(async input => {
+        entered.resolve();
+        await preparation.promise;
+        return build(input);
+      });
+      await second.thread.ensureCurrentSubscription();
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      second.subscribe(event => {
+        events.push(event);
+      });
+      await session.sendMessage({ content: 'Fail now' }).catch(error => {
+        expect(kind).toBe('startup');
+        expect(error.message).toContain('Startup unavailable');
+      });
+      await entered.promise;
+      const original = errors(await session.thread.listActiveMessages())[0]!;
+      const memory = (await storage.getStore('memory'))!;
+      const followingTime = new Date(original.createdAt.getTime() + 1);
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'following-message',
+            threadId,
+            resourceId: 'resource',
+            role: 'user',
+            createdAt: followingTime,
+            content: { format: 2, parts: [{ type: 'text', text: 'Following message' }] },
+          },
+        ],
+      });
+      await vi.waitFor(() => expect(Date.now()).toBeGreaterThan(followingTime.getTime()));
+      const finished = Promise.withResolvers<void>();
+      second.subscribe(event => {
+        if (event.type === 'agent_end') finished.resolve();
+      });
+      preparation.resolve();
+      await finished.promise;
+      const messages = await session.thread.listActiveMessages();
+      expect(errors(messages)).toHaveLength(1);
+      expect(errors(messages)[0]!.createdAt).toEqual(original.createdAt);
+      const failures = events.filter(event => event.type === 'error');
+      expect(failures).toHaveLength(2);
+      expect(failures.map(event => event.occurredAt)).toEqual([
+        original.createdAt.getTime(),
+        original.createdAt.getTime(),
+      ]);
+      expect(messages.findIndex(message => message.id === original.id)).toBeLessThan(
+        messages.findIndex(message => message.id === 'following-message'),
+      );
+      await controller.deleteSession({ resourceId: 'resource', scope: 'first' });
+      await controller.deleteSession({ resourceId: 'resource', scope: 'second' });
+    },
+  );
+
   it('keeps persisted error-only history out of the next successful provider request', async () => {
     const { controller, session, model } = await setup('success');
     await session.sendMessage({ content: 'Remember this earlier context' });
