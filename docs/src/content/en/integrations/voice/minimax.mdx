@@ -1,0 +1,74 @@
+---
+title: 'MiniMax | Voice'
+description: 'Use MiniMax text-to-speech with Mastra through global or China endpoints.'
+packages:
+  - '@mastra/voice-minimax'
+---
+
+# MiniMax
+
+The MiniMax voice integration converts text into audio with the T2A v2 API. It supports the global and China endpoints and returns generated audio as a Node.js readable stream.
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/voice-minimax
+```
+
+## Configure text-to-speech
+
+Set your API key in `MINIMAX_API_KEY`. You also need a voice ID from your MiniMax account.
+
+```typescript
+import { MiniMaxVoice } from '@mastra/voice-minimax'
+
+const voice = new MiniMaxVoice({
+  speechModel: {
+    name: 'speech-2.8-hd',
+  },
+  speaker: process.env.MINIMAX_VOICE_ID,
+})
+
+const audioStream = await voice.speak('Hello from Mastra')
+audioStream.pipe(destination)
+```
+
+The default speech model is `speech-2.8-hd`. The package also accepts `speech-2.8-turbo`, `speech-2.6-hd`, `speech-2.6-turbo`, `speech-02-hd`, `speech-02-turbo`, `speech-01-hd`, and `speech-01-turbo`.
+
+## Select a regional endpoint
+
+The `global` region sends requests to `https://api.minimax.io/v1/t2a_v2` and is the default. Use `china` to send requests to `https://api.minimaxi.com/v1/t2a_v2`.
+
+```typescript
+const voice = new MiniMaxVoice({
+  speechModel: {
+    region: 'china',
+  },
+  speaker: process.env.MINIMAX_VOICE_ID,
+})
+```
+
+## Configure a request
+
+Set request fields under `properties` at construction or for an individual `speak()` call. Per-call settings override constructor settings.
+
+```typescript
+const audioStream = await voice.speak('Welcome', {
+  properties: {
+    language_boost: 'auto',
+    audio_setting: {
+      format: 'wav',
+      sample_rate: 32000,
+    },
+    pronunciation_dict: {
+      tone: ['Mastra/\u02c8m\u00e6str\u0259/'],
+    },
+    voice_modify: {
+      pitch: 1,
+    },
+    subtitle_enable: true,
+  },
+})
+```
+
+Supported audio formats are `mp3`, `wav`, `flac`, and `pcm`. The integration requests hexadecimal audio and validates the API status before returning decoded bytes.

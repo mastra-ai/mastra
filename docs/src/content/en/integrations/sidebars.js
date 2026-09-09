@@ -702,6 +702,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'voice/minimax',
+          label: 'MiniMax',
+        },
+        {
+          type: 'doc',
           id: 'voice/mistral',
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
