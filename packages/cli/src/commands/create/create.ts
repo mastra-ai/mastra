@@ -250,8 +250,7 @@ export const create = async (args: CreateOptions): Promise<void> => {
   let llmApiKey = options.llmApiKey;
   let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
   let observabilityEnabled = false;
-  let platformSetupController: AbortController | undefined;
-  let platformSetupPromise: Promise<PlatformSetupResult> | undefined;
+  let platformSetup: PlatformSetupResult | undefined;
 
   if (mode === 'managed') {
     const providerProvidedByCli = llmProvider !== undefined;
@@ -276,23 +275,36 @@ export const create = async (args: CreateOptions): Promise<void> => {
         selection_method: 'interactive',
       });
       if (observabilityEnabled) {
-        platformSetupController = new AbortController();
-        platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
-          try {
-            const token = await getToken(platformSetupController!.signal, { skipOnInput: true });
-            const org = await resolveCurrentOrg(token, {
-              forcePrompt: true,
-              exitOnCancel: false,
-              signal: platformSetupController!.signal,
-            });
-            return { status: 'ready', token, org };
-          } catch (error) {
-            if (error instanceof LoginCancelledError || error instanceof OrgSelectionCancelledError) {
-              return { status: 'cancelled' };
-            }
-            return { status: 'failed', error };
+        // Authenticate before scaffolding so the auth prompts never share the
+        // terminal with clone/install progress output.
+        const authController = new AbortController();
+        const abortAuth = () => authController.abort();
+        process.once('SIGINT', abortAuth);
+        try {
+          const token = await getToken(authController.signal, { skipOnInput: true });
+          const org = await resolveCurrentOrg(token, {
+            forcePrompt: true,
+            exitOnCancel: false,
+            signal: authController.signal,
+          });
+          platformSetup = { status: 'ready', token, org };
+        } catch (error) {
+          if (authController.signal.aborted) {
+            analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'cancelled' });
+            cancelCreate();
           }
-        })();
+          if (error instanceof LoginCancelledError || error instanceof OrgSelectionCancelledError) {
+            platformSetup = { status: 'cancelled' };
+          } else {
+            platformSetup = { status: 'failed', error };
+          }
+        } finally {
+          process.removeListener('SIGINT', abortAuth);
+        }
+        if (platformSetup.status === 'cancelled') {
+          analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
+          p.log.info('Skipping Mastra platform setup.');
+        }
       }
     }
   }
@@ -325,7 +337,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   const interrupt = (signal: 'SIGINT' | 'SIGTERM') => {
     interruptionSignal ??= signal;
     materializationController.abort();
-    platformSetupController?.abort();
   };
   const handleSigint = () => interrupt('SIGINT');
   const handleSigterm = () => interrupt('SIGTERM');
@@ -354,7 +365,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
         targetDir: staging.rootPath,
         branch,
         signal: materializationController.signal,
-        ...(observabilityEnabled ? { silent: true } : {}),
       });
 
       if (isManaged) {
@@ -376,28 +386,12 @@ export const create = async (args: CreateOptions): Promise<void> => {
     }
 
     if (options.install) {
-      if (observabilityEnabled) {
-        await installDependencies(
-          staging.projectPath,
-          packageManager,
-          options.timeout,
-          materializationController.signal,
-          true,
-        );
-      } else {
-        await installDependencies(
-          staging.projectPath,
-          packageManager,
-          options.timeout,
-          materializationController.signal,
-        );
-      }
+      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
     }
     materializationController.signal.throwIfAborted();
     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
   } catch (error) {
     materializationError = error;
-    platformSetupController?.abort();
   } finally {
     if (process.cwd() !== invocationCwd) {
       process.chdir(invocationCwd);
@@ -411,7 +405,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
     }
   }
 
-  const platformSetup = await platformSetupPromise;
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
 
@@ -423,16 +416,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   }
   if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
   if (materializationError) throw materializationError;
-  if (platformSetup?.status === 'cancelled') {
-    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
-    p.log.info('Skipping Mastra platform setup.');
-  } else if (observabilityEnabled) {
-    p.log.success(
-      options.install
-        ? 'Default template cloned and dependencies installed.'
-        : 'Default template cloned. Dependency installation was skipped.',
-    );
-  }
 
   const postSetup = await runPostCreateSetup({
     projectPath: targetPath,

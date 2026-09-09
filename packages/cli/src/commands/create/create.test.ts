@@ -430,7 +430,7 @@ describe('create preflight and mode orchestration', () => {
 });
 
 describe('managed observability', () => {
-  it('authenticates during materialization and provisions the prompted project after publish', async () => {
+  it('authenticates before materialization and provisions the prompted project after publish', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const credentials = await import('../auth/credentials.js');
@@ -466,22 +466,20 @@ describe('managed observability', () => {
     });
 
     await vi.waitFor(() => {
-      expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ silent: true }));
-      expect(installDependencies).toHaveBeenCalledWith(
-        expect.any(String),
-        'npm',
-        60_000,
-        expect.any(AbortSignal),
-        true,
-      );
-      expect(publishStagedProject).toHaveBeenCalledOnce();
+      expect(orgs.resolveCurrentOrg).toHaveBeenCalledOnce();
     });
+    // Scaffolding waits for auth to finish so prompts never share the terminal
+    // with clone/install progress output.
+    expect(cloneTemplate).not.toHaveBeenCalled();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
     finishOrgSelection?.({ orgId: 'org-id', orgName: 'Test Org' });
     await createPromise;
 
+    expect(cloneTemplate).toHaveBeenCalledWith(expect.not.objectContaining({ silent: true }));
+    expect(installDependencies).toHaveBeenCalledWith(expect.any(String), 'npm', 60_000, expect.any(AbortSignal));
+    expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(credentials.getToken).toHaveBeenCalledBefore(vi.mocked(cloneTemplate));
-    expect(orgs.resolveCurrentOrg).toHaveBeenCalledBefore(vi.mocked(publishStagedProject));
+    expect(orgs.resolveCurrentOrg).toHaveBeenCalledBefore(vi.mocked(cloneTemplate));
     expect(orgs.resolveCurrentOrg).toHaveBeenCalledWith('auth-token', {
       forcePrompt: true,
       exitOnCancel: false,
@@ -665,10 +663,9 @@ describe('managed observability', () => {
     const orgs = await import('../auth/orgs.js');
     const skills = await import('../init/skills-install');
     const commandUtils = await import('../utils.js');
-    const { installDependencies } = await import('../../utils/clone-template');
+    const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
     const { publishStagedProject } = await import('./utils');
     const trackEvent = vi.fn();
-    let finishInstall: (() => void) | undefined;
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
@@ -680,12 +677,6 @@ describe('managed observability', () => {
           options?.signal?.addEventListener('abort', () => reject(new Error('platform setup aborted')), { once: true });
         }),
     );
-    vi.mocked(installDependencies).mockImplementationOnce(
-      () =>
-        new Promise(resolve => {
-          finishInstall = resolve;
-        }),
-    );
 
     const createPromise = create({
       projectName: 'my-project',
@@ -695,13 +686,13 @@ describe('managed observability', () => {
 
     await vi.waitFor(() => {
       expect(orgs.resolveCurrentOrg).toHaveBeenCalledOnce();
-      expect(installDependencies).toHaveBeenCalledOnce();
     });
     process.emit('SIGINT');
-    finishInstall?.();
 
     await expect(createPromise).rejects.toMatchObject({ name: 'CreateCancelledError' });
     expect(prompts.cancel).toHaveBeenCalledWith('Operation cancelled');
+    expect(cloneTemplate).not.toHaveBeenCalled();
+    expect(installDependencies).not.toHaveBeenCalled();
     expect(publishStagedProject).not.toHaveBeenCalled();
     expect(skills.installMastraSkills).not.toHaveBeenCalled();
     expect(commandUtils.gitInit).not.toHaveBeenCalled();
