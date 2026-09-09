@@ -200,7 +200,7 @@ const tracingOptions = {
 
 This example produces `langfuse.trace.metadata.customerId` and `langfuse.trace.metadata.tier`.
 
-Metadata on the root span is also forwarded. Mastra sets `runId` and `resourceId` on every agent and workflow root span, and you can add your own keys through `tracingOptions.metadata`. The exporter forwards each of these root span keys to `langfuse.trace.metadata.<key>`. Keys that map to a dedicated Langfuse field (`userId`, `sessionId`, `threadId`, `traceName`, and `version`) are not duplicated as trace metadata. Metadata on child spans stays on the observation and never changes the trace.
+Metadata on the root span is also forwarded. Mastra sets `runId` and `resourceId` on every agent and workflow root span, and you can add your own keys through `tracingOptions.metadata`. The exporter forwards each of these root span keys to `langfuse.trace.metadata.<key>`. Keys that map to a dedicated Langfuse field (`userId`, `sessionId`, `threadId`, `traceName`, and `version`) are not duplicated as trace metadata. Other metadata on child spans stays on the observation. Dedicated fields such as session IDs follow their own mapping rules.
 
 Notes:
 
@@ -208,6 +208,14 @@ Notes:
 - The reserved identity keys `agentId`, `agentName`, `workflowId`, and `workflowName` are set from the root span and take precedence over custom values with the same name.
 - Keys under `langfuse` take precedence over root span metadata with the same name.
 - Values are sent as strings, because Langfuse maps trace metadata attributes as strings. Numbers, booleans, and objects are serialized with JSON. Langfuse Cloud restores them to their original types on ingestion.
+
+## Conversation sessions
+
+The exporter maps span metadata to Langfuse sessions using `sessionId`, or `threadId` when `sessionId` is absent or `null`. An explicit empty `sessionId` suppresses this fallback and sends no session ID.
+
+[Observational Memory](/docs/memory/observational-memory) keeps observer and reflector spans in the caller's session, even when child spans arrive before their parents. It preserves the caller span's explicit `sessionId`, including an empty string. Otherwise, it uses the caller span's non-empty `threadId`, falling back to the original request's thread ID. Without either identity, it adds no session ID.
+
+Internal observer and reflector execution threads remain separate. Multi-thread observation uses the invoking caller's session, not the first thread in the batch. This session behavior doesn't change buffering or span parentage, and applies when `bufferOnIdle` is `false`.
 
 ## Prompt linking
 
