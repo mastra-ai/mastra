@@ -97,6 +97,9 @@ describe('defineProxyTool', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://example.test/v2/connections/c_1/proxy/graphql');
     expect(init.method).toBe('POST');
+    // createTool hands the validated input straight to execute (no context
+    // wrapper), so config.request must see it directly.
+    expect(init.body).toBe(JSON.stringify({ name: 'hi' }));
   });
 
   it('resolves the connection id from the env var at execute time', async () => {

@@ -170,6 +170,65 @@ describe('connect resolver caching and liveness', () => {
     expect(Object.keys(again)).toEqual(['linear']);
   });
 
+  it('applies a cooldown after a failed background refresh instead of refetching every resolution', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let fail = false;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () =>
+        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      );
+    const tools = connect({
+      projectId: 'proj_1',
+      ttlMs: 1_000,
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    const start = Date.now();
+    await tools();
+    fail = true;
+    vi.setSystemTime(start + 1_001);
+    await tools();
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Still inside the failure cooldown: stale resolutions must not refetch.
+    vi.setSystemTime(start + 2_000);
+    await tools();
+    await tools();
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // After the cooldown a stale resolution revalidates again.
+    vi.setSystemTime(start + 40_000);
+    fail = false;
+    await tools();
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('refresh() rejects when the platform fetch fails even with a cached snapshot', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let fail = false;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () =>
+        fail ? Promise.reject(new Error('network down')) : Response.json({ connections: [makeConnection()] }),
+      );
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    });
+
+    await tools();
+    fail = true;
+    await expect(tools.refresh()).rejects.toThrow('network down');
+
+    // The cached snapshot stays available for plain resolutions.
+    await expect(tools()).resolves.toHaveProperty('linear');
+  });
+
   it('rejects when the platform is unreachable and nothing is cached', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const fetchMock = vi.fn().mockResolvedValue(

@@ -42,13 +42,23 @@ export function providerDir(localId: string): string {
 export function listInstalledProviderIds(): string[] {
   if (!existsSync(providersDir)) return [];
   return readdirSync(providersDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && existsSync(resolve(providersDir, entry.name, 'index.ts')))
+    .filter(
+      entry =>
+        entry.isDirectory() &&
+        // Dot-prefixed directories are generator scratch space (e.g. a
+        // temporary dir left behind by a killed generate run), never providers.
+        !entry.name.startsWith('.') &&
+        existsSync(resolve(providersDir, entry.name, 'index.ts')),
+    )
     .map(entry => entry.name)
     .sort();
 }
 
 export function providerRegistrationName(localId: string): string {
-  return `${localId.replace(/[-._]+(\w)/g, (_, ch: string) => ch.toUpperCase())}Provider`;
+  const camel = localId.replace(/[-._]+(\w)/g, (_, ch: string) => ch.toUpperCase());
+  // A leading digit (e.g. '1password') would make the camelized ID an invalid
+  // TypeScript identifier; prefix it so the generated modules still parse.
+  return `${/^\d/.test(camel) ? `_${camel}` : camel}Provider`;
 }
 
 export function updateProviderIndex(): void {
@@ -72,7 +82,14 @@ export function updateProviderIndex(): void {
 export function readManifest(localId: string): ProviderManifest | undefined {
   const path = resolve(providerDir(localId), '.manifest.json');
   if (!existsSync(path)) return undefined;
-  return JSON.parse(readFileSync(path, 'utf8')) as ProviderManifest;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as ProviderManifest;
+  } catch {
+    // A truncated or hand-edited manifest gets the same treatment as a
+    // missing one: callers fall through to their "no generator manifest"
+    // handling instead of surfacing a raw SyntaxError.
+    return undefined;
+  }
 }
 
 function listFilesRecursive(root: string, current = root): string[] {

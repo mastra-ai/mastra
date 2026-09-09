@@ -32,6 +32,10 @@ describe('maintainer provider commands', () => {
   let addProvider: typeof import('../../scripts/add-provider.js').addProvider;
   let removeProvider: typeof import('../../scripts/remove-provider.js').removeProvider;
   let listProviders: typeof import('../../scripts/list-providers.js').listProviders;
+  const originalTtyDescriptors = {
+    stdin: Object.getOwnPropertyDescriptor(process.stdin, 'isTTY'),
+    stdout: Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'),
+  };
 
   beforeAll(async () => {
     packageRoot = mkdtempSync(resolve(tmpdir(), 'mastra-connect-provider-commands-'));
@@ -66,11 +70,22 @@ describe('maintainer provider commands', () => {
     mkdirSync(resolve(packageRoot, 'src', 'providers'), { recursive: true });
     vi.restoreAllMocks();
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    // Force the non-interactive `confirm` branch: in an interactive Vitest run
+    // both streams are TTYs and `confirm` would block on a readline prompt.
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
   });
 
   afterAll(() => {
     delete process.env.MASTRA_CONNECT_PACKAGE_ROOT;
     rmSync(packageRoot, { recursive: true, force: true });
+    for (const [stream, descriptor] of [
+      [process.stdin, originalTtyDescriptors.stdin],
+      [process.stdout, originalTtyDescriptors.stdout],
+    ] as const) {
+      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
+      else delete (stream as { isTTY?: boolean }).isTTY;
+    }
   });
 
   it('adds a provider, writes its manifest, and updates the provider index', async () => {
@@ -135,6 +150,46 @@ describe('maintainer provider commands', () => {
 
     await addProvider({ providerId: 'first-provider', localId: 'local', yes: true, expectedTemplateSha: templateSha });
     expect(readFileSync(toolFile, 'utf8')).not.toContain('// hand edit');
+  });
+
+  it('normalizes a leading-digit local ID into a valid registration identifier', async () => {
+    await addProvider({
+      providerId: 'first-provider',
+      localId: '1custom',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
+    expect(providerIndex).toContain("import { _1customProvider } from './1custom/index.js';");
+    const generatedIndex = readFileSync(resolve(packageRoot, 'src/providers/1custom/index.ts'), 'utf8');
+    expect(generatedIndex).toContain('export const _1customProvider: ProviderRegistration = {');
+  });
+
+  it('ignores dot-prefixed scratch directories when rebuilding the provider index', async () => {
+    await addProvider({ providerId: 'first-provider', localId: 'local', yes: true, expectedTemplateSha: templateSha });
+
+    // Simulate a temporary generation dir left behind by a killed run.
+    const staleDir = resolve(packageRoot, 'src/providers/.stale.generate-123');
+    mkdirSync(staleDir, { recursive: true });
+    writeFileSync(resolve(staleDir, 'index.ts'), 'export {};\n');
+
+    await addProvider({ providerId: 'second-provider', localId: 'other', yes: true, expectedTemplateSha: templateSha });
+    const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
+    expect(providerIndex).not.toContain('.stale.generate-123');
+    expect(listProviders({ installedOnly: true })).toEqual([
+      'local <- first-provider (1 tools, 0 skipped)',
+      'other <- second-provider (1 tools, 0 skipped)',
+    ]);
+  });
+
+  it('treats a corrupt manifest as unmanaged instead of throwing a SyntaxError', async () => {
+    await addProvider({ providerId: 'first-provider', localId: 'local', yes: true, expectedTemplateSha: templateSha });
+    writeFileSync(resolve(packageRoot, 'src/providers/local/.manifest.json'), '{ truncated');
+
+    await expect(
+      addProvider({ providerId: 'first-provider', localId: 'local', yes: true, expectedTemplateSha: templateSha }),
+    ).rejects.toThrow("Local ID 'local' already exists without a generator manifest");
   });
 
   it('rejects local ID collisions between different template providers', async () => {

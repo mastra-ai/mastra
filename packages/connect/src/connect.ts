@@ -36,7 +36,7 @@ export interface ConnectTools {
   (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<Record<string, ToolsInput>>;
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
-  /** Fetches toolsets from the platform now and updates the cache. */
+  /** Fetches toolsets from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<Record<string, ToolsInput>>;
 }
 
@@ -46,6 +46,8 @@ interface NormalizedRequest {
 }
 
 const DEFAULT_TTL_MS = 30_000;
+/** Minimum wait after a failed platform fetch before another background revalidation. */
+const FAILURE_COOLDOWN_MS = 30_000;
 
 /**
  * Returns a live toolset resolver over the project's Platform connections.
@@ -81,7 +83,9 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   const warnedMissing = new Set<string>();
   let cache: { snapshot: Record<string, ToolsInput>; fetchedAt: number } | undefined;
   let inflight: Promise<Record<string, ToolsInput>> | undefined;
+  let lastFailureAt: number | undefined;
 
+  /** Fetches a fresh snapshot, deduplicating concurrent calls. Rejects on failure. */
   const refresh = (): Promise<Record<string, ToolsInput>> => {
     if (!inflight) {
       inflight = (async () => {
@@ -89,16 +93,10 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
           const connections = await listProjectConnections(client, projectId);
           const snapshot = mapToolsets(connections, requests, options, warnedMissing);
           cache = { snapshot, fetchedAt: Date.now() };
+          lastFailureAt = undefined;
           return snapshot;
         } catch (error) {
-          if (cache) {
-            console.warn(
-              `[@mastra/connect] Keeping cached toolsets (fetched ${Date.now() - cache.fetchedAt}ms ago); platform refresh failed: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-            return cache.snapshot;
-          }
+          lastFailureAt = Date.now();
           throw error;
         } finally {
           inflight = undefined;
@@ -113,9 +111,23 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       return cache.snapshot;
     }
     if (cache) {
-      // Stale: serve the snapshot now and revalidate in the background.
-      void refresh().catch(() => {});
-      return cache.snapshot;
+      // Stale: serve the snapshot now and revalidate in the background,
+      // swallowing (but warning about) fetch failures. During a sustained
+      // platform outage the cooldown keeps this to one request per window
+      // instead of one per agent call.
+      const staleSnapshot = cache.snapshot;
+      const inCooldown = lastFailureAt !== undefined && Date.now() - lastFailureAt < FAILURE_COOLDOWN_MS;
+      if (!inCooldown) {
+        const staleFetchedAt = cache.fetchedAt;
+        void refresh().catch((error: unknown) => {
+          console.warn(
+            `[@mastra/connect] Keeping cached toolsets (fetched ${Date.now() - staleFetchedAt}ms ago); platform refresh failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        });
+      }
+      return staleSnapshot;
     }
     return refresh();
   };
@@ -214,8 +226,20 @@ function resolveProviderConnection(request: NormalizedRequest, candidates: Proje
   const directed = request.options.connectionId?.trim() || readEnvConnectionId(request.registration);
   if (directed) {
     const match = candidates.find(connection => connection.id === directed);
-    if (match?.status === 'needs_reauth') {
+    if (!match) {
+      console.warn(
+        `[@mastra/connect] Skipping ${integrationId}: pinned connection ${directed} is not attached to this project.`,
+      );
+      return undefined;
+    }
+    if (match.status === 'needs_reauth') {
       console.warn(`[@mastra/connect] Skipping ${integrationId}: connection ${directed} needs re-auth.`);
+      return undefined;
+    }
+    if (match.status !== 'active') {
+      console.warn(
+        `[@mastra/connect] Skipping ${integrationId}: connection ${directed} is not active (status '${match.status}').`,
+      );
       return undefined;
     }
     return directed;

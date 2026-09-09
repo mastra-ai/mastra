@@ -142,6 +142,14 @@ describe('listProjectConnections', () => {
     await expect(listProjectConnections(client, 'proj_1')).rejects.toMatchObject({ code: 'platform_error' });
   });
 
+  it('wraps an invalid JSON body in platform_error instead of a raw SyntaxError', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('not json', { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(listProjectConnections(client, 'proj_1')).rejects.toMatchObject({ code: 'platform_error' });
+  });
+
   it('redacts the access token from transport error messages', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error(`connect failed for Bearer ${TOKEN} at host`));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -203,6 +211,25 @@ describe('proxyRequest', () => {
     });
     const [url] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://example.test/v2/connections/c_1/proxy/issues?page=2&q=bug+fix');
+  });
+
+  it('rejects literal and encoded dot segments before building the URL', async () => {
+    const fetchMock = vi.fn();
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    for (const path of ['../../projects/p_1/connections', 'a/../b', '%2e%2e/secrets', 'a/%2E%2e/b', 'a/%zz/b']) {
+      await expect(proxyRequest(client, 'c_1', { method: 'GET', path })).rejects.toMatchObject({
+        code: 'invalid_options',
+      });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows dots inside ordinary path segments', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', { method: 'GET', path: 'files/report.v1.2.pdf' });
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('https://example.test/v2/connections/c_1/proxy/files/report.v1.2.pdf');
   });
 
   it('JSON-encodes bodies and forwards custom headers', async () => {

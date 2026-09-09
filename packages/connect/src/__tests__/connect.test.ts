@@ -138,6 +138,34 @@ describe('connect', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-auth'));
   });
 
+  it('skips a directed connection id that is not attached to the project', async () => {
+    installProvider();
+    vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_absent');
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(tools).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('pinned connection c_absent is not attached to this project'),
+    );
+  });
+
+  it('skips a directed connection in a non-active state', async () => {
+    installProvider();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ connections: [makeConnection({ id: 'c_err', status: 'error' })] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { connectionId: 'c_err' } },
+    })();
+    expect(tools).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("connection c_err is not active (status 'error')"));
+  });
+
   it('skips when multiple active connections exist without a pin', async () => {
     installProvider();
     const fetchMock = vi.fn().mockResolvedValue(

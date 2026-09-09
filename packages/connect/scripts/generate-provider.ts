@@ -36,6 +36,7 @@ import {
   calculateFileChecksums,
   currentTemplateSha,
   providerDir,
+  providerRegistrationName,
   providersDir,
   templatesDir,
   validateProviderId,
@@ -313,8 +314,11 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
   const imports = actions
     .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
     .join('\n');
+  // Keys are quoted because a leading-digit local ID (e.g. '1password')
+  // produces tool keys that are not valid bare identifiers; prettier strips
+  // the quotes again wherever they are unnecessary.
   const toolEntries = actions
-    .map(action => `    ${action.candidate.toolKey}: ${action.toolFactoryName}(platformProxy),`)
+    .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
@@ -336,7 +340,9 @@ ${toolEntries}
 function emitIndexFile(integrationId: string): string {
   const envVar = `MASTRA_${integrationId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
   const factoryName = `create${toPascal(integrationId)}Tools`;
-  const registrationName = `${toCamel(integrationId)}Provider`;
+  // Shared with updateProviderIndex so the emitted export always matches the
+  // import the provider index writes (including leading-digit normalization).
+  const registrationName = providerRegistrationName(integrationId);
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';

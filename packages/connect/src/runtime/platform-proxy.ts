@@ -28,6 +28,8 @@ export interface PlatformProxyRequest {
    * Retry hint from templates. We treat this as a soft ceiling — the platform
    * proxy already applies its own retry policy; templates that ask for `n`
    * retries get up to `n` transient retries here on network/5xx failures.
+   * Only honored for idempotent HTTP methods (GET/HEAD/PUT/DELETE): a POST or
+   * PATCH the provider may have already applied is never repeated.
    */
   retries?: number;
 }
@@ -77,6 +79,9 @@ export interface PlatformProxy {
   withRequestContext(requestContext: RequestContext): PlatformProxy;
 }
 
+/** Methods with an idempotency contract per RFC 9110; only these may be retried. */
+const IDEMPOTENT_METHODS = new Set<ProxyRequestOptions['method']>(['GET', 'HEAD', 'PUT', 'DELETE']);
+
 interface CreatePlatformProxyOptions {
   connectionId?: string;
   client?: ConnectClientOptions;
@@ -98,7 +103,10 @@ async function callProxy<T>(
     );
   }
   const client = resolveClient(clientOptions);
-  const attempts = Math.max(1, Math.min(config.retries ?? 1, 5));
+  // Non-idempotent writes get exactly one attempt: a POST/PATCH the provider
+  // accepted just before a transient failure must not be replayed as a
+  // duplicate mutation. There is no idempotency-key contract on the proxy.
+  const attempts = IDEMPOTENT_METHODS.has(method) ? Math.max(1, Math.min(config.retries ?? 1, 5)) : 1;
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {

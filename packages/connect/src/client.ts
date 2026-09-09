@@ -46,8 +46,12 @@ function resolveIntegrationsUrl(): string {
   return DEFAULT_INTEGRATIONS_URL;
 }
 
+// Written as a loop rather than /\/+$/ so a hostile baseUrl of many slashes
+// cannot trigger polynomial regex backtracking (CodeQL js/polynomial-redos).
 function stripTrailingSlashes(url: string): string {
-  return url.replace(/\/+$/, '');
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
 }
 
 export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
@@ -95,6 +99,15 @@ async function platformFetch(client: ResolvedClient, path: string, init?: Reques
       throw redacted;
     }
     throw error;
+  }
+}
+
+/** Parses a successful platform response body, mapping invalid JSON to the platform_error contract. */
+async function parsePlatformJson(response: Response, context: string): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new MastraConnectError('platform_error', `Platform returned an unparseable response body while ${context}.`);
   }
 }
 
@@ -162,7 +175,9 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
   if (!response.ok) {
     await throwPlatformError(response, `listing connections for project ${projectId}`);
   }
-  const parsed = connectionListSchema.safeParse(await response.json());
+  const parsed = connectionListSchema.safeParse(
+    await parsePlatformJson(response, `listing connections for project ${projectId}`),
+  );
   if (!parsed.success) {
     throw new MastraConnectError(
       'platform_error',
@@ -177,7 +192,9 @@ export async function getCredential(client: ResolvedClient, connectionId: string
   if (!response.ok) {
     await throwPlatformError(response, `fetching credentials for connection ${connectionId}`);
   }
-  const parsed = credentialSchema.safeParse(await response.json());
+  const parsed = credentialSchema.safeParse(
+    await parsePlatformJson(response, `fetching credentials for connection ${connectionId}`),
+  );
   if (!parsed.success) {
     throw new MastraConnectError(
       'unsupported_credential_type',
@@ -189,7 +206,7 @@ export async function getCredential(client: ResolvedClient, connectionId: string
 
 export interface ProxyRequestOptions {
   method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  /** Provider-relative path (no leading slash required; absolute URLs and '..' are rejected by the platform). */
+  /** Provider-relative path (no leading slash required; dot segments are rejected client-side, absolute URLs by the platform). */
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
@@ -205,12 +222,38 @@ export interface ProxyRequestOptions {
  * provider's own 401/404 passed through the proxy stays `proxy_error` with the
  * provider status attached.
  */
+/**
+ * True when any path segment is a literal or percent-encoded dot segment.
+ * fetch/URL normalizes `..` (and `%2e%2e` variants) *before* the request is
+ * sent, which would let a crafted path escape the connection-proxy prefix and
+ * hit an arbitrary platform route with the caller's bearer token.
+ */
+function hasDotSegment(path: string): boolean {
+  return path.split('/').some(segment => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      // Malformed percent-encoding: reject rather than guess what the
+      // URL parser would do with it.
+      return true;
+    }
+    return decoded === '.' || decoded === '..';
+  });
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<unknown> {
   const cleanPath = options.path.replace(/^\/+/, '');
+  if (hasDotSegment(cleanPath)) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid proxy path '${options.path}': dot segments are not allowed.`,
+    );
+  }
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined) search.set(key, String(value));
