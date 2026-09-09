@@ -88,6 +88,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
         },
       });
     }
+    if (url.pathname.endsWith('/feed-events')) return route.fulfill({ body: '', contentType: 'text/event-stream' });
     if (url.pathname.endsWith('/active-runs')) return route.fulfill({ json: { runs: [] } });
     if (url.pathname.endsWith('/decisions')) return route.fulfill({ json: { decisions: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });

@@ -519,7 +519,12 @@ describe('BUILTIN_SERVERS command()', () => {
     });
 
     it('returns undefined when binary not found', () => {
-      expect(eslintCommand(tempDir)).toBeUndefined();
+      vi.stubEnv('PATH', tempDir);
+      try {
+        expect(eslintCommand(tempDir)).toBeUndefined();
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 

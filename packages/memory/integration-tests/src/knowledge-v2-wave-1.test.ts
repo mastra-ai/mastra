@@ -17,6 +17,7 @@ const adapter = process.env.KNOWLEDGE_ADAPTER === 'pg' ? 'pg' : 'libsql';
 const outputPath = process.env.KNOWLEDGE_PROOF_OUTPUT;
 const temporaryDirectories: string[] = [];
 const stores: MastraCompositeStore[] = [];
+const memories: Memory[] = [];
 const postgresSchemas: string[] = [];
 
 const structure = {
@@ -43,10 +44,33 @@ function message(threadId: string): MastraDBMessage {
   };
 }
 
-function deterministicCaptureModel() {
+function deterministicObservationModel(curate = false) {
+  let wrote = false;
   const doStream = vi.fn(async () => ({
     stream: new ReadableStream({
       start(controller) {
+        if (curate && !wrote) {
+          wrote = true;
+          controller.enqueue({
+            type: 'tool-call',
+            toolCallId: 'wave-1-create',
+            toolName: 'knowledge_create',
+            input: JSON.stringify({
+              name: 'Atlas refund launch',
+              kind: 'feature',
+              text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
+              nodeScope: 'resource',
+              scope: 'resource',
+            }),
+          });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 20, outputTokens: 8 },
+          });
+          controller.close();
+          return;
+        }
         for (const chunk of [
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'wave-1-observation', modelId: 'aimock', timestamp: new Date() },
@@ -54,7 +78,7 @@ function deterministicCaptureModel() {
           {
             type: 'text-delta',
             id: 'wave-1-text',
-            delta: '<observations>Maya Chen owns the Atlas refund launch.</observations>',
+            delta: '<observations>\nMaya Chen owns the Atlas refund launch.\n</observations>',
           },
           { type: 'text-end', id: 'wave-1-text' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 20, outputTokens: 8, totalTokens: 28 } },
@@ -67,35 +91,9 @@ function deterministicCaptureModel() {
     rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }));
-  const doGenerate = vi.fn(async () => ({
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop' as const,
-    usage: { inputTokens: 20, outputTokens: 20, totalTokens: 40 },
-    warnings: [],
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify({
-          capture: {
-            nodes: [
-              {
-                name: 'Atlas refund launch',
-                kind: 'feature',
-                scope: 'resource',
-                records: [
-                  {
-                    text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-                    scope: 'resource',
-                    reason: 'Ownership is required to coordinate the refund launch.',
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      },
-    ],
-  }));
+  const doGenerate = vi.fn(async () => {
+    throw new Error('Wave 1 proof requires streaming observation-time curate, not structured capture extraction.');
+  });
   return {
     model: {
       specificationVersion: 'v2' as const,
@@ -105,6 +103,7 @@ function deterministicCaptureModel() {
       doGenerate,
     },
     doGenerate,
+    doStream,
   };
 }
 
@@ -135,21 +134,23 @@ async function createStorage(id: string): Promise<{ storage: MastraCompositeStor
 
 function createRuntime(storage: MastraCompositeStore) {
   const knowledge = new Knowledge({ id: 'shipyard-knowledge', storage, structure });
-  const { model, doGenerate } = deterministicCaptureModel();
+  const { model, doGenerate } = deterministicObservationModel();
+  const curator = deterministicObservationModel(true);
   const memory = new Memory({
     storage,
-    knowledge: 'default',
+    knowledge: 'mastra',
     options: {
       observationalMemory: {
         enabled: true,
         model,
-        experimental_subconscious: new Subconscious({ observation: ['capture'], reflection: [] }),
+        experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curator.model }] }),
         observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
       },
     },
   });
-  const mastra = new Mastra({ knowledge: { default: knowledge }, memory: { default: memory }, logger: false });
-  return { knowledge: mastra.getKnowledge('default'), memory, doGenerate };
+  memories.push(memory);
+  const mastra = new Mastra({ knowledge: { mastra: knowledge }, memory: { default: memory }, logger: false });
+  return { knowledge: mastra.getKnowledge('mastra'), memory, doGenerate, curator };
 }
 
 function sanitizePackageUrl(url: string): string {
@@ -164,6 +165,13 @@ async function writeProofOutput(value: Record<string, unknown>) {
 
 afterEach(async () => {
   const cleanupErrors: unknown[] = [];
+  for (const memory of memories.splice(0)) {
+    try {
+      await memory.settled();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
   for (const storage of stores.splice(0).reverse()) {
     if (storage instanceof PostgresStore) {
       const schemaName = postgresSchemas.pop();
@@ -191,7 +199,13 @@ afterEach(async () => {
 });
 
 describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
-  it('reconciles, captures through OM, and survives a fresh runtime restart', async () => {
+  it('rejects obsolete observation-agent configuration with migration guidance', () => {
+    expect(() => new Subconscious(JSON.parse('{"observation":["capture"]}'))).toThrow(
+      'Unknown Subconscious observation agent: capture. Use "curate" for observation-time ingestion or "remind" for retrieval.',
+    );
+  });
+
+  it('reconciles, curates through OM, and survives a fresh runtime restart', async () => {
     const resolvedPackages = {
       core: import.meta.resolve('@mastra/core/knowledge'),
       memory: import.meta.resolve('@mastra/memory'),
@@ -220,23 +234,38 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       sendStateSignal: async () => ({ skipped: false }) as never,
     });
     expect(observed.observed).toBe(true);
-    expect(first.doGenerate).toHaveBeenCalledTimes(1);
-
-    const visibleScope = ['org:acme', 'resource:shipyard', 'resource:shipyard:uncurated'];
+    const visibleScope = ['org:acme', 'resource:shipyard'];
+    await first.memory.settled();
+    expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
+      kind: 'feature',
+      scope: ['org:acme', 'resource:shipyard'],
+    });
+    expect(first.doGenerate).not.toHaveBeenCalled();
+    expect(first.curator.doGenerate).not.toHaveBeenCalled();
+    expect(first.curator.doStream).toHaveBeenCalled();
     const captured = await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope });
-    expect(captured).toMatchObject({ kind: 'feature', scope: ['resource:shipyard:uncurated'] });
     const records = await first.knowledge.listKnowledgeAbout({ node: captured!.id, scope: visibleScope });
     expect(records.records).toHaveLength(1);
     expect(records.records[0]).toMatchObject({
       text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
       sourceThreadId: threadId,
-      scope: ['resource:shipyard:uncurated'],
-      metadata: { reason: 'Ownership is required to coordinate the refund launch.' },
+      scope: ['org:acme', 'resource:shipyard'],
     });
     expect(records.records[0]?.capturedAt).toBeInstanceOf(Date);
-    expect(await first.knowledge.listActivity({ scope: visibleScope, limit: 100 })).not.toEqual([]);
+    expect(await first.knowledge.listActivity({ scope: visibleScope, limit: 100 })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'node-created', recordId: captured!.id, scope: visibleScope }),
+        expect.objectContaining({
+          action: 'record-created',
+          recordId: records.records[0]!.id,
+          sourceThreadId: threadId,
+          scope: visibleScope,
+        }),
+      ]),
+    );
 
     await first.memory.settled();
+    memories.splice(memories.indexOf(first.memory), 1);
     await storage.close();
     stores.splice(stores.indexOf(storage), 1);
 
@@ -268,7 +297,7 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
         Object.entries(resolvedPackages).map(([name, url]) => [name, sanitizePackageUrl(url)]),
       ),
       structureScopeCount: Object.keys(reconciled.scopes).length,
-      capture: { node: captured?.name, records: records.records.length, activity: 'present' },
+      curation: { node: captured?.name, records: records.records.length, activity: 'present' },
       restart: { sameNodeId: persisted?.id === captured?.id, duplicateScopes: replay.createdScopeIds.length },
     });
   });
