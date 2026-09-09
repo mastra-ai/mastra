@@ -36,6 +36,14 @@ const agent = new Agent({
   // ...
   inputProcessors: [createBackgroundWorkSignalProcessor()],
 });
+
+function handleBackgroundSignal(signal: { tagName?: string }) {
+  if (signal.tagName === 'work-completed') {
+    // Handle successful background work.
+  } else if (signal.tagName === 'work-failed') {
+    // Handle failed background work.
+  }
+}
 ```
 
 `deferred` returns a task placeholder while the run continues, `awaited` uses durable background execution while holding the current branch for the authoritative result, and `foreground` executes inline. The legacy `_background.enabled` field remains supported.

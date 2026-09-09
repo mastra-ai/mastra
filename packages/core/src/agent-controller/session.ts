@@ -3353,12 +3353,15 @@ export class Session<TState = unknown> {
         ifActive: { behavior: 'persist' },
         ifIdle: { behavior: 'persist' },
       });
-      await result.persisted;
+      const settled = await result.accepted;
 
-      if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
-        const message = signal.toDBMessage(target);
-        this.emit({ type: 'message_start', message });
-        this.emit({ type: 'message_end', message });
+      if (settled.action === 'persist') {
+        await result.persisted;
+        if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
+          const message = signal.toDBMessage(target);
+          this.emit({ type: 'message_start', message });
+          this.emit({ type: 'message_end', message });
+        }
       }
 
       return { accepted: true as const };
@@ -3486,7 +3489,8 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
-        if (ifActive?.behavior === 'persist') {
+        const settled = ifActive?.behavior === 'persist' || requireDelivery ? await result.accepted : undefined;
+        if (settled?.action === 'persist') {
           await result.persisted;
           const message = signal.toDBMessage({
             resourceId: this.identity.getResourceId(),
@@ -3496,11 +3500,11 @@ export class Session<TState = unknown> {
           this.emit({ type: 'message_end', message });
         }
         if (requireDelivery) {
-          const settled = await result.accepted;
+          const acceptedResult = settled ?? (await result.accepted);
           return {
             accepted: true as const,
-            runId: 'runId' in settled ? settled.runId : undefined,
-            action: settled.action,
+            runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
+            action: acceptedResult.action,
           };
         }
         return { accepted: true as const, runId: await settleRunId(result) };

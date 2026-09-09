@@ -1003,7 +1003,7 @@ const agent = new Agent({
 })
 ```
 
-Mastra's background runtime remains responsible for execution, persistence, retries, result reconciliation, and continuation. The processor only retains caller-scoped notification access. It emits `work-completed` or `work-failed` after the authoritative tool result is reconciled.
+Mastra's background runtime remains responsible for execution, persistence, retries, result reconciliation, and continuation. The processor only retains caller-scoped notification access. When background work starts, it emits `work-deferred` or `work-awaited` with `status: 'running'`. After the authoritative tool result is reconciled, it emits `work-completed` or `work-failed`.
 
 Notifications are process-local and best-effort. If the originating run has already ended or the signal can't be delivered (for example, because the task resumed on another process), Mastra preserves the authoritative result without recreating the run or retrying the notification. Foreground calls never emit background work notifications because there is no detached work to report.
 

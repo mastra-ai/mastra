@@ -182,6 +182,118 @@ describe('AgentController signal messages', () => {
     expect(events.filter(event => event.type === 'message_end')).toEqual([]);
   });
 
+  it('emits a persisted explicit-thread signal into the matching session thread', async () => {
+    const agent = createAgentMock(() => null);
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted: Promise.resolve(),
+      signal: { id: 'completion-2', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-explicit-thread-match',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'current-thread' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignalToThread(
+      {
+        id: 'completion-2',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      { resourceId: 'resource-1', threadId: 'current-thread' },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true });
+    expect(events.filter(event => event.type === 'message_start')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'message_end')).toHaveLength(1);
+  });
+
+  it('does not emit an explicit-thread signal when persistence is discarded', async () => {
+    const agent = createAgentMock(() => null);
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'discard' as const }),
+      signal: { id: 'completion-discarded', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-explicit-thread-discard',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'current-thread' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignalToThread(
+      {
+        id: 'completion-discarded',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      { resourceId: 'resource-1', threadId: 'current-thread' },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true });
+    expect(events.filter(event => event.type === 'message_start')).toEqual([]);
+    expect(events.filter(event => event.type === 'message_end')).toEqual([]);
+  });
+
+  it('does not emit an active signal when persistence is discarded', async () => {
+    const agent = createAgentMock(() => 'run-1');
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'discard' as const }),
+      signal: { id: 'completion-discarded', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-notification-discard',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => 'run-1') as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignal(
+      {
+        id: 'completion-discarded',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      {
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(events.filter(event => event.type === 'message_start')).toEqual([]);
+    expect(events.filter(event => event.type === 'message_end')).toEqual([]);
+  });
+
   it('declines an armed approval with interruption context before delivering a user signal', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
