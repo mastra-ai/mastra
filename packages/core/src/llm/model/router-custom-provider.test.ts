@@ -58,6 +58,32 @@ describe('ModelRouter - Custom Provider Support', () => {
       const mockInstance = vi.mocked(createOpenAICompatible).mock.results[0].value;
       expect(mockInstance.chatModel).toHaveBeenCalledWith('my-model');
     });
+
+    it('adds x-opencode-session when using OpenCode Go with a custom URL', async () => {
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: {
+          providerId: 'opencode-go',
+          modelId: 'deepseek-v4-flash',
+          url: 'https://opencode.ai/zen/go/v1',
+          apiKey: 'test-key',
+        },
+      });
+
+      await agent.generate('test', { maxSteps: 1 });
+
+      expect(createOpenAICompatible).toHaveBeenCalledWith({
+        name: 'opencode-go',
+        apiKey: 'test-key',
+        baseURL: 'https://opencode.ai/zen/go/v1',
+        headers: {
+          'x-opencode-session': expect.any(String),
+        },
+        supportsStructuredOutputs: true,
+      });
+    });
   });
 
   describe('Unknown provider with custom URL', () => {

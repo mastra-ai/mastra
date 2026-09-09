@@ -13,6 +13,7 @@ const {
   createGoogleGenerativeAIMock,
   createGroqMock,
   createMistralMock,
+  createOpenAICompatibleMock,
   createOpenAIMock,
   createOpenRouterMock,
   createPerplexityMock,
@@ -31,6 +32,7 @@ const {
   createGoogleGenerativeAIMock: vi.fn(),
   createGroqMock: vi.fn(),
   createMistralMock: vi.fn(),
+  createOpenAICompatibleMock: vi.fn(),
   createOpenAIMock: vi.fn(),
   createOpenRouterMock: vi.fn(),
   createPerplexityMock: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock('@ai-sdk/deepseek-v6', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
 vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
+vi.mock('@ai-sdk/openai-compatible-v6', () => ({ createOpenAICompatible: createOpenAICompatibleMock }));
 vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
 vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
 vi.mock('@ai-sdk/togetherai-v6', () => ({ createTogetherAI: createTogetherAIMock }));
@@ -74,6 +77,7 @@ describe('ModelsDevGateway', () => {
     createGoogleGenerativeAIMock.mockReturnValue({ chat: chatModelMock });
     createGroqMock.mockReturnValue(callableModelMock);
     createMistralMock.mockReturnValue(callableModelMock);
+    createOpenAICompatibleMock.mockReturnValue({ chatModel: chatModelMock });
     createOpenAIMock.mockReturnValue({ responses: openAIResponsesMock });
     createOpenRouterMock.mockReturnValue(callableModelMock);
     createPerplexityMock.mockReturnValue(callableModelMock);
@@ -645,6 +649,63 @@ describe('ModelsDevGateway', () => {
       });
       expect(xAIResponsesMock).toHaveBeenCalledWith('grok-4.3');
       expect(callableModelMock).not.toHaveBeenCalledWith('grok-4.3');
+    });
+
+    it('adds x-opencode-session for OpenCode Go requests', async () => {
+      gateway = new ModelsDevGateway({
+        'opencode-go': {
+          apiKeyEnvVar: 'OPENCODE_API_KEY',
+          name: 'OpenCode Go',
+          models: ['deepseek-v4-flash'],
+          gateway: 'models.dev',
+          url: 'https://opencode.ai/zen/go/v1',
+        },
+      });
+
+      await gateway.resolveLanguageModel({
+        providerId: 'opencode-go',
+        modelId: 'deepseek-v4-flash',
+        apiKey: 'sk-test',
+      });
+
+      expect(createOpenAICompatibleMock).toHaveBeenCalledWith({
+        name: 'opencode-go',
+        apiKey: 'sk-test',
+        baseURL: 'https://opencode.ai/zen/go/v1',
+        headers: {
+          'User-Agent': expect.any(String),
+          'x-opencode-session': expect.any(String),
+        },
+        supportsStructuredOutputs: true,
+      });
+    });
+
+    it('reuses x-thread-id as x-opencode-session for OpenCode Go', async () => {
+      gateway = new ModelsDevGateway({
+        'opencode-go': {
+          apiKeyEnvVar: 'OPENCODE_API_KEY',
+          name: 'OpenCode Go',
+          models: ['deepseek-v4-flash'],
+          gateway: 'models.dev',
+          url: 'https://opencode.ai/zen/go/v1',
+        },
+      });
+
+      await gateway.resolveLanguageModel({
+        providerId: 'opencode-go',
+        modelId: 'deepseek-v4-flash',
+        apiKey: 'sk-test',
+        headers: { 'x-thread-id': 'thread-123' },
+      });
+
+      expect(createOpenAICompatibleMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-thread-id': 'thread-123',
+            'x-opencode-session': 'thread-123',
+          }),
+        }),
+      );
     });
   });
 
