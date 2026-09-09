@@ -389,6 +389,62 @@ describe('ToolCard dispatch', () => {
     });
   });
 
+  describe('when a completed delegation still requires approval', () => {
+    it('keeps the badge expanded with the approval controls visible', () => {
+      render(
+        <AgentBadge
+          agentId="head"
+          messages={[]}
+          toolCallId="approval-call"
+          toolName="agent-head"
+          isNetwork={false}
+          toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
+          isComplete
+        />,
+        { wrapper: Providers },
+      );
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).not.toBeNull();
+    });
+  });
+
+  describe('when a completed delegation is still revealing child messages', () => {
+    it('stays expanded until the child messages finish', () => {
+      const props = {
+        agentId: 'head',
+        messages: [],
+        toolCallId: 'streaming-call',
+        toolName: 'agent-head',
+        isNetwork: false,
+        toolApprovalMetadata: undefined,
+        isComplete: true,
+      };
+      const { rerender } = render(<AgentBadge {...props} keepOpenForStreamingChildMessages />, { wrapper: Providers });
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      rerender(<AgentBadge {...props} keepOpenForStreamingChildMessages={false} />);
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  describe('when a child tool returns a falsy output', () => {
+    it.each([false, 0, '', null])('treats %j as complete instead of asking for approval again', toolOutput => {
+      render(
+        <AgentBadge
+          agentId="head"
+          messages={[{ type: 'tool', toolName: 'search', toolCallId: 'child-call', toolOutput }]}
+          toolCallId="approval-call"
+          toolName="agent-head"
+          isNetwork={false}
+          toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
+          isComplete
+        />,
+        { wrapper: Providers },
+      );
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    });
+  });
+
   describe('when a delegation completes successfully', () => {
     it('does not show an error slot even if stale error text is supplied', () => {
       render(
