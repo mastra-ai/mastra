@@ -4,14 +4,15 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
+  attentionKindsIn,
   fetchFactoryAttention,
   markAllFactoryAttentionRead,
   updateFactoryAttentionReceipt,
 } from '../ui/domains/factory/services/attention';
 import type {
+  FactoryAttentionGroup,
   FactoryAttentionItem,
   FactoryAttentionReceiptAction,
-  FactoryAttentionTier,
   FactoryAttentionView,
 } from '../ui/domains/factory/services/attention';
 
@@ -25,14 +26,19 @@ export function useFactoryAttention(
   factoryProjectId: string | undefined,
   view: FactoryAttentionView,
   limit: number,
-  tier?: FactoryAttentionTier,
+  group?: FactoryAttentionGroup,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, tier),
+    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, group),
     queryFn: factoryProjectId
       ? ({ signal }) =>
-          fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal, ...(tier ? { tier } : {}) })
+          fetchFactoryAttention(baseUrl, factoryProjectId, {
+            view,
+            limit,
+            signal,
+            ...(group ? { kinds: attentionKindsIn(group) } : {}),
+          })
       : skipToken,
     refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,

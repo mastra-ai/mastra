@@ -38,7 +38,9 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Linear intake            | WorkOS + `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` + `APP_DATABASE_URL` + a state secret (`GITHUB_APP_WEBHOOK_SECRET` or `WORKOS_COOKIE_PASSWORD`) |
 | Slack channels           | `SLACK_APP_SIGNING_SECRET`, `SLACK_APP_BOT_TOKEN`, `SLACK_APP_CLIENT_ID`, `SLACK_APP_CLIENT_SECRET` + WorkOS + a state secret (see above)           |
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
-| Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
+| Cloud sandboxes          | `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`, plus `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`                                |
+
+Set `FACTORY_SANDBOX_PROVIDER=local` in `.env` to run sandbox commands on the machine running Factory, even when cloud credentials are configured. This leaves Platform auth and database settings unchanged. The separate `SANDBOX_PROVIDER` variable selects the PlatformSandbox cloud backend (`e2b` or `railway`).
 
 ### Database
 

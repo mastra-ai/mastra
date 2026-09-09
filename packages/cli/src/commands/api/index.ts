@@ -486,6 +486,11 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
+  addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
+    description: 'List the boards installed on a Factory project with their phases and transitions',
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
     input: 'optional',

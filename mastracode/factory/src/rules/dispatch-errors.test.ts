@@ -8,6 +8,9 @@ describe('Factory dispatch failure policy', () => {
     expect(factoryDispatchFailureMetadata('repository_egress_blocked').canRetry).toBe(false);
     expect(factoryDispatchFailureMetadata('repository_cli_missing').canRetry).toBe(false);
     expect(factoryDispatchFailureMetadata('unsupported_provider_item').canRetry).toBe(false);
+    // Rows written before a pause stopped counting as a failure: retrying one kicks a run nobody asked for.
+    expect(factoryDispatchFailureMetadata('plan_awaiting_approval').canRetry).toBe(false);
+    expect(factoryDispatchFailureMetadata('run_awaiting_input').canRetry).toBe(false);
   });
 
   it('offers Retry for repeatable transport and repository operations', () => {

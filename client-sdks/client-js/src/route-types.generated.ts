@@ -3060,22 +3060,28 @@ type Shared_Type_130 = {
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
-  toolMocks?: Shared_Type_128[] | undefined;
+  toolMocks?: (Shared_Type_128[] | undefined) | null;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
-  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-  scorerIds?: string[] | undefined;
+  unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
+  scorerIds?: (string[] | undefined) | null;
   requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
   metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
   /** Source/provenance of this dataset item */
-  source?: Shared_Type_129 | undefined;
+  source?: (Shared_Type_129 | undefined) | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -18245,6 +18251,36 @@ export interface PatchDatasetsDatasetIdItemsItemId_RouteContract {
 }
 
 // ============================================================================
+// Route: DELETE /datasets/:datasetId/items/:itemId/purge
+// ============================================================================
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams = GetDatasetsDatasetIdItemsItemId_PathParams;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_Response = PostAuthRefresh_Response;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_Request = Simplify<
+  (DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams extends never
+    ? {}
+    : { params: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams }) &
+    (DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams
+        ? { query?: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }
+        : { query: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract {
+  pathParams: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams;
+  queryParams: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams;
+  body: never;
+  request: DeleteDatasetsDatasetIdItemsItemIdPurge_Request;
+  response: DeleteDatasetsDatasetIdItemsItemIdPurge_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: DELETE /datasets/:datasetId/items/:itemId
 // ============================================================================
 export type DeleteDatasetsDatasetIdItemsItemId_PathParams = GetDatasetsDatasetIdItemsItemId_PathParams;
@@ -18323,20 +18359,26 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
-    toolMocks?: Shared_Type_128[] | undefined;
+    toolMocks?: (Shared_Type_128[] | undefined) | null;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
-    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-    scorerIds?: string[] | undefined;
+    unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
+    scorerIds?: (string[] | undefined) | null;
     requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
+      | (
+          | {
+              [key: string]: unknown;
+            }
+          | undefined
+        )
+      | null;
     metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
+      | (
+          | {
+              [key: string]: unknown;
+            }
+          | undefined
+        )
+      | null;
     validTo: number | null;
     isDeleted: boolean;
     createdAt: Date;
@@ -18458,6 +18500,37 @@ export interface GetExperimentsReviewSummary_RouteContract {
   body: never;
   request: GetExperimentsReviewSummary_Request;
   response: GetExperimentsReviewSummary_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /experiments/:experimentId
+// ============================================================================
+export type DeleteExperimentsExperimentId_PathParams = {
+  /** Unique identifier for the experiment */
+  experimentId: string;
+};
+
+export type DeleteExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type DeleteExperimentsExperimentId_Response = PostAuthRefresh_Response;
+
+export type DeleteExperimentsExperimentId_Request = Simplify<
+  (DeleteExperimentsExperimentId_PathParams extends never ? {} : { params: DeleteExperimentsExperimentId_PathParams }) &
+    (DeleteExperimentsExperimentId_QueryParams extends never
+      ? {}
+      : {} extends DeleteExperimentsExperimentId_QueryParams
+        ? { query?: DeleteExperimentsExperimentId_QueryParams }
+        : { query: DeleteExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteExperimentsExperimentId_RouteContract {
+  pathParams: DeleteExperimentsExperimentId_PathParams;
+  queryParams: DeleteExperimentsExperimentId_QueryParams;
+  body: never;
+  request: DeleteExperimentsExperimentId_Request;
+  response: DeleteExperimentsExperimentId_Response;
   responseType: 'json';
 }
 
@@ -18808,6 +18881,37 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   body: never;
   request: GetDatasetsDatasetIdExperimentsExperimentId_Request;
   response: GetDatasetsDatasetIdExperimentsExperimentId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /datasets/:datasetId/experiments/:experimentId
+// ============================================================================
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams =
+  PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
+
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_Response = PostAuthRefresh_Response;
+
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
+  (DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
+    ? {}
+    : { params: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
+    (DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams
+        ? { query?: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }
+        : { query: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
+  pathParams: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams;
+  queryParams: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams;
+  body: never;
+  request: DeleteDatasetsDatasetIdExperimentsExperimentId_Request;
+  response: DeleteDatasetsDatasetIdExperimentsExperimentId_Response;
   responseType: 'json';
 }
 
@@ -22368,18 +22472,21 @@ export interface RouteTypes {
   'DELETE /datasets/:datasetId/items/batch': DeleteDatasetsDatasetIdItemsBatch_RouteContract;
   'GET /datasets/:datasetId/items/:itemId': GetDatasetsDatasetIdItemsItemId_RouteContract;
   'PATCH /datasets/:datasetId/items/:itemId': PatchDatasetsDatasetIdItemsItemId_RouteContract;
+  'DELETE /datasets/:datasetId/items/:itemId/purge': DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract;
   'DELETE /datasets/:datasetId/items/:itemId': DeleteDatasetsDatasetIdItemsItemId_RouteContract;
   'GET /datasets/:datasetId/versions': GetDatasetsDatasetIdVersions_RouteContract;
   'GET /datasets/:datasetId/items/:itemId/history': GetDatasetsDatasetIdItemsItemIdHistory_RouteContract;
   'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion': GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract;
   'GET /experiments': GetExperiments_RouteContract;
   'GET /experiments/review-summary': GetExperimentsReviewSummary_RouteContract;
+  'DELETE /experiments/:experimentId': DeleteExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments': GetDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments': PostDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run': PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/results': PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'POST /datasets/:datasetId/experiments/:experimentId/finalize': PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId': GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
+  'DELETE /datasets/:datasetId/experiments/:experimentId': DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId': PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments/:experimentId/results': GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract;
   'PATCH /datasets/:datasetId/experiments/:experimentId/results/:resultId': PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_RouteContract;
@@ -22836,6 +22943,7 @@ export interface Client {
     POST: PostDatasetsDatasetIdExperiments_RouteContract;
   };
   '/datasets/:datasetId/experiments/:experimentId': {
+    DELETE: DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract;
     GET: GetDatasetsDatasetIdExperimentsExperimentId_RouteContract;
     PATCH: PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract;
   };
@@ -22866,6 +22974,9 @@ export interface Client {
   };
   '/datasets/:datasetId/items/:itemId/history': {
     GET: GetDatasetsDatasetIdItemsItemIdHistory_RouteContract;
+  };
+  '/datasets/:datasetId/items/:itemId/purge': {
+    DELETE: DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract;
   };
   '/datasets/:datasetId/items/:itemId/versions/:datasetVersion': {
     GET: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract;
@@ -22909,6 +23020,9 @@ export interface Client {
   };
   '/experiments': {
     GET: GetExperiments_RouteContract;
+  };
+  '/experiments/:experimentId': {
+    DELETE: DeleteExperimentsExperimentId_RouteContract;
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;

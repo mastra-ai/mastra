@@ -48,12 +48,15 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
+const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
+
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
   boardRegistry: BoardRegistry = createBoardRegistry(),
+  parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -77,7 +80,11 @@ function buildApp(
         boards: boardRegistry,
       }),
       startCoordinator,
-      liveSessions: { isRunning: sessionId => running.has(sessionId) },
+      liveSessions: {
+        isRunning: sessionId => running.has(sessionId),
+        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
+        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+      },
     }).routes(),
   );
   return app;
@@ -132,6 +139,76 @@ beforeEach(async () => {
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+describe('installed board catalog', () => {
+  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { 'github-issue': () => [] },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(response.status).toBe(200);
+    const { boards } = await response.json();
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
+      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+    );
+    expect(boards.at(-1)).toEqual({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'preparing',
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          transitions: [{ outcome: null, to: 'shipped' }],
+        },
+        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+      ],
+    });
+  });
+
+  it('supports an empty installation', async () => {
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ includeDefaultBoards: false }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(await response.json()).toEqual({ boards: [] });
+  });
+
+  it('requires authentication and project membership', async () => {
+    expect((await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(401);
+    expect((await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(403);
+    await seedProject('other-org');
+    expect((await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(404);
+  });
 });
 
 // ── Auth / scoping ───────────────────────────────────────────────────────
@@ -978,12 +1055,9 @@ describe('GET /web/factory/projects/:id/attention', () => {
           target: { kind: 'work-item', workItemId: workItem.id, board: 'work' },
         },
       ],
-      openCount: 1,
-      badgeCount: 1,
-      unreadCount: 1,
-      latestOccurrenceKey: firstKey,
-      latestOccurrenceAt: now.toISOString(),
-      latestOccurrenceUnread: true,
+      kinds: {
+        'automation-failed': { open: 1, unread: 1, latest: { key: firstKey, at: now.toISOString(), unread: true } },
+      },
       hasMore: false,
     });
     const receiptRead = findMany.mock.calls.find(([collection]) => collection === 'factory_attention_receipts');
@@ -1025,13 +1099,12 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], openCount: 1, unreadCount: 0 });
+    ).resolves.toMatchObject({ items: [], kinds: { 'automation-failed': { open: 1, unread: 0 } } });
 
     expect((await json('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      openCount: 0,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 0, unread: 0 } },
     });
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
@@ -1043,8 +1116,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/restore`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ key: firstKey, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
     await seed.workItems.setAttentionReceipt({
       orgId: 'org1',
@@ -1089,8 +1161,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
     });
 
     const readAll = await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
@@ -1098,8 +1169,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ occurrence: 2, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
 
     const [retried, staleReceipt] = await Promise.all([
@@ -1185,9 +1255,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      badgeCount: 1,
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-proposed': { open: 1, unread: 1 } },
     });
 
     await seed.workItems.supersedeTerminalDecisionsForWorkItem({
@@ -1198,8 +1266,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      badgeCount: 0,
-      openCount: 0,
+      kinds: { 'automation-proposed': { open: 0 } },
     });
   });
 
@@ -1675,8 +1742,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json(),
     ).resolves.toMatchObject({
       items: [{ decisionId: target.id }],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
       hasMore: false,
     });
     await expect(
@@ -1918,6 +1984,23 @@ describe('run activity on the work-item listing', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(2);
     expect(body.runningSessionIds).toEqual(['session-running']);
+    expect(body.parkedSessionIds).toEqual([]);
+  });
+
+  it('reports the listed cards whose session waits on an answer', async () => {
+    await startRun('session-parked');
+    await startRun('session-idle');
+
+    const res = await buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      undefined,
+      new Set(['session-parked']),
+    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+
+    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
   });
 
   it('reports no activity for a session that belongs to no card in the project', async () => {

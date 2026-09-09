@@ -80,18 +80,26 @@ export function BoardColumnEmptyState({
   kind,
   hasIntakeSource,
   filtersExcludeAll = false,
+  alreadyMaterialized = 0,
 }: {
   stage: BoardStageId;
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
+  /** Feed items withheld because their card sits on another board in this Factory. */
+  alreadyMaterialized?: number;
 }) {
   const copy = filtersExcludeAll
     ? {
         title: kind === 'review' ? 'No pull requests match filters' : 'No work items match filters',
         description: 'Try another teammate or relevance type.',
       }
-    : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+    : alreadyMaterialized > 0
+      ? {
+          title: boardColumnEmptyCopy(stage, kind, hasIntakeSource).title,
+          description: `${alreadyMaterialized} ${alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have'} a card on another board, so the feed only offers new ones.`,
+        }
+      : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
     <div className="border-border1 rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
       <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
