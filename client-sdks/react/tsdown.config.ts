@@ -47,7 +47,8 @@ export default defineConfig(options => ({
   treeshake: true,
   sourcemap: true,
   deps: {
-    neverBundle: [/^@mastra\/core/],
+    neverBundle: [/^@mastra\/core(?!\/tools\/payload-transform$)/],
+    alwaysBundle: ['@mastra/core/tools/payload-transform'],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd());

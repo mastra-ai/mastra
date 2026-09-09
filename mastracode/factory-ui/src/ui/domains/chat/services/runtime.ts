@@ -100,7 +100,6 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
       }
       return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
     }
-    case 'session_snapshot':
     case 'display_state_changed':
       return {
         ...state,
@@ -108,7 +107,6 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         usage: event.displayState.tokenUsage,
         bufferingMessages: event.displayState.bufferingMessages ?? false,
         bufferingObservations: event.displayState.bufferingObservations ?? false,
-        followUpCount: event.displayState.queuedFollowUps,
       };
     case 'goal_evaluation':
       return {

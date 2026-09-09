@@ -1,6 +1,7 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { ChunkType } from '@mastra/core/stream';
+import type { ToolPayloadTransformPhase } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
@@ -9,6 +10,11 @@ import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart,
 const RUN_ID = 'run-1';
 
 const streamMeta = (): MastraDBMessageMetadata => ({ mode: 'stream' });
+
+const withDisplayTransform = (chunk: ChunkType, phase: ToolPayloadTransformPhase, transformed: unknown): ChunkType => ({
+  ...chunk,
+  metadata: { mastra: { toolPayloadTransform: { display: { [phase]: { transformed } } } } },
+});
 
 // -----------------------------------------------------------------------------
 // Chunk fixture builders (one per ChunkType variant exercised below).
@@ -796,6 +802,77 @@ describe('accumulateChunk - reasoning streaming', () => {
 // =============================================================================
 
 describe('accumulateChunk - tool calls', () => {
+  it('suppresses private input deltas and renders transformed arguments and output', () => {
+    const streaming = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-1', 'workflow-search'),
+      {
+        ...toolCallDeltaChunk('tc-1', '{"private":"secret"}'),
+        metadata: { mastra: { toolPayloadTransform: { display: { 'input-delta': { suppress: true } } } } },
+      },
+    ]);
+    expect(streaming[0].content.parts).toMatchObject([{ argsText: '', toolInvocation: { state: 'partial-call' } }]);
+
+    const called = reduce(
+      [
+        withDisplayTransform(toolCallDeltaChunk('tc-1', 'secret'), 'input-delta', '{"preview":"safe"}'),
+        toolCallInputStreamingEndChunk('tc-1'),
+        withDisplayTransform(toolCallChunk('tc-1', 'workflow-search', { private: 'secret' }), 'input-available', {
+          preview: 'safe',
+        }),
+      ],
+      streamMeta(),
+      streaming,
+    );
+    expect(called[0].content.parts).toMatchObject([{ toolInvocation: { state: 'call', args: { preview: 'safe' } } }]);
+    expect(JSON.stringify(called)).not.toContain('secret');
+
+    const completed = reduce(
+      [
+        toolResultChunk('tc-1', { steps: [{ status: 'success' }] }),
+        withDisplayTransform(toolResultChunk('tc-1', { private: 'secret' }), 'output-available', null),
+      ],
+      streamMeta(),
+      called,
+    );
+    expect(completed[0].content.parts).toMatchObject([
+      { toolInvocation: { state: 'result', args: { preview: 'safe' }, result: null } },
+    ]);
+    expect(JSON.stringify(completed)).not.toContain('secret');
+  });
+
+  it.each([
+    {
+      chunk: withDisplayTransform(toolErrorChunk('tc-1', 'private error'), 'error', 'Visible error'),
+      expected: { parts: [{ toolInvocation: { state: 'output-error', errorText: 'Visible error' } }] },
+    },
+    {
+      chunk: withDisplayTransform(toolErrorChunk('tc-1', 'private error'), 'error', null),
+      expected: { parts: [{ toolInvocation: { state: 'output-error', errorText: 'null' } }] },
+    },
+    {
+      chunk: withDisplayTransform(
+        toolCallApprovalChunk('tc-1', 'search', { private: true }),
+        'approval',
+        'Approve search',
+      ),
+      expected: { metadata: { requireApprovalMetadata: { search: { args: 'Approve search' } } } },
+    },
+    {
+      chunk: withDisplayTransform(toolOutputDeniedChunk('tc-1', 'search', { private: true }), 'approval', null),
+      expected: { parts: [{ toolInvocation: { state: 'output-denied', args: null } }] },
+    },
+    {
+      chunk: withDisplayTransform(toolCallSuspendedChunk('tc-1', 'search', {}, { private: true }), 'suspend', {
+        question: 'Continue?',
+      }),
+      expected: { metadata: { suspendedTools: { search: { suspendPayload: { question: 'Continue?' } } } } },
+    },
+  ])('renders the display transform for $chunk.type', ({ chunk, expected }) => {
+    const result = reduce([startChunk(), toolCallChunk('tc-1', 'search', {}), chunk]);
+    expect(result[0].content).toMatchObject(expected);
+  });
+
   it('tool-call creates a call-state tool-invocation part', () => {
     const out = reduce([startChunk(), toolCallChunk('tc-1', 'search', { query: 'mastra' })]);
     const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
@@ -1183,6 +1260,23 @@ describe('accumulateChunk - data-* chunks', () => {
 // =============================================================================
 
 describe('accumulateChunk - signal echo (data-user-message)', () => {
+  it('keeps the server assistant message ID when the initial user echo arrives before step-start', () => {
+    const messages = reduce([
+      startChunk('provisional-response'),
+      dataUserMessageChunk('prompt-1', 'Hello'),
+      stepStartChunk('response-1'),
+      textStartChunk('text-1'),
+      textDeltaChunk('text-1', 'Hello back'),
+      textEndChunk('text-1'),
+    ]);
+
+    expect(messages.map(message => ({ id: message.id, role: message.role }))).toEqual([
+      { id: 'prompt-1', role: 'user' },
+      { id: 'response-1', role: 'assistant' },
+    ]);
+    expect(messages[1].content.parts).toMatchObject([{ type: 'text', text: 'Hello back' }]);
+  });
+
   it('finalizes streaming assistant and appends the echoed user message', () => {
     const out = reduce([
       startChunk('asst-1'),

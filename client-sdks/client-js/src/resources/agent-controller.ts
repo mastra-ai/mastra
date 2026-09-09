@@ -1,11 +1,13 @@
 import type {
   AgentControllerThread,
+  AgentControllerThreadStreamEvent,
   AgentControllerWireEvent,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType } from '@mastra/core/stream';
 
 import type {
   AgentControllerActiveRun,
@@ -51,10 +53,6 @@ type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
 type SerializedThread = WireEventOf<'thread_created'>['thread'];
 
-type HydratedDisplayState = Omit<WireEventOf<'display_state_changed'>['displayState'], 'currentMessage'> & {
-  currentMessage: MastraDBMessage | null;
-};
-
 /**
  * Notifications reach a session as agent signals carried on messages, not as
  * controller events. These two arms predate that and no controller emits them.
@@ -85,14 +83,7 @@ type Hydrated<T> = T extends { type: 'thread_created' }
   ? Omit<T, 'thread'> & { thread: AgentControllerThread }
   : T extends { type: 'message_start' | 'message_update' | 'message_end' }
     ? Omit<T, 'message'> & { message: MastraDBMessage }
-    : T extends WireEventOf<'session_snapshot'>
-      ? Omit<T, 'displayState' | 'messages'> & {
-          displayState: HydratedDisplayState;
-          messages: MastraDBMessage[];
-        }
-      : T extends WireEventOf<'display_state_changed'>
-        ? Omit<T, 'displayState'> & { displayState: HydratedDisplayState }
-        : T;
+    : T;
 
 /**
  * AgentController events the SDK types explicitly: the wire union `@mastra/core`
@@ -153,7 +144,6 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     notification_summary: true,
     usage_update: true,
     display_state_changed: true,
-    session_snapshot: true,
     goal_evaluation: true,
     follow_up_queued: true,
     om_observation_start: true,
@@ -192,15 +182,12 @@ function hydrateThread(thread: SerializedThread): AgentControllerThread {
   return { ...thread, createdAt: toDate(thread.createdAt), updatedAt: toDate(thread.updatedAt) };
 }
 
-function hydrateDisplayState(displayState: WireEventOf<'display_state_changed'>['displayState']): HydratedDisplayState {
-  return {
-    ...displayState,
-    currentMessage: displayState.currentMessage ? hydrateMessage(displayState.currentMessage) : null,
-  };
-}
-
 /** A frame straight off the stream: still wire-shaped, so its timestamps are strings. */
 type ParsedEvent = AgentControllerWireEvent | NotificationEvent | OtherAgentControllerEvent;
+
+function isThreadChunkEvent(event: { type: string }): event is AgentControllerThreadStreamEvent {
+  return event.type === 'thread_chunk';
+}
 
 function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEvent | NotificationEvent {
   return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
@@ -215,14 +202,6 @@ function hydrateKnownEvent(event: AgentControllerWireEvent | NotificationEvent):
       return { ...event, message: hydrateMessage(event.message) };
     case 'thread_created':
       return { ...event, thread: hydrateThread(event.thread) };
-    case 'display_state_changed':
-      return { ...event, displayState: hydrateDisplayState(event.displayState) };
-    case 'session_snapshot':
-      return {
-        ...event,
-        displayState: hydrateDisplayState(event.displayState),
-        messages: event.messages.map(hydrateMessage),
-      };
     default:
       return event;
   }
@@ -262,12 +241,13 @@ export interface AgentControllerRequestOptions {
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
+  onChunk?: (chunk: ChunkType) => void;
   /**
    * Called when the stream errors or ends and no (further) reconnect will be
    * attempted — the subscription is dead after this fires.
    */
   onError?: (error: unknown) => void;
-  /** Called after reconnection, before the initial session snapshot is read. */
+  /** Reset accumulated chunks here before the reconnected stream replays the active run. */
   onReconnect?: () => void;
   /**
    * Automatically re-establish the stream after an established stream drops
@@ -400,7 +380,10 @@ export class AgentControllerSession extends BaseResource {
       });
 
     const requestStream = async (): Promise<Response> => {
-      const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
+      const threadStreamQuery = options.onChunk ? '?includeThreadStream=true' : '';
+      const response = await this.request<Response>(this.url(`${this.base()}/stream${threadStreamQuery}`), {
+        stream: true,
+      });
       if (!response.body) {
         throw new Error('No response body for agent controller session stream');
       }
@@ -445,14 +428,19 @@ export class AgentControllerSession extends BaseResource {
               if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
-              let event: AgentControllerEvent;
+              let event: AgentControllerEvent | AgentControllerThreadStreamEvent;
               try {
-                event = hydrateEventTimestamps(JSON.parse(data));
+                const parsedEvent: ParsedEvent | AgentControllerThreadStreamEvent = JSON.parse(data);
+                event = isThreadChunkEvent(parsedEvent) ? parsedEvent : hydrateEventTimestamps(parsedEvent);
               } catch {
                 continue;
               }
               try {
-                options.onEvent(event);
+                if (isThreadChunkEvent(event)) {
+                  options.onChunk?.(event.chunk);
+                } else {
+                  options.onEvent(event);
+                }
               } catch (cause) {
                 if (!cancelled) safeOnError(cause);
                 return { kind: 'consumer_error' };
@@ -501,6 +489,9 @@ export class AgentControllerSession extends BaseResource {
     // forever against a down server).
     const firstResponse = await requestStream();
 
+    // Background loop: pump the current stream; on drop, re-establish it under
+    // the reconnect policy (exponential backoff, per-outage retry budget) and
+    // notify the consumer via onReconnect so it can re-sync missed state.
     const run = async (initial: Response) => {
       let response = initial;
 

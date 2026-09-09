@@ -1,4 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
@@ -303,20 +304,6 @@ describe('AgentController Resource', () => {
       { type: 'message_start', message },
       { type: 'message_update', message },
       { type: 'message_end', message },
-      { type: 'display_state_changed', displayState: { isRunning: true, currentMessage: message } },
-      { type: 'display_state_changed', displayState: { isRunning: false, currentMessage: null } },
-      {
-        type: 'session_snapshot',
-        displayState: { isRunning: true, currentMessage: message },
-        messages: [{ ...message, id: 'user-1', role: 'user' }, message],
-        streamingMessageId: message.id,
-      },
-      {
-        type: 'session_snapshot',
-        displayState: { isRunning: false, currentMessage: message },
-        messages: [message],
-        streamingMessageId: null,
-      },
     ];
     mockSse([
       `data: ${JSON.stringify(events[0])}\n\n`,
@@ -334,34 +321,19 @@ describe('AgentController Resource', () => {
         },
       });
 
-    await vi.waitFor(() => expect(received).toHaveLength(events.length));
+    // Allow the async pump to drain the (already-closed) stream.
+    await new Promise(r => setTimeout(r, 10));
     sub.unsubscribe();
 
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
-    expect(received.map(e => e.type)).toEqual(events.map(event => event.type));
+    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_start', 'message_update', 'message_end']);
     for (const event of received.slice(1)) {
-      if (event.type === 'session_snapshot') {
-        expect(event.messages.map(snapshotMessage => snapshotMessage.createdAt)).toEqual(
-          event.messages.map(() => new Date(createdAt)),
-        );
-        expect(event.messages.map(snapshotMessage => snapshotMessage.id)).toEqual(
-          event.displayState.isRunning ? ['user-1', 'm1'] : ['m1'],
-        );
-        expect(event.streamingMessageId).toBe(event.displayState.isRunning ? 'm1' : null);
-      }
-      if (event.type === 'display_state_changed' || event.type === 'session_snapshot') {
-        expect(event.displayState.currentMessage?.createdAt).toEqual(
-          event.displayState.currentMessage ? new Date(createdAt) : undefined,
-        );
-        continue;
-      }
       if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') continue;
       expect(event.message.createdAt).toBeInstanceOf(Date);
       expect(event.message.createdAt.toISOString()).toBe(createdAt);
       expect(agentControllerMessageText(event.message)).toBe('hi');
     }
-    expect(message.createdAt).toBe(createdAt);
   });
 
   it('hydrates thread timestamps from SSE events', async () => {
@@ -617,6 +589,84 @@ describe('AgentController Resource', () => {
   // request() has its own internal retry loop; disable it so these specs
   // observe subscribe()'s connection policy directly.
   const noRetryClient = () => new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+
+  it('delivers thread chunks separately from controller events over the scoped session stream', async () => {
+    const chunk: ChunkType = {
+      type: 'tool-call',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', args: { command: 'gh pr checkout 42' } },
+    };
+    const event = { type: 'agent_start' };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      openSseResponse([event, { type: 'thread_chunk', chunk }].map(frame => `data: ${JSON.stringify(frame)}\n\n`)),
+    );
+    const onEvent = vi.fn();
+    const onChunk = vi.fn();
+    const subscription = await client.getAgentController('code').session('user-1', '/workspace/main').subscribe({
+      onEvent,
+      onChunk,
+    });
+
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledWith(chunk));
+    subscription.unsubscribe();
+
+    expect(onEvent).toHaveBeenCalledExactlyOnceWith(event);
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true&sessionScope=%2Fworkspace%2Fmain',
+    );
+  });
+
+  it('calls onReconnect before replaying thread chunks so consumers can rebuild without duplicates', async () => {
+    const toolCall: ChunkType = {
+      type: 'tool-call',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', args: { command: 'gh pr checkout 42' } },
+    };
+    const toolResult: ChunkType = {
+      type: 'tool-result',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', result: 'Checked out' },
+    };
+    const replayFrames = [toolCall, toolResult].map(
+      chunk => `data: ${JSON.stringify({ type: 'thread_chunk', chunk })}\n\n`,
+    );
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(sseResponse(replayFrames.slice(0, 1)))
+      .mockResolvedValueOnce(openSseResponse(replayFrames));
+    const order: string[] = [];
+    const chunks: ChunkType[] = [];
+    const onEvent = vi.fn();
+    const subscription = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent,
+        onChunk: chunk => {
+          order.push(chunk.type);
+          chunks.push(chunk);
+        },
+        onReconnect: () => {
+          order.push('reconnect');
+          chunks.length = 0;
+        },
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+
+    await vi.waitFor(() => expect(chunks).toEqual([toolCall, toolResult]));
+    subscription.unsubscribe();
+
+    expect(order).toEqual(['tool-call', 'reconnect', 'tool-call', 'tool-result']);
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(vi.mocked(global.fetch).mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true',
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true',
+    ]);
+  });
 
   it('rejects subscribe when the initial connection fails without reconnect', async () => {
     (global.fetch as any).mockRejectedValue(new Error('connect refused'));

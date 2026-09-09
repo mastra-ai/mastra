@@ -1,16 +1,15 @@
 // @vitest-environment jsdom
-import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
-import { defaultDisplayState } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
+import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
@@ -18,45 +17,6 @@ const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessio
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('useAgentControllerConnection', () => {
-  it('uses the initial idle snapshot and refreshes history when a run finishes before subscription', async () => {
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
-        HttpResponse.json({ controllerId, resourceId, threadId: 'state-thread' }),
-      ),
-      http.get(sessionUrl, () =>
-        HttpResponse.json({ controllerId, resourceId, threadId: 'state-thread', running: true }),
-      ),
-      http.get(
-        `${sessionUrl}/stream`,
-        () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(stream) {
-                stream.enqueue(
-                  new TextEncoder().encode(
-                    `data: ${JSON.stringify({
-                      type: 'display_state_changed',
-                      displayState: { isRunning: false, currentMessage: null },
-                    })}\n\n`,
-                  ),
-                );
-              },
-            }),
-            { headers: { 'content-type': 'text/event-stream' } },
-          ),
-      ),
-    );
-    const { result, client } = renderHookWithProviders(() =>
-      useAgentControllerConnection({ ...hookArgs, onEvent: () => {} }),
-    );
-    const messagesKey = queryKeys.agentControllerThreadMessages(controllerId, resourceId, 'state-thread', 100);
-    client.setQueryData(messagesKey, []);
-
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-    await waitFor(() => expect(result.current.state?.running).toBe(false));
-    expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true);
-  });
-
   it('given a session, when the connection is established, then status is ready with session state exposed', async () => {
     const onCreate = vi.fn();
     const onReadState = vi.fn();
@@ -120,7 +80,7 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);
-    expect(onReadState).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onReadState).toHaveBeenCalledTimes(2));
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
@@ -265,9 +225,6 @@ describe('useAgentControllerConnection', () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
     let emit: (event: AgentControllerEvent) => void = () => {};
-    const durableTasks: NonNullable<AgentControllerSessionState['tasks']> = [
-      { id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
-    ];
 
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
@@ -281,7 +238,7 @@ describe('useAgentControllerConnection', () => {
           modelId: 'openai/gpt-4o-mini',
           threadId: 'state-thread',
           running: false,
-          tasks: durableTasks,
+          tasks: [{ id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' }],
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
@@ -302,25 +259,6 @@ describe('useAgentControllerConnection', () => {
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    const snapshot: Extract<KnownAgentControllerEvent, { type: 'session_snapshot' }> = {
-      type: 'session_snapshot',
-      displayState: {
-        ...defaultDisplayState(),
-        isRunning: true,
-        activeTools: {},
-        toolInputBuffers: {},
-        pendingSuspensions: {},
-        activeSubagents: {},
-        modifiedFiles: {},
-      },
-      messages: [],
-      streamingMessageId: null,
-    };
-    emit(snapshot);
-    await waitFor(() => expect(onEvent).toHaveBeenCalledWith(snapshot));
-    await waitFor(() => expect(result.current.state?.running).toBe(true));
-    expect(result.current.state?.tasks).toEqual(durableTasks);
-
     emit({ type: 'agent_start' });
 
     await waitFor(() => expect(result.current.state?.running).toBe(true));
@@ -335,68 +273,7 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('given a state refetch started before the run ends, then the stale response does not restore running', async () => {
-    const encoder = new TextEncoder();
-    let emit: (event: AgentControllerEvent) => void = () => {};
-    let stateReads = 0;
-    let releaseRefetch: (() => void) | undefined;
-    const refetchGate = new Promise<void>(resolve => {
-      releaseRefetch = resolve;
-    });
-
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
-        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
-      ),
-      http.get(sessionUrl, async () => {
-        stateReads += 1;
-        if (stateReads > 1) await refetchGate;
-        return HttpResponse.json({
-          controllerId,
-          resourceId,
-          modeId: 'build',
-          modelId: 'openai/gpt-4o-mini',
-          threadId: 'thread-1',
-          running: true,
-        });
-      }),
-      http.get(
-        `${sessionUrl}/stream`,
-        () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-              },
-              cancel() {},
-            }),
-            { headers: { 'content-type': 'text/event-stream' } },
-          ),
-      ),
-    );
-
-    const { result, client } = renderHookWithProviders(() =>
-      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() }),
-    );
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-    await waitForMutationsIdle(client);
-
-    void client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
-      exact: true,
-    });
-    await waitFor(() => expect(stateReads).toBe(2));
-
-    emit({ type: 'agent_end', reason: 'complete' });
-    await waitFor(() => expect(result.current.state?.running).toBe(false));
-
-    releaseRefetch?.();
-    await waitForMutationsIdle(client);
-
-    expect(result.current.state?.running).toBe(false);
-  });
-
-  it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
+  it('keeps live completion and tasks when the first-connect refresh returns stale state', async () => {
     const encoder = new TextEncoder();
     const onEvent = vi.fn();
     let emit: (event: AgentControllerEvent) => void = () => {};
@@ -420,6 +297,7 @@ describe('useAgentControllerConnection', () => {
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
           threadId: 'thread-1',
+          running: true,
           tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
         });
       }),
@@ -443,20 +321,20 @@ describe('useAgentControllerConnection', () => {
     );
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    void client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
-      exact: true,
-    });
     await waitFor(() => expect(stateReads).toBe(2));
 
     const liveTasks = [
       { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
     ];
     emit({ type: 'task_updated', tasks: liveTasks });
+    emit({ type: 'agent_end', reason: 'complete' });
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    expect(result.current.state?.running).toBe(false);
 
     releaseRefetch?.();
-    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    await waitForMutationsIdle(client);
+    expect(result.current.state?.tasks).toEqual(liveTasks);
+    expect(result.current.state?.running).toBe(false);
   });
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
@@ -698,7 +576,6 @@ describe('useAgentControllerConnection', () => {
 
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
-    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.status).toBe('ready'));

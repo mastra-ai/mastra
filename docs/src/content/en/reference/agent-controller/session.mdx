@@ -152,6 +152,12 @@ unsubscribe()
 
 Returns: `() => void`
 
+#### `subscribeToThread()`
+
+Subscribe to the current thread's raw agent chunks through [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions). A run active in the same process replays its buffered chunks before delivering new chunks. Controller lifecycle events remain on `session.subscribe()`.
+
+Returns: `Promise<AgentThreadSubscription | undefined>`. The result is `undefined` when the session has no thread. Read chunks from `subscription.stream` and call `subscription.unsubscribe()` when finished. The subscription stays bound to that thread, so subscribe again after switching threads.
+
 ### Messages and run control
 
 #### `sendMessage({ content, files?, requestContext? })`
@@ -782,16 +788,6 @@ Return the current `AgentControllerDisplayState` snapshot for UI rendering.
 ```typescript
 const displayState = session.displayState.get()
 ```
-
-### `session.displayState.snapshot()`
-
-Return a `session_snapshot` event containing the display state, the latest run's messages in emission order, and the ID of the assistant message currently streaming. `streamingMessageId` is `null` when no message is streaming. Messages remain available after completion until the next run starts or the session switches threads.
-
-```typescript
-const snapshot = structuredClone(session.displayState.snapshot())
-```
-
-The returned state and messages reference live objects. Copy them when retaining a snapshot. The HTTP event stream copies and sends this snapshot on each connection. In-process `session.subscribe()` continues to deliver live events without replaying previous messages.
 
 ### `session.displayState.restoreTasks(tasks)`
 

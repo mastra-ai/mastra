@@ -10,14 +10,12 @@ interface LiveTasks {
   tasks: AgentControllerTaskSnapshot[];
 }
 
-/** What the stream reported, stamped with the generation it arrived at, so it outranks a state response it overtook. */
 export interface LiveEvents {
   generation: number;
   running?: { value: boolean; at: number };
   tasks?: LiveTasks & { at: number };
 }
 
-/** Stamps what an event changed; returns the generation before it, to overlay the cached snapshot from. */
 export function recordLiveEvent(live: LiveEvents, event: { running?: boolean; tasks?: LiveTasks }): number {
   const since = live.generation;
   const at = since + 1;
@@ -27,7 +25,6 @@ export function recordLiveEvent(live: LiveEvents, event: { running?: boolean; ta
   return since;
 }
 
-/** The snapshot with everything the stream reported after `since` laid over it. */
 export function overlayLiveEvents(
   state: AgentControllerSessionState,
   live: LiveEvents,

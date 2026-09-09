@@ -1,8 +1,9 @@
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, AgentThreadSubscription } from '@mastra/core/agent';
 import type {
   AgentController,
   AgentControllerDisplayState,
   AgentControllerEvent,
+  AgentControllerThreadStreamEvent,
   ErrorCarryingAgentControllerEvent,
   JsonReadyAgentControllerEvent,
   ReservedThreadMetadataKey,
@@ -452,14 +453,19 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+/**
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
+ * before converting its Maps so queued wire events retain point-in-time state.
+ */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
+  const snapshot = structuredClone(displayState);
   return {
-    ...displayState,
-    activeTools: Object.fromEntries(displayState.activeTools),
-    toolInputBuffers: Object.fromEntries(displayState.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(displayState.pendingSuspensions),
-    activeSubagents: Object.fromEntries(displayState.activeSubagents),
-    modifiedFiles: Object.fromEntries(displayState.modifiedFiles),
+    ...snapshot,
+    activeTools: Object.fromEntries(snapshot.activeTools),
+    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
+    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
+    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
   };
 }
 
@@ -475,8 +481,7 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
-    const snapshot = structuredClone(event);
-    return { ...snapshot, displayState: toWireDisplayState(snapshot.displayState) };
+    return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
     return { ...event, error: { name: event.error.name, message: event.error.message } };
@@ -491,13 +496,21 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   streamFormat: 'sse' as const,
   sseFlushOnConnect: true,
   pathParamSchema: sessionPathParams,
-  queryParamSchema: sessionScopeQuerySchema,
+  queryParamSchema: sessionScopeQuerySchema.extend({ includeThreadStream: z.enum(['true', 'false']).optional() }),
   summary: 'Stream controller session events',
-  description: 'Sends the current session snapshot, then streams session events to the client over SSE.',
+  description: 'Subscribes to a session\u2019s event bus and streams events to the client over SSE.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, abortSignal, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    includeThreadStream,
+    abortSignal,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -505,6 +518,9 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
       let unsubscribe: (() => void) | undefined;
+      let threadSubscription: AgentThreadSubscription<undefined> | undefined;
+      let threadBinding: object | undefined;
+      let abortCleanup: (() => void) | undefined;
       const clearHeartbeat = () => {
         if (heartbeat) {
           clearTimeout(heartbeat);
@@ -516,6 +532,9 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
         cleanedUp = true;
         clearHeartbeat();
         unsubscribe?.();
+        threadBinding = undefined;
+        threadSubscription?.unsubscribe();
+        if (abortCleanup) abortSignal?.removeEventListener('abort', abortCleanup);
         if (controller) {
           try {
             controller.close();
@@ -528,7 +547,6 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       // through verbatim.
       return new ReadableStream<unknown>({
         start(controller) {
-          controller.enqueue(toWireEvent(session.displayState.snapshot()));
           const scheduleHeartbeat = () => {
             if (cleanedUp) return;
             clearHeartbeat();
@@ -545,6 +563,31 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             }, 25_000);
           };
 
+          const subscribeToThread = async () => {
+            const binding = {};
+            threadBinding = binding;
+            threadSubscription?.unsubscribe();
+            threadSubscription = undefined;
+            try {
+              const subscription = await session.subscribeToThread();
+              if (cleanedUp || threadBinding !== binding) {
+                subscription?.unsubscribe();
+                return;
+              }
+              threadSubscription = subscription;
+              if (!subscription) return;
+              for await (const chunk of subscription.stream) {
+                if (cleanedUp || threadBinding !== binding) return;
+                controller.enqueue({ type: 'thread_chunk', chunk } satisfies AgentControllerThreadStreamEvent);
+                scheduleHeartbeat();
+              }
+            } catch (error) {
+              if (cleanedUp || threadBinding !== binding) return;
+              cleanup();
+              controller.error(error);
+            }
+          };
+
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
             try {
@@ -553,14 +596,24 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // string here would double-encode it.
               controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
+              const threadBindingChanged =
+                event.type === 'thread_changed' ||
+                event.type === 'thread_created' ||
+                (event.type === 'thread_deleted' && !session.thread.isSet());
+              if (includeThreadStream === 'true' && threadBindingChanged) void subscribeToThread();
             } catch {
               cleanup();
             }
           });
 
-          const abortCleanup = () => cleanup(controller);
+          abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
+          if (abortSignal?.aborted) {
+            abortCleanup();
+            return;
+          }
           scheduleHeartbeat();
+          if (includeThreadStream === 'true') void subscribeToThread();
         },
         cancel() {
           cleanup();

@@ -40,6 +40,19 @@ describe('toolFromInvocationPart', () => {
     createdAt,
   });
 
+  it('renders buffered partial arguments ahead of incomplete live deltas', () => {
+    const partial = {
+      ...part(),
+      argsText: '{"path":"src/index',
+      toolInvocation: { ...part().toolInvocation, state: 'partial-call' as const },
+    };
+    const tool = toolFromInvocationPart(partial, { ...runtime(), argsText: 'index' });
+
+    expect(tool.argsText).toBe('{"path":"src/index');
+    expect(tool.args).toBeUndefined();
+    expect(tool.status).toBe('running');
+  });
+
   it('prefers the stamp core persisted on the part', () => {
     expect(toolFromInvocationPart(part(PART_AT), runtime(START_AT), MESSAGE_AT).createdAt).toBe(PART_AT);
   });

@@ -1,3 +1,4 @@
+import type { ChunkType } from '../stream';
 import type { AgentControllerDisplayState, AgentControllerEvent } from './types';
 
 /** `Error` is structurally `{ name, message, stack? }`; the `stack` key tells an instance from a flattened {@link WireError}. */
@@ -49,3 +50,8 @@ export type JsonReadyAgentControllerEvent = WireShape<AgentControllerEvent>;
 
 /** An {@link AgentControllerEvent} as it arrives on a client, after JSON. */
 export type AgentControllerWireEvent = Jsonify<JsonReadyAgentControllerEvent>;
+
+export type AgentControllerThreadStreamEvent<OUTPUT = undefined> = {
+  type: 'thread_chunk';
+  chunk: ChunkType<OUTPUT>;
+};

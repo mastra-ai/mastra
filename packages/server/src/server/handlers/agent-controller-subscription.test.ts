@@ -12,11 +12,28 @@ import { z } from 'zod';
 
 import { STREAM_AGENT_CONTROLLER_SESSION_ROUTE } from './agent-controller';
 
-it('restores the prompt and running tool on attachment, then restores completed messages on reconnect', async () => {
+async function readThroughThreadChunk(reader: ReadableStreamDefaultReader<unknown>, chunkType: string) {
+  const events: unknown[] = [];
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error(`Stream closed before ${chunkType}`);
+    if (typeof value !== 'object' || value === null || !('chunk' in value)) continue;
+    events.push(value);
+    const chunk = value.chunk;
+    if (typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === chunkType) return events;
+  }
+}
+
+it('replays the native thread stream to late subscribers without repeating or aborting the tool', async () => {
   const checkout = Promise.withResolvers<void>();
   const toolStarted = Promise.withResolvers<void>();
   const storage = new InMemoryStore();
   let modelCalls = 0;
+  const executeCheckout = vi.fn(async () => {
+    toolStarted.resolve();
+    await checkout.promise;
+    return 'Checked out';
+  });
   const agent = new Agent({
     id: 'checkout-agent',
     name: 'Checkout agent',
@@ -57,11 +74,7 @@ it('restores the prompt and running tool on attachment, then restores completed 
         id: 'checkout',
         description: 'Check out the pull request',
         inputSchema: z.object({}),
-        execute: async () => {
-          toolStarted.resolve();
-          await checkout.promise;
-          return 'Checked out';
-        },
+        execute: executeCheckout,
       }),
     },
   });
@@ -78,120 +91,83 @@ it('restores the prompt and running tool on attachment, then restores completed 
   await mastra.startWorkers();
   await session.thread.create();
   const run = session.sendMessage({ content: 'Check out this pull request' });
-  let reader: ReadableStreamDefaultReader<unknown> | undefined;
+  const passiveSubscribe = vi.spyOn(session, 'subscribeToThread');
+  let firstReader: ReadableStreamDefaultReader<unknown> | undefined;
+  let secondReader: ReadableStreamDefaultReader<unknown> | undefined;
   try {
     await toolStarted.promise;
-    await vi.waitFor(() => expect(session.displayState.get().activeTools.get('checkout-1')?.status).toBe('running'));
-    const stream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+    expect(await session.thread.listActiveMessages()).toEqual([]);
+    const firstStream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
       mastra,
       controllerId: 'code',
       resourceId: 'mid-run',
+      includeThreadStream: 'true',
       requestContext: new RequestContext(),
       abortSignal: new AbortController().signal,
     });
-    expect(stream).toBeInstanceOf(ReadableStream);
-    if (!(stream instanceof ReadableStream)) throw new Error('Expected session stream');
-    reader = stream.getReader();
-    const initial = await reader.read();
-    if (typeof initial.value !== 'object' || initial.value === null || !('streamingMessageId' in initial.value)) {
-      throw new Error('Expected initial session snapshot');
-    }
-    const streamingMessageId = initial.value.streamingMessageId;
-    expect(streamingMessageId).toEqual(expect.any(String));
-    expect(initial.value).toMatchObject({
-      type: 'session_snapshot',
-      streamingMessageId,
-      messages: [
-        {
-          role: 'signal',
-          content: {
-            parts: [
-              { type: 'data-user-message', data: expect.objectContaining({ contents: 'Check out this pull request' }) },
-            ],
-          },
-        },
-        {
-          id: streamingMessageId,
-          role: 'assistant',
-          content: {
-            parts: expect.arrayContaining([
-              expect.objectContaining({ type: 'text', text: 'Checking out the pull request.' }),
-              {
-                type: 'tool-invocation',
-                toolInvocation: expect.objectContaining({ toolCallId: 'checkout-1', state: 'call' }),
-              },
-            ]),
-          },
-        },
-      ],
-      displayState: {
-        isRunning: true,
-        activeTools: { 'checkout-1': { name: 'checkout', status: 'running' } },
-        currentMessage: {
-          id: streamingMessageId,
-          role: 'assistant',
-          content: {
-            parts: expect.arrayContaining([
-              {
-                type: 'tool-invocation',
-                toolInvocation: expect.objectContaining({ toolCallId: 'checkout-1', state: 'call' }),
-              },
-            ]),
-          },
-        },
-      },
+    if (!(firstStream instanceof ReadableStream)) throw new Error('Expected session stream');
+    firstReader = firstStream.getReader();
+    const replayed = await readThroughThreadChunk(firstReader, 'tool-call');
+    expect(replayed).toContainEqual(
+      expect.objectContaining({
+        type: 'thread_chunk',
+        chunk: expect.objectContaining({
+          type: 'data-user-message',
+          data: expect.objectContaining({ contents: 'Check out this pull request' }),
+        }),
+      }),
+    );
+    expect(replayed).toContainEqual(
+      expect.objectContaining({
+        type: 'thread_chunk',
+        chunk: expect.objectContaining({
+          type: 'text-delta',
+          payload: expect.objectContaining({ text: 'Checking out the pull request.' }),
+        }),
+      }),
+    );
+    expect(replayed.at(-1)).toMatchObject({
+      type: 'thread_chunk',
+      chunk: { type: 'tool-call', payload: { toolCallId: 'checkout-1' } },
     });
-    const serializedInitial = JSON.stringify(initial.value);
+    const firstSubscription = await passiveSubscribe.mock.results[0]?.value;
+    if (!firstSubscription) throw new Error('Expected passive thread subscription');
+    const firstUnsubscribe = vi.spyOn(firstSubscription, 'unsubscribe');
+    await firstReader.cancel();
+    expect(firstUnsubscribe).toHaveBeenCalledOnce();
+
+    const abortController = new AbortController();
+    const secondStream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+      mastra,
+      controllerId: 'code',
+      resourceId: 'mid-run',
+      includeThreadStream: 'true',
+      requestContext: new RequestContext(),
+      abortSignal: abortController.signal,
+    });
+    if (!(secondStream instanceof ReadableStream)) throw new Error('Expected session stream');
+    secondReader = secondStream.getReader();
+    expect(await readThroughThreadChunk(secondReader, 'tool-call')).toEqual(replayed);
+    const secondSubscription = await passiveSubscribe.mock.results[1]?.value;
+    if (!secondSubscription) throw new Error('Expected second passive thread subscription');
+    const secondUnsubscribe = vi.spyOn(secondSubscription, 'unsubscribe');
+    abortController.abort();
+    expect(secondUnsubscribe).toHaveBeenCalledOnce();
+    expect(executeCheckout).toHaveBeenCalledOnce();
+
     checkout.resolve();
     await run;
-    const events: unknown[] = [];
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      events.push(value);
-      if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'agent_end') break;
-    }
-    expect(events).toContainEqual(expect.objectContaining({ type: 'tool_end', toolCallId: 'checkout-1' }));
-    expect(events).toContainEqual(expect.objectContaining({ type: 'message_end' }));
-    expect(JSON.stringify(initial.value)).toBe(serializedInitial);
-    await reader.cancel();
-    const reconnected = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-      mastra,
-      controllerId: 'code',
-      resourceId: 'mid-run',
-      requestContext: new RequestContext(),
-      abortSignal: new AbortController().signal,
+    expect(session.displayState.get().activeTools.get('checkout-1')).toMatchObject({
+      status: 'completed',
+      result: 'Checked out',
     });
-    if (!(reconnected instanceof ReadableStream)) throw new Error('Expected session stream');
-    reader = reconnected.getReader();
-    expect((await reader.read()).value).toMatchObject({
-      type: 'session_snapshot',
-      displayState: { isRunning: false },
-      streamingMessageId: null,
-      messages: expect.arrayContaining([
-        expect.objectContaining({
-          role: 'signal',
-          content: expect.objectContaining({
-            parts: [
-              expect.objectContaining({
-                type: 'data-user-message',
-                data: expect.objectContaining({ contents: 'Check out this pull request' }),
-              }),
-            ],
-          }),
-        }),
-        expect.objectContaining({
-          role: 'assistant',
-          content: expect.objectContaining({
-            parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Checkout complete.' })]),
-          }),
-        }),
-      ]),
-    });
+    expect(executeCheckout).toHaveBeenCalledOnce();
   } finally {
     checkout.resolve();
     await run;
-    await reader?.cancel();
+    await firstReader?.cancel();
+    await secondReader?.cancel();
     await mastra.shutdown();
+    vi.restoreAllMocks();
   }
 }, 30_000);

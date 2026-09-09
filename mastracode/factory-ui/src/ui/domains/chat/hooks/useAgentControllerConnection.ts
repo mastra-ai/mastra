@@ -33,7 +33,6 @@ function connectionStateUpdate(
       return { running: false };
     case 'task_updated':
       return { tasks: event.tasks };
-    case 'session_snapshot':
     case 'display_state_changed':
       return { running: event.displayState.isRunning };
     default:
@@ -104,18 +103,13 @@ export function useAgentControllerConnection({
     sseStateRef.current = next;
     setSseConnectionState(next);
     if (next !== 'connected') return;
-    const reconnected = previous === 'dropped';
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
-    if (reconnected) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
-        exact: true,
-      });
-    }
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
+      exact: true,
+    });
   };
 
   const handleEvent = (event: AgentControllerEvent) => {

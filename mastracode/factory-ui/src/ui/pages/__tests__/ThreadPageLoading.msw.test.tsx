@@ -1,7 +1,7 @@
 import type { AgentControllerEvent, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
-import { defaultDisplayState } from '@mastra/core/agent-controller';
-import type { WireDisplayState } from '@mastra/core/agent-controller';
-import { screen, waitFor, within } from '@testing-library/react';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -32,7 +32,7 @@ const initiatingMessage: MastraDBMessage = {
   createdAt: new Date(initiatingPayload.createdAt),
   content: {
     format: 2,
-    parts: [{ type: 'data-user-message', data: initiatingPayload }],
+    parts: [{ type: 'text', text: initiatingPayload.contents }],
     metadata: { signal: initiatingPayload },
   },
 };
@@ -75,26 +75,27 @@ function deferred() {
   return { promise, resolve };
 }
 
-function sessionSnapshot(
-  messages: MastraDBMessage[],
-  displayState: Partial<WireDisplayState> = {},
-  streamingMessageId: string | null = null,
-): AgentControllerEvent {
-  return {
-    type: 'session_snapshot',
-    messages,
-    streamingMessageId,
-    displayState: {
-      ...defaultDisplayState(),
-      activeTools: {},
-      toolInputBuffers: {},
-      pendingSuspensions: {},
-      activeSubagents: {},
-      modifiedFiles: {},
-      currentMessage: messages.at(-1) ?? null,
-      ...displayState,
+type StreamFrame = AgentControllerEvent | { type: 'thread_chunk'; chunk: ChunkType | DataChunkType };
+const run = { runId: 'checkout-run', from: ChunkFrom.AGENT };
+const checkoutChunks: (ChunkType | DataChunkType)[] = [
+  { ...run, type: 'start', payload: { messageId: checkoutMessage.id } },
+  { type: 'data-user-message', data: initiatingPayload },
+  { ...run, type: 'step-start', payload: { messageId: checkoutMessage.id, request: {} } },
+  { ...run, type: 'text-start', payload: { id: 'checkout-text' } },
+  { ...run, type: 'text-delta', payload: { id: 'checkout-text', text: 'Checking out the pull request.' } },
+  { ...run, type: 'text-end', payload: { id: 'checkout-text' } },
+  {
+    ...run,
+    type: 'tool-call',
+    payload: {
+      toolCallId: 'call-1',
+      toolName: 'execute_command',
+      args: { ...checkoutArgs, __mastraMetadata: undefined },
     },
-  };
+  },
+];
+function threadFrames(chunks: (ChunkType | DataChunkType)[]): StreamFrame[] {
+  return chunks.map(chunk => ({ type: 'thread_chunk', chunk }));
 }
 
 function stubThreadRoute({
@@ -102,17 +103,24 @@ function stubThreadRoute({
   threads = [],
   messages = [],
   sessionState = {},
-  streamed = [sessionSnapshot([])],
+  streamed = [],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
   sessionState?: Record<string, unknown>;
-  streamed?: AgentControllerEvent[];
+  streamed?: StreamFrame[];
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
   const encoder = new TextEncoder();
+  const onStream = vi.fn();
+  const onReadMessages = vi.fn();
+  let currentStream: ReadableStreamDefaultController<Uint8Array> | undefined;
+  function emit(event: StreamFrame) {
+    if (!currentStream) throw new Error('The session stream has not connected');
+    currentStream.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  }
   const onSwitchThread = vi.fn<(threadId: string) => void>();
   let activeThreadId = initialThreadId;
 
@@ -184,7 +192,9 @@ function stubThreadRoute({
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
-              for (const event of streamed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              currentStream = controller;
+              onStream();
+              for (const event of streamed) emit(event);
             },
             cancel() {},
           }),
@@ -195,6 +205,7 @@ function stubThreadRoute({
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesGate.promise;
+      onReadMessages();
       return HttpResponse.json({ messages });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
@@ -203,7 +214,15 @@ function stubThreadRoute({
     ),
   );
 
-  return { sessionGate, messagesGate, onSwitchThread };
+  return {
+    sessionGate,
+    messagesGate,
+    onSwitchThread,
+    onStream,
+    onReadMessages,
+    emit,
+    disconnect: () => currentStream?.close(),
+  };
 }
 
 function observeEmptyPrompt() {
@@ -271,72 +290,89 @@ describe('ThreadPage loading shell', () => {
     expect(emptyPrompt.wasDrawn()).toBe(false);
   });
 
-  it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
-    const { sessionGate, messagesGate } = stubThreadRoute({
-      sessionState: { running: true },
-      streamed: [
-        sessionSnapshot(
-          [initiatingMessage, checkoutMessage],
-          {
-            isRunning: true,
-            activeTools: {
-              'call-1': {
-                name: 'execute_command',
-                args: checkoutArgs,
-                status: 'running',
-                shellOutput: 'Fetching origin\n',
-              },
-            },
-          },
-          checkoutMessage.id,
-        ),
-      ],
+  it('joins a blocked tool through buffered chunks and reconciles replay with persisted history', async () => {
+    const messages: MastraDBMessage[] = [];
+    const streamed = threadFrames(checkoutChunks);
+    const sessionState = { running: true };
+    const { sessionGate, messagesGate, onStream, onReadMessages, disconnect } = stubThreadRoute({
+      messages,
+      sessionState,
+      streamed,
     });
     const { client } = renderThreadRoute();
     const emptyPrompt = observeEmptyPrompt();
     sessionGate.resolve();
     messagesGate.resolve();
 
-    const checkout = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 4000 });
+    const checkout = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 5000 });
     await waitForMutationsIdle(client);
     emptyPrompt.disconnect();
-
     expect(checkout).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByText(initiatingPayload.contents)).toBeInTheDocument();
+    const prompt = screen.getByText(initiatingPayload.contents);
+    const response = await screen.findByText('Checking out the pull request.', {}, { timeout: 5000 });
+    expect(prompt.compareDocumentPosition(response) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector(`time[datetime="${initiatingPayload.createdAt}"]`)).toBeInTheDocument();
     expect(document.body).toHaveTextContent('Checking out the pull request.');
+    expect(within(checkout).getByText(checkoutArgs.command)).toBeInTheDocument();
     expect(emptyPrompt.wasDrawn()).toBe(false);
-    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
 
-    await userEvent.setup().click(within(checkout).getByRole('button', { expanded: false }));
-    expect(await within(checkout).findByText('Fetching origin')).toBeInTheDocument();
-  });
+    streamed.push(
+      ...threadFrames([
+        { ...run, type: 'text-start', payload: { id: 'waiting-text' } },
+        { ...run, type: 'text-delta', payload: { id: 'waiting-text', text: 'Waiting for checkout to finish.' } },
+      ]),
+    );
+    act(disconnect);
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    await screen.findByText('Waiting for checkout to finish.', {}, { timeout: 5000 });
+    await waitForMutationsIdle(client);
+    expect(screen.getAllByRole('group', { name: 'Tool: execute_command' })).toHaveLength(1);
+    expect(screen.getAllByText(initiatingPayload.contents)).toHaveLength(1);
+    expect(screen.getAllByText('Checking out the pull request.')).toHaveLength(1);
 
-  it('shows buffered tool arguments while the input is still streaming', async () => {
-    const bufferedInput = '{"command":"gh pr checkout';
-    const { sessionGate, messagesGate } = stubThreadRoute({
-      sessionState: { running: true },
-      streamed: [
-        sessionSnapshot([initiatingMessage], {
-          isRunning: true,
-          activeTools: { 'call-1': { name: 'execute_command', args: {}, status: 'streaming_input' } },
-          toolInputBuffers: { 'call-1': { toolName: 'execute_command', text: bufferedInput } },
-        }),
-      ],
+    messages.push(initiatingMessage, {
+      ...checkoutMessage,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Checking out the pull request.' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'execute_command',
+              args: checkoutArgs,
+              result: 'Checked out',
+            },
+          },
+          { type: 'text', text: 'Waiting for checkout to finish.' },
+          { type: 'text', text: ' Ready for review.' },
+        ],
+      },
     });
-    renderThreadRoute();
-    sessionGate.resolve();
-    messagesGate.resolve();
-
-    const checkout = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 4000 });
-    await userEvent.setup().click(within(checkout).getByRole('button', { expanded: false }));
-    expect(await within(checkout).findByText(bufferedInput)).toBeInTheDocument();
+    const historyReadsBeforeCompletion = onReadMessages.mock.calls.length;
+    streamed.length = 0;
+    sessionState.running = false;
+    act(disconnect);
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(3), { timeout: 5000 });
+    await waitFor(() => expect(onReadMessages.mock.calls.length).toBeGreaterThan(historyReadsBeforeCompletion));
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(document.body.textContent).toContain('Ready for review.'), { timeout: 5000 });
+    expect(document.body.textContent?.match(/Checking out the pull request\./g)).toHaveLength(1);
+    expect(screen.getAllByText(initiatingPayload.contents)).toHaveLength(1);
+    expect(screen.getAllByRole('group', { name: 'Tool: execute_command' })).toHaveLength(1);
+    expect(screen.getByRole('group', { name: 'Tool: execute_command' })).toHaveAttribute('aria-busy', 'false');
   });
 
   it('restores the approval required to continue a run opened mid-step', async () => {
     const approval = { toolCallId: 'call-1', toolName: 'execute_command', args: checkoutArgs };
     const { sessionGate, messagesGate } = stubThreadRoute({
       sessionState: { running: true },
-      streamed: [sessionSnapshot([initiatingMessage, checkoutMessage], { isRunning: true, pendingApproval: approval })],
+      streamed: threadFrames([
+        ...checkoutChunks,
+        { ...run, type: 'tool-call-approval', payload: { ...approval, resumeSchema: '{}' } },
+      ]),
     });
     const onApprove = vi.fn();
     server.use(
@@ -349,6 +385,7 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
     messagesGate.resolve();
 
+    await waitForMutationsIdle(client);
     const approve = await screen.findByRole('button', { name: 'Approve execute_command' });
     await userEvent.setup().click(approve);
     await waitForMutationsIdle(client);
@@ -360,15 +397,15 @@ describe('ThreadPage loading shell', () => {
   it('shows the run thinking, never the empty prompt, while a joined run has streamed nothing yet', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({
       sessionState: { running: true },
-      streamed: [sessionSnapshot([], { isRunning: true })],
+      streamed: threadFrames([{ ...run, type: 'start', payload: { messageId: 'waiting-message' } }]),
     });
     const { client } = renderThreadRoute();
     const emptyPrompt = observeEmptyPrompt();
     sessionGate.resolve();
     messagesGate.resolve();
 
-    expect(await screen.findByText('Thinking')).toBeInTheDocument();
     await waitForMutationsIdle(client);
+    await waitFor(() => expect(screen.getByText('Thinking')).toBeInTheDocument());
     emptyPrompt.disconnect();
 
     expect(emptyPrompt.wasDrawn()).toBe(false);

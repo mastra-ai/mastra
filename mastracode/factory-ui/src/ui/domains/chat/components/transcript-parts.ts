@@ -146,14 +146,16 @@ export function toolFromInvocationPart(
   // an SSE gap (no server replay), and a terminal part never regresses — the
   // overlay's 'running' would otherwise spin forever.
   const terminalStatus = terminalInvocationStatus(invocation);
+  const streamedArgsText = 'argsText' in part && typeof part.argsText === 'string' ? part.argsText : undefined;
+  const streamingArgs = invocation.state === 'partial-call' && streamedArgsText !== undefined;
   const result = terminalStatus
     ? (persistedResult ?? invocation.errorText ?? runtime?.result)
     : (runtime?.result ?? persistedResult ?? invocation.errorText);
   return {
     toolCallId: invocation.toolCallId,
     toolName: invocation.toolName,
-    argsText: runtime?.argsText ?? '',
-    args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
+    argsText: streamedArgsText ?? runtime?.argsText ?? '',
+    args: streamingArgs ? undefined : (runtime?.args ?? ('args' in invocation ? invocation.args : undefined)),
     status: terminalStatus ?? runtime?.status ?? 'running',
     result,
     output: runtime?.output ?? '',

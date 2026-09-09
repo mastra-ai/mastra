@@ -9,7 +9,7 @@ export type MastraProviderMetadata = Record<string, Record<string, unknown>>;
  */
 export type TripwireMetadata = TripwirePayload;
 
-export type ToolApprovalArgs = Record<string, unknown>;
+export type ToolApprovalArgs = unknown;
 
 export type RequireApprovalEntry = {
   toolCallId: string;

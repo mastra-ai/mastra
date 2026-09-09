@@ -1,8 +1,9 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
 import type { AgentControllerSession } from '../services/agentControllerClient';
+import { createThreadStreamHandler } from '../services/thread-stream';
 
 export type SseConnectionState = 'never' | 'connected' | 'dropped';
 
@@ -52,11 +53,16 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
 
+  const emitEvent = (event: AgentControllerEvent) => {
+    for (const listener of subscription.eventListeners) listener(event);
+  };
+  const threadStream = createThreadStreamHandler(emitEvent);
+
   void session
     .subscribe({
-      onEvent: event => {
-        for (const listener of subscription.eventListeners) listener(event);
-      },
+      onEvent: threadStream.onEvent,
+      onChunk: threadStream.onChunk,
+      onReconnect: threadStream.reset,
       onError: () => {
         if (subscription.state === 'connected') setState(subscription, 'dropped');
       },
@@ -111,19 +117,16 @@ export function useAgentControllerEvents({
   // Losing visibility tears the subscription down through the normal cleanup
   // path; regaining it re-subscribes and re-syncs like any reconnect.
   const visible = useDocumentVisible();
-  const onEventRef = useRef(onEvent);
-  const onConnectedChangeRef = useRef(onConnectedChange);
-
-  onEventRef.current = onEvent;
-  onConnectedChangeRef.current = onConnectedChange;
+  const receiveEvent = useEffectEvent(onEvent);
+  const connectedChange = useEffectEvent(onConnectedChange);
 
   useEffect(() => {
     if (!enabled || !session || !epoch || !visible) return;
 
     const subscription = getSubscription(session);
-    const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
+    const handleEvent = (event: AgentControllerEvent) => receiveEvent(event);
     const handleState = (state: SseConnectionState) => {
-      onConnectedChangeRef.current(state === 'connected');
+      connectedChange(state === 'connected');
       setConnectionState(state);
     };
 

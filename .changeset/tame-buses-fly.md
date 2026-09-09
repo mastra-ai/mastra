@@ -2,4 +2,13 @@
 '@mastra/client-js': patch
 ---
 
-Handle agent-controller session snapshots and hydrate their message timestamps, matching live message events and thread history.
+Add an optional `onChunk` callback to agent-controller subscriptions so clients can receive the active run's buffered agent chunks and ongoing output over the existing connection.
+
+```typescript
+await session.subscribe({
+  onEvent: handleEvent,
+  onChunk: handleChunk,
+  onReconnect: resetChunks,
+  reconnect: true,
+});
+```

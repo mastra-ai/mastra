@@ -1,12 +1,12 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot, KnownAgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 
+import { isRecord } from '../../../../lib/isRecord';
 import { sentByOther } from './message-author';
 import type { OMBudgets } from './runtime';
-import { displayPrompts, displaySubagents, displayTools } from './transcript-display';
 
 /**
  * Transcript model + reducer.
@@ -253,7 +253,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ],
       };
     case 'mergeWindow':
-      return mergeServerWindow(state, action.messages);
+      return reconcileToolResults(mergeServerWindow(state, action.messages), action.messages);
     case 'clearPending':
       return { ...state, pending: false };
     case 'failLocalUser':
@@ -322,7 +322,10 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     }
     case 'tool_start':
       return withTool(
-        state,
+        {
+          ...state,
+          entries: state.entries.filter(entry => entry.kind !== 'approval' || entry.toolCallId !== event.toolCallId),
+        },
         event.toolCallId,
         t => ({
           ...t,
@@ -341,7 +344,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+      return withTool(clearToolPrompt(state, event.toolCallId), event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
@@ -365,10 +368,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         suspendPayload: event.suspendPayload,
       });
     case 'tool_suspension_cancelled':
-      return {
-        ...state,
-        entries: state.entries.filter(entry => entry.kind !== 'suspension' || entry.toolCallId !== event.toolCallId),
-      };
+      return clearToolPrompt(state, event.toolCallId);
 
     case 'mode_changed':
     case 'model_changed':
@@ -487,10 +487,12 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       };
     }
 
-    case 'session_snapshot':
-      return restoreSessionSnapshot(state, event, viewerId);
     case 'display_state_changed':
-      return restoreDisplayState(state, event.displayState);
+      return {
+        ...state,
+        omProgress: event.displayState.omProgress ?? state.omProgress,
+        usage: event.displayState.tokenUsage ?? state.usage,
+      };
 
     // Follow-up queue.
     case 'follow_up_queued':
@@ -532,64 +534,12 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
   }
 }
 
-function restoreSessionSnapshot(
-  state: TranscriptState,
-  snapshot: Extract<KnownAgentControllerEvent, { type: 'session_snapshot' }>,
-  viewerId?: string,
-): TranscriptState {
-  const anchors = claimOnScreenEntries(state.entries, snapshot.messages);
-  const pendingUserIndex = state.entries.findLastIndex(
-    entry => entry.kind === 'message' && entry.message.role === 'user' && entry.id.startsWith('local-'),
-  );
-  const acknowledgedIndex = snapshot.messages.findIndex(message => anchors.get(message) === pendingUserIndex);
-  const hasPendingResponse =
-    pendingUserIndex !== -1 &&
-    acknowledgedIndex !== -1 &&
-    snapshot.messages.slice(acknowledgedIndex + 1).some(message => message.role === 'assistant');
-  let next = mergeServerWindow(state, snapshot.messages);
-  for (const message of snapshot.messages) {
-    next = upsertMessage(next, message, message.id === snapshot.streamingMessageId, viewerId);
-  }
-  const observedToolCallIds = new Set(snapshot.messages.flatMap(message => toolCallIdsOf(message.content.parts)));
-  next = {
-    ...next,
-    entries: next.entries.filter(
-      entry =>
-        entry.kind !== 'suspension' ||
-        !observedToolCallIds.has(entry.toolCallId) ||
-        entry.toolCallId in snapshot.displayState.pendingSuspensions,
-    ),
-  };
-  return restoreDisplayState({ ...next, pending: state.pending && !hasPendingResponse }, snapshot.displayState);
-}
-
-function restoreDisplayState(
-  state: TranscriptState,
-  displayState: Extract<KnownAgentControllerEvent, { type: 'display_state_changed' }>['displayState'],
-): TranscriptState {
-  let next = state;
-  for (const tool of displayTools(displayState)) {
-    next = withTool(next, tool.toolCallId, current => ({ ...tool, createdAt: current.createdAt }));
-  }
-  next = { ...next, entries: next.entries.filter(entry => entry.kind !== 'approval') };
-  for (const prompt of displayPrompts(displayState)) next = pushPrompt(next, prompt);
-  const subagents = new Map(displaySubagents(displayState).map(subagent => [subagent.id, subagent]));
-  const entries = next.entries.map(entry => {
-    const subagent = subagents.get(entry.id);
-    if (subagent) {
-      subagents.delete(entry.id);
-      return subagent;
-    }
-    return entry.kind === 'subagent' && !displayState.isRunning ? { ...entry, done: true } : entry;
-  });
-  next = { ...next, entries: [...entries, ...subagents.values()] };
-  if (!displayState.isRunning) next = finishStreamingMessages(next);
+function clearToolPrompt(state: TranscriptState, toolCallId: string): TranscriptState {
   return {
-    ...next,
-    tasks: displayState.tasks,
-    followUpCount: displayState.queuedFollowUps,
-    omProgress: displayState.omProgress,
-    usage: displayState.tokenUsage,
+    ...state,
+    entries: state.entries.filter(
+      entry => (entry.kind !== 'suspension' && entry.kind !== 'approval') || entry.toolCallId !== toolCallId,
+    ),
   };
 }
 
@@ -693,7 +643,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const reconciled = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
   if (messages.every(message => onScreenIndex.has(message))) return reconciled;
 
@@ -939,8 +889,12 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   if (serverTerminalParts.size === 0) return state;
 
   let changed = false;
-  const entries = state.entries.map(entry => {
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+  const entries = state.entries.flatMap(entry => {
+    if ((entry.kind === 'approval' || entry.kind === 'suspension') && serverTerminalParts.has(entry.toolCallId)) {
+      changed = true;
+      return [];
+    }
+    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return [entry];
     let entryChanged = false;
     const parts = entry.message.content.parts.map(part => {
       if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
@@ -949,9 +903,9 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
       entryChanged = true;
       return serverPart;
     });
-    if (!entryChanged) return entry;
+    if (!entryChanged) return [entry];
     changed = true;
-    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
+    return [{ ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } }];
   });
 
   return changed ? { ...state, entries } : state;
@@ -975,19 +929,15 @@ function withRenderableSignalText(message: MastraDBMessage): MastraDBMessage {
 
 /** Signal `contents` is either a bare string or the array form produced by `partsToSignalContents`. */
 function signalContentsToText(data: unknown): string {
-  if (!data || typeof data !== 'object') return '';
-  const contents = (data as { contents?: unknown }).contents;
-  if (typeof contents === 'string') return contents;
-  if (!Array.isArray(contents)) return '';
-  return contents
-    .map(entry => {
-      if (typeof entry === 'string') return entry;
-      if (entry && typeof entry === 'object' && typeof (entry as { text?: unknown }).text === 'string') {
-        return (entry as { text: string }).text;
-      }
-      return '';
+  if (!isRecord(data)) return '';
+  if (typeof data.contents === 'string') return data.contents;
+  if (!Array.isArray(data.contents)) return '';
+  return data.contents
+    .flatMap(entry => {
+      if (typeof entry === 'string') return entry ? [entry] : [];
+      const text = isRecord(entry) && typeof entry.text === 'string' ? entry.text : '';
+      return text ? [text] : [];
     })
-    .filter(Boolean)
     .join('\n');
 }
 

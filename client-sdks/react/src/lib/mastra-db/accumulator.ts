@@ -7,6 +7,8 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ToolPayloadTransformPhase } from '@mastra/core/tools';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '@mastra/core/tools/payload-transform';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
@@ -482,6 +484,10 @@ export interface AccumulateChunkArgs {
  */
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
+  const displayPayload = (phase: ToolPayloadTransformPhase, fallback: unknown) => {
+    const transform = getTransformedToolPayload(chunk.metadata, 'display', phase);
+    return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
+  };
 
   // ----- Template-literal passthrough chunk types from NetworkChunkType -----
   // `agent-execution-event-*` and `workflow-execution-event-*` carry nested
@@ -867,22 +873,18 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'tool-call': {
+      const args = displayPayload('input-available', chunk.payload.args);
       const invocation: MastraToolInvocation = {
         state: 'call',
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
-        args: chunk.payload.args,
+        args,
       };
       const newPart: MastraToolInvocationPart = {
         ...makeToolInvocationPart(invocation),
         providerMetadata: chunk.payload.providerMetadata,
       };
 
-      // Upsert by toolCallId: if `tool-call-input-streaming-start` already created
-      // a placeholder part for this id, transition it in place instead of
-      // appending a duplicate. `chunk.payload.args` is the authoritative
-      // server-side parsed args and overwrites any client-side JSON.parse done
-      // during streaming.
       const existing = locateToolPart(result, chunk.payload.toolCallId, false);
       if (existing && existing.toolPartIndex >= 0) {
         const { messageIndex, toolPartIndex } = existing;
@@ -899,7 +901,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 state: 'call',
                 toolName: chunk.payload.toolName,
                 toolCallId: chunk.payload.toolCallId,
-                args: chunk.payload.args,
+                args,
               } as MastraToolInvocation,
               providerMetadata: chunk.payload.providerMetadata ?? prev.providerMetadata,
             } as MastraMessagePart;
@@ -945,8 +947,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     }
 
     case 'tool-call-delta': {
-      // Append the streamed JSON fragment onto the matching tool invocation's
-      // `argsText` buffer. Keep `args` empty/parsed-so-far until the end chunk.
+      const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
+      if (transform?.suppress) return result;
+      const argsTextDelta = hasTransformedToolPayload(transform) ? transform.transformed : chunk.payload.argsTextDelta;
+      if (typeof argsTextDelta !== 'string') return result;
       const location = locateToolPart(result, chunk.payload.toolCallId, false);
       if (!location || location.toolPartIndex < 0) return result;
       const { messageIndex, toolPartIndex } = location;
@@ -957,7 +961,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       const toolPart = parts[toolPartIndex] as MastraToolInvocationPart & { argsText?: string };
       if (!isToolPart(toolPart)) return result;
 
-      const nextArgsText = (toolPart.argsText ?? '') + (chunk.payload.argsTextDelta ?? '');
+      const nextArgsText = (toolPart.argsText ?? '') + argsTextDelta;
       parts[toolPartIndex] = {
         ...toolPart,
         argsText: nextArgsText,
@@ -1025,7 +1029,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           ...toolPart.toolInvocation,
           state: 'output-denied',
           toolName: chunk.payload.toolName,
-          args: chunk.payload.args ?? toolPart.toolInvocation.args,
+          args: displayPayload(
+            'approval',
+            displayPayload('input-available', chunk.payload.args ?? toolPart.toolInvocation.args),
+          ),
           approval: chunk.payload.approval,
         },
       } as MastraMessagePart;
@@ -1076,6 +1083,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           payloadTaskId = chunk.payload.taskId;
           break;
       }
+      const outputTransform = getTransformedToolPayload(chunk.metadata, 'display', 'output-available');
+      if (hasTransformedToolPayload(outputTransform)) payloadResult = outputTransform.transformed;
+      payloadError = displayPayload('error', payloadError);
 
       if (toolPart && isToolPart(toolPart)) {
         const { toolName, toolCallId, args } = toolPart.toolInvocation;
@@ -1130,7 +1140,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             Boolean(resultObj?.result?.steps) || toolName?.startsWith('workflow-') || existingLooksLikeWorkflow;
           const isAgent = chunk.from === 'AGENT';
           let output: unknown;
-          if (isWorkflow) {
+          if (hasTransformedToolPayload(outputTransform)) {
+            output = payloadResult;
+          } else if (isWorkflow) {
             // Prefer merging the terminal payload into the accumulated
             // workflow state so the UI keeps its step history.
             const accumulated =
@@ -1391,7 +1403,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
               [chunk.payload.toolName]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
-                args: chunk.payload.args as Record<string, unknown>,
+                args: displayPayload('approval', displayPayload('input-available', chunk.payload.args)),
               },
             },
           },
@@ -1405,7 +1417,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       // Narrow merged payloads explicitly. Both shapes carry the fields below.
       let suspToolCallId: string;
       let suspToolName: string;
-      let suspArgs: Record<string, unknown>;
+      let suspArgs: unknown;
       let suspPayload: unknown;
       let suspSuspendedAt: Date | undefined;
       let suspTaskId: string | undefined;
@@ -1419,9 +1431,11 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       } else {
         suspToolCallId = chunk.payload.toolCallId;
         suspToolName = chunk.payload.toolName;
-        suspArgs = chunk.payload.args as Record<string, unknown>;
+        suspArgs = chunk.payload.args;
         suspPayload = chunk.payload.suspendPayload;
       }
+      suspArgs = displayPayload('input-available', suspArgs);
+      suspPayload = displayPayload('suspend', suspPayload);
 
       const location = isBgTaskEvent
         ? locateToolPart(result, suspToolCallId, true)
@@ -1493,10 +1507,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'step-start': {
       const stepMessageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
       if (!stepMessageId) return result;
+      if (result.some(message => message.id === stepMessageId)) return result;
 
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-      if (result.some(message => message.id === stepMessageId)) return result;
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(result, stepMessageId, [], metadata);
+      }
 
       // Re-key the pending message in place while it only holds `data-*` parts
       // (they belong to the run, not a persisted row); once model content has
@@ -1574,7 +1590,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'network-validation-end':
     case 'network-object':
     case 'network-object-result':
-    case 'tool-output-denied':
       return result;
 
     default:
