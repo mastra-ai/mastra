@@ -646,7 +646,13 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ vector: vector as any });
 
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector);
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      vector,
+      process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+        ? expect.objectContaining({ id: 'mastracode' })
+        : undefined,
+    );
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
