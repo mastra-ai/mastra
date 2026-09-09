@@ -32,6 +32,7 @@ import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -181,6 +182,22 @@ const linear =
       })
     : undefined;
 
+// Jira Cloud intake. Deployment-global credentials (Basic auth with an API
+// token) — no OAuth flow. Only a complete credential group enables the
+// integration; with a partial group no `/web/jira/*` routes mount and the SPA
+// treats the missing status route as "disabled".
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
+      })
+    : undefined;
+
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
@@ -276,7 +293,12 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(slack ? [slack] : []),
+];
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
