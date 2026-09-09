@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -158,6 +158,20 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
       HttpResponse.json(nodePayload),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, () =>
+      HttpResponse.json({
+        events: [
+          {
+            id: 'activity-1',
+            action: 'knowledge-appended',
+            recordType: 'record',
+            recordId: 'record-1',
+            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            createdAt: '2026-08-13T03:00:00.000Z',
+          },
+        ],
+      }),
+    ),
   );
 }
 
@@ -169,6 +183,43 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 }
 
 describe('KnowledgePage', () => {
+  it('keeps the selected Knowledge key on graph, activity, and detail requests', async () => {
+    stubKnowledgeRoute();
+    const requests: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, ({ request }) => {
+        requests.push(`graph:${new URL(request.url).searchParams.get('knowledgeKey')}`);
+        return HttpResponse.json(graphFixture);
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
+        requests.push(`activity:${new URL(request.url).searchParams.get('knowledgeKey')}`);
+        return HttpResponse.json({ events: [] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, ({ request }) => {
+        requests.push(`node:${new URL(request.url).searchParams.get('knowledgeKey')}`);
+        return HttpResponse.json(nodeFixture);
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team`);
+    fireEvent.click(await screen.findByText('Payments Service'));
+    await waitFor(() => expect(requests).toContain('node:team'));
+    await user.click(screen.getByRole('tab', { name: 'activity' }));
+    await waitFor(() => expect(requests).toContain('activity:team'));
+    expect(requests).toContain('graph:team');
+    expect(requests.every(request => request.endsWith(':team'))).toBe(true);
+
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=second`));
+    await waitFor(() => expect(requests).toContain('graph:second'));
+    await screen.findByText('Payments Service');
+    expect(requests).not.toContain('node:second');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Knowledge scope' })).queryByText('Payments Service'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Payments Service'));
+    await waitFor(() => expect(requests).toContain('node:second'));
+  });
+
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -176,6 +227,23 @@ describe('KnowledgePage', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${FACTORY_ID}/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/supervisor/health`, () =>
+        HttpResponse.json({
+          checkedAt: '2026-09-03T00:00:00.000Z',
+          findings: [],
+          counts: {
+            'decision-stuck': 0,
+            'start-stalled': 0,
+            'seat-orphaned': 0,
+            'seat-missing': 0,
+            'held-waiting': 0,
+            'label-drift': 0,
+          },
+        }),
       ),
     );
 
@@ -198,6 +266,20 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
     // Clean payload → no truncation banner.
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
+  });
+
+  it('uses scope-first navigation and shows the authorized activity feed', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    expect(within(scopes).getByRole('button', { name: 'Organization scope' })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: 'Project scope' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'activity' }));
+    expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
+    expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
   });
 
   it('shows the truncation banner when the payload window was capped', async () => {
