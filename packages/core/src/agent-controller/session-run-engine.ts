@@ -1347,6 +1347,7 @@ export class SessionRunEngine {
       }
     };
     let currentRun: StreamState | undefined;
+    let previousRunId: string | null | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
 
@@ -1362,7 +1363,9 @@ export class SessionRunEngine {
           const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
           errorContext.runId = runId;
           currentRun = this.createStreamState();
-          this.#session.run.nextOperation();
+          // A resumed segment continues the same operation, including other pending tool answers.
+          if (!runId || runId !== previousRunId) this.#session.run.nextOperation();
+          previousRunId = runId;
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
