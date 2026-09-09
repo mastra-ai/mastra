@@ -226,6 +226,12 @@ trustPolicyExclude:
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
 overrides:
+  # onnxruntime-node ships no macOS x64 prebuilt binary after 1.23, so
+  # @mastra/fastembed's 1.26.0 pin makes every server that imports it (the
+  # factory boots through @mastra/code-sdk) fail to load on Intel Macs.
+  # 1.23.0 is the last release with both darwin arch builds; @mastra/fastembed
+  # only uses InferenceSession.create and Tensor, which are unchanged.
+  onnxruntime-node: 1.23.0
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
   '@types/node': 22.19.15
