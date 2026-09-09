@@ -253,6 +253,91 @@ describe('MastraApiMCPServer', () => {
     expect(headers.get('content-type')).toBe('application/json');
   });
 
+  it('advertises and validates nonempty string path arguments before fetching', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: '/tools/:toolId/execute',
+            pathParamSchema: objectSchema({ toolId: {} }),
+            queryParamSchema: objectSchema({ runId: { type: 'string' } }, ['runId']),
+            bodySchema: objectSchema({ data: { type: 'object' } }, ['data']),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const listed = await listTools(server);
+    expect(listed.tools[0].inputSchema.properties.toolId).toMatchObject({ type: 'string', minLength: 1 });
+    expect(listed.tools[0].inputSchema.required).toEqual(['toolId', 'runId', 'data']);
+
+    for (const toolId of ['', 1, false, null, [], {}, undefined]) {
+      const result = await callTool(server, 'tool_execute', { toolId, runId: 'run', data: {} });
+      expect(result.isError).toBe(true);
+    }
+    for (const args of [
+      { toolId: 'valid', data: {} },
+      { toolId: 'valid', runId: 'run' },
+    ]) {
+      expect((await callTool(server, 'tool_execute', args)).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+
+    const result = await callTool(server, 'tool_execute', { toolId: 'weather/local ?#', runId: 'run', data: {} });
+    expect(result.isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).pathname).toBe('/api/tools/weather%2Flocal%20%3F%23/execute');
+  });
+
+  it.each([
+    { type: 'string', minLength: 4, pattern: '^tool' },
+    { type: ['string', 'null'], minLength: 4, pattern: '^tool' },
+  ])('preserves stricter path constraints and colliding input properties: %j', async pathProperty => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        manifestResponse([
+          {
+            method: 'POST',
+            path: '/tools/:toolId/execute',
+            pathParamSchema: objectSchema({ toolId: pathProperty }, ['toolId']),
+            queryParamSchema: objectSchema({ toolId: { maxLength: 8 } }, ['toolId']),
+            bodySchema: objectSchema({ toolId: { pattern: 'ok$' }, data: {} }, ['data']),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(new Response('{}'));
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    const listed = await listTools(server);
+    expect(listed.tools[0].inputSchema.required).toEqual(['toolId', 'data']);
+    for (const toolId of ['', 'ok', 'failok', 'toolongok', 'toolbad', null, 1]) {
+      expect((await callTool(server, 'tool_execute', { toolId, data: {} })).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await callTool(server, 'tool_execute', { toolId: 'toolok', data: {} })).isError).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not weaken conflicting path and body types', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      manifestResponse([
+        {
+          method: 'POST',
+          path: '/tools/:toolId/execute',
+          pathParamSchema: objectSchema({ toolId: { type: 'string' } }, ['toolId']),
+          bodySchema: objectSchema({ toolId: { type: 'number' } }),
+        },
+      ]),
+    );
+    const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
+    for (const toolId of ['tool', 1, '']) {
+      expect((await callTool(server, 'tool_execute', { toolId })).isError).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('sends GET arguments as query parameters and uses configured authorization', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
@@ -387,7 +472,7 @@ describe('MastraApiMCPServer', () => {
       path: '/agents/:agentId/generate',
       pathParamSchema: {
         ...objectSchema({ agentId: { $ref: `#/${keyword}/value` } }, ['agentId']),
-        [keyword]: { value: { type: 'string' } },
+        [keyword]: { value: { type: 'string', minLength: 4 } },
       },
       queryParamSchema: {
         ...objectSchema({ limit: { $ref: `#/${keyword}/value` } }),
@@ -414,7 +499,11 @@ describe('MastraApiMCPServer', () => {
     const server = await MastraApiMCPServer.create({ url: 'https://mastra.example', fetch });
     const listed = await listTools(server);
     const schema = listed.tools[0].inputSchema;
-    expect(schema.properties.agentId.$ref).toBe(`#/definitions/pathParamSchema/${keyword}/value`);
+    expect(schema.properties.agentId).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      allOf: [{ $ref: `#/definitions/pathParamSchema/${keyword}/value` }],
+    });
     expect(schema.properties.limit.$ref).toBe(`#/definitions/queryParamSchema/${keyword}/value`);
     expect(schema.properties.tree.$ref).toBe(`#/definitions/bodySchema/${keyword}/value`);
     expect(schema.properties.nested.$ref).toBe('#/definitions/bodySchema');
@@ -434,7 +523,14 @@ describe('MastraApiMCPServer', () => {
     expect(recursive.isError).toBe(false);
     expect(fetch).toHaveBeenCalledTimes(3);
 
-    for (const invalid of [{ agentId: 2 }, { limit: 'wrong' }, { tree: 'wrong' }, { nested: {} }]) {
+    for (const invalid of [
+      { agentId: '' },
+      { agentId: 'abc' },
+      { agentId: 2 },
+      { limit: 'wrong' },
+      { tree: 'wrong' },
+      { nested: {} },
+    ]) {
       const result = await callTool(server, 'agent_run', { agentId: 'support', messages: [], ...invalid });
       expect(result.isError).toBe(true);
     }

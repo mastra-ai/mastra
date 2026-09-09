@@ -87,11 +87,7 @@ class MastraApiRequester {
     let path = route.path;
 
     for (const name of pathParams) {
-      const value = remainingInput[name];
-      if (typeof value !== 'string' || value.length === 0) {
-        throw new Error(`The ${name} argument must be a non-empty string.`);
-      }
-      path = path.replace(`:${name}`, encodeURIComponent(value));
+      path = path.replace(`:${name}`, encodeURIComponent(remainingInput[name] as string));
       delete remainingInput[name];
     }
 
@@ -309,11 +305,17 @@ function mergeInputSchemas(route: ApiSchemaRoute, supportsVerbose = false): Json
     return [schema];
   });
   const properties: JsonObject = {};
-  const required = new Set<string>();
+  const pathParams = new Set(schemaPropertyNames(route.pathParamSchema));
+  const required = new Set<string>(pathParams);
   let allowsAdditionalProperties = false;
 
   for (const schema of schemas) {
-    if (isRecord(schema.properties)) Object.assign(properties, schema.properties);
+    if (isRecord(schema.properties)) {
+      for (const [name, property] of Object.entries(schema.properties)) {
+        properties[name] =
+          pathParams.has(name) && Object.hasOwn(properties, name) ? { allOf: [properties[name], property] } : property;
+      }
+    }
     if (Array.isArray(schema.required)) {
       for (const name of schema.required) {
         if (typeof name === 'string') required.add(name);
@@ -330,6 +332,11 @@ function mergeInputSchemas(route: ApiSchemaRoute, supportsVerbose = false): Json
       description: 'Return the full response instead of the lightweight response.',
       default: false,
     };
+  }
+
+  for (const name of pathParams) {
+    // Intersect rather than overwrite source constraints, including relocated references.
+    properties[name] = { type: 'string', minLength: 1, allOf: [properties[name]] };
   }
 
   return {
