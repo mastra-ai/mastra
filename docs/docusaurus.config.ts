@@ -226,11 +226,11 @@ const config: Config = {
         {
           title: 'Product',
           items: [
-            { label: 'Framework', to: '/ai-agent-framework' },
-            { label: 'Observability', to: '/platform-observability' },
-            { label: 'Studio', to: '/studio' },
-            { label: 'Factory', to: '/factory' },
-            { label: 'Agent Builder', to: '/agent-builder' },
+            { label: 'Framework', href: 'https://mastra.ai/ai-agent-framework' },
+            { label: 'Observability', href: 'https://mastra.ai/platform-observability' },
+            { label: 'Studio', href: 'https://mastra.ai/studio' },
+            { label: 'Factory', href: 'https://mastra.ai/factory' },
+            { label: 'Agent Builder', href: 'https://mastra.ai/agent-builder' },
           ],
         },
         {
@@ -245,26 +245,26 @@ const config: Config = {
         {
           title: 'Resources',
           items: [
-            { label: 'Blog', to: '/blog' },
+            { label: 'Blog', href: 'https://mastra.ai/blog' },
             { label: 'Changelog', href: 'https://github.com/mastra-ai/mastra/releases' },
-            { label: 'Research', to: '/research' },
-            { label: 'Podcast · Agent Hour', to: '/podcasts' },
+            { label: 'Research', href: 'https://mastra.ai/research' },
+            { label: 'Podcast · Agent Hour', href: 'https://mastra.ai/podcasts' },
             { label: 'License', to: '/docs/license' },
           ],
         },
         {
           title: 'Company',
           items: [
-            { label: 'About', to: '/about' },
-            { label: 'Customers', to: '/customers' },
-            { label: 'Careers', to: '/careers' },
-            { label: 'Newsletter', to: '/newsletter' },
+            { label: 'About', href: 'https://mastra.ai/about' },
+            { label: 'Customers', href: 'https://mastra.ai/customers' },
+            { label: 'Careers', href: 'https://mastra.ai/careers' },
+            { label: 'Newsletter', href: 'https://mastra.ai/newsletter' },
           ],
         },
         {
           title: 'Connect',
           items: [
-            { label: 'Contact Us', to: '/contact' },
+            { label: 'Contact Us', href: 'https://mastra.ai/contact' },
             { label: 'GitHub', href: 'https://github.com/mastra-ai/mastra' },
             { label: 'Discord', href: 'https://discord.gg/BTYqqHKUrf' },
             { label: 'YouTube', href: 'https://www.youtube.com/@mastra-ai' },
