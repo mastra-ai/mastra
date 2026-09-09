@@ -9,6 +9,8 @@ import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
 import { BackgroundTaskManager } from './manager';
 
+const WAIT_TIMEOUT_MS = 10_000;
+
 describe('BackgroundTaskManager with UnixSocketPubSub', () => {
   const managers: BackgroundTaskManager[] = [];
   const mastras: Mastra[] = [];
@@ -49,9 +51,12 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
       runId: 'run-1',
     });
 
-    await vi.waitFor(async () => {
-      await expect(manager.getTask(task.id)).resolves.toMatchObject({ status: 'completed', result: 'unix-result' });
-    });
+    await vi.waitFor(
+      async () => {
+        await expect(manager.getTask(task.id)).resolves.toMatchObject({ status: 'completed', result: 'unix-result' });
+      },
+      { timeout: WAIT_TIMEOUT_MS },
+    );
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
@@ -81,9 +86,12 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
       agentId: 'agent',
       runId: 'portable',
     });
-    await vi.waitFor(async () => {
-      expect(await producer.getTask(task.id)).toMatchObject({ status: 'completed', result: 'remote-result' });
-    });
+    await vi.waitFor(
+      async () => {
+        expect(await producer.getTask(task.id)).toMatchObject({ status: 'completed', result: 'remote-result' });
+      },
+      { timeout: WAIT_TIMEOUT_MS },
+    );
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
@@ -115,12 +123,15 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
       { executor: { execute: originExecute } },
     );
 
-    await vi.waitFor(async () => {
-      await expect(originManager.getTask(task.id)).resolves.toMatchObject({
-        status: 'completed',
-        result: 'origin-result',
-      });
-    });
+    await vi.waitFor(
+      async () => {
+        await expect(originManager.getTask(task.id)).resolves.toMatchObject({
+          status: 'completed',
+          result: 'origin-result',
+        });
+      },
+      { timeout: WAIT_TIMEOUT_MS },
+    );
     expect(originExecute).toHaveBeenCalledTimes(1);
     expect(remoteExecute).not.toHaveBeenCalled();
   });

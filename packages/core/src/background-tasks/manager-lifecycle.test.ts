@@ -40,6 +40,19 @@ class NeverSubscribePubSub extends EventEmitterPubSub {
   }
 }
 
+class ResultGatedPubSub extends EventEmitterPubSub {
+  readonly subscribeStarted = deferred();
+  readonly subscribeGate = deferred();
+
+  override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (topic === 'background-tasks-result') {
+      this.subscribeStarted.resolve();
+      await this.subscribeGate.promise;
+    }
+    await super.subscribe(topic, cb, options);
+  }
+}
+
 class CapturingPubSub extends EventEmitterPubSub {
   dispatchCallback?: EventCallback;
 
@@ -98,6 +111,27 @@ describe('BackgroundTaskManager lifecycle', () => {
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }
+  });
+
+  it('releases every subscription when shutdown starts during the final initialization step', async () => {
+    const emitter = new EventEmitter();
+    const pubsub = new ResultGatedPubSub(emitter);
+    const manager = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: false });
+
+    const initPromise = manager.init(pubsub);
+    await pubsub.subscribeStarted.promise;
+    const shutdownPromise = manager.shutdown();
+    pubsub.subscribeGate.resolve();
+
+    await Promise.all([initPromise, shutdownPromise]);
+    expect(emitter.eventNames()).toEqual([]);
+    await pubsub.close();
+  });
+
+  it('preserves resolved defaults when optional config values are explicitly undefined', () => {
+    const manager = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: undefined });
+
+    expect((manager as any).config.recoverStaleTasksOnStart).toBe(true);
   });
 
   it('allows shutdown before initialization', async () => {
@@ -416,6 +450,136 @@ describe('BackgroundTaskManager lifecycle', () => {
     expect(ack).toHaveBeenCalledOnce();
     await manager.shutdown();
     await pubsub.close();
+    await mastra.shutdown();
+    mastra.__unregisterHooks();
+  });
+
+  it('fails and acknowledges a claimed dispatch when Mastra is not registered', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: false });
+    const mockStore = new MockStore();
+    const storage = await mockStore.getStore('backgroundTasks');
+    if (!storage) throw new Error('Background task storage is unavailable');
+    vi.spyOn(manager, 'getStorage').mockResolvedValue(storage);
+    await manager.init(pubsub);
+
+    const task = makeRunningTask({ status: 'pending', startedAt: undefined });
+    await storage.createTask(task);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: task.id },
+      runId: task.id,
+      createdAt: new Date(),
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(await storage.getTask(task.id)).toMatchObject({
+      status: 'failed',
+      error: { message: 'Mastra is not registered with this background task manager' },
+    });
+    expect(ack).toHaveBeenCalledOnce();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('does not overwrite cancellation when workflow startup fails', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true, recoverStaleTasksOnStart: false });
+    await manager.init(pubsub);
+
+    const task = makeRunningTask({ status: 'pending', startedAt: undefined });
+    let currentTask = task;
+    const updateTask = vi.fn(
+      async (
+        _taskId: string,
+        update: Partial<BackgroundTask>,
+        options?: { expectedStatus?: BackgroundTask['status'] },
+      ) => {
+        if (options?.expectedStatus === 'pending') {
+          currentTask = { ...currentTask, ...update };
+          return true;
+        }
+        currentTask = { ...currentTask, status: 'cancelled' };
+        return false;
+      },
+    );
+    const publish = vi.spyOn(pubsub, 'publish');
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => currentTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => {
+          throw new Error('workflow startup failed');
+        },
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: task.id },
+      runId: task.id,
+      createdAt: new Date(),
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenLastCalledWith(task.id, expect.objectContaining({ status: 'failed' }), {
+      expectedStatus: 'running',
+    });
+    expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'task.failed' }));
+    expect(ack).toHaveBeenCalledOnce();
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
+  it('releases a reserved slot when a resumed task is no longer suspended', async () => {
+    const manager = new BackgroundTaskManager({ enabled: true });
+    vi.spyOn(manager, 'getStorage').mockResolvedValue({
+      getTask: async () => makeRunningTask({ status: 'completed' }),
+    } as any);
+    (manager as any).localReservations.set('task-1', 'agent-1');
+    const event: Event = {
+      type: 'task.resume',
+      id: 'event-1',
+      data: { taskId: 'task-1', resumeData: {} },
+      runId: 'task-1',
+      createdAt: new Date(),
+    };
+
+    await expect((manager as any).handleResume(event)).resolves.toBe(true);
+
+    expect((manager as any).localReservations.has('task-1')).toBe(false);
+    await manager.shutdown();
+  });
+
+  it('logs dispatch failures while draining instead of rejecting', async () => {
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const manager = new BackgroundTaskManager({ enabled: true });
+    manager.__registerMastra(mastra);
+    vi.spyOn(manager, 'getStorage').mockResolvedValue({
+      getTask: async () => makeRunningTask({ status: 'pending', startedAt: undefined }),
+    } as any);
+    const error = new Error('dispatch failed');
+    vi.spyOn(manager as any, 'dispatch').mockRejectedValue(error);
+    manager.registerTaskContext('task-1', { executor: { execute: vi.fn() } });
+    (manager as any).localPendingTaskIds.add('task-1');
+
+    await expect((manager as any).drainPending()).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith('background-task dispatch failed while draining task-1:', error);
+    expect((manager as any).localPendingTaskIds.has('task-1')).toBe(true);
+    expect((manager as any).localReservations.has('task-1')).toBe(false);
+    await manager.shutdown();
     await mastra.shutdown();
     mastra.__unregisterHooks();
   });

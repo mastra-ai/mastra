@@ -65,4 +65,19 @@ describe('BackgroundTasksLibSQL', () => {
       result: { files: 3, ok: true },
     });
   });
+
+  it.each([
+    ['function', () => {}],
+    ['symbol', Symbol('result')],
+  ])('rejects a defined %s result that JSON cannot serialize', async (_type, result) => {
+    await store.createTask(createTask('unserializable-result'));
+
+    await expect(store.updateTask('unserializable-result', { result })).rejects.toThrow(
+      'Failed to serialize background task value as JSON',
+    );
+    await expect(store.getTask('unserializable-result')).resolves.toMatchObject({
+      status: 'running',
+      result: undefined,
+    });
+  });
 });

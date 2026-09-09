@@ -79,7 +79,12 @@ describe('BackgroundTaskManager', () => {
 
   describe('shared-storage ownership', () => {
     it('releases resume reservations on publish failure and tolerates worker-start failure', async () => {
-      const local = await makeLocalManager({ enabled: true, globalConcurrency: 1, perAgentConcurrency: 1 });
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        recoverStaleTasksOnStart: false,
+      });
       const execute = vi.fn(async (_args, opts) => {
         if (!opts.resumeData) return opts.suspend({ waiting: true });
         return opts.resumeData;
@@ -160,7 +165,12 @@ describe('BackgroundTaskManager', () => {
     });
 
     it('preserves a claimed invocation when publication reports failure after delivery', async () => {
-      const local = await makeLocalManager({ enabled: true, globalConcurrency: 1, perAgentConcurrency: 1 });
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        recoverStaleTasksOnStart: false,
+      });
       let release!: () => void;
       const gate = new Promise<void>(resolve => {
         release = resolve;
@@ -206,7 +216,12 @@ describe('BackgroundTaskManager', () => {
     });
 
     it('cleans up an invocation when dispatch publication rejects and allows the next enqueue', async () => {
-      const local = await makeLocalManager({ enabled: true, globalConcurrency: 1, perAgentConcurrency: 1 });
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        recoverStaleTasksOnStart: false,
+      });
       const execute = vi.fn(async () => 'next');
       const deregister = vi.spyOn(local.mgr, 'deregisterTaskContext');
       const publish = vi.spyOn(local.isolatedPubsub, 'publish').mockRejectedValueOnce(new Error('publish failed'));
@@ -849,18 +864,55 @@ describe('BackgroundTaskManager', () => {
             opts.abortSignal.addEventListener('abort', () => reject(new Error('Task cancelled')));
           }),
       );
-      const { task } = await mgr.enqueue(
-        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
-        ctx(executeFn),
+
+      try {
+        const { task } = await mgr.enqueue(
+          { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+          ctx(executeFn),
+        );
+        await tick();
+
+        await mgr.cancel(task.id);
+        await tick();
+
+        expect(onCancelled).toHaveBeenCalledTimes(1);
+        expect(onCancelled.mock.calls[0]![0].status).toBe('cancelled');
+      } finally {
+        await cleanup();
+      }
+    });
+
+    it('continues cancellation when onTaskCancelled rejects', async () => {
+      const callbackError = new Error('callback failed');
+      const onCancelled = vi.fn().mockRejectedValue(callbackError);
+      const { mgr, cleanup, localMastra } = await makeLocalManager({ enabled: true, onTaskCancelled: onCancelled });
+      const warn = vi.spyOn(localMastra.getLogger(), 'warn');
+      const executeFn = vi.fn().mockImplementation(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            opts.abortSignal.addEventListener('abort', () => reject(new Error('Task cancelled')));
+          }),
       );
-      await tick();
 
-      await mgr.cancel(task.id);
-      await tick();
+      try {
+        const { task } = await mgr.enqueue(
+          { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+          ctx(executeFn),
+        );
+        await tick();
 
-      expect(onCancelled).toHaveBeenCalledTimes(1);
-      expect(onCancelled.mock.calls[0]![0].status).toBe('cancelled');
-      await cleanup();
+        await expect(mgr.cancel(task.id)).resolves.toBeUndefined();
+        await tick();
+
+        expect(onCancelled).toHaveBeenCalledOnce();
+        expect(warn).toHaveBeenCalledWith(
+          `background-task cancellation callback failed for ${task.id}:`,
+          callbackError,
+        );
+        expect(mgr.taskContexts.has(task.id)).toBe(false);
+      } finally {
+        await cleanup();
+      }
     });
 
     it('invokes per-task onComplete callback', async () => {

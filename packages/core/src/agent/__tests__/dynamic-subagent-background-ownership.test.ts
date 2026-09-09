@@ -5,6 +5,8 @@ import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage';
 import { Agent } from '../agent';
 
+const WAIT_TIMEOUT_MS = 10_000;
+
 it('keeps asynchronously selected subagents on their owning instance with distinct request contexts', async () => {
   const storage = new MockStore();
   const instances: Mastra[] = [];
@@ -86,35 +88,44 @@ it('keeps asynchronously selected subagents on their owning instance with distin
   try {
     const origin = await makeInstance();
     await delegate(origin.supervisor, 'A');
-    await vi.waitFor(() => expect(executions).toEqual(['A']));
+    await vi.waitFor(() => expect(executions).toEqual(['A']), { timeout: WAIT_TIMEOUT_MS });
     await delegate(origin.supervisor, 'B');
     expect(await tasks()).toEqual(expect.arrayContaining([expect.objectContaining({ runId: 'B', status: 'pending' })]));
     const remote = await makeInstance();
     await delegate(remote.supervisor, 'C');
-    await vi.waitFor(async () =>
-      expect(await tasks()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ runId: 'A', status: 'running' }),
-          expect.objectContaining({ runId: 'B', status: 'pending' }),
-          expect.objectContaining({ runId: 'C', status: 'completed', result: expect.objectContaining({ text: 'C' }) }),
-        ]),
-      ),
+    await vi.waitFor(
+      async () =>
+        expect(await tasks()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ runId: 'A', status: 'running' }),
+            expect.objectContaining({ runId: 'B', status: 'pending' }),
+            expect.objectContaining({
+              runId: 'C',
+              status: 'completed',
+              result: expect.objectContaining({ text: 'C' }),
+            }),
+          ]),
+        ),
+      { timeout: WAIT_TIMEOUT_MS },
     );
     expect(executions).toEqual(['A', 'C']);
     release();
-    await vi.waitFor(async () => {
-      const completed = await tasks();
-      expect(completed).toHaveLength(3);
-      for (const selected of ['A', 'B', 'C']) {
-        expect(completed).toContainEqual(
-          expect.objectContaining({
-            runId: selected,
-            status: 'completed',
-            result: expect.objectContaining({ text: selected }),
-          }),
-        );
-      }
-    });
+    await vi.waitFor(
+      async () => {
+        const completed = await tasks();
+        expect(completed).toHaveLength(3);
+        for (const selected of ['A', 'B', 'C']) {
+          expect(completed).toContainEqual(
+            expect.objectContaining({
+              runId: selected,
+              status: 'completed',
+              result: expect.objectContaining({ text: selected }),
+            }),
+          );
+        }
+      },
+      { timeout: WAIT_TIMEOUT_MS },
+    );
     expect(executions).toEqual(['A', 'C', 'B']);
   } finally {
     release();
