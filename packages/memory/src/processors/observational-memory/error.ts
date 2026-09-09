@@ -42,8 +42,7 @@ export function formatOmError(error: unknown): string {
   try {
     collectErrorDetails(error, 0);
   } catch {
-    // Malformed thrown values must not prevent the failure marker from being recorded.
-    return 'Unknown error';
+    // Stop on malformed thrown values, but preserve diagnostics already collected.
   }
   const message = [...details].join(': ') || 'Unknown error';
   return message.length > 2000 ? `${message.slice(0, 1997)}...` : message;

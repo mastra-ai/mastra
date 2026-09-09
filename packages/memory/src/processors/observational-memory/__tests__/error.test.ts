@@ -110,7 +110,8 @@ const malformedErrors = [
 describe.each(malformedErrors)('$name', ({ create }) => {
   it('falls back without throwing during formatting', () => {
     expect(formatOmError(create())).toBe('Unknown error');
-    expect(formatOmError(new Error('Wrapper', { cause: create() }))).toBe('Unknown error');
+    expect(formatOmError(new Error('Wrapper', { cause: create() }))).toBe('Wrapper');
+    expect(formatOmError(Object.assign(providerError(), { cause: create() }))).toBe(diagnostic);
   });
 
   it.each([createBufferingFailedMarker, createObservationFailedMarker])(
