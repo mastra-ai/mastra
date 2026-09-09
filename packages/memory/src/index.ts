@@ -296,30 +296,21 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * semantic recall, and observational memory.
  *
  * @remarks
- * Attach an instance using an Agent's `memory` option. Configure storage on this
- * instance or its Mastra instance, and use stable thread/resource identifiers
- * to continue a conversation. Generation requires the model provider's credentials.
+ * Configure storage on this instance or its Mastra instance before use.
+ * See the bundled docs for setup and conversation identifiers.
  *
  * @example
- * Attach memory with temporary storage for development.
+ * Attach memory to an agent; `yourModel` is your configured model.
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
- * import { InMemoryStore } from '@mastra/core/storage';
  * import { Memory } from '@mastra/memory';
  *
- * const memory = new Memory({
- *   storage: new InMemoryStore(), // Development only: data is lost on restart.
- *   options: { lastMessages: 20 },
- * });
  * const agent = new Agent({
  *   id: 'assistant',
  *   name: 'Assistant',
- *   instructions: 'Use the conversation history to answer questions.',
- *   model: 'openai/gpt-5.6-sol',
- *   memory,
- * });
- * await agent.generate('Hello!', {
- *   memory: { thread: 'conversation-123', resource: 'user-456' },
+ *   instructions: 'You are a helpful assistant.',
+ *   model: yourModel,
+ *   memory: new Memory(),
  * });
  * ```
  *
