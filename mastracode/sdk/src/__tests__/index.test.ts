@@ -489,6 +489,22 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
+  it('disables the background task manager unless background tools are enabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(false);
+
+    controllerConstructorMock.mockClear();
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
+  });
+
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
     const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };

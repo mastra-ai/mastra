@@ -1187,7 +1187,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     resourceId: project.resourceId,
     storage,
     backgroundTasks: {
-      enabled: true,
+      enabled: globalSettings.backgroundTools?.enabled ?? false,
       recoverStaleTasksOnStart: false,
       ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
     },
