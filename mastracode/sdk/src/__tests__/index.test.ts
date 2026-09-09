@@ -825,7 +825,14 @@ describe('createMastraCode', () => {
 
     // Third argument is the settings path threaded through for pack-driven
     // observational-memory resolution; no `settingsPath` was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined);
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(
+      expect.anything(),
+      vector,
+      undefined,
+      process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+        ? expect.objectContaining({ id: 'mastracode' })
+        : undefined,
+    );
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
