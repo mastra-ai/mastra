@@ -776,6 +776,136 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
+  describe.sequential('externalized package validation', () => {
+    let isolatedFixturePath: string;
+    let originalMastraConfig: string;
+    const mastraConfigPath = () => join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+
+    /**
+     * Writes a package straight into the app's `node_modules` and declares it as a dependency.
+     *
+     * These packages exist to be *externalized*, so they cannot be workspace packages — the
+     * deployer always bundles those. Installing them by hand also keeps them out of the local
+     * registry and lets each one be exactly the shape the case needs.
+     */
+    async function installExternalPackage(name: string, indexJs: string) {
+      const version = '1.0.0';
+      const packageDir = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', name);
+      await mkdir(packageDir, { recursive: true });
+      await writeFile(
+        join(packageDir, 'package.json'),
+        JSON.stringify({ name, version, type: 'module', main: 'index.js', exports: { '.': './index.js' } }, null, 2),
+      );
+      await writeFile(join(packageDir, 'index.js'), indexJs);
+
+      const appPackageJsonPath = join(isolatedFixturePath, 'apps', 'custom', 'package.json');
+      const appPackageJson = JSON.parse(await readFile(appPackageJsonPath, 'utf-8'));
+      appPackageJson.dependencies[name] = version;
+      await writeFile(appPackageJsonPath, JSON.stringify(appPackageJson, null, 2));
+    }
+
+    async function build() {
+      await removeOutputDir(isolatedFixturePath);
+      return execa(pkgManager, ['build'], {
+        cwd: join(isolatedFixturePath, 'apps', 'custom'),
+        env: process.env,
+        reject: false,
+      });
+    }
+
+    beforeAll(async () => {
+      isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-externals-test-${pkgManager}-`));
+      await setupMonorepo(isolatedFixturePath, pkgManager);
+
+      const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+      await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+      await writeFile(
+        join(corePath, 'runtime-context', 'index.js'),
+        `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+      );
+
+      // Healthy, ordinary library — the shape of `dotenv.config()` or `Sentry.init()`: it works,
+      // and bundled code calls it while the module evaluates.
+      await installExternalPackage(
+        'eager-init-external',
+        [
+          'function init(name) {',
+          "  if (typeof name !== 'string') {",
+          "    throw new TypeError('eager-init-external: init() needs a name');",
+          '  }',
+          '  return name;',
+          '}',
+          '',
+          'export default { init };',
+          '',
+        ].join('\n'),
+      );
+
+      // Mirrors the #18626 report, where `buffer-equal-constant-time` reads `buffer.SlowBuffer` —
+      // removed in Node 26 — and throws the moment it is evaluated. Thrown unconditionally so the
+      // case does not depend on which Node version CI happens to run.
+      await installExternalPackage(
+        'hostile-external',
+        "throw new TypeError('hostile-external: SlowBuffer is not a function');\n",
+      );
+
+      originalMastraConfig = await readFile(mastraConfigPath(), 'utf-8');
+    }, timeout);
+
+    afterAll(async () => {
+      await rm(isolatedFixturePath, { recursive: true, force: true });
+    });
+
+    it(
+      'builds when bundled code uses an externalized package while the module evaluates',
+      async () => {
+        await writeFile(
+          mastraConfigPath(),
+          originalMastraConfig
+            .replace(
+              "import 'nodemailer';",
+              "import 'nodemailer';\nimport eagerInit from 'eager-init-external';\n\neagerInit.init('monorepo-e2e');",
+            )
+            .replace(/externals:\s*\[[^\]]*\]/, "externals: ['bcrypt', 'eager-init-external']"),
+        );
+
+        const result = await build();
+        const output = `${result.stdout}\n${result.stderr}`;
+
+        // Stubbing externals up front hands this chunk `export default {}`, so the call at module
+        // scope fails and takes a build with it that has nothing wrong with it.
+        expect(output).not.toContain('eagerInit.init is not a function');
+        expect(result.exitCode).toBe(0);
+
+        const packageJson = JSON.parse(
+          await readFile(join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json'), 'utf-8'),
+        );
+        expect(packageJson.dependencies).toHaveProperty('eager-init-external');
+      },
+      timeout,
+    );
+
+    it(
+      'builds when an externalized package throws while it loads under externals: true',
+      async () => {
+        await writeFile(
+          mastraConfigPath(),
+          originalMastraConfig
+            .replace("import 'nodemailer';", "import 'nodemailer';\nimport 'hostile-external';")
+            .replace(/externals:\s*\[[^\]]*\]/, 'externals: true'),
+        );
+
+        const result = await build();
+        const output = `${result.stdout}\n${result.stderr}`;
+
+        // The package is installed where the app runs, not where it is built, so a throw during
+        // validation says nothing about the bundle and must not end the build.
+        expect(output).not.toContain('hostile-external: SlowBuffer is not a function');
+        expect(result.exitCode).toBe(0);
+      },
+      timeout,
+    );
+  });
   describe.sequential('pnpm build approvals', () => {
     it(
       'reports blocked native build scripts as a user configuration error',

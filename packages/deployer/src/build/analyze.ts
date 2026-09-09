@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE } from './analyze/constants';
+import { DEPRECATED_EXTERNALS, DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
@@ -218,6 +218,97 @@ function validateError(
   }
 }
 
+/**
+ * Collects the package names a stack trace points at, closest to the throw site first.
+ *
+ * Every `node_modules` segment of a path counts, not just the last one, because a nested install
+ * layout puts a package's ancestors in its own path: a throw inside
+ * `node_modules/jsonwebtoken/node_modules/jws/node_modules/jwa/index.js` should be blamed on
+ * `jwa` first, then `jws`, then `jsonwebtoken` — the user may have externalized any of them.
+ * Handles scoped packages and skips pnpm's `.pnpm` store segment.
+ */
+function getPackageNamesFromStack(stack: string): string[] {
+  const packageNames: string[] = [];
+
+  for (const line of stack.split('\n')) {
+    const segments = [...line.matchAll(/node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/g)].map(match =>
+      match[1]!.replaceAll('\\', '/'),
+    );
+
+    // Deepest segment first: the package the file belongs to, then the packages it is nested under.
+    for (const packageName of segments.reverse()) {
+      if (packageName !== '.pnpm' && !packageNames.includes(packageName)) {
+        packageNames.push(packageName);
+      }
+    }
+  }
+
+  return packageNames;
+}
+
+/**
+ * Finds the externalized package a validation failure should be blamed on, if any.
+ *
+ * Externalized packages are installed at runtime rather than bundled, so a failure that comes
+ * from one is not evidence of a bundling problem — it is a package the validation pass should
+ * not have needed to execute at all. Two shapes are recognised:
+ *
+ * - the package could not be loaded at all (`ERR_MODULE_NOT_FOUND`), named in the message
+ * - the package threw while evaluating, in which case its files appear in the stack
+ */
+function findExternalizedPackageInError(
+  err: Error,
+  {
+    externalizablePackages,
+    externalsPreset,
+    workspaceMap,
+  }: {
+    externalizablePackages: string[];
+    externalsPreset: boolean;
+    workspaceMap: Map<string, WorkspacePackageInfo>;
+  },
+): string | undefined {
+  if (!externalsPreset && externalizablePackages.length === 0) {
+    return undefined;
+  }
+
+  const missingPackage = err.stack?.includes('[ERR_MODULE_NOT_FOUND]')
+    ? err.message.match(/Cannot find package '([^']+)'/)?.[1]
+    : undefined;
+
+  const candidates = [...(missingPackage ? [getPackageName(missingPackage) ?? missingPackage] : [])];
+  if (err.stack) {
+    candidates.push(...getPackageNamesFromStack(err.stack));
+  }
+
+  for (const packageName of candidates) {
+    // Workspace packages are always bundled, never externalized — errors in them are real.
+    if (workspaceMap.has(packageName)) {
+      continue;
+    }
+
+    // `externals: true` externalizes every non-workspace dependency.
+    if (externalsPreset || externalizablePackages.some(external => isDependencyPartOfPackage(packageName, external))) {
+      return packageName;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Whether a validation failure is the stub itself failing to link, rather than the bundle.
+ *
+ * The stub for an externalized package is a bare `export default {}`, so a chunk that imports a
+ * named binding from that package cannot link:
+ * `SyntaxError: The requested module 'pkg' does not provide an export named 'x'`.
+ */
+function isStubLinkError(err: Error, stubbedExternals: string[]): boolean {
+  const specifier = err.message.match(/^The requested module '([^']+)' does not provide an export named/)?.[1];
+
+  return specifier !== undefined && stubbedExternals.some(external => isDependencyPartOfPackage(specifier, external));
+}
+
 async function validateFile(
   root: string,
   file: OutputChunk,
@@ -227,20 +318,26 @@ async function validateFile(
     logger,
     workspaceMap,
     stubbedExternals,
+    externalizablePackages,
+    externalsPreset,
   }: {
     binaryMapData: Record<string, string[]>;
     moduleResolveMapLocation: string;
     logger: IMastraLogger;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     stubbedExternals: string[];
+    externalizablePackages: string[];
+    externalsPreset: boolean;
   },
 ) {
+  let injectESMShim = false;
+
   try {
     if (!file.isDynamicEntry && file.isEntry) {
       // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
       await validate(join(root, file.fileName), {
         moduleResolveMapLocation,
-        injectESMShim: false,
+        injectESMShim,
         stubbedExternals,
       });
     }
@@ -251,15 +348,72 @@ async function validateFile(
       err.type === 'ReferenceError' &&
       (err.message.startsWith('__dirname') || err.message.startsWith('__filename'))
     ) {
+      injectESMShim = true;
       try {
         await validate(join(root, file.fileName), {
           moduleResolveMapLocation,
-          injectESMShim: true,
+          injectESMShim,
           stubbedExternals,
         });
         errorToHandle = null;
       } catch (err) {
         errorToHandle = err;
+      }
+    }
+
+    if (errorToHandle instanceof Error) {
+      // An externalized package is installed at runtime, not bundled, so it does not have to
+      // survive being executed here. Retry with that one package stubbed out. Stubbing on demand
+      // rather than up front keeps externalized packages that bundled code legitimately uses at
+      // module-evaluation time working. See issues #18626 and #16626.
+      //
+      // Each retry runs the chunk further than the last, so it can surface the next externalized
+      // package the chunk touches. Keep going until the chunk loads, the failure can no longer be
+      // blamed on an externalized package, or the stub itself is what fails.
+      const retryStubbedExternals = [...stubbedExternals];
+
+      while (errorToHandle instanceof Error) {
+        const externalizedPackage = findExternalizedPackageInError(errorToHandle, {
+          externalizablePackages,
+          externalsPreset,
+          workspaceMap,
+        });
+
+        if (!externalizedPackage || retryStubbedExternals.includes(externalizedPackage)) {
+          break;
+        }
+
+        retryStubbedExternals.push(externalizedPackage);
+        logger.debug('Retrying validation with externalized package stubbed', {
+          fileName: file.fileName,
+          packageName: externalizedPackage,
+        });
+
+        try {
+          await validate(join(root, file.fileName), {
+            moduleResolveMapLocation,
+            injectESMShim,
+            stubbedExternals: retryStubbedExternals,
+          });
+          errorToHandle = null;
+        } catch (retryErr) {
+          if (retryErr instanceof Error && isStubLinkError(retryErr, retryStubbedExternals)) {
+            // The stub is a bare `export default {}`, so it cannot stand in for every import shape
+            // — a named import of it fails to link. That tells us nothing about the bundle: this
+            // chunk can only be executed with the real package, which is precisely the package we
+            // have decided not to execute. Validation is inconclusive here rather than failed, so
+            // warn and keep going instead of ending the build.
+            logger.warn(
+              `Skipped validating "${file.fileName}": it cannot be executed without "${externalizedPackage}", which is externalized. If the built output misbehaves, check that "${externalizedPackage}" is installed where you deploy it.`,
+            );
+            errorToHandle = null;
+          } else {
+            // Anything else is about the bundle, not the stub: either the next externalized package
+            // (the next pass stubs it) or a genuine defect, which still has to fail the build with
+            // the usual guidance.
+            errorToHandle = retryErr;
+          }
+        }
       }
     }
 
@@ -286,6 +440,7 @@ async function validateOutput(
     reverseVirtualReferenceMap,
     usedExternals,
     mergedExternals,
+    externalsPreset,
     outputDir,
     projectRoot,
     workspaceMap,
@@ -295,6 +450,7 @@ async function validateOutput(
     reverseVirtualReferenceMap: Map<string, string>;
     usedExternals: Record<string, Record<string, string>>;
     mergedExternals: string[];
+    externalsPreset: boolean;
     outputDir: string;
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -344,7 +500,11 @@ async function validateOutput(
     binaryMapData = JSON.parse(binaryMap);
   }
 
-  const stubbedExternals = [...new Set([...mergedExternals, ...DEPS_TO_IGNORE, ...result.externalDependencies.keys()])];
+  // GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS and DEPS_TO_IGNORE are small, curated lists the
+  // maintainers control, so stubbing them up front is safe. Packages the *user* externalized are
+  // ordinary runtime libraries — bundled code may legitimately use them while it evaluates — so
+  // those are stubbed only in response to an actual failure, inside validateFile.
+  const stubbedExternals = [...new Set([...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...DEPS_TO_IGNORE])];
 
   for (const file of output) {
     if (file.type === 'asset') {
@@ -363,6 +523,10 @@ async function validateOutput(
       logger,
       workspaceMap,
       stubbedExternals,
+      // Everything the build treats as external: what the config resolved to, plus what analysis
+      // discovered. Any of these can be stubbed on demand when it breaks validation.
+      externalizablePackages: [...mergedExternals, ...result.externalDependencies.keys()],
+      externalsPreset,
     });
   }
 
@@ -581,6 +745,7 @@ export async function analyzeBundle(
       reverseVirtualReferenceMap: fileNameToDependencyMap,
       usedExternals,
       mergedExternals,
+      externalsPreset,
       outputDir,
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
