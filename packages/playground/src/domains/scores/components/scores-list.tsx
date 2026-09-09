@@ -1,28 +1,10 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Columns3Icon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ScoresColumnsState } from '@/domains/scores/hooks/use-scores-columns';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
-
-type ToggleableColumn = 'input' | 'entity';
-
-const TOGGLEABLE_COLUMNS: ToggleableColumn[] = ['input', 'entity'];
-
-const COLUMN_LABELS: Record<ToggleableColumn, string> = {
-  input: 'Input',
-  entity: 'Entity',
-};
-
-function buildColumns(visible: Set<ToggleableColumn>): string {
-  const parts: string[] = ['auto', 'auto', 'minmax(0, 10rem)'];
-  if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 40rem)');
-  return parts.join(' ');
-}
 
 type ScoresListProps = {
   selectedScoreId?: string;
@@ -33,6 +15,7 @@ type ScoresListProps = {
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   errorMsg?: string;
+  columnsState: ScoresColumnsState;
 };
 
 function mapScore(score: ClientScoreRowData): ScoreRowData {
@@ -52,25 +35,10 @@ export function ScoresList({
   hasNextPage,
   setEndOfListElement,
   selectedScoreId: controlledSelectedId,
+  columnsState: { visibleColumns, columns },
 }: ScoresListProps) {
   const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(controlledSelectedId);
   const selectedScoreId = controlledSelectedId ?? internalSelectedId;
-
-  const [hiddenColumns, setHiddenColumns] = useState<Set<ToggleableColumn>>(new Set());
-  const visibleColumns = useMemo(
-    () => new Set<ToggleableColumn>(TOGGLEABLE_COLUMNS.filter(c => !hiddenColumns.has(c))),
-    [hiddenColumns],
-  );
-  const columns = useMemo(() => buildColumns(visibleColumns), [visibleColumns]);
-
-  const toggleColumn = useCallback((col: ToggleableColumn) => {
-    setHiddenColumns(prev => {
-      const next = new Set(prev);
-      if (next.has(col)) next.delete(col);
-      else next.add(col);
-      return next;
-    });
-  }, []);
 
   // Sync internal selection when parent updates the controlled prop
   useEffect(() => {
@@ -118,34 +86,8 @@ export function ScoresList({
     onScoreClick?.('');
   }, [onScoreClick]);
 
-  const columnsMenu = (
-    <div className="flex shrink-0 items-center justify-end pb-2">
-      <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline" size="sm">
-            <Columns3Icon className="size-3.5" />
-            Columns
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
-          <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
-          {TOGGLEABLE_COLUMNS.map(col => (
-            <DropdownMenu.CheckboxItem key={col} checked={visibleColumns.has(col)} onClick={() => toggleColumn(col)}>
-              {COLUMN_LABELS[col]}
-            </DropdownMenu.CheckboxItem>
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu>
-    </div>
-  );
-
   if (isLoading) {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-col">
-        {columnsMenu}
-        <DataListSkeleton columns={columns} />
-      </div>
-    );
+    return <DataListSkeleton columns={columns} />;
   }
 
   if (!scores) {
@@ -182,8 +124,6 @@ export function ScoresList({
       className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="flex h-full min-h-0 min-w-0 flex-col">
-        {columnsMenu}
-
         <ScoresDataList columns={columns} className="min-h-0" scrollRef={containerRef}>
           {header}
 
