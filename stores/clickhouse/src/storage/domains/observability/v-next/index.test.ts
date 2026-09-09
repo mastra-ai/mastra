@@ -2304,10 +2304,14 @@ LIMIT 1`,
           query: `CREATE MATERIALIZED VIEW ${MV_DISCOVERY_PAIRS} REFRESH EVERY 5 MINUTE TO ${TABLE_DISCOVERY_PAIRS} AS SELECT CAST('' AS LowCardinality(String)) AS kind, '' AS key1, '' AS key2, '' AS value WHERE 0`,
         });
 
-        // Marker row proving the table (and its data) survives init()'s view
-        // migration. Inserted after the legacy views because a non-APPEND
-        // view's initial refresh atomically swaps the target table — the very
-        // behavior this fix removes.
+        // Wait for the initial table swaps and stop later refreshes so they
+        // cannot race the marker insert or erase it before migration.
+        for (const view of [MV_DISCOVERY_VALUES, MV_DISCOVERY_PAIRS]) {
+          await scopedClient.command({ query: `SYSTEM WAIT VIEW ${view}` });
+          await scopedClient.command({ query: `SYSTEM STOP VIEW ${view}` });
+        }
+
+        // The marker proves that init() preserves the target table's data.
         await scopedClient.command({
           query: `INSERT INTO ${TABLE_DISCOVERY_VALUES} VALUES ('entityType', '', 'marker-survivor')`,
         });

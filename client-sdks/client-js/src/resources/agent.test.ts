@@ -1811,6 +1811,91 @@ describe('Agent Voice Resource', () => {
     expect(versionedAgent).toBeInstanceOf(Agent);
   });
 
+  it('should include the selected agent version when listing runs', async () => {
+    const versionedAgent = client.getAgent('test-agent', { versionId: 'version-123' });
+    mockFetchResponse({ runs: [], total: 0 });
+
+    await versionedAgent.listRuns({ status: 'running' });
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.searchParams.get('agentVersionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('status')).toBe('running');
+  });
+
+  it('should preserve draft agent selection with a running-run filter', async () => {
+    const versionedAgent = client.getAgent('test-agent', { status: 'draft' });
+    mockFetchResponse({ runs: [], total: 0 });
+
+    await versionedAgent.listRuns({ status: 'running' });
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.searchParams.get('agentVersionStatus')).toBe('draft');
+    expect(requestedUrl.searchParams.get('status')).toBe('running');
+  });
+
+  it('should list current running and suspended runs', async () => {
+    const updatedAt = '2026-06-12T10:00:00.000Z';
+    const suspendedAt = '2026-06-12T09:00:00.000Z';
+    mockFetchResponse({
+      runs: [
+        { runId: 'run-running', status: 'running', updatedAt },
+        {
+          runId: 'run-suspended',
+          status: 'suspended',
+          updatedAt: suspendedAt,
+          suspendedAt,
+          toolCalls: [{ toolCallId: 'tool-call-123', requiresApproval: true }],
+        },
+      ],
+      total: 2,
+    });
+
+    const result = await agent.listRuns();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${clientOptions.baseUrl}/api/agents/test-agent/runs`,
+      expect.objectContaining({ headers: expect.objectContaining(clientOptions.headers) }),
+    );
+    expect(result.total).toBe(2);
+    expect(result.runs[0]).toMatchObject({ runId: 'run-running', status: 'running', updatedAt });
+    const suspendedRun = result.runs[1]!;
+    expect(suspendedRun.status).toBe('suspended');
+    if (suspendedRun.status === 'suspended') {
+      expect(suspendedRun.suspendedAt).toBe(suspendedAt);
+      expect(suspendedRun.toolCalls[0]!.requiresApproval).toBe(true);
+    }
+  });
+
+  it('should pass all run filters and request context as query params', async () => {
+    mockFetchResponse({ runs: [], total: 0 });
+    const fromDate = new Date('2026-01-01T00:00:00.000Z');
+    const toDate = new Date('2026-02-01T00:00:00.000Z');
+
+    await agent.listRuns(
+      {
+        status: 'suspended',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        toDate,
+        perPage: 5,
+        page: 0,
+      },
+      { tenant: 'tenant-123' },
+    );
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.pathname).toBe('/api/agents/test-agent/runs');
+    expect(requestedUrl.searchParams.get('status')).toBe('suspended');
+    expect(requestedUrl.searchParams.get('threadId')).toBe('thread-123');
+    expect(requestedUrl.searchParams.get('resourceId')).toBe('resource-123');
+    expect(requestedUrl.searchParams.get('fromDate')).toBe(fromDate.toISOString());
+    expect(requestedUrl.searchParams.get('toDate')).toBe(toDate.toISOString());
+    expect(requestedUrl.searchParams.get('perPage')).toBe('5');
+    expect(requestedUrl.searchParams.get('page')).toBe('0');
+    expect(JSON.parse(atob(requestedUrl.searchParams.get('requestContext')!))).toEqual({ tenant: 'tenant-123' });
+  });
+
   it('should list suspended runs with suspendedAt as an ISO string', async () => {
     const suspendedAt = new Date('2026-06-12T10:00:00.000Z');
     mockFetchResponse({

@@ -259,6 +259,31 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/runs": {
+    "method": "GET",
+    "path": "/agents/:agentId/runs",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "agentVersionId",
+      "agentVersionStatus",
+      "fromDate",
+      "page",
+      "perPage",
+      "resourceId",
+      "status",
+      "threadId",
+      "toDate"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "GET /agents/:agentId/suspended-runs": {
     "method": "GET",
     "path": "/agents/:agentId/suspended-runs",
@@ -266,6 +291,8 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [
+      "agentVersionId",
+      "agentVersionStatus",
       "fromDate",
       "page",
       "perPage",

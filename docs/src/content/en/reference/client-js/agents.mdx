@@ -429,6 +429,28 @@ response.processDataStream({
 })
 ```
 
+### `listRuns()`
+
+List the agent's current non-terminal runs from storage. Base agents can return suspended runs, while durable and evented agents can also return running runs.
+
+```typescript
+const { runs, total } = await agent.listRuns({
+  threadId: 'thread-456',
+  resourceId: 'user-123',
+  fromDate: new Date('2026-01-01T00:00:00Z'),
+  perPage: 20,
+  page: 0,
+})
+
+for (const run of runs) {
+  if (run.status === 'suspended') {
+    console.log(run.toolCalls)
+  }
+}
+```
+
+Accepts optional `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` filters. Date filters are `Date` objects and returned date fields are ISO strings. Omitting `status` returns every discoverable running and suspended run. The `total` value is calculated before pagination. See [`Agent.listRuns()`](/reference/agents/listRuns) for response shapes, ordering, and agent support.
+
 ### `listSuspendedRuns()`
 
 List suspended runs for the agent from storage: runs waiting on a tool-call approval or on a tool that suspended. Discovery is backed by storage, so it works after a server restart and across server instances. Pass the returned `runId` to `approveToolCall()`, `declineToolCall()`, or `resumeStream()`.

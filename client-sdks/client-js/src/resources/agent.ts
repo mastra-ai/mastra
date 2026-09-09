@@ -43,6 +43,8 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  ListAgentRunsParams,
+  ListAgentRunsResponse,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
   GetAgentPlanResponse,
@@ -79,6 +81,33 @@ type RecoverParams = {
     defaultStatus?: 'draft' | 'published';
   };
 };
+
+type AgentRunListQueryParams = ListAgentSuspendedRunsParams & {
+  status?: ListAgentRunsParams['status'];
+};
+
+function agentRunListQueryString(
+  params?: AgentRunListQueryParams,
+  requestContext?: RequestContext | Record<string, any>,
+  version?: AgentVersionIdentifier,
+): string {
+  const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+  if (version) {
+    if ('versionId' in version) {
+      searchParams.set('agentVersionId', version.versionId);
+    } else {
+      searchParams.set('agentVersionStatus', version.status);
+    }
+  }
+  if (params?.status !== undefined) searchParams.set('status', params.status);
+  if (params?.threadId !== undefined) searchParams.set('threadId', params.threadId);
+  if (params?.resourceId !== undefined) searchParams.set('resourceId', params.resourceId);
+  if (params?.fromDate !== undefined) searchParams.set('fromDate', params.fromDate.toISOString());
+  if (params?.toDate !== undefined) searchParams.set('toDate', params.toDate.toISOString());
+  if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+  if (params?.page !== undefined) searchParams.set('page', String(params.page));
+  return searchParams.size ? `?${searchParams}` : '';
+}
 
 type ToolCallRespondFn<OUTPUT> = (
   messages: MessageListInput,
@@ -2831,6 +2860,22 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Lists current non-terminal runs for this agent from storage. Base agents
+   * can return suspended runs; durable and evented agents can also return
+   * running runs.
+   * @param params - Optional status, thread, resource, date, and pagination filters
+   * @param requestContext - Optional request context
+   * @returns Promise containing the matching runs and the total count before pagination
+   */
+  async listRuns(
+    params?: ListAgentRunsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentRunsResponse> {
+    const query = agentRunListQueryString(params, requestContext, this.version);
+    return this.request<ListAgentRunsResponse>(`/agents/${this.agentId}/runs${query}`);
+  }
+
+  /**
    * Lists suspended runs for this agent from storage — runs waiting on a
    * tool-call approval or on a tool that suspended. Backed by storage, so it
    * works after a server restart and across server instances. Pass the
@@ -2843,15 +2888,7 @@ export class Agent extends BaseResource {
     params?: ListAgentSuspendedRunsParams,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ListAgentSuspendedRunsResponse> {
-    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
-    if (params?.threadId) searchParams.set('threadId', params.threadId);
-    if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
-    if (params?.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
-    if (params?.toDate) searchParams.set('toDate', params.toDate.toISOString());
-    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
-    if (params?.page !== undefined) searchParams.set('page', String(params.page));
-
-    const query = searchParams.size ? `?${searchParams}` : '';
+    const query = agentRunListQueryString(params, requestContext, this.version);
     return this.request<ListAgentSuspendedRunsResponse>(`/agents/${this.agentId}/suspended-runs${query}`);
   }
 
