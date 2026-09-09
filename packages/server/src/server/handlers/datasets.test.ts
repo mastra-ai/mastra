@@ -271,25 +271,26 @@ describe('Datasets Handlers', () => {
         );
       });
 
-      it('rejects a model override on a create-only (start: false) request', async () => {
-        const dataset = await mastra.datasets.create({ name: 'Create-only model DS' });
-        await dataset.addItem({ input: { prompt: 'hello' } });
-
-        const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+      it('rejects a model override on a create-only (start: false) request', () => {
+        const result = TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({
           ...baseBody,
           start: false,
           model: 'openai/gpt-4o',
         });
-        await expect(
-          TRIGGER_EXPERIMENT_ROUTE.handler({
-            ...createTestServerContext({ mastra }),
-            datasetId: dataset.id,
-            ...parsedBody,
-          } as any),
-        ).rejects.toMatchObject({
-          status: 400,
-          message: expect.stringContaining('model override requires start: true'),
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0]?.message).toContain('model override requires start: true');
+      });
+
+      it('rejects a model override on non-agent targets and empty model ids', () => {
+        const workflow = TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({
+          targetType: 'workflow',
+          targetId: 'wf',
+          model: 'openai/gpt-4o',
         });
+        expect(workflow.success).toBe(false);
+        expect(workflow.error?.issues[0]?.message).toContain('only supported for agent targets');
+
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: '' }).success).toBe(false);
       });
     });
   });

@@ -9,7 +9,7 @@ The registered agent is never mutated: the experiment runs a forked copy with th
 ```ts
 const dataset = await mastra.datasets.get({ id: datasetId });
 
-for (const model of ['openai/gpt-4o', 'anthropic/claude-sonnet-4-5']) {
+for (const model of ['openai/gpt-5', 'anthropic/claude-sonnet-4-6']) {
   await dataset.startExperiment({
     targetType: 'agent',
     targetId: 'support-agent',

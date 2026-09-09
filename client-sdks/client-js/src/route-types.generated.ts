@@ -18594,7 +18594,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   version?: number | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
-  /** Model override for the target agent (agent targets only, requires start: true). Router id string (e.g. "openai/gpt-4o") or provider config object. The registered agent is not mutated. */
+  /** Model override for the target agent (agent targets only, requires start: true). Router id string (e.g. "openai/gpt-5") or provider config object. The registered agent is not mutated. */
   model?:
     | (
         | string

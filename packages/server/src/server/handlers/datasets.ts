@@ -866,11 +866,6 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
       if (start === false) {
-        if (model) {
-          throw new HTTPException(400, {
-            message: 'model override requires start: true (create-only experiments have no runner to apply it to)',
-          });
-        }
         const created = await ds.createExperiment({
           id,
           targetType,
