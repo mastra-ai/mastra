@@ -1,7 +1,6 @@
 'use client';
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
@@ -19,6 +18,7 @@ import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@/lib/framework';
@@ -123,14 +123,7 @@ export function ExperimentResultPanel({
             <>
               <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
               <DataKeysAndValues.Value>
-                <Badge
-                  size="xs"
-                  variant={
-                    result.status === 'needs-review' ? 'orange' : result.status === 'complete' ? 'green' : 'neutral'
-                  }
-                >
-                  {result.status}
-                </Badge>
+                <ReviewStatusBadge status={result.status} />
               </DataKeysAndValues.Value>
             </>
           )}

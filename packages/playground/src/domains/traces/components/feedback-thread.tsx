@@ -1,6 +1,5 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
@@ -21,6 +20,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 type FeedbackThreadProps = {
@@ -42,15 +42,12 @@ type FeedbackThreadProps = {
 };
 
 // The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
-function ReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
-  return status === 'reviewed' ? (
-    <Badge data-slot="feedback-review-status" variant="green" size="xs" indicator="dot">
-      Reviewed
-    </Badge>
-  ) : (
-    <Badge data-slot="feedback-review-status" variant="yellow" size="xs" indicator="dot">
-      Needs review
-    </Badge>
+function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  const resolved = status === 'reviewed' ? 'reviewed' : 'needs-review';
+  return (
+    <ReviewStatusBadge data-slot="feedback-review-status" status={resolved}>
+      {resolved === 'reviewed' ? 'Reviewed' : 'Needs review'}
+    </ReviewStatusBadge>
   );
 }
 
@@ -76,7 +73,7 @@ function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: Fe
       <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const status = <ReviewStatusBadge status={fb.reviewStatus} />;
+    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
     const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
       <Button
         variant="ghost"
