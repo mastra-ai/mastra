@@ -1,3 +1,4 @@
+import type { GetMetricAggregateArgs, GetMetricAggregateResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -23,6 +24,7 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
+import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ExperimentItemPage from '@/pages/experiments/experiment/item';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
@@ -73,8 +75,23 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
   return { router, queryClient };
 };
 
+let metricRequests: GetMetricAggregateArgs[] = [];
+
+const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> = {
+  sum: { value: 12400, estimatedCost: 0.0123, costUnit: 'USD' },
+  avg: { value: 1850 },
+  count: { value: 42 },
+};
+
 beforeEach(() => {
+  metricRequests = [];
   server.use(
+    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
+      const body = (await request.json()) as GetMetricAggregateArgs;
+      metricRequests.push(body);
+      return HttpResponse.json(metricAggregateByAggregation[body.aggregation] ?? { value: null });
+    }),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
@@ -114,6 +131,22 @@ describe('experiment item sub-route', () => {
 
       await screen.findByText('item-2');
       expect(screen.queryByRole('tab')).toBeNull();
+    });
+  });
+
+  describe('given the experiment route on a metrics-capable store', () => {
+    it('when the page loads, then it requests metric aggregates filtered by the route experimentId and renders Tokens/Latency in the meta bar', async () => {
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Tokens')).toBeDefined();
+      expect(await screen.findByText('12.4K')).toBeDefined();
+      expect(screen.getByText('Latency (avg)')).toBeDefined();
+      expect(await screen.findByText('1.9s')).toBeDefined();
+
+      expect(metricRequests.length).toBeGreaterThanOrEqual(3);
+      for (const body of metricRequests) {
+        expect(body.filters).toEqual({ experimentId: EXPERIMENT_ID });
+      }
     });
   });
 

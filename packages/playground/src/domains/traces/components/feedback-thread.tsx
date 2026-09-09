@@ -1,5 +1,6 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
@@ -34,7 +35,24 @@ type FeedbackThreadProps = {
    * `embed` renders a compact card suitable for inline use.
    */
   variant?: CommentVariant;
+  /** When provided, unreviewed rows get a "Mark reviewed" action. */
+  onMarkReviewed?: (feedbackId: string) => void;
+  /** feedbackId whose review-status update is in flight (disables its action). */
+  pendingFeedbackId?: string;
 };
+
+// The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
+function ReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  return status === 'reviewed' ? (
+    <Badge data-slot="feedback-review-status" variant="green" size="xs" indicator="dot">
+      Reviewed
+    </Badge>
+  ) : (
+    <Badge data-slot="feedback-review-status" variant="yellow" size="xs" indicator="dot">
+      Needs review
+    </Badge>
+  );
+}
 
 function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
@@ -43,7 +61,12 @@ function formatBody(fb: FeedbackItem): string {
   return String(fb.value ?? '');
 }
 
-function FeedbackItems({ variant, items }: { variant: CommentVariant; items: FeedbackItem[] }) {
+type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
+  variant: CommentVariant;
+  items: FeedbackItem[];
+};
+
+function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: FeedbackItemsProps) {
   const rows = items.map((fb, index) => {
     const ts = new Date(fb.timestamp);
     const author = feedbackAuthorLabel(fb);
@@ -52,18 +75,34 @@ function FeedbackItems({ variant, items }: { variant: CommentVariant; items: Fee
     const timestamp = (
       <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
     );
+    const feedbackId = fb.feedbackId;
+    const status = <ReviewStatusBadge status={fb.reviewStatus} />;
+    const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ml-auto"
+        disabled={pendingFeedbackId === feedbackId}
+        onClick={() => onMarkReviewed(feedbackId)}
+      >
+        Mark reviewed
+      </Button>
+    );
     const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
-    const key = `${fb.traceId}-${index}`;
+    const key = feedbackId ?? `${fb.traceId}-${index}`;
 
     // The thread variant lays the row out as avatar gutter + content column.
+    // Without an author there is nothing to align under, so skip the gutter entirely.
     if (variant === 'thread') {
       return (
         <CommentItem key={key}>
-          <CommentItemAvatar>{avatar}</CommentItemAvatar>
+          {avatar && <CommentItemAvatar>{avatar}</CommentItemAvatar>}
           <CommentItemContent>
             <CommentItemHeader>
               {name}
               {timestamp}
+              {status}
+              {markReviewed}
             </CommentItemHeader>
             {body}
           </CommentItemContent>
@@ -78,6 +117,8 @@ function FeedbackItems({ variant, items }: { variant: CommentVariant; items: Fee
           {avatar}
           {name}
           {timestamp}
+          {status}
+          {markReviewed}
         </CommentItemHeader>
         {body}
       </CommentItem>
@@ -99,6 +140,8 @@ export function FeedbackThread({
   onSubmit,
   isSubmitting = false,
   variant = 'thread',
+  onMarkReviewed,
+  pendingFeedbackId,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -119,7 +162,12 @@ export function FeedbackThread({
             No feedback yet
           </Txt>
         ) : (
-          <FeedbackItems variant={variant} items={feedbackItems} />
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
+          />
         )}
       </div>
 
