@@ -272,6 +272,39 @@ describe('MemoryPG message paging with includeTotal: false', () => {
     expect(result.hasMore).toBe(true);
   });
 
+  it.each([
+    { rowCount: 0, hasMore: false },
+    { rowCount: 1, hasMore: false },
+    { rowCount: 2, hasMore: false },
+    { rowCount: 3, hasMore: true },
+  ])('pages resource messages without counting ($rowCount rows)', async ({ rowCount, hasMore }) => {
+    const client = new SkipCountQueryClient();
+    client.pageRows = [
+      createRow('message-1', '2025-01-01T00:00:00.000Z'),
+      { ...createRow('message-2', '2025-01-01T00:00:01.000Z'), threadId: 'thread-2' },
+      createRow('message-3', '2025-01-01T00:00:02.000Z'),
+    ].slice(0, rowCount);
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessagesByResourceId({
+      resourceId: 'resource-1',
+      perPage: 2,
+      page: 1,
+      includeTotal: false,
+    });
+
+    expect(client.queries).toHaveLength(1);
+    const [pageQuery] = client.queries;
+    expect(pageQuery!.query).not.toContain('COUNT(*)');
+    expect(pageQuery!.query).not.toContain('AS "__total"');
+    expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
+    expect(pageQuery!.values).toEqual(['resource-1', 3, 2]);
+    expect(result.messages.map(message => message.id)).toEqual(['message-1', 'message-2'].slice(0, rowCount));
+    expect(result.hasMore).toBe(hasMore);
+    expect(result.page).toBe(1);
+    expect(result.perPage).toBe(2);
+  });
+
   it('still emits the COUNT(*) subquery by default (includeTotal omitted)', async () => {
     const client = new MessageQueryClient();
     client.pageRows = pageRows;
