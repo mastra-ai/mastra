@@ -113,6 +113,16 @@ type StorageListMessagesOptions = {
     metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
+  /**
+   * Whether to compute the total count of matching messages.
+   *
+   * Defaults to `true` to preserve Studio pagination, which relies on `total`.
+   * Callers that only need a bounded window of recent messages (e.g. agent
+   * last-N reads) can pass `false` so the store skips the `COUNT(*)` work and
+   * derives `hasMore` from a single extra row. When `false`, `total` is not a
+   * reliable count and should not be used for pagination math.
+   */
+  includeTotal?: boolean;
 };
 
 /**

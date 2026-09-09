@@ -1,0 +1,74 @@
+---
+extends: existence
+message: "AI disguise metaphor: '%s'. Name what the thing is, then say how it differs from what it resembles. Disable this rule for security, forensics, or costume prose."
+level: error
+nonword: true
+ignorecase: true
+# The substitution frame: one thing named as another wearing its clothes.
+# An opinion "disguised as" a question, complexity "masquerading as" rigor,
+# a rewrite "dressed up as" a refactor, a lecture "in disguise," padding
+# "under the guise of" thoroughness. The frame asserts a mismatch between
+# surface and substance without stating either, which is the dodge; naming
+# both is the correction the message asks for. The frame's other verb,
+# "stands in for," lives in FigurativeIdioms.
+#
+# Corpus notes, measured against the Go and Python standard libraries and
+# the Markdown in the Go source tree. "Dressed as" and every parade and
+# pose inflection measured zero. Go holds the only two disguise hits, both
+# the accurate technical sense: pointers into the stack "disguised as"
+# uintptrs describes type punning, and commits "masquerading as" real ones
+# describes a forgery. Python's one hit is garbage arriving "in the guise
+# of" 7-bit us-ascii. All three are flag-hard costs by the maintainer's
+# call: security and forensics prose, where impersonation is the literal
+# subject, should disable the rule, as should writing about actual
+# costumes.
+#
+# The verbs match inflected forms only, so the noun homographs (a party
+# disguise, a masquerade ball, a parade route, salad dressing) stay quiet.
+# "Masquerade" alone keeps its base form, because "can masquerade as" is
+# the frame and no noun reading survives the trailing "as". The past
+# participle "posed as" stays uncovered: mathematical prose states a
+# problem "posed as" an optimization literally, and no gate separates that
+# register from the tell.
+#
+# The neighboring frames measured the same way. "Pretend to be" has one
+# corpus hit, the Python reference on class instances that "can pretend to
+# be numbers"; emulation and test-double prose, where a mock is built to
+# pretend, should disable the rule. "What passes for," "passes itself off
+# as," "cosplaying as," and the stacked-impostor "in a trench coat" all
+# measured zero. "Passes for" is gated on the free relative, because a
+# test literally "passes for the wrong reason," and the pass-off token is
+# gated on a pronoun object, because "the cleanup pass kicked off as
+# scheduled" is ordinary scheduling prose. "Impersonate" never matches:
+# its corpus presence is the Windows security API, where impersonation is
+# the literal mechanism.
+tokens:
+  # --- The costume verbs, each gated on the "as" that completes the frame.
+  # Up to two optional words admit a direct object ("dressing inaction as,"
+  # "disguising the lecture as," "parading the fix as").
+  - '\bdress(?:ed|es|ing) (?:\w+ ){0,2}(?:up )?as\b'
+  - '\bdisguis(?:ed|es|ing) (?:\w+ ){0,2}as\b'
+  - '\bmasquerad(?:e|es|ed|ing) (?:\w+ ){0,2}as\b'
+  - '\bparad(?:es|ed|ing) (?:\w+ ){0,2}as\b'
+
+  # --- "Poses as," minus the comparison construction ("poses as much risk as,"
+  # "poses as many questions as it answers"), which is ordinary prose. No
+  # object slot here: "posing the question as" is the literal phrasing
+  # sense, and the slot would sweep it in.
+  - '\bpos(?:es|ing) as(?! (?:much|many|few|little|great|well)\b)'
+
+  # --- The impostor verbs without "as": a helper that "pretends to be"
+  # the real client, "what passes for" documentation, a wrapper that
+  # "passes itself off as" the original, a spreadsheet "cosplaying as" a
+  # database.
+  - '\bpretend(?:s|ed|ing)? to be\b'
+  - '\b(?:what|which) passes for\b'
+  - '\bpass(?:es|ed|ing)? (?:itself|themselves|it|them) off as\b'
+  - '\bpassed off as\b'
+  - '\bcosplay(?:s|ed|ing)? as\b'
+
+  # --- The noun forms of the same frame.
+  - '\bin disguise\b'
+  - '\b(?:in|under) the guise of\b'
+  - '\bin sheep(?:''|’)?s clothing\b'
+  - '\bin a trench ?coat\b'

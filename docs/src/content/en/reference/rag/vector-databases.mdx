@@ -669,7 +669,7 @@ Key metadata considerations:
 
 ## Deleting vectors
 
-When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it straightforward to remove all embeddings associated with a specific document.
+Use `deleteVectors` with a metadata filter to remove embeddings associated with a document. This is useful for cleaning up stale vectors after a document is deleted or updated.
 
 ### Delete by Metadata Filter
 
