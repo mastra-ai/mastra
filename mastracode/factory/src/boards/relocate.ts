@@ -29,9 +29,12 @@ export async function moveCardToBoard({
   const currentBoard = effectiveBoard(item);
   if (currentBoard === targetBoard) return 'unchanged';
   const current = boardRegistry.get(currentBoard);
-  const movable = item.stages.every(
-    stage => current?.phases[stage]?.kind !== 'terminal' && item.sessions[stage] === undefined,
-  );
+  // Sessions are keyed by the phase's role, not the phase id.
+  const movable = item.stages.every(stage => {
+    if (current?.phases[stage]?.kind === 'terminal') return false;
+    const role = current?.roleForPhase(stage);
+    return role === undefined || item.sessions[role] === undefined;
+  });
   if (!movable) return 'skipped';
   try {
     const updated = await workItems.update({

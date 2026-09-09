@@ -1,6 +1,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
+import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
@@ -42,6 +43,12 @@ export interface IntakeRoutesDeps extends RouteDependencies {
 
 /** Upper bound on source pages read while relocating cards, so a huge source cannot stall the request. */
 const REBIND_MAX_PAGES = 20;
+/**
+ * One deadline for the whole rebind read, not one per page: the binding is already saved when we
+ * get here, so the caller is only waiting on relocation and a slow provider must not hold the
+ * response for pages × timeout.
+ */
+const REBIND_READ_BUDGET_MS = 30_000;
 
 /**
  * Keys under which an intake item may be persisted as a work item. Providers key items by their
@@ -83,9 +90,12 @@ async function relocateSourceCards({
 
   const sourceKeys = new Set<string>();
   let cursor: string | undefined;
+  const deadline = Date.now() + REBIND_READ_BUDGET_MS;
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
-    const result = await withTimeout(integration.id, () =>
-      integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+    const result = await withTimeout(
+      integration.id,
+      () => integration.intake.listItems({ orgId, userId, sourceIds: [sourceId], cursor }),
+      deadline - Date.now(),
     );
     for (const item of result.items) {
       for (const key of intakeItemSourceKeys(integration.id, item)) sourceKeys.add(key);
@@ -159,11 +169,16 @@ type SettledIntegration<T> = { integrationId: string; value: T } | IntakeIntegra
 const PROVIDER_READ_TIMEOUT_MS = 15_000;
 
 /** The Intake contract takes no abort signal, so a slow read is abandoned, not cancelled. */
-function withTimeout<T>(integrationId: string, read: () => Promise<T>): Promise<T> {
+function withTimeout<T>(
+  integrationId: string,
+  read: () => Promise<T>,
+  timeoutMs: number = PROVIDER_READ_TIMEOUT_MS,
+): Promise<T> {
   return new Promise((resolve, reject) => {
+    const budget = Math.max(0, timeoutMs);
     const timer = setTimeout(
-      () => reject(new Error(`${integrationId} did not answer within ${PROVIDER_READ_TIMEOUT_MS / 1000}s`)),
-      PROVIDER_READ_TIMEOUT_MS,
+      () => reject(new Error(`${integrationId} did not answer within ${Math.round(budget / 1000)}s`)),
+      budget,
     );
     read()
       .then(resolve, reject)
@@ -221,28 +236,24 @@ export function parseIntakeBinding(body: unknown): ParsedBinding | null {
   };
 }
 
-interface ParsedLabelRoute {
-  factoryProjectId: string;
-  integrationId: string;
-  label: string;
+const identifier = z.string().min(1).max(256);
+const labelRouteBodySchema = z.object({
+  factoryProjectId: identifier,
+  integrationId: identifier,
+  label: z
+    .string()
+    .max(256)
+    .transform(normalizeIntakeLabel)
+    .refine(label => label.length > 0, 'label must not be blank'),
   /** Installed board target; `null` removes the route so the label falls back to Work. */
-  board: string | null;
-}
+  board: identifier.nullish().transform(board => board ?? null),
+});
+type ParsedLabelRoute = z.output<typeof labelRouteBodySchema>;
 
 /** Validate a label-route request body, rejecting unknown shapes. */
 export function parseIntakeLabelRoute(body: unknown): ParsedLabelRoute | null {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
-  const { factoryProjectId, integrationId, label, board } = body as Record<string, unknown>;
-  const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
-  if (!isId(factoryProjectId) || !isId(integrationId)) return null;
-  if (typeof label !== 'string' || normalizeIntakeLabel(label).length === 0 || label.length > 256) return null;
-  if (board !== undefined && board !== null && !isId(board)) return null;
-  return {
-    factoryProjectId: factoryProjectId as string,
-    integrationId: integrationId as string,
-    label: normalizeIntakeLabel(label),
-    board: (board as string | null | undefined) ?? null,
-  };
+  const parsed = labelRouteBodySchema.safeParse(body);
+  return parsed.success ? parsed.data : null;
 }
 
 function loose(c: unknown): Context {

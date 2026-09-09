@@ -24,12 +24,14 @@ import type { BoardStageId } from '../stages';
  * always enabled. Any board (Work included) only gets a Linear feed from the
  * sources explicitly routed to it, offered on the board's initial phase.
  */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+
 export function useBoardIntake({
   factoryProjectId,
   repository,
   definition,
   knownSourceKeys,
-  elsewhereSourceKeys = knownSourceKeys,
+  elsewhereSourceKeys = EMPTY_KEYS,
 }: {
   factoryProjectId: string;
   repository: LinkedRepositoryPayload;
@@ -74,6 +76,9 @@ export function useBoardIntake({
     [labelRoutesQuery.data],
   );
   const routedHere = labelRoutes.some(route => route.board === kind);
+  // Until routes resolve, Work cannot tell which issues belong elsewhere, so it
+  // holds its GitHub feed rather than flashing cards that another board owns.
+  const routesSettled = review || !labelRoutesQuery.isPending;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
@@ -97,10 +102,12 @@ export function useBoardIntake({
   // label the issue carries wins; unrouted issues belong to Work.
   const boardIssues = useMemo(
     () =>
-      (issues.data ?? []).filter(
-        issue => (labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board ?? 'work') === kind,
-      ),
-    [issues.data, labelRoutes, kind],
+      routesSettled
+        ? (issues.data ?? []).filter(
+            issue => (labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board ?? 'work') === kind,
+          )
+        : [],
+    [issues.data, labelRoutes, kind, routesSettled],
   );
   const pulls = useProjectPullRequestsQuery(review ? projectRepositoryId : undefined);
   const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined);
@@ -144,6 +151,7 @@ export function useBoardIntake({
     return { candidates: fresh, alreadyMaterialized: elsewhere };
   }, [
     knownSourceKeys,
+    elsewhereSourceKeys,
     participantCandidates,
     intakeIssues,
     triageIssues.data,
@@ -172,6 +180,7 @@ export function useBoardIntake({
     feedByColumn,
     isPending:
       (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
+      (active === 'github' && !routesSettled) ||
       Boolean(feed?.isPending),
     isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
   };

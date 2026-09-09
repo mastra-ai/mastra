@@ -15,7 +15,10 @@ import type { LinearProject } from '../../../factory/services/linear';
 import { LinearRouting } from '../LinearRouting';
 
 const projects: LinearProject[] = [{ id: 'proj-1', name: 'Releases', state: 'started', teams: [] }];
-const factories = [{ id: 'fp-1', name: 'Acme' }];
+const factories = [
+  { id: 'fp-1', name: 'Acme' },
+  { id: 'fp-2', name: 'Globex' },
+];
 
 function stub(initial: IntakeSourceBinding[]) {
   let bindings = initial;
@@ -83,5 +86,21 @@ describe('LinearRouting board target', () => {
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-1', board: 'release' });
+  });
+
+  it('drops the board when the project moves to a different Factory', async () => {
+    const saved = stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
+    const user = userEvent.setup();
+    renderRouting();
+
+    const factory = await screen.findByRole('combobox', { name: 'Factory for Releases' });
+    await waitFor(() => expect(factory).toBeEnabled());
+    await user.click(factory);
+    await user.click(await screen.findByRole('option', { name: 'Globex' }));
+
+    // A board id belongs to one Factory's catalog; carrying it over could bind
+    // to a board the new Factory never installed.
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
   });
 });

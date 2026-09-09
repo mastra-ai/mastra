@@ -78,7 +78,12 @@ const releaseBoard = defineBoard({
   id: 'release',
   title: 'Release',
   initialPhase: 'queued',
-  phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting' },
+    // Role deliberately differs from the phase id: sessions are keyed by role.
+    shipping: { title: 'Shipping', kind: 'working', role: 'release-publisher' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
 });
 const boardRegistry = createBoardRegistry({ boards: [releaseBoard] });
 
@@ -284,6 +289,45 @@ describe('intake configuration', () => {
       expect(await back.json()).toMatchObject({ relocated: { moved: 2, skipped: 0 } });
       const again = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
       expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    });
+
+    it('keeps a custom-board card whose session is keyed by the phase role', async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const { item: shipping } = await seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: project.id,
+        input: {
+          board: 'release',
+          title: 'ENG-20',
+          stages: ['shipping'],
+          sessions: { 'release-publisher': { sessionId: 's-2', branch: 'b', threadId: 't' } },
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'linear:ENG-20',
+            url: 'https://linear.app/acme/issue/ENG-20',
+          },
+        },
+      });
+      const sourcePage = {
+        items: [
+          {
+            source: { type: 'issue', externalId: 'uuid-20' },
+            sourceId: 'team-1',
+            title: 'a',
+            metadata: { identifier: 'ENG-20' },
+          },
+        ],
+        nextCursor: null,
+      };
+      vi.mocked(linear.listItems).mockResolvedValueOnce(sourcePage);
+      await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: 'release' });
+
+      const back = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: 'work' });
+      expect(await back.json()).toMatchObject({ relocated: { moved: 0, skipped: 1 } });
+      const after = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
+      expect(after.find(i => i.id === shipping.id)).toMatchObject({ board: 'release', stages: ['shipping'] });
     });
 
     it('rejects a board that is not installed', async () => {

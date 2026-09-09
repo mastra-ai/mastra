@@ -58,10 +58,7 @@ export function useBoardItems({
   const all = useMemo(() => items.data ?? [], [items.data]);
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = useMemo(
-    () => persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind))),
-    [all, kind],
-  );
+  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
@@ -128,9 +125,10 @@ export function useBoardItems({
       return;
     }
     setDropError(undefined);
-    // A dropped candidate files onto this board and enters at its initial phase,
-    // which the server also picks when `stages` is omitted for the board.
-    const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase ?? 'intake';
+    // A dropped candidate files onto this board and enters at its initial phase.
+    // With the catalog unresolved, `stages` is left out so the server picks it
+    // rather than guessing a phase the board may not declare.
+    const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase;
     const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
     const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
     void (async () => {
@@ -141,14 +139,14 @@ export function useBoardItems({
         parentWorkItemId,
         title,
         url,
-        stages: [initialPhase],
+        ...(initialPhase ? { stages: [initialPhase] } : {}),
         metadata,
       });
       // The kickoff reads the card's feed, so typed guidance reaches the run as a comment on it.
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (toStage !== initialPhase) requestTransition(item, toStage, { cause });
+      if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');
       setDropError(failure);

@@ -8,3 +8,15 @@ Installed custom boards are now first-class in the Factory UI, and intake routin
 - The UI renders sidebar links, columns, phase labels, working/terminal states, card creation, and card moves from that catalog. Work and Review keep their URLs; custom boards open at `/factories/:id/boards/:boardId`. Unknown boards and catalog failures show an explicit unavailable state instead of falling back to Work. A card's persisted `board` determines membership; UI actions cannot reassign it. Settings › Skills groups built-in skills by board and lists custom boards' declared roles.
 - Intake bindings are explicit: a Linear project or GitHub repository feeds a board only once bound to one, and opening a board no longer materializes cards. `intake_source_bindings` gains a `board` column; rebinding a Linear project moves its non-terminal, idle cards to the new board's initial phase.
 - GitHub label routing: `GET`/`PUT /web/intake/label-routes` map a label to a board per Factory project (new `intake_label_routes` table). `issueOpened` picks the routed board, saving a route relocates matching cards, and `issues.labeled` / `issues.unlabeled` move cards between the routed board and Work while refreshing label metadata. Unrouted issues still go to Work.
+
+```ts
+// Route GitHub issues labelled `release` on this Factory project to the installed `release` board.
+await fetch('/web/intake/label-routes', {
+  method: 'PUT',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ factoryProjectId, integrationId: 'github', label: 'release', board: 'release' }),
+});
+
+// Discover what the UI will render for that project.
+const { boards } = await fetch(`/web/factory/projects/${factoryProjectId}/boards`).then(res => res.json());
+```

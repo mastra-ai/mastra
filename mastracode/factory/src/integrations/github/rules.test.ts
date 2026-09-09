@@ -2497,7 +2497,8 @@ describe('GithubRules label routes', () => {
       id: item.id,
       userId: 'user-1',
       patch: {
-        sessions: { planning: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
+        // Sessions are keyed by the phase's role (`plan`), not the phase id (`planning`).
+        sessions: { plan: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
       },
     });
     await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });

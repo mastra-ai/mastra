@@ -60,7 +60,12 @@ export function LinearRouting({
               <Select
                 value={routedFactory?.id ?? UNROUTED}
                 disabled={busy || factories.length === 0}
-                onValueChange={value => route(sourceId, value === UNROUTED ? null : value, board)}
+                // A board belongs to one Factory's catalog, so switching Factory
+                // clears it rather than binding to a board the new one may lack.
+                onValueChange={value => {
+                  const next = value === UNROUTED ? null : value;
+                  route(sourceId, next, next === routedFactory?.id ? board : null);
+                }}
               >
                 <SelectTrigger variant="outline" size="sm" aria-label={`Factory for ${name}`} className="w-auto">
                   <Txt as="span" variant="ui-sm">

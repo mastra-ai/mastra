@@ -16,7 +16,6 @@ import {
 import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
-import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
 
 // GitHub keeps issue vs PR distinct — card meta shows #N for both
@@ -46,7 +45,7 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
+const STAGE_ICON_SOURCES: Partial<Record<string, string>> = {
   triage: '/factory-stage-icons/triage.svg',
   planning: '/factory-stage-icons/in-progress.svg',
   execute: '/factory-stage-icons/in-progress.svg',
@@ -57,7 +56,8 @@ export function BoardStageIcon({
   kind,
   decorative = false,
 }: {
-  stage: BoardStageId;
+  /** Built-in phases get bespoke art; any other (custom-board) id falls back to `kind`. */
+  stage: string;
   kind?: 'resting' | 'working' | 'terminal';
   /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
   decorative?: boolean;

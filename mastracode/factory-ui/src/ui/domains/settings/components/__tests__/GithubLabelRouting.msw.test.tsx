@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { IntakeLabelRoute } from '../../../factory/services/intake';
 import { GithubLabelRouting } from '../GithubLabelRouting';
 
@@ -47,14 +47,15 @@ describe('GithubLabelRouting', () => {
   it('adds a label route offering only custom boards, never Work or Review', async () => {
     const saved = stub([]);
     const user = userEvent.setup();
-    renderRouting();
+    const { client } = renderRouting();
 
-    const label = await screen.findByRole('textbox', { name: 'Label for Acme' });
+    await waitForMutationsIdle(client);
+    const label = screen.getByRole('textbox', { name: 'Label for Acme' });
     // The card must say which Factory and repositories the routes govern.
     expect(screen.getByText('Acme')).toBeInTheDocument();
     expect(screen.getByText('Applies to issues from acme/app, acme/docs')).toBeInTheDocument();
     const picker = screen.getByRole('combobox', { name: 'Board for new Acme label' });
-    await waitFor(() => expect(picker).toBeEnabled());
+    expect(picker).toBeEnabled();
     const add = screen.getByRole('button', { name: 'Add' });
     expect(add).toBeDisabled();
 
@@ -66,12 +67,9 @@ describe('GithubLabelRouting', () => {
     await waitFor(() => expect(add).toBeEnabled());
     await user.click(add);
 
-    await waitFor(() =>
-      expect(saved).toEqual([
-        { factoryProjectId: 'fp-1', integrationId: 'github', label: 'Release', board: 'release' },
-      ]),
-    );
-    const row = await screen.findByRole('combobox', { name: 'Board for release' });
+    await waitForMutationsIdle(client);
+    expect(saved).toEqual([{ factoryProjectId: 'fp-1', integrationId: 'github', label: 'Release', board: 'release' }]);
+    const row = screen.getByRole('combobox', { name: 'Board for release' });
     expect(row).toHaveTextContent('Release Preview');
     expect(label).toHaveValue('');
   });
@@ -90,14 +88,14 @@ describe('GithubLabelRouting', () => {
   it('removes a route so its issues return to Work', async () => {
     const saved = stub([releaseRoute]);
     const user = userEvent.setup();
-    renderRouting();
+    const { client } = renderRouting();
 
-    await user.click(await screen.findByRole('button', { name: 'Remove route for release' }));
+    await waitForMutationsIdle(client);
+    await user.click(screen.getByRole('button', { name: 'Remove route for release' }));
 
-    await waitFor(() =>
-      expect(saved).toEqual([{ factoryProjectId: 'fp-1', integrationId: 'github', label: 'release', board: null }]),
-    );
-    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Board for release' })).not.toBeInTheDocument());
+    await waitForMutationsIdle(client);
+    expect(saved).toEqual([{ factoryProjectId: 'fp-1', integrationId: 'github', label: 'release', board: null }]);
+    expect(screen.queryByRole('combobox', { name: 'Board for release' })).not.toBeInTheDocument();
   });
 
   it('flags a route whose board is no longer installed', async () => {
@@ -124,5 +122,28 @@ describe('GithubLabelRouting', () => {
     renderRouting();
 
     expect(await screen.findByText(/unavailable right now/)).toBeInTheDocument();
+  });
+
+  it('keeps existing routes removable when the board catalog fails to load', async () => {
+    const saved = stub([releaseRoute]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderRouting();
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText(/Installed boards are unavailable right now/)).toBeInTheDocument();
+    expect(screen.queryByText(/No custom boards are installed/)).not.toBeInTheDocument();
+    // The route is still listed; it must not be mislabelled as uninstalled.
+    expect(screen.queryByText(/is not installed/)).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Board for release' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Board for new Acme label' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Remove route for release' }));
+    await waitForMutationsIdle(client);
+    expect(saved).toEqual([expect.objectContaining({ label: 'release', board: null })]);
   });
 });

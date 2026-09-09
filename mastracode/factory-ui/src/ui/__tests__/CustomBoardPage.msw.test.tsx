@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { releaseBoard } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders } from '../../../e2e/ui/render';
+import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../api/types';
 import { createAppRoutes } from '../router';
 
@@ -47,16 +47,16 @@ function renderBoard(board = 'boards/release') {
     http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false, workspace: null })),
     http.get('*/web/github/projects/:id/sessions', () => HttpResponse.json({ sessions: [] })),
     http.get('*/web/github/projects/:id/issues', intakeRequest),
-    http.get('*/web/github/projects/:id/pull-requests', intakeRequest),
+    http.get('*/web/github/projects/:id/prs', intakeRequest),
   );
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/fp-1/${board}`] });
-  renderWithProviders(<RouterProvider router={router} />);
-  return { intakeRequest };
+  const { client } = renderWithProviders(<RouterProvider router={router} />);
+  return { intakeRequest, client };
 }
 
 describe('custom-only board routing', () => {
   it('renders declaration-ordered custom columns without built-in intake or automation', async () => {
-    const { intakeRequest } = renderBoard();
+    const { intakeRequest, client } = renderBoard();
     const columns = await screen.findByRole('group', { name: 'Board columns' });
     expect(
       within(columns)
@@ -66,6 +66,8 @@ describe('custom-only board routing', () => {
     expect(screen.getAllByLabelText('working phase')).toHaveLength(2);
     expect(screen.getByLabelText('terminal phase')).toBeTruthy();
     expect(screen.queryByText('Auto-approve plans')).toBeNull();
+    // Columns render before every query settles, so only judge the feeds once idle.
+    await waitForMutationsIdle(client);
     expect(intakeRequest).not.toHaveBeenCalled();
   });
   it.each(['boards/missing', 'work', 'review'])(

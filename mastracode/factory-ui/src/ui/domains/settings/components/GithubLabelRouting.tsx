@@ -59,7 +59,9 @@ export function GithubLabelRouting({
       />
     );
   }
-  if (boards.length === 0 && !catalog.isPending) {
+  // A failed catalog is not an empty one: existing routes stay listed (and
+  // removable) so a transient error never reads as "nothing is installed".
+  if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {
     return (
       <SettingsRow
         variant="factory"
@@ -74,7 +76,11 @@ export function GithubLabelRouting({
 
   return (
     <div className="flex flex-col">
-      <SettingsRow variant="factory" label={name} description={scope} />
+      <SettingsRow
+        variant="factory"
+        label={name}
+        description={catalog.isError ? `${scope}. Installed boards are unavailable right now.` : scope}
+      />
       {routes.map(existing => {
         const current = boards.find(board => board.id === existing.board);
         return (
@@ -82,15 +88,21 @@ export function GithubLabelRouting({
             variant="factory"
             key={existing.label}
             label={existing.label}
-            description={current ? undefined : `Board '${existing.board}' is not installed; issues stay on Work.`}
+            description={
+              current || catalog.isError
+                ? undefined
+                : `Board '${existing.board}' is not installed; issues stay on Work.`
+            }
           >
             <div className="flex items-center gap-2">
               <BoardSelect
                 ariaLabel={`Board for ${existing.label}`}
                 value={current?.id ?? null}
-                placeholder={current ? current.title : `${existing.board} (not installed)`}
+                placeholder={
+                  current || catalog.isError ? (current?.title ?? existing.board) : `${existing.board} (not installed)`
+                }
                 boards={boards}
-                disabled={busy}
+                disabled={busy || !catalog.isSuccess}
                 onChange={next => route(existing.label, next)}
               />
               <Button
@@ -125,7 +137,7 @@ export function GithubLabelRouting({
             value={draftBoard}
             placeholder="Choose a board"
             boards={boards}
-            disabled={busy || catalog.isPending}
+            disabled={busy || !catalog.isSuccess}
             onChange={setDraftBoard}
           />
           <Button

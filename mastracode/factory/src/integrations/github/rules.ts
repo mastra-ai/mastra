@@ -17,7 +17,10 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  WorkItemUpdateConflictError,
+} from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
@@ -351,13 +354,21 @@ export class GithubRules {
     let item = found;
     let changed = false;
     if (!sameLabels(cardLabels(item), labels)) {
-      const updated = await this.options.storage.update({
-        orgId: item.orgId,
-        id: item.id,
-        userId: LABEL_ROUTE_USER_ID,
-        patch: { metadata: { ...(item.metadata ?? {}), labels } },
-        expectedRevision: item.revision,
-      });
+      let updated;
+      try {
+        updated = await this.options.storage.update({
+          orgId: item.orgId,
+          id: item.id,
+          userId: LABEL_ROUTE_USER_ID,
+          patch: { metadata: { ...(item.metadata ?? {}), labels } },
+          expectedRevision: item.revision,
+        });
+      } catch (error) {
+        // The card changed under us (a run wrote it, or a concurrent delivery won). The next
+        // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+        return { status: 'ignored' };
+      }
       if (!updated) return { status: 'ignored' };
       item = updated.item;
       changed = true;

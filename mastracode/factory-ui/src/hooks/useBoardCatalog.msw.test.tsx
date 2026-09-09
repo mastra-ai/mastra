@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../api/types';
 import { useBoardCatalog } from './useBoardCatalog';
 
@@ -56,13 +56,15 @@ describe('installed board catalog query', () => {
         HttpResponse.json(params.id === 'project-1' ? catalog : ({ boards: [] } satisfies BoardCatalogResponse)),
       ),
     );
-    const { result, rerender } = renderHookWithProviders(({ id }) => useBoardCatalog(id), {
+    const { result, rerender, client } = renderHookWithProviders(({ id }) => useBoardCatalog(id), {
       initialProps: { id: 'project-1' },
     });
-    await waitFor(() => expect(result.current.data).toEqual(catalog.boards));
+    await waitForMutationsIdle(client);
+    expect(result.current.data).toEqual(catalog.boards);
     rerender({ id: 'project-2' });
     expect(result.current.data).toBeUndefined();
-    await waitFor(() => expect(result.current.data).toEqual([]));
+    await waitForMutationsIdle(client);
+    expect(result.current.data).toEqual([]);
     expect(result.current.isSuccess).toBe(true);
   });
 });

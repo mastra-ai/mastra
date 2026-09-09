@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { releaseBoard } from '../../e2e/ui/board-catalog';
 import { server } from '../../e2e/ui/msw-server';
-import { renderHookWithProviders } from '../../e2e/ui/render';
+import { renderHookWithProviders, waitForMutationsIdle } from '../../e2e/ui/render';
 import { useBoardComposer } from '../ui/domains/factory/hooks/useBoardComposer';
 import { useBoardItems } from '../ui/domains/factory/hooks/useBoardItems';
 import { factoryAttentionTargetPath } from '../ui/domains/factory/services/attention';
@@ -56,7 +56,7 @@ describe('custom board operations', () => {
     const { result, client } = renderHookWithProviders(() =>
       useBoardItems({ factoryProjectId: 'fp-1', kind: 'release' }),
     );
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     act(() => result.current.handleDrop({ kind: 'work-item', id: item.id, fromStage: 'queued' }, stage));
     expect(transition).not.toHaveBeenCalled();
   });
@@ -78,7 +78,7 @@ describe('custom board operations', () => {
     });
     server.use(listHandler(), http.post('*/web/factory/projects/:id/work-items/:itemId/transition', transition));
     const { result, client } = renderHookWithProviders(() => useBoardItems({ factoryProjectId: 'fp-1', kind }));
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     act(() => result.current.handleDrop({ kind: 'work-item', id: item.id, fromStage: 'queued' }, 'preparing'));
     expect(transition).not.toHaveBeenCalled();
     act(() => result.current.move(item.id, 'preparing'));
@@ -112,7 +112,7 @@ describe('custom board operations', () => {
     const { result, client } = renderHookWithProviders(() =>
       useBoardItems({ factoryProjectId: 'fp-1', kind: 'release' }),
     );
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     await act(async () => {
       result.current.handleDrop(
         {
@@ -134,6 +134,44 @@ describe('custom board operations', () => {
       stages: ['queued'],
       externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:REL-1' },
     });
+    expect(transition).not.toHaveBeenCalled();
+  });
+
+  it('lets the server pick the phase when a candidate is dropped before the catalog resolves', async () => {
+    let body: unknown;
+    const transition = vi.fn(() => HttpResponse.json({}));
+    // The catalog never answers, so the hook cannot know the board's initial phase.
+    server.use(
+      listHandler(),
+      http.get('*/web/factory/projects/:id/boards', () => new Promise<never>(() => {})),
+      http.post('*/web/factory/projects/:id/work-items', async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ workItem: { ...wireItem, id: 'release-3', source: 'linear-issue' } });
+      }),
+      http.post('*/web/factory/projects/:id/work-items/:itemId/transition', transition),
+    );
+    const { result } = renderHookWithProviders(() => useBoardItems({ factoryProjectId: 'fp-1', kind: 'release' }));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    await act(async () => {
+      result.current.handleDrop(
+        {
+          kind: 'candidate',
+          candidate: {
+            source: 'linear-issue',
+            sourceKey: 'linear:REL-2',
+            title: 'Cut 1.3',
+            url: 'https://linear.app/acme/issue/REL-2',
+            metadata: {},
+          },
+        },
+        'queued',
+      );
+    });
+    await waitFor(() => expect(body).toBeDefined());
+    // No guessed `intake` phase: the request omits `stages` entirely.
+    expect(body).not.toHaveProperty('stages');
+    expect(body).toMatchObject({ board: 'release' });
+    // The server filed it on `queued`, which is where it was dropped, so no follow-up move.
     expect(transition).not.toHaveBeenCalled();
   });
 
