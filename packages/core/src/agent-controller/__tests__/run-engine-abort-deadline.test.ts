@@ -29,6 +29,7 @@ function createHarness() {
 
   const machinery: SessionMachinery = {
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
+    getRunScope: () => undefined,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these tests');
     },
@@ -40,6 +41,7 @@ function createHarness() {
     generateId: () => `msg-${++idCounter}`,
     resolveTransitionModeId: () => undefined,
     saveSystemReminder: vi.fn(async () => null),
+    saveSessionError: vi.fn(async () => null),
   };
 
   const engine = new SessionRunEngine(session, machinery);
@@ -76,6 +78,26 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
     expect(session.run.isRunning()).toBe(false);
     expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
+  });
+
+  it('Given a stream error, When the stream is finalized, Then its occurrence identity is minted once at the run boundary', async () => {
+    const { engine, events } = createHarness();
+
+    await engine.processStream({
+      fullStream: (async function* () {
+        yield chunk({ type: 'error', payload: { error: new Error('stream failed') } });
+      })(),
+    });
+
+    const errors = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'error' }> => event.type === 'error',
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      error: expect.objectContaining({ message: 'stream failed' }),
+      occurrenceId: 'msg-2',
+    });
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'error' });
   });
 
   it('Given a run that ends on a terminal chunk, Then the source stream is still cleaned up', async () => {
@@ -300,10 +322,11 @@ describe('SessionRunEngine — abort deadline', () => {
     await engine.processSubscribedThreadStream(subscription);
 
     expect(events.filter(event => event.type === 'error')).toEqual([
-      {
+      expect.objectContaining({
         type: 'error',
         error: new Error('Thread run run-1 lost its lease before publishing a terminal event'),
-      },
+        occurrenceId: expect.any(String),
+      }),
     ]);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
       { type: 'agent_end', reason: 'error' },

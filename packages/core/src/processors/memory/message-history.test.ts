@@ -26,7 +26,7 @@ class MockStorage extends MemoryStorage {
   private messages: MastraDBMessage[] = [];
 
   async listMessages(params: any): Promise<any> {
-    const { threadId, perPage = false, page = 1, orderBy } = params;
+    const { threadId, perPage = false, page = 0, orderBy } = params;
     const threadMessages = this.messages.filter(m => m.threadId === threadId);
 
     // Sort by createdAt if orderBy is specified
@@ -40,8 +40,11 @@ class MockStorage extends MemoryStorage {
     }
 
     let resultMessages = sortedMessages;
+    let hasMore = false;
     if (typeof perPage === 'number' && perPage > 0) {
-      resultMessages = sortedMessages.slice(0, perPage);
+      const start = page * perPage;
+      resultMessages = sortedMessages.slice(start, start + perPage);
+      hasMore = start + resultMessages.length < sortedMessages.length;
     }
 
     return {
@@ -49,7 +52,7 @@ class MockStorage extends MemoryStorage {
       total: threadMessages.length,
       page,
       perPage,
-      hasMore: false,
+      hasMore,
     };
   }
 
@@ -168,6 +171,47 @@ describe('MessageHistory', () => {
       expect(resultMessages[0].id).toBe('msg-2');
       expect(resultMessages[1].id).toBe('msg-3');
       expect(resultMessages[2].id).toBe('msg-4');
+    });
+
+    it('excludes standalone session errors from model history', async () => {
+      const sessionError: MastraDBMessage = {
+        id: 'session-error-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'data-session-error', data: { occurrenceId: 'error-1', name: 'Error', message: 'failed' } }],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      } as MastraDBMessage;
+      const storedMessage: MastraDBMessage = {
+        id: 'stored-response',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'previous response' }] },
+        threadId: 'thread-1',
+        createdAt: new Date('2025-12-31T00:00:00Z'),
+      };
+      const userMessage: MastraDBMessage = {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'continue' }] },
+        threadId: 'thread-1',
+        createdAt: new Date('2026-01-01T00:00:01Z'),
+      };
+      mockStorage.setMessages([sessionError, storedMessage]);
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 1 });
+      const messageList = new MessageList();
+      messageList.add(userMessage, 'input');
+
+      const result = await processor.processInput({
+        messages: [userMessage],
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
+      expect(resultMessages.map(message => message.id)).toEqual(['stored-response', 'user-1']);
     });
 
     it('reuses the same history read within a memory run', async () => {

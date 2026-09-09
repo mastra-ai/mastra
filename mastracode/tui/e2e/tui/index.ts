@@ -130,6 +130,7 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
 import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
+import { sessionErrorHistoryReloadScenario } from './session-error-history-reload.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -328,6 +329,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
+  'session-error-history-reload': sessionErrorHistoryReloadScenario,
   'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
   'shell-passthrough-during-run': shellPassthroughDuringRunScenario,

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { MastraDBMessage } from '../agent/message-list';
 
-import { filterSystemReminderMessages, isSystemReminderMessage, isSystemReminderSignalType } from './system-reminders';
+import {
+  filterSystemReminderMessages,
+  isSessionErrorMessage,
+  isSystemReminderMessage,
+  isSystemReminderSignalType,
+} from './system-reminders';
 
 describe('system reminder filtering', () => {
   it.each([
@@ -115,5 +120,23 @@ describe('system reminder filtering', () => {
         embeddedMarkupMessage,
       ]),
     ).toEqual([userSignalMessage, embeddedMarkupMessage]);
+  });
+
+  it('identifies persisted session errors as display-only messages', () => {
+    const message = {
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [{ type: 'data-session-error', data: { occurrenceId: 'error-1', name: 'Error', message: 'failed' } }],
+      },
+    } as unknown as MastraDBMessage;
+
+    const mixedMessage = {
+      ...message,
+      content: { format: 2, parts: [...message.content.parts, { type: 'text', text: 'normal response' }] },
+    } as unknown as MastraDBMessage;
+
+    expect(isSessionErrorMessage(message)).toBe(true);
+    expect(isSessionErrorMessage(mixedMessage)).toBe(false);
   });
 });

@@ -52,6 +52,16 @@ describe('AgentController OM failure abort behavior', () => {
       'Observational memory observation buffering failed: Bad Request',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
+    expect(
+      (await session.thread.listActiveMessages()).flatMap(message =>
+        message.content.parts.filter(part => part.type === 'data-session-error'),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: 'data-session-error',
+        data: expect.objectContaining({ message: 'Observational memory observation buffering failed: Bad Request' }),
+      }),
+    ]);
     expect(session.run.isAbortRequested()).toBe(false);
     expect(session.run.hasAbortController()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);

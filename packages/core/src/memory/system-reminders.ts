@@ -18,6 +18,14 @@ export function isSystemReminderSignalType(type: unknown): boolean {
   return type === 'system-reminder' || type === 'reactive';
 }
 
+export function isSessionErrorMessage(message: MastraDBMessage): boolean {
+  return (
+    message.role === 'assistant' &&
+    message.content.parts.length === 1 &&
+    message.content.parts[0]?.type === 'data-session-error'
+  );
+}
+
 export function isSystemReminderMessage(message: MastraDBMessage): boolean {
   if (!isRecord(message.content)) {
     return false;

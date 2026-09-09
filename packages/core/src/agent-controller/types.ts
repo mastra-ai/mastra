@@ -523,6 +523,20 @@ export interface TokenUsage {
   raw?: unknown;
 }
 
+/** JSON-safe data stored for one user-visible session failure. */
+export interface SessionErrorData {
+  occurrenceId: string;
+  name: string;
+  message: string;
+  errorType?: string;
+  retryable?: boolean;
+  retryDelay?: number;
+  retryAttempt?: number;
+  maxRetries?: number;
+  runId?: string;
+  toolCallId?: string;
+}
+
 /** Creates a zero-initialized TokenUsage object. */
 export function createEmptyTokenUsage(): TokenUsage {
   return {
@@ -825,6 +839,8 @@ export type AgentControllerEvent =
   | {
       type: 'error';
       error: Error;
+      /** Stable identity shared with the persisted `data-session-error` part. */
+      occurrenceId?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;
@@ -832,9 +848,9 @@ export type AgentControllerEvent =
       maxRetries?: number;
     }
   | { type: 'follow_up_queued'; count: number; runId?: string }
-  | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
+  | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error; occurrenceId?: string }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
-  | { type: 'workspace_error'; error: Error }
+  | { type: 'workspace_error'; error: Error; occurrenceId?: string }
   | {
       type: 'om_status';
       windows: {

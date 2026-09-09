@@ -46,6 +46,7 @@ import type {
   ModelUseCountTracker,
   PermissionPolicy,
   PermissionRules,
+  SessionErrorData,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -312,6 +313,14 @@ export interface SessionMachinery {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
+  }): Promise<MastraDBMessage | null>;
+  /** Persist one session failure as a standalone assistant data message. */
+  saveSessionError(input: {
+    id: string;
+    threadId: string;
+    resourceId: string;
+    data: SessionErrorData;
+    createdAt: Date;
   }): Promise<MastraDBMessage | null>;
 }
 
@@ -2840,6 +2849,10 @@ export class Session<TState = unknown> {
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
   readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
+  /** Error persistence writes still in flight; terminal runs await these before completing. */
+  readonly #pendingErrorPersistence = new Set<Promise<void>>();
+  /** Avoid duplicate writes when the same upstream error event is delivered again. */
+  readonly #recordedErrorOccurrences = new Set<string>();
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -2996,6 +3009,7 @@ export class Session<TState = unknown> {
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
   ): Promise<void> {
     const event = { type: 'agent_end', reason } as const;
+    await this.#drainErrorPersistence();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
         await listener(event);
@@ -3006,12 +3020,90 @@ export class Session<TState = unknown> {
     this.emit(event);
   }
 
+  #recordSessionError(event: Extract<AgentControllerEvent, { type: 'error' }>): AgentControllerEvent {
+    const occurrenceId = event.occurrenceId ?? this.#machinery?.generateId();
+    const emitted = occurrenceId ? { ...event, occurrenceId } : event;
+    const threadId = this.thread.getId();
+    const machinery = this.#machinery;
+    const persistenceKey = occurrenceId && threadId ? `${threadId.length}:${threadId}${occurrenceId}` : undefined;
+    if (
+      !occurrenceId ||
+      !threadId ||
+      !machinery ||
+      !persistenceKey ||
+      this.#recordedErrorOccurrences.has(persistenceKey)
+    ) {
+      return emitted;
+    }
+
+    this.#recordedErrorOccurrences.add(persistenceKey);
+    const createdAt = new Date();
+    const runId = this.run.getRunId();
+    const data: SessionErrorData = {
+      occurrenceId,
+      name: event.error.name || 'Error',
+      message: event.error.message,
+      ...(event.errorType ? { errorType: event.errorType } : {}),
+      ...(event.retryable !== undefined ? { retryable: event.retryable } : {}),
+      ...(event.retryDelay !== undefined ? { retryDelay: event.retryDelay } : {}),
+      ...(event.retryAttempt !== undefined ? { retryAttempt: event.retryAttempt } : {}),
+      ...(event.maxRetries !== undefined ? { maxRetries: event.maxRetries } : {}),
+      ...(runId ? { runId } : {}),
+    };
+
+    let persistence: Promise<void>;
+    persistence = machinery
+      .saveSessionError({
+        id: `session-error-${persistenceKey}`,
+        threadId,
+        resourceId: this.identity.getResourceId(),
+        data,
+        createdAt,
+      })
+      .then(() => undefined)
+      .catch(error => {
+        console.error('Failed to persist session error:', error);
+      })
+      .finally(() => this.#pendingErrorPersistence.delete(persistence));
+    this.#pendingErrorPersistence.add(persistence);
+    return emitted;
+  }
+
+  #recordWorkspaceError(error: Error, occurrenceId?: string): string | undefined {
+    const event = this.#recordSessionError({
+      type: 'error',
+      error: new Error(`Workspace: ${error.message}`),
+      ...(occurrenceId ? { occurrenceId } : {}),
+    });
+    return event.type === 'error' ? event.occurrenceId : undefined;
+  }
+
+  async #drainErrorPersistence(): Promise<void> {
+    while (this.#pendingErrorPersistence.size > 0) {
+      await Promise.allSettled(this.#pendingErrorPersistence);
+    }
+  }
+
   /**
    * Emit an event on this session. Delegates to this session's bus, which folds
    * the event into the canonical display state, dispatches to this session's
    * listeners, then fans out a synthetic `display_state_changed`.
    */
   emit(event: AgentControllerEvent): void {
+    if (event.type === 'error') {
+      this.#bus.emit(this.#recordSessionError(event));
+      return;
+    }
+    if (event.type === 'workspace_error') {
+      const occurrenceId = this.#recordWorkspaceError(event.error, event.occurrenceId);
+      this.#bus.emit(occurrenceId ? { ...event, occurrenceId } : event);
+      return;
+    }
+    if (event.type === 'workspace_status_changed' && event.status === 'error' && event.error) {
+      const occurrenceId = this.#recordWorkspaceError(event.error, event.occurrenceId);
+      this.#bus.emit(occurrenceId ? { ...event, occurrenceId } : event);
+      return;
+    }
     this.#bus.emit(event);
   }
 

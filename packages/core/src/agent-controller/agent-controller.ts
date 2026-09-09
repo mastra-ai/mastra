@@ -45,6 +45,7 @@ import type {
   AgentControllerSessionDeletedListener,
   AgentControllerThread,
   ModelAuthStatus,
+  SessionErrorData,
   ToolCategory,
 } from './types';
 
@@ -418,6 +419,7 @@ export class AgentController<TState = {}> {
       generateId: () => this.generateId(),
       resolveTransitionModeId: () => this.resolveTransitionModeId(session),
       saveSystemReminder: input => this.saveSystemReminder(input),
+      saveSessionError: input => this.saveSessionError(input),
     });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
@@ -2047,6 +2049,37 @@ export class AgentController<TState = {}> {
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;
     return this.convertToControllerMessage(saved);
+  }
+
+  /** Persist a standalone, display-only session error data part. */
+  private async saveSessionError({
+    id,
+    threadId,
+    resourceId,
+    data,
+    createdAt,
+  }: {
+    id: string;
+    threadId: string;
+    resourceId: string;
+    data: SessionErrorData;
+    createdAt: Date;
+  }): Promise<MastraDBMessage | null> {
+    if (!this.#resolveStorage()) return null;
+    const memoryStorage = await this.getMemoryStorage();
+    const dbMessage: MastraDBMessage = {
+      id,
+      role: 'assistant',
+      threadId,
+      resourceId,
+      createdAt,
+      content: {
+        format: 2,
+        parts: [{ type: 'data-session-error', data }],
+      },
+    };
+    const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
+    return this.convertToControllerMessage(result.messages[0] ?? dbMessage);
   }
 
   /**

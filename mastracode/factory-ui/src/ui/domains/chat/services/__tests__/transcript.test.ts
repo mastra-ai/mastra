@@ -108,6 +108,46 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('renders persisted session errors as one notice without an empty assistant entry', () => {
+    const state = createInitialTranscript({
+      messages: [
+        dbMessage('session-error-1', 'assistant', [
+          {
+            type: 'data-session-error',
+            data: { occurrenceId: 'error-1', name: 'Error', message: 'resume failed' },
+          } as never,
+        ]),
+      ],
+    });
+
+    expect(state.entries).toEqual([
+      { kind: 'notice', id: 'session-error-error-1', level: 'error', text: 'resume failed' },
+    ]);
+  });
+
+  it('reconciles a persisted session error with its live occurrence', () => {
+    const live = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'error',
+        error: { name: 'Error', message: 'resume failed' },
+        occurrenceId: 'error-1',
+      } as never,
+    });
+    const message = dbMessage('session-error-1', 'assistant', [
+      {
+        type: 'data-session-error',
+        data: { occurrenceId: 'error-1', name: 'Error', message: 'resume failed' },
+      } as never,
+    ]);
+
+    const merged = transcriptReducer(live, { type: 'mergeWindow', messages: [message] });
+
+    expect(merged.entries).toEqual([
+      { kind: 'notice', id: 'session-error-error-1', level: 'error', text: 'resume failed' },
+    ]);
+  });
+
   it('restores suspended tool prompts from persisted assistant metadata', () => {
     const message = dbMessage('assistant-ask', 'assistant', [
       {

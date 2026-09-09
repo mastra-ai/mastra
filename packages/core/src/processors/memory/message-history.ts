@@ -2,6 +2,7 @@ import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
+import { isSessionErrorMessage } from '../../memory/system-reminders';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
@@ -127,21 +128,34 @@ export class MessageHistory implements Processor {
       // 1. Fetch historical messages from storage (as DB format)
       const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
       const loadMessages = async () => {
-        const result = await this.storage.listMessages({
-          threadId,
-          resourceId,
-          page: 0,
-          perPage: this.lastMessages,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
-        });
-        return result.messages;
+        const loadPage = (page: number) =>
+          this.storage.listMessages({
+            threadId,
+            resourceId,
+            page,
+            perPage: this.lastMessages,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          });
+        if (!this.lastMessages) return (await loadPage(0)).messages;
+
+        const messages: MastraDBMessage[] = [];
+        for (let page = 0; ; page += 1) {
+          const result = await loadPage(page);
+          messages.push(...result.messages);
+          const usableMessages = messages.filter(
+            message => message.role !== 'system' && !isSessionErrorMessage(message),
+          );
+          if (usableMessages.length >= this.lastMessages || !result.hasMore) return messages;
+        }
       };
       const messages = memoryRunState ? await memoryRunState.load(cacheKey, loadMessages) : await loadMessages();
 
-      // 2. Filter out system messages (they should never be stored in DB)
-      const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
-      });
+      // 2. Filter out system and display-only session-error messages.
+      const eligibleMessages = messages.filter(
+        (msg: MastraDBMessage) => msg.role !== 'system' && !isSessionErrorMessage(msg),
+      );
+      const filteredMessages =
+        typeof this.lastMessages === 'number' ? eligibleMessages.slice(0, this.lastMessages) : eligibleMessages;
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
       // This includes messages added by previous processors like SemanticRecall

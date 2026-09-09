@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, SessionErrorData } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
 
@@ -41,7 +41,17 @@ export interface OmRenderPart {
   data: Record<string, unknown>;
 }
 
-export type AssistantRenderPart = TextRenderPart | ThinkingRenderPart | ToolRenderPart | OmRenderPart;
+export interface SessionErrorRenderPart {
+  kind: 'session-error';
+  data: SessionErrorData;
+}
+
+export type AssistantRenderPart =
+  | TextRenderPart
+  | ThinkingRenderPart
+  | ToolRenderPart
+  | OmRenderPart
+  | SessionErrorRenderPart;
 
 function getParts(message: MastraDBMessage): MessagePart[] {
   const content = message.content;
@@ -82,6 +92,22 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
       }
       case 'reasoning': {
         out.push({ kind: 'thinking', text: (part as { reasoning?: string }).reasoning ?? '' });
+        break;
+      }
+      case 'data-session-error': {
+        const data = (part as { data?: unknown }).data;
+        if (
+          data &&
+          typeof data === 'object' &&
+          'occurrenceId' in data &&
+          'name' in data &&
+          'message' in data &&
+          typeof data.occurrenceId === 'string' &&
+          typeof data.name === 'string' &&
+          typeof data.message === 'string'
+        ) {
+          out.push({ kind: 'session-error', data: data as SessionErrorData });
+        }
         break;
       }
       case 'tool-invocation': {
