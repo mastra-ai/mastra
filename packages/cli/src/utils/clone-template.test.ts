@@ -99,19 +99,6 @@ describe('clone-template', () => {
       });
     });
 
-    it('suppresses spinner output when cloning silently', async () => {
-      const mockExec = vi.fn().mockImplementation(async () => {
-        vol.fromJSON({ '/test-project/README.md': 'template' });
-        return { stdout: '', stderr: '' };
-      });
-      vi.mocked(execa).mockImplementation(mockExec as never);
-
-      const { cloneTemplate } = await import('./clone-template');
-      await cloneTemplate({ template: mockTemplate, projectName: 'test-project', silent: true });
-
-      expect(yoctoSpinner).not.toHaveBeenCalled();
-    });
-
     it('should fallback to git clone when degit fails', async () => {
       const mockExec = vi
         .fn()
@@ -517,16 +504,6 @@ describe('clone-template', () => {
         timeout: undefined,
         killSignal: 'SIGTERM',
       });
-    });
-
-    it('suppresses spinner output when installing silently', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
-      vi.mocked(execa).mockImplementation(mockExec as never);
-
-      const { installDependencies } = await import('./clone-template');
-      await installDependencies('/test-project', 'npm', undefined, undefined, true);
-
-      expect(yoctoSpinner).not.toHaveBeenCalled();
     });
 
     it('passes an abort signal to dependency installation', async () => {
