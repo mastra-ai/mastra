@@ -8,15 +8,6 @@ import type { FormatConfig } from 'oxfmt';
 import { API_COMMANDS, registerApiCommand } from '../src/commands/api/index.js';
 import type { ApiCommandDescriptor } from '../src/commands/api/types.js';
 
-const executionCommands = new Set([
-  'agent run',
-  'workflow run start',
-  'workflow run resume',
-  'tool execute',
-  'mcp tool execute',
-  'experiment run',
-]);
-
 export const outputPath = path.resolve(import.meta.dirname, '../../mcp/src/server/mastra-api-operations.generated.ts');
 
 export function isApiPrefixedCommand(command: Pick<ApiCommandDescriptor, 'routePlacement'>): boolean {
@@ -35,9 +26,7 @@ export function getOperations() {
       method: command.method,
       path: command.path,
       ...(command.verbose ? { verbosePath: command.verbose.path } : {}),
-      // Generic execution can invoke arbitrary user code with destructive side effects.
-      destructive:
-        executionCommands.has(command.name) || command.name.includes(' delete') || command.name.includes(' cancel'),
+      destructive: command.method !== 'GET',
     }));
 }
 

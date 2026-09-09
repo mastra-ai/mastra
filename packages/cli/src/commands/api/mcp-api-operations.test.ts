@@ -64,12 +64,9 @@ test('generic execution is destructive and never read-only', () => {
   }
 });
 
-test('reads remain non-destructive while deletion and cancellation remain destructive', () => {
+test('every non-GET operation is destructive and GET operations remain non-destructive', () => {
   for (const operation of MASTRA_API_OPERATIONS) {
-    if (operation.method === 'GET') assert.equal(operation.destructive, false, operation.name);
-    if (operation.method === 'DELETE' || operation.name.endsWith('_cancel')) {
-      assert.equal(operation.destructive, true, operation.name);
-    }
+    assert.equal(operation.destructive, operation.method !== 'GET', operation.name);
   }
 });
 
