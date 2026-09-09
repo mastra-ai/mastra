@@ -38,6 +38,25 @@ function fixture(knowledge?: Knowledge | false) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious observation curator', () => {
+  it('settles observation-dispatched work including work queued during completion', async () => {
+    const memory = new Memory({ storage: new InMemoryStore(), options: { observationalMemory: false } });
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    memory.trackSubconsciousWork(first.promise.then(() => memory.trackSubconsciousWork(second.promise)));
+    const completed = vi.fn();
+    const settling = memory.settled().then(completed);
+    await Promise.resolve();
+    expect(completed).not.toHaveBeenCalled();
+    first.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(completed).not.toHaveBeenCalled();
+    second.resolve();
+    await settling;
+    expect(completed).toHaveBeenCalledOnce();
+    await memory.settled();
+  });
+
   it('uses the selected Knowledge runtime for observation and derived agent memory', async () => {
     const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
     const { memory, context, extractor } = fixture(knowledge);

@@ -82,15 +82,19 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
           );
           const result = dispatchCuratorObservation(agent, context, config, context.rawObservations);
 
-          void result.accepted
-            .then(async accepted => {
-              if (accepted.action === 'wake') await accepted.output.consumeStream();
-            })
-            .catch(error => reportCuratorError(error, context, subconscious, store, scope))
-            .catch(error => omError(`[Subconscious:curate] failed to report curator error: ${String(error)}`));
+          context.memory.trackSubconsciousWork(
+            result.accepted
+              .then(async accepted => {
+                if (accepted.action === 'wake') await accepted.output.consumeStream();
+              })
+              .catch(error => reportCuratorError(error, context, subconscious, store, scope))
+              .catch(error => omError(`[Subconscious:curate] failed to report curator error: ${String(error)}`)),
+          );
         } catch (error) {
-          void reportCuratorError(error, context, subconscious, store, scope).catch(reportingError =>
-            omError(`[Subconscious:curate] failed to report curator error: ${String(reportingError)}`),
+          context.memory.trackSubconsciousWork(
+            reportCuratorError(error, context, subconscious, store, scope).catch(reportingError =>
+              omError(`[Subconscious:curate] failed to report curator error: ${String(reportingError)}`),
+            ),
           );
         }
       },
