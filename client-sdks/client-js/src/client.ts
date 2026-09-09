@@ -2242,16 +2242,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists results for a dataset experiment
+   * Lists results for a dataset experiment.
+   * `tags` restricts the list to results that have all of the given tags.
    */
   public listDatasetExperimentResults(
     datasetId: string,
     experimentId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; tags?: string[] },
   ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) searchParams.set('page', String(options.page));
+    if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
+    for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
