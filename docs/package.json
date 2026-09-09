@@ -30,7 +30,6 @@
     "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/integrations src/content/en/reference",
     "lint:prose": "npm-run-all --parallel lint:vale:ai lint:remark",
     "test": "vitest run",
-    "test:vale": "node --test scripts/vale/rules.test.mjs",
     "test:watch": "vitest watch",
     "test:e2e": "pnpm exec playwright test",
     "test:smoke": "pnpm exec playwright test tests/smoke.spec.ts --project=desktop",
