@@ -1091,6 +1091,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async setRecordScopes(input: {
     id: string;
+    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
@@ -1099,12 +1100,14 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
       const now = new Date();
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=?`,
-        args: [now.toISOString(), input.id],
+      const result = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
+        args: [now.toISOString(), input.id, input.version],
       });
+      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
       await this.#replaceRecordScopes(tx, input.id, scopeIds, now);
       await this.#activity(tx, 'move', 'record', input.id, input.contextScopeId, input.importRunId);
       const version = record.version + 1;

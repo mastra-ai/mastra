@@ -47,6 +47,26 @@ describe('Subconscious knowledge write tools', () => {
     ).toMatchSnapshot();
   });
 
+  it('rejects a rescope changed after visibility validation without overwriting the new scopes', async () => {
+    const { store, source, tools } = await fixture();
+    const record = await store.createRecord({ node: source, text: 'Private evidence', scopeIds: [scopeIds[2]!] });
+    const setScopes = store.setRecordScopes.bind(store);
+    const mutation = vi.spyOn(store, 'setRecordScopes').mockImplementationOnce(async input => {
+      await setScopes({ id: record.id, version: record.version, scopeIds: [scopeIds[1]!] });
+      return setScopes(input);
+    });
+    await expect(
+      tools.knowledge_rescope!.execute?.(
+        { recordId: record.id, expectedVersion: record.version, scope: 'org' },
+        {} as any,
+      ),
+    ).rejects.toThrow('version conflict');
+    expect(mutation).toHaveBeenCalledWith({ id: record.id, version: record.version, scopeIds: [scopeIds[0]] });
+    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
+    expect(await store.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
+    mutation.mockRestore();
+  });
+
   it('creates a node and first record with code-owned provenance and capture time', async () => {
     const { store, tools } = await fixture();
     const before = Date.now();

@@ -1,4 +1,8 @@
-import { knowledgeSemanticDocumentId, knowledgeSemanticIdempotencyKey } from '@mastra/core/storage';
+import {
+  knowledgeSemanticDocumentId,
+  knowledgeSemanticIdempotencyKey,
+  KnowledgeConflictError,
+} from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -381,6 +385,33 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(store.deleteNodeByAddress({ source: 'github', address: 'configured:team' })).rejects.toThrow();
     });
 
+    it('rejects stale and concurrent record rescope without changing newer state', async () => {
+      const node = await store.createNode({ name: 'Rescope subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Scoped evidence', scopeIds: [PROJECT_SCOPE_ID] });
+      const attempts = [PROJECT_SCOPE_ID, OTHER_SCOPE_ID].map(scopeId => ({
+        id: record.id,
+        version: record.version,
+        scopeIds: [scopeId],
+      }));
+      const results = await Promise.allSettled(attempts.map(input => store.setRecordScopes(input)));
+      expect(results.map(result => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      const rejected = results.find(result => result.status === 'rejected');
+      expect(rejected && rejected.status === 'rejected' && rejected.reason).toBeInstanceOf(KnowledgeConflictError);
+      const before = {
+        record: await store.getRecord({ id: record.id }),
+        scopes: await store.getRecordScopeIds(record.id),
+        activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({}),
+      };
+      await expect(store.setRecordScopes(attempts[0]!)).rejects.toBeInstanceOf(KnowledgeConflictError);
+      expect({
+        record: await store.getRecord({ id: record.id }),
+        scopes: await store.getRecordScopeIds(record.id),
+        activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({}),
+      }).toEqual(before);
+    });
+
     it('accepts memberships only to live scope nodes', async () => {
       const ordinary = await store.createNode({ name: 'Ordinary', scopeIds: [PROJECT_SCOPE_ID] });
       const member = await store.createNode({ name: 'Member', scopeIds: [PROJECT_SCOPE_ID] });
@@ -404,9 +435,9 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
             resolutionScopeIds: [invalidScopeId],
           }),
         ).rejects.toThrow('Knowledge scope not found');
-        await expect(store.setRecordScopes({ id: record.id, scopeIds: [invalidScopeId] })).rejects.toThrow(
-          'Knowledge scope not found',
-        );
+        await expect(
+          store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [invalidScopeId] }),
+        ).rejects.toThrow('Knowledge scope not found');
       }
     });
 
@@ -494,7 +525,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const moved = await store.createRecord({ node: target, text: 'Move scopes', scopeIds: [PROJECT_SCOPE_ID] });
       const merged = await store.createRecord({ node: source, text: 'Merge nodes', scopeIds: [PROJECT_SCOPE_ID] });
 
-      await store.setRecordScopes({ id: moved.id, scopeIds: [OTHER_SCOPE_ID] });
+      await store.setRecordScopes({ id: moved.id, version: moved.version, scopeIds: [OTHER_SCOPE_ID] });
       await store.mergeNodes({ sourceId: source.id, targetId: target.id, sourceVersion: source.version });
 
       const keys = (await store.listSemanticOutbox()).map(entry => entry.idempotencyKey);
