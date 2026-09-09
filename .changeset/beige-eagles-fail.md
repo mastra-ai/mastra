@@ -2,9 +2,9 @@
 '@mastra/playground-ui': minor
 ---
 
-Adds `appearance="contained"` with a thin stroke or `frame="inset"` surface frame. The inset selection slides between tabs and joins the content panel with curved shoulders. Overflow tabs are available through a compact dropdown.
+Adds `appearance="contained"` to display tabs with a frame around the content panel. Choose `frame="stroke"` for an outlined frame or `frame="inset"` for a filled frame. Tabs that do not fit the available width move into a `+N` dropdown.
 
-Set `attention` on a tab to pulse its full surface briefly, then retain a tint until the caller clears it. Reduced motion disables the pulse. Storybook controls demonstrate overflow, closable tabs, and attention.
+Set `attention` on a tab to show a line along its bottom edge. The line pulses briefly, then stays visible until you clear the prop. Users who prefer reduced motion see a static line.
 
 ```tsx
 <Tabs defaultTab="overview" appearance="contained" frame="inset">

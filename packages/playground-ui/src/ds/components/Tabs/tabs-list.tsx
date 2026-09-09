@@ -62,13 +62,18 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
       const existing = previous.find(item => item.value === tab.value);
       if (
         existing &&
+        existing.element === tab.element &&
         existing.width === tab.width &&
         existing.label === tab.label &&
         existing.disabled === tab.disabled &&
         existing.onClick === tab.onClick
       )
         return previous;
-      return existing ? previous.map(item => (item.value === tab.value ? tab : item)) : [...previous, tab];
+      const next = existing ? previous.map(item => (item.value === tab.value ? tab : item)) : [...previous, tab];
+      return next.sort((a, b) => {
+        if (a.element === b.element) return 0;
+        return a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
     });
   }, []);
   const unregister = useCallback(
@@ -86,11 +91,13 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
     return () => observer.disconnect();
   }, [contained]);
   const gap = tabs?.frame === 'inset' ? 4 : 0;
+  const frameReserve = tabs?.frame === 'inset' ? 30 : 0;
   const hiddenValues = useMemo(() => {
     const hidden = new Set<string>();
     if (!contained || available === null) return hidden;
-    const total = measurements.reduce((sum, tab) => sum + tab.width + gap, 30);
-    let remaining = available - (total > available ? 52 : 0) - 30;
+    const tabTotal = measurements.reduce((sum, tab) => sum + tab.width, 0) + gap * Math.max(measurements.length - 1, 0);
+    if (tabTotal + frameReserve <= available) return hidden;
+    let remaining = available - frameReserve - 48;
     const active = measurements.find(tab => tab.value === tabs?.value);
     if (active) remaining -= active.width + gap;
     let full = false;
@@ -102,7 +109,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
       } else remaining -= tab.width + gap;
     }
     return hidden;
-  }, [contained, available, measurements, gap, tabs?.value]);
+  }, [contained, available, measurements, gap, frameReserve, tabs?.value]);
   const hiddenTabs = measurements.filter(tab => hiddenValues.has(tab.value));
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))

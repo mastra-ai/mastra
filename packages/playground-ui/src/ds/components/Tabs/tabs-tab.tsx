@@ -41,6 +41,7 @@ export const Tab = ({
         label: children,
         disabled: disabled ?? false,
         width: element.getBoundingClientRect().width,
+        element,
         onClick,
       });
     const observer = new ResizeObserver(measure);

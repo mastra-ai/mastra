@@ -48,6 +48,61 @@ describe('Tab', () => {
     expect(screen.queryByText('Needs attention')).toBeNull();
     expect(tab.querySelector('[data-slot="tab-attention"]')).toBeNull();
   });
+  it.each([
+    ['stroke', 200],
+    ['inset', 234],
+  ] as const)('keeps exactly fitting %s tabs out of the overflow menu', (frame, width) => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    render(
+      <Tabs defaultTab="first" appearance="contained" frame={frame}>
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+      </Tabs>,
+    );
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+  });
+
+  it('keeps an inserted tab ahead of later tabs in overflow order', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    const content = (feedback: boolean) => (
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          {feedback && <Tab value="feedback">Feedback</Tab>}
+          <Tab value="scores">Scores</Tab>
+        </TabList>
+      </Tabs>
+    );
+    const { rerender } = render(content(false));
+    rerender(content(true));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Feedback']);
+    fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+    expect(screen.getByRole('menuitem', { name: 'Scores' })).toBeTruthy();
+  });
+
+  it('restores all tabs when contained appearance changes to default', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    const content = (appearance: 'default' | 'contained') => (
+      <Tabs defaultTab="first" appearance={appearance} frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+      </Tabs>
+    );
+    const { rerender } = render(content('contained'));
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    rerender(content('default'));
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /more tabs/ })).toBeNull();
+  });
+
   it('moves overflowed tabs into the menu and promotes the selected item', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
@@ -87,7 +142,7 @@ describe('Tab', () => {
         unobserve() {}
       },
     );
-    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
     render(
       <Tabs defaultTab="first" appearance="contained">
@@ -105,7 +160,7 @@ describe('Tab', () => {
   });
 
   it('leaves controlled selection with the caller when an overflow item is chosen', () => {
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
     const onValueChange = vi.fn();
     const content = (value: string) => (

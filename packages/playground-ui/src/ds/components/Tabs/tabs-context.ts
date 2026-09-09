@@ -6,6 +6,7 @@ export type TabMeasurement = {
   label: ReactNode;
   disabled: boolean;
   width: number;
+  element: HTMLElement;
   onClick?: () => void;
 };
 
