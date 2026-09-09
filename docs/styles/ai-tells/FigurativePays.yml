@@ -1,0 +1,113 @@
+---
+extends: existence
+message: "AI money metaphor: '%s'. Name the plain benefit or cost. Disable this rule for finance or commerce prose."
+level: error
+nonword: true
+ignorecase: true
+# The transaction figure: effort framed as spending, benefit as a purchase,
+# consequence as a bill. AI prose reaches for it whenever a tradeoff needs
+# stating, and the figure lets the sentence skip the number or the name the
+# reader wanted ("the discipline pays off," "you pay the price later," "this
+# buys you flexibility").
+#
+# The discriminator throughout is the unnamed transaction. Pre-LLM technical
+# prose uses the same vocabulary precisely, and always names what is traded:
+# "at the cost of performance," "at the expense of updates" (nine matches
+# across the Go standard library), "we don't pay the price of building the
+# map," "that will come at a cost of extra complexity." Every one carries an
+# "of" complement, so the priced tokens below exclude "of" with a lookahead
+# and the named-tradeoff idiom stays entirely uncovered. What the rule flags
+# is the transaction asserted with the goods left blank.
+#
+# Ownership splits with the neighbors: "pays for itself," "pays dividends,"
+# and "pays its rent" stay in AnthropomorphicJustification; the sentence-final
+# mic drops "It pays off." and "The habit pays off." stay in MicDrop, and the
+# determiner-gated token here fires on that last one too, which is by
+# design, the same both-alerts call FillerPhrases documents; "comes at a
+# cost" stays in FigurativeIdioms with the other fixed idioms; "cheap wins"
+# stays in FigurativeWins; and "costs little" stays in FigurativeIdioms.
+#
+# Every token below measured zero across the Go and Python standard
+# libraries except "buy us," which appears once ("Perhaps that doesn't buy
+# us much"), the established programmer idiom this rule flags on purpose.
+# The literal senses (a loan paid off, a fair price paid, coffee bought for
+# a friend) belong to finance and commerce writing, which disables the rule.
+tokens:
+  # --- The determiner-gated payoff: an artifact's worth asserted as a
+  # return on investment, with an optional modifier word between the
+  # determiner and the subject ("the upfront work pays off," "each
+  # rehearsal paid off").
+  - '\b(?:a|an|the|this|that|these|those|its|their|our|your|each|every) (?:[a-z]+ )?[a-z]+ (?:pays?|paid|paying) off\b'
+
+  # --- The unnamed price: consequence as a bill with no line items
+  # ("you pay the price later," "skip the check and pay a steep price").
+  # The "of" complement is the named tradeoff pre-LLM prose writes, so
+  # the lookahead leaves it alone.
+  - '\bpay(?:s|ing)? the price\b(?! of)'
+  - '\bpaid the price\b(?! of)'
+  - '\bpay(?:s|ing)? a (?:[a-z]+ )?price\b(?! of)'
+  - '\bpaid a (?:[a-z]+ )?price\b(?! of)'
+
+  # --- The same invoice spelled with "cost," and the free lunch: "never
+  # pays that cost," "at no cost," "costs nothing," "would pay to
+  # compare," "spends work." A documentation-corpus audit (2026-09) found
+  # the cost spellings escaping alongside the price ones; every token
+  # measures zero across the Go and Python standard libraries except
+  # "costs nothing" at one ("this if and the condition cost nothing").
+  # Bare "cheap" stays out, matching fifty-two times: "cheap to copy" is how
+  # both corpora describe a cost they measured, and no complement separates
+  # it from the AI grade. The negated-object spelling "costs nothing" is
+  # NegatedObject's; this rule takes the prepositional and modal forms.
+  - '\bpay(?:s|ing)? (?:the|that|this|its|their|an?) (?:[a-z]+ )?cost\b(?! of)'
+  - '\bpaid (?:the|that|this|its|their|an?) (?:[a-z]+ )?cost\b(?! of)'
+  - '\bat no (?:cost|charge|expense)\b'
+
+  # --- The count as an invoice: a false-positive tally, a line count,
+  # or a match count presented as a price ("costs thirteen corpus
+  # hits," "the cost is five hits," "at zero corpus hits," "the cost is
+  # real"). This package's own rule comments and README rows wrote the
+  # formula for years, and the maintainer flagged it as the "measured
+  # cost" family's third limb (2026-09): a number framed as a bill
+  # rather than reported. Every spelling measures zero across the seven
+  # pre-LLM corpora, which report a count as a count. The plain
+  # sentence says what matched and how often.
+  - '\bcosts? (?:about |roughly |around |at most |at least |under |over |only |just |another |a further )?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|a hundred|hundreds|dozens?|a few|several|no|nothing|zero) (?:[a-z-]+ ){0,2}(?:hits?|matches|alerts?|findings?|false positives|lines|sentences|paragraphs)\b'
+  - '\bthe cost (?:is|was|comes to|stays|remains) (?:(?:about |roughly |around |under |over )?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|a hundred|hundreds)|a few|several|real|nonzero|zero)\b(?! (?:seconds?|minutes?|hours?|days?|weeks?|months?|years?|dollars?|cents?|bytes?|cycles?|percent|times (?:the|that|as))\b)'
+  - '\bat (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|a hundred|hundreds|zero|about \w+|roughly \w+|around \w+) (?:[a-z-]+ )?(?:corpus )?hits?\b(?! (?:per|a|an|each|every)\b)'
+  - '\bcosts? (?:about |roughly |around )?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|a hundred)(?=[.,;:)(]| \(| (?:each|apiece|across|in the|on the|and|but|all|every|most|mostly|none)\b)'
+  - '\b(?:would|could|might|may) pay to\b'
+  - '\bspend(?:s|ing)? (?:work|effort|a budget|budget|attention|cycles|compute|tokens|a round-?trip|round-?trips)\b'
+  - '\bspent (?:work|effort|a budget|budget|attention|cycles|compute|tokens|a round-?trip|round-?trips)\b'
+
+  # --- The purchase: a change "buys" a beneficiary something, or buys an
+  # abstract good no register sells ("this buys you flexibility," "the
+  # cache buys us time," "the shim bought breathing room").
+  - '\b(?:buys?|bought|buying) (?:you|us|them)\b'
+  - '\b(?:buys?|bought|buying) (?:a little |some |extra |more )?(?:time|breathing room|headroom|goodwill|leeway|flexibility|slack)\b'
+
+  # --- Fixed money idioms, all measured at zero across both standard
+  # libraries: entry framed as a ticket, obligation as an invoice,
+  # opportunism as a withdrawal, importance as a market signal.
+  - '\bprice of admission\b'
+  - '\bfoots? the bill\b'
+  - '\bfooting the bill\b'
+  - '\bputs? a premium on\b'
+  - '\bputting a premium on\b'
+  - '\bcash(?:es|ed|ing)? in on\b'
+
+  # --- The settled invoice, here with the other money figures now that
+  # FigurativeSettles owns the rest of the verb: a measurement or a
+  # check "settles" a cost the way a diner settles a bill ("the corpus
+  # run settled the cost," "the libraries settled each token's cost,"
+  # "the audit squares the ledger"). The determiner set matches the
+  # payoff token above and the optional middle word takes a possessive,
+  # the two openings that let "settled each token's cost" through the
+  # narrower token this family had in AnthropomorphicJustification.
+  # Every token measured zero across the Go and Python standard
+  # libraries. The negotiation sense takes "on" ("settled on a price")
+  # and stays clear; the literal payment belongs to restaurant and
+  # accounting prose, which disables the rule.
+  - '\bsettl(?:es?|ed|ing) (?:a|an|the|this|that|these|those|its|their|our|your|each|every) (?:[a-z]+(?:''s)? )?(?:costs?|prices?|bill|tab|debts?)\b'
+  - '\bsettl(?:es?|ed|ing) up\b'
+  - '\bsquar(?:es?|ed|ing) (?:the|that|this|its|each|every) (?:[a-z]+(?:''s)? )?(?:bill|ledger|books|account|debts?)\b'
+  - '\bbalanc(?:es?|ed|ing) the books\b'

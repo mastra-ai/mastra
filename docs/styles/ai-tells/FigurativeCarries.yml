@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. State the consequence or the obligation directly. Disable this rule for freight or logistics prose."
+message: "AI overused verb: '%s'. Name what it contains or entails directly. Disable this rule for freight or logistics prose."
 level: error
 nonword: true
 ignorecase: true
@@ -8,10 +8,66 @@ ignorecase: true
 # consequence: a term "carries baggage," a change "carries risk," an approach
 # "carries a caveat." Literal carrying is everywhere (people carry bags,
 # trucks carry freight), so the complement after the verb is the
-# discriminator, in the FigurativeSits mold. "Carries its weight" stays in
-# AnthropomorphicJustification; the tokens here avoid that span so the two
-# rules never double-flag. Freight or logistics writing disables the whole
-# rule.
+# discriminator, in the FigurativeSits mold, for the verb-first tokens. The
+# last token flips the discriminator to a determiner-gated open subject with
+# the common literal carriers listed as exceptions, in the FigurativeLands
+# mold; the exceptions below apply inside that token's span. "Carries its
+# weight" stays in AnthropomorphicJustification; the tokens here avoid that
+# span so the two rules never double-flag. Freight or logistics writing
+# disables the whole rule.
+exceptions:
+  # Vehicles and conveyances
+  - "(?i)trucks?"
+  - "(?i)bus(?:es)?"
+  - "(?i)vans?"
+  - "(?i)ships?"
+  - "(?i)vessels?"
+  - "(?i)boats?"
+  - "(?i)trains?"
+  - "(?i)ferr(?:y|ies)"
+  - "(?i)planes?"
+  - "(?i)aircraft"
+  - "(?i)carts?"
+  - "(?i)conveyors?"
+  # People who carry
+  - "(?i)couriers?"
+  - "(?i)porters?"
+  - "(?i)drivers?"
+  - "(?i)soldiers?"
+  - "(?i)players?"
+  - "(?i)patients?"
+  - "(?i)mothers?"
+  - "(?i)fathers?"
+  - "(?i)wom[ae]n"
+  - "(?i)m[ae]n"
+  - "(?i)person"
+  - "(?i)people"
+  # Biology and disease vectors
+  - "(?i)virus(?:es)?"
+  - "(?i)mosquito(?:es)?"
+  - "(?i)ticks?"
+  - "(?i)genes?"
+  - "(?i)alleles?"
+  - "(?i)chromosomes?"
+  - "(?i)cells?"
+  - "(?i)blood"
+  - "(?i)proteins?"
+  - "(?i)bacteria"
+  - "(?i)carriers?"
+  # Physical media
+  - "(?i)wires?"
+  - "(?i)cables?"
+  - "(?i)currents?"
+  - "(?i)winds?"
+  - "(?i)rivers?"
+  - "(?i)water"
+  - "(?i)air"
+  - "(?i)waves?"
+  # Corpus-attested prose carriers: a cited paper, and Go's own Context
+  # API, whose documentation says a Context carries deadlines and values.
+  - "(?i)papers?"
+  - "(?i)contexts?"
+  - "(?i)objects?"
 tokens:
   # --- Freighted significance: the abstraction hauls invisible cargo
   # ("carries weight in the review," "carries implications," "the term
@@ -22,10 +78,107 @@ tokens:
 
   # --- Attached fine print: the change ships with a warning label
   # ("carries a caveat," "carries a cost," "carries a penalty"). The
-  # sibling of the bare grant in AnthropomorphicJustification, which flags
-  # what the artifact earns rather than what it lugs around.
+  # sibling of the earning figure in FigurativeEarns, which flags what
+  # the artifact earns rather than what it lugs around.
   - "\\bcarr(?:y|ies|ied|ying) (?:a|an|the) (?:caveat|warning|cost|price|price tag|penalty|footnote|asterisk|catch|downside|tradeoff|trade-off)\\b"
 
   # --- Heroics: one component drags the rest across the finish line
   # ("the cache carries the team," "one test carries the suite").
   - "\\bcarr(?:y|ies|ied|ying) the (?:day|team|torch|banner|mantle|load|conversation|narrative|argument|story|suite|whole \\w+)\\b"
+
+  # --- Content possession: an inanimate component treated as a vessel that
+  # hauls abstract cargo rather than one that contains or transmits it ("the
+  # daemon carries no pipeline logic," "the module carries the validation
+  # logic," "the packet carries the payload," "the signal carries data").
+  # The transport framing is the tell in either domain, so the code-structure
+  # nouns and the networking data nouns are both in the set. The "(?!out\\b)"
+  # keeps the phrasal "carries out the logic" (execute) from matching, and
+  # the head-noun set excludes physical objects, so literal "carries freight"
+  # stays quiet. An optional determiner and one modifier word sit between the
+  # verb and the head noun.
+  - "\\bcarr(?:y|ies|ied|ying) (?!out\\b)(?:no |a |an |any |little |the |all the |its |their |extra |additional |significant |real |actual |meaningful |core )?(?:[a-z]+ )?(?:logic|functionality|behaviors?|behaviours?|semantics|side[ -]effects?|state|payloads?|data|traffic|tokens?|headers?|cookies?|signals?|metadata|information)\\b"
+
+  # --- Rule possession: a file or section treated as the bearer of a policy
+  # rather than the place the policy is written ("the lower block carries the
+  # pattern for this case," "the config carries the exemption," "the schema
+  # carries the constraint"). Distinct from the content-possession token
+  # above, which frames the subject as a vessel hauling data; here the cargo
+  # is a rule, and "contains" or "defines" is the word that was avoided. The head
+  # nouns are policy and schema terms with no physical sense, so literal
+  # freight ("the truck carries the load") cannot reach them. The lookahead
+  # excludes both phrasal verbs that would otherwise slip through the
+  # modifier slot: "carries out the policy" (execute) and "carried over
+  # settings from the previous release" (bring forward).
+  #
+  # The known false positive is arithmetic writing, where "carry" means the
+  # digit propagated to the next column rather than the verb of possession
+  # ("carry the constraint" in a solver comment). Numeric and cryptographic
+  # prose already disables this rule for the freight tokens above.
+  - "\\bcarr(?:y|ies|ied|ying) (?!out\\b|over\\b)(?:no |a |an |any |the |its |their |that |this |the same |every )?(?:[a-z]+ )?(?:pattern|rule|exemption|exception|convention|constraint|requirement|policy|contract|guarantee|invariant|override|precedent|assumption|default|setting)s?\\b"
+
+  # --- Typographic cargo: the freight is a mark on the page or in a name
+  # ("carries a repotools: prefix," "none of the three carries a suffix,"
+  # "the release carries a tag"). These head nouns leaked through the
+  # policy-noun set above constantly in agent-written docs, which is what
+  # put them here. "Annotation" is deliberately absent: Python's own
+  # documentation says a function "may carry a return annotation," so that
+  # noun floods. The rest measured zero across the Go and Python standard
+  # libraries.
+  - "\\bcarr(?:y|ies|ied|ying) (?!out\\b|over\\b)(?:no |a |an |any |the |its |their |that |this |every )?(?:[a-z]+ )?(?:prefix(?:es)?|suffix(?:es)?|tags?|labels?|markers?|trailers?|templates?|stamps?)\\b"
+
+  # --- Negated cargo: the spec-sheet negation with the object left open
+  # ("it carries no counts and no dates," "carries zero overhead").
+  # NegatedObject leaves "carries no" to this rule, but the tokens above
+  # gate on head-noun lists or on a determiner-fronted subject, so a
+  # pronoun subject with an unlisted noun slipped past both. The corpora
+  # show the open token once ("carry no data," which the content token
+  # above flags on its own), so the object stays open, with
+  # NegatedObject's own lookahead gates keeping degree idioms ("carries
+  # no more than three") and literal counts ("carries zero or more")
+  # quiet. The object slot matches NegatedObject's exactly, quoted and
+  # backticked objects included: one quote mark may open the object, and
+  # in markdown a backticked object becomes the asterisk run Vale's
+  # parser masks the code span to, which is what the alternation matches
+  # ("carries no `counts`"). Both spellings measure zero in the corpora,
+  # like the bare one.
+  - "\\bcarr(?:y|ies|ied|ying) (?:no (?!(?:one|matter|more|less|fewer|longer|sooner|later|earlier|better|worse|faster|slower|higher|lower|further|deeper|closer|harder|easier)\\b)|zero (?!(?:or|value|values|to)\\b))(?:['\"‘“`]?[a-z][-a-z]*\\b|\\*+)"
+
+  # --- Mirrored possession: the same-construction sibling of FigurativeHolds
+  # ("carries the same caveat," "carries a similar risk"). The comparison
+  # word is the tell, so the object stays open.
+  - "\\bcarr(?:y|ies|ied|ying) (?:the same|a similar|an identical|a matching)\\b"
+
+  # --- Open-subject conveyance: any determiner-gated subject as the
+  # bearer, with the complement left open ("the manifest carries the pin,"
+  # "each zip carries its own README," "this distinction carries"). A
+  # curated subject list proved unmaintainable here: agent prose attaches
+  # this verb to an open-ended set of document and config nouns, so the
+  # determiner and the inflected verb carry the discriminator between them,
+  # in the widened-FigurativeSits mold, and the exceptions above name the
+  # common literal carriers. The bare infinitive is left out because
+  # arithmetic prose puts the carry noun in that slot ("the final carry,"
+  # "the hardware carry"), the same collision that keeps it out of
+  # CommitFigurativeVerbs; requiring a subject word between the determiner
+  # and the verb also keeps the plural noun ("the carries are summed") from
+  # matching. The lookahead excludes the phrasal "carries out" and "carried
+  # over." Rare literal carriers fire, so freight, biology, or electrical
+  # writing disables the rule; the one known prose leak left is journalism's
+  # conveyance sense ("the site carries the story"), which media writing
+  # disables too.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all) (?:[a-z]+ )?[a-z]+ carr(?:ies|ied|ying)(?!\\s+(?:out|over)\\b)\\b"
+
+  # --- The bare "carry" the token above leaves out, admitted where a
+  # plural subject or a relative pronoun proves it is the verb ("the
+  # machine formats carry the score columns," "the blobs that carry no
+  # state rows," "the tier other stages carry"). A documentation-corpus
+  # audit (2026-09) found the plural-subject construction escaping every token
+  # here, the verb being the one writers reach for once a reviewer has
+  # taken "holds" away. The determiner-gated plural measures one corpus
+  # hit ("These embedded types carry methods with them"), the
+  # relative-pronoun token two, both the arithmetic verb ("which will
+  # carry if src != 0"), which the trailing lookahead now refuses along
+  # with the phrasal forms. The bare plural with no determiner stays out:
+  # the arithmetic noun sits in that slot sixteen times ("returns the
+  # carry," "output 0 is carry/borrow").
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|most|some|many|two|three|several|other) (?:[a-z]+ )?[a-z]+s carry\\b(?! (?:out|over|on|if|when|bits?|flags?|chains?|in|save|propagation|lookahead|select)\\b)"
+  - "\\b(?:that|which|who) (?:[a-z]+ )?carry\\b(?! (?:out|over|on|if|when|bits?|flags?|chains?|in|save|propagation|lookahead|select)\\b|[.,;:)/])"
