@@ -100,7 +100,7 @@ function completeIssue(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:factory-complete-issue`,
     role: 'triage',
     skillName: 'factory-complete-issue',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+    arguments: sourceRef(context.item),
   } as const;
 }
 

@@ -278,17 +278,30 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-// GitLab intake (issues in). GitLab does NOT provide the source-control
-// capability — the factory resolves its source-control owner by the literal
-// integration id `github` — so merge requests keep shipping through GitHub,
-// the same split Linear already runs under. Either credential path enables it:
-// a complete OAuth app (per-user connect flow) or a static group/personal
-// access token for single-team self-hosted installs.
+// GitLab intake (issues in), dispatched onto work-item rules by its webhook.
+// GitLab does NOT provide the source-control capability — the factory resolves
+// its source-control owner by the literal integration id `github` — so merge
+// requests keep shipping through GitHub, the same split Linear already runs
+// under. Either credential path enables it: a complete OAuth app (per-user
+// connect flow) or a static group/personal access token for single-team
+// self-hosted installs.
+//
+// GITLAB_WEBHOOK_SECRET is required alongside either path: the webhook route
+// authenticates deliveries with that secret alone, so the integration refuses
+// to construct without one rather than mounting an unauthenticated route that
+// can move cards.
 const gitlabClientId = process.env.GITLAB_CLIENT_ID?.trim();
 const gitlabClientSecret = process.env.GITLAB_CLIENT_SECRET?.trim();
 const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabWebhookSecret = process.env.GITLAB_WEBHOOK_SECRET?.trim();
+const gitlabCredentialed = Boolean((gitlabClientId && gitlabClientSecret) || gitlabAccessToken);
+if (gitlabCredentialed && !gitlabWebhookSecret) {
+  // Loud at boot: silently skipping a configured integration would look like
+  // GitLab intake is running when no route is mounted at all.
+  throw new Error('GitLab is configured but GITLAB_WEBHOOK_SECRET is unset — the webhook cannot be authenticated.');
+}
 const gitlab =
-  (gitlabClientId && gitlabClientSecret) || gitlabAccessToken
+  gitlabCredentialed && gitlabWebhookSecret
     ? new GitLabIntegration({
         baseUrl: process.env.GITLAB_BASE_URL?.trim(),
         clientId: gitlabClientId,
@@ -296,7 +309,7 @@ const gitlab =
         scope: process.env.GITLAB_OAUTH_SCOPE?.trim(),
         accessToken: gitlabAccessToken,
         publicUrl: process.env.MASTRACODE_PUBLIC_URL?.trim(),
-        webhookSecret: process.env.GITLAB_WEBHOOK_SECRET?.trim(),
+        webhookSecret: gitlabWebhookSecret,
       })
     : undefined;
 

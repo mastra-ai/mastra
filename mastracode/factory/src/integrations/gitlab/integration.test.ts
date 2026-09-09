@@ -1,6 +1,8 @@
+import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth } from '../../routes/test-utils.js';
+import { createBoardRegistry } from '../../boards/index.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
 import { GitLabIntegration } from './integration.js';
@@ -21,6 +23,7 @@ function integration(options: { accessToken?: string; withOAuthApp?: boolean } =
   const gitlab = new GitLabIntegration({
     ...(options.withOAuthApp === false ? {} : { clientId: 'gl_client', clientSecret: 'gl_secret' }),
     ...(options.accessToken ? { accessToken: options.accessToken } : {}),
+    webhookSecret: 'hook-secret',
   });
   gitlab.initialize({
     storage: seed.integrations.forIntegration('gitlab'),
@@ -73,20 +76,34 @@ beforeEach(async () => {
 // ── construction ─────────────────────────────────────────────────────────
 describe('construction', () => {
   it('rejects a half-configured instance at boot rather than per request', () => {
-    expect(() => new GitLabIntegration({})).toThrow(/accessToken or a complete OAuth app/);
-    expect(() => new GitLabIntegration({ clientId: 'gl_client' })).toThrow(/accessToken or a complete OAuth app/);
+    expect(() => new GitLabIntegration({ webhookSecret: 's' })).toThrow(/accessToken or a complete OAuth app/);
+    expect(() => new GitLabIntegration({ clientId: 'gl_client', webhookSecret: 's' })).toThrow(
+      /accessToken or a complete OAuth app/,
+    );
   });
 
   it('accepts either a static token or a complete OAuth app', () => {
-    expect(() => new GitLabIntegration({ accessToken: 'pat' })).not.toThrow();
-    expect(() => new GitLabIntegration({ clientId: 'a', clientSecret: 'b' })).not.toThrow();
+    expect(() => new GitLabIntegration({ accessToken: 'pat', webhookSecret: 's' })).not.toThrow();
+    expect(() => new GitLabIntegration({ clientId: 'a', clientSecret: 'b', webhookSecret: 's' })).not.toThrow();
+  });
+
+  it('refuses to construct without a webhook secret', () => {
+    // The webhook route is always mounted, bypasses user auth, and dispatches
+    // rules that move cards. An unset secret would mount it open, so this has
+    // to fail at boot rather than per delivery.
+    expect(() => new GitLabIntegration({ accessToken: 'pat' } as never)).toThrow(/requires a webhookSecret/);
+    expect(() => new GitLabIntegration({ accessToken: 'pat', webhookSecret: '   ' })).toThrow(
+      /requires a webhookSecret/,
+    );
   });
 
   it('only demands a stable state signer when an OAuth flow exists', () => {
     // A static-token deploy never signs OAuth state, so forcing a stable signer
     // on it would be a boot requirement with nothing behind it.
-    expect(new GitLabIntegration({ accessToken: 'pat' }).requiresStableStateSigner).toBe(false);
-    expect(new GitLabIntegration({ clientId: 'a', clientSecret: 'b' }).requiresStableStateSigner).toBe(true);
+    expect(new GitLabIntegration({ accessToken: 'pat', webhookSecret: 's' }).requiresStableStateSigner).toBe(false);
+    expect(
+      new GitLabIntegration({ clientId: 'a', clientSecret: 'b', webhookSecret: 's' }).requiresStableStateSigner,
+    ).toBe(true);
   });
 });
 
@@ -267,6 +284,136 @@ describe('resolveIntakeDispatch', () => {
   });
 });
 
+// ── webhook route ────────────────────────────────────────────────────────
+describe('webhook route', () => {
+  const issueBody = {
+    object_kind: 'issue',
+    user: { username: 'reporter' },
+    project: { id: 42, path_with_namespace: 'acme/widgets' },
+    object_attributes: {
+      iid: 7,
+      title: 'Widget falls over',
+      url: 'https://gitlab.com/acme/widgets/-/issues/7',
+      state: 'opened',
+      action: 'open',
+      updated_at: '2026-01-02T00:00:00Z',
+    },
+  };
+
+  /**
+   * Mounts the real route on a bare Hono app. `runtime` is omitted unless a
+   * test supplies one, mirroring an intake-only host.
+   */
+  function mount(options: { withRuntime?: boolean } = {}) {
+    const gitlab = integration();
+    const app = new Hono();
+    const runtime = options.withRuntime
+      ? { configVersion: 'test-config', workItems: seed.workItems, boards: createBoardRegistry() }
+      : undefined;
+    mountApiRoutes(
+      app,
+      gitlab.routes({
+        auth: fakeRouteAuth(),
+        storage: {
+          generic: seed.integrations.forIntegration('gitlab'),
+          sourceControl: seed.sourceControl,
+          projects: seed.projects,
+          memorySettings: seed.memorySettings,
+          intake: seed.intake,
+          channelIdentity: seed.channelIdentity,
+        },
+        ...(runtime ? { runtime } : {}),
+      } as never),
+    );
+    return app;
+  }
+
+  function post(app: Hono, body: unknown, headers: Record<string, string> = {}) {
+    return app.request('/web/gitlab/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+  }
+
+  it('rejects a delivery whose token does not match', async () => {
+    const response = await post(mount(), issueBody, { 'x-gitlab-token': 'wrong' });
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects a delivery carrying no token at all', async () => {
+    // The route bypasses user auth, so an absent header must fail closed rather
+    // than short-circuit past the comparison.
+    expect((await post(mount(), issueBody)).status).toBe(401);
+  });
+
+  it('rejects an unparseable body without reaching the rules', async () => {
+    const response = await post(mount(), 'not json', { 'x-gitlab-token': 'hook-secret' });
+    expect(response.status).toBe(400);
+  });
+
+  it('acknowledges a kind Factory has no rule for', async () => {
+    // 2xx on purpose: GitLab retries non-2xx, so a pipeline hook must not
+    // become a retry loop.
+    const response = await post(
+      mount(),
+      { object_kind: 'pipeline', project: { id: 42, path_with_namespace: 'a/b' } },
+      { 'x-gitlab-token': 'hook-secret' },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, ignored: true });
+  });
+
+  it('acknowledges without dispatching when the host has no work-item runtime', async () => {
+    const response = await post(mount(), issueBody, { 'x-gitlab-token': 'hook-secret' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, ignored: true });
+  });
+
+  it('ignores a delivery for a GitLab project nothing is bound to', async () => {
+    const response = await post(mount({ withRuntime: true }), issueBody, { 'x-gitlab-token': 'hook-secret' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, event: 'issueOpened', status: 'ignored' });
+  });
+
+  it('commits a delivery for a bound project end to end', async () => {
+    const app = mount({ withRuntime: true });
+    const project = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'u1',
+      input: { name: 'Widgets', repositoryId: null },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'gitlab',
+      sourceId: '42',
+      factoryProjectId: project.id,
+      board: null,
+    });
+
+    const response = await post(app, issueBody, { 'x-gitlab-token': 'hook-secret' });
+    expect(await response.json()).toMatchObject({ ok: true, event: 'issueOpened', status: 'committed' });
+    // Proof the HTTP edge reaches storage: the decision is queued for the
+    // dispatcher against the bound project.
+    const [decision] = await seed.workItems.listDeferredDecisions('org1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue' });
+  });
+
+  it('fails the delivery so GitLab retries when ingest throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const app = mount({ withRuntime: true });
+      vi.spyOn(seed.intake, 'listBindingsByExternalSource').mockRejectedValue(new Error('storage down'));
+      const response = await post(app, issueBody, { 'x-gitlab-token': 'hook-secret' });
+      // 500, not 200: a storage blip must not silently drop a card transition.
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: 'ingest_failed' });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 // ── diagnostics ──────────────────────────────────────────────────────────
 describe('diagnostics', () => {
   it('reports configuration without leaking credential values', () => {
@@ -289,6 +436,7 @@ describe('diagnostics', () => {
       webhookSecretConfigured: true,
       // Intake-only for now: GitLab ships no versionControl surface.
       capabilities: { intake: true, versionControl: false },
+      gitlabRuleEvents: ['issueOpened', 'issueEdited', 'issueClosed', 'issueNoteCreated'],
     });
   });
 });

@@ -139,6 +139,15 @@ export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 export const FACTORY_LINEAR_EVENTS = ['issueObserved', 'issueClosed'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
+/**
+ * GitLab webhook deliveries, after `object_kind` and `action` are collapsed
+ * into one event name. Narrower than GitHub's set because GitLab intake reads
+ * issues and their notes only — merge-request events arrive under their own
+ * family.
+ */
+export const FACTORY_GITLAB_EVENTS = ['issueOpened', 'issueEdited', 'issueClosed', 'issueNoteCreated'] as const;
+export type FactoryGitlabEventName = (typeof FACTORY_GITLAB_EVENTS)[number];
+
 export type FactoryRuleJsonValue =
   | null
   | boolean
@@ -167,7 +176,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'linear' | 'gitlab' | 'rule';
   id: string;
 }
 
@@ -298,6 +307,48 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
     labels: readonly string[];
     createdAt: string;
     updatedAt: string;
+  };
+}
+
+export interface FactoryGitlabRuleContext extends FactoryRuleContextBase {
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryGitlabEventName;
+  /** GitLab's delivery identity: `object_kind` plus the issue's `updated_at`. */
+  deliveryId: string;
+  project: { id: number; pathWithNamespace: string };
+  issue: {
+    /** Project-scoped issue number — what GitLab shows and its API paths take. */
+    iid: number;
+    /** `${projectId}!${iid}`, the ref the intake capability round-trips. */
+    ref: string;
+    title: string;
+    url: string;
+    state: 'opened' | 'closed';
+    stateType: string;
+    author: string | null;
+    assignees?: readonly string[];
+    labels?: readonly string[];
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  /** Present on `issueNoteCreated`: the note that triggered the delivery. */
+  issueNote?: {
+    id: number;
+    body: string;
+    url?: string;
+    author?: string;
+    createdAt?: string;
+    /**
+     * Factory posts its own notes through the connected GitLab account, so its
+     * own comment comes back as a delivery. Handlers must not answer their own
+     * message. `false` when authorship cannot be resolved, matching GitHub's
+     * fail-open guard.
+     */
+    factoryAuthored: boolean;
   };
 }
 

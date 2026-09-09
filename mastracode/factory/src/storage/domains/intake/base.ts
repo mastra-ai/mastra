@@ -247,6 +247,30 @@ export class IntakeStorage extends FactoryStorageDomain {
     return rows.map(row => row.source_id);
   }
 
+  /**
+   * Every org that has bound one external source id, across all orgs.
+   *
+   * Deliberately un-scoped, and the only read here that is. A provider webhook
+   * arrives with no tenant — GitLab identifies the project and nothing else —
+   * so resolving the delivery to an org requires searching bindings by source
+   * id. Mirrors `sourceControl.projectRepositories.listByExternalRepository`,
+   * which the GitHub webhook uses for the same reason. Callers must treat the
+   * result as a fan-out, not as a permission grant.
+   */
+  async listBindingsByExternalSource({
+    integrationId,
+    sourceId,
+  }: {
+    integrationId: string;
+    sourceId: string;
+  }): Promise<(IntakeSourceBinding & { orgId: string })[]> {
+    const rows = await this.#db.findMany<IntakeSourceBindingRow & { org_id: string }>('intake_source_bindings', {
+      integration_id: integrationId,
+      source_id: sourceId,
+    });
+    return rows.map(row => ({ ...toIntakeSourceBinding(row), orgId: row.org_id }));
+  }
+
   /** The binding for one source, or `null` when it is unbound. */
   async getBinding({
     orgId,

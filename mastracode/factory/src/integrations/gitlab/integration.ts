@@ -6,10 +6,14 @@
  * with explicit credentials, and passes it to `MastraFactory` via
  * `integrations: [...]`. No other module reads `GITLAB_*` env vars.
  *
- * SCOPE: intake only (issues in). It deliberately does NOT implement the
- * `versionControl` capability — the factory resolves its source-control owner
- * by the literal integration id `"github"` (see `factory.js` and
- * `rules/types.js`), so merge requests, branches, and clone auth cannot be
+ * SCOPE: issues in, as a first-class rule family. Webhook deliveries for
+ * issues and their notes are dispatched onto work-item rules (`./rules.js`),
+ * so a GitLab issue materializes, refreshes, and retires a Work card the way a
+ * GitHub issue does.
+ *
+ * It does NOT yet implement the `versionControl` capability — the factory
+ * resolves its source-control owner by the literal integration id `"github"`
+ * (see `factory.js`), so merge requests, branches, and clone auth cannot be
  * served from here today. The supported shape is GitLab issues in, GitHub pull
  * requests out — the same split Linear already runs under.
  *
@@ -54,6 +58,7 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext } from '../base.js';
 import { GitLabClient, parseIssueRef, type GitLabIssue } from './client.js';
+import { resolveGitlabRules, type GitlabEventRules, type GitlabRuleOverrides } from './default-rules.js';
 import { toIntakeIssue, toIntakeIssueDetail, toIntakeItem, toStateEvent } from './intake.js';
 import {
   buildAuthorizeUrl,
@@ -67,6 +72,8 @@ import {
   type GitLabOAuthAppConfig,
   type GitLabTokenSet,
 } from './oauth.js';
+import { attachGitlabRules } from './rules.js';
+import { parseGitlabWebhook } from './webhook.js';
 
 const DEFAULT_BASE_URL = 'https://gitlab.com';
 
@@ -78,8 +85,6 @@ const PKCE_TTL_MS = 10 * 60 * 1000;
 
 /** Tenant used when the host runs without web auth (single-user local dev). */
 const LOCAL_TENANT = { orgId: 'local', userId: 'local' } as const;
-
-
 
 export interface GitLabIntegrationOptions {
   /** Instance origin. Defaults to gitlab.com; set this for self-hosted. */
@@ -99,8 +104,17 @@ export interface GitLabIntegrationOptions {
    * factory's `publicUrl`, then to the request's own origin.
    */
   publicUrl?: string;
-  /** Shared secret compared against `X-Gitlab-Token` on the webhook route. */
-  webhookSecret?: string;
+  /**
+   * Shared secret compared against `X-Gitlab-Token` on the webhook route.
+   * Required: the webhook moves cards, and the route cannot use a user session,
+   * so this secret is the only thing authenticating a delivery.
+   */
+  webhookSecret: string;
+  /**
+   * Per-event rule overrides. A handler set to `null` disables that event
+   * without redeclaring the rest of the set.
+   */
+  rules?: GitlabRuleOverrides;
 }
 
 /** Shape this integration persists as its org-owned connection payload. */
@@ -224,7 +238,10 @@ export class GitLabIntegration implements FactoryIntegration {
   private readonly oauthApp: GitLabOAuthAppConfig | undefined;
   private readonly fallbackToken: string | undefined;
   private readonly configuredPublicUrl: string | undefined;
-  private readonly webhookSecret: string | undefined;
+  private readonly webhookSecret: string;
+
+  /** Resolved once at construction; read by `attachGitlabRules` per delivery. */
+  readonly rules: GitlabEventRules;
 
   /** Bound once by the factory in `prepare()`, before any surface is used. */
   private storageHandle: IntegrationStorageHandle | undefined;
@@ -257,6 +274,16 @@ export class GitLabIntegration implements FactoryIntegration {
       );
     }
 
+    const webhookSecret = options.webhookSecret?.trim();
+    if (!webhookSecret) {
+      // The webhook route is always mounted and it moves cards, but it cannot
+      // authenticate a user session — GitLab authenticates itself with this
+      // shared secret alone. Without one, any unauthenticated caller could
+      // drive the board, so a missing secret is a boot error rather than a
+      // route that quietly trusts everyone.
+      throw new Error('GitLabIntegration requires a webhookSecret — the webhook route has no other authentication.');
+    }
+
     this.baseUrl = (options.baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
     this.oauthApp =
       clientId && clientSecret
@@ -265,7 +292,8 @@ export class GitLabIntegration implements FactoryIntegration {
     this.fallbackToken = accessToken || undefined;
     this.requiresStableStateSigner = Boolean(this.oauthApp);
     this.configuredPublicUrl = options.publicUrl?.trim().replace(/\/+$/, '') || undefined;
-    this.webhookSecret = options.webhookSecret?.trim() || undefined;
+    this.webhookSecret = webhookSecret;
+    this.rules = resolveGitlabRules(options.rules);
 
     // Bound as arrow properties so `this` survives the factory destructuring
     // the capability off the instance — the same idiom LinearIntegration uses.
@@ -280,11 +308,7 @@ export class GitLabIntegration implements FactoryIntegration {
     };
   }
 
-  initialize(args: {
-    storage: IntegrationStorageHandle;
-    projects: FactoryProjectsStorage;
-    auth: RouteAuth;
-  }): void {
+  initialize(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void {
     this.storageHandle = args.storage;
     this.projects = args.projects;
     this.auth = args.auth;
@@ -305,6 +329,15 @@ export class GitLabIntegration implements FactoryIntegration {
    * The org's usable credential: stored OAuth connection (refreshed when due)
    * first, configured static token second.
    */
+  /**
+   * Username of the account this org's Factory acts as, when the connection
+   * records one. Used to recognize Factory's own webhook deliveries. Resolved
+   * from stored connection data only — no API call on the webhook path.
+   */
+  async connectedAccount(orgId: string): Promise<string | undefined> {
+    return readConnectionData((await this.storageHandle?.connections.get(orgId))?.data)?.connectedAs;
+  }
+
   private async resolveConnectionData(orgId: string): Promise<GitLabConnectionData | null> {
     const stored = readConnectionData((await this.storageHandle?.connections.get(orgId))?.data);
 
@@ -345,7 +378,10 @@ export class GitLabIntegration implements FactoryIntegration {
         console.warn(`[gitlab] token refresh failed for org ${orgId} — reconnect required.`, error);
         return null;
       } finally {
-        // MUTANT: cleanup removed
+        // Clearing the entry is what makes a retry possible: without it a
+        // rejected attempt would be served from the map forever, latching a
+        // transient refresh failure into a permanently disconnected org.
+        this.refreshInFlight.delete(orgId);
       }
     })();
 
@@ -426,12 +462,7 @@ export class GitLabIntegration implements FactoryIntegration {
     return { items, nextCursor };
   }
 
-  private async listIssues({
-    connection,
-    sourceIds,
-    labels,
-    cursor,
-  }: ListIntakeIssuesInput): Promise<IntakeIssuePage> {
+  private async listIssues({ connection, sourceIds, labels, cursor }: ListIntakeIssuesInput): Promise<IntakeIssuePage> {
     if (sourceIds.length === 0) return { issues: [], nextCursor: null };
     const client = this.clientForConnection(connection);
 
@@ -522,9 +553,7 @@ export class GitLabIntegration implements FactoryIntegration {
    * tenant-mode host requires both a signed-in user and an organization;
    * an auth-disabled host takes the single-user local path.
    */
-  private async resolveTenant(
-    c: Context,
-  ): Promise<{ orgId: string; userId: string } | { response: Response }> {
+  private async resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
     const auth = this.auth;
     if (!auth?.enabled()) return { ...LOCAL_TENANT };
     await auth.ensureUser(c);
@@ -551,6 +580,9 @@ export class GitLabIntegration implements FactoryIntegration {
     this.contextBaseUrl = ctx.baseUrl;
     this.intakeStorage = ctx.storage.intake;
     this.projectsStorage = ctx.storage.projects;
+    // Undefined when the host runs without the work-item runtime (intake-only
+    // deploys). The webhook then verifies and acknowledges without dispatching.
+    const ingestFactoryEvent = attachGitlabRules(this, ctx);
 
     return [
       registerApiRoute('/web/gitlab/status', {
@@ -834,16 +866,34 @@ export class GitLabIntegration implements FactoryIntegration {
         // session, so this route must bypass the host's user auth.
         requiresAuth: false,
         handler: async c => {
-          if (this.webhookSecret && c.req.header('x-gitlab-token') !== this.webhookSecret) {
+          // Constant-time compare: the header is attacker-supplied and a
+          // length-varying `!==` leaks the secret a byte at a time.
+          if (!safeEqual(c.req.header('x-gitlab-token') ?? '', this.webhookSecret)) {
             return c.json({ error: 'invalid_signature' }, 401);
           }
-          // TODO: map `object_kind: 'issue' | 'note'` onto work-item rules via
-          // `ctx.rules` and signal live sessions through `ctx.controller`. The
-          // secret check above is optional only because this handler does
-          // nothing yet — the moment payloads drive rules, `webhookSecret` must
-          // become mandatory (reject the delivery when it is unset) so an
-          // unauthenticated caller cannot move cards.
-          return c.json({ ok: true, ignored: true });
+
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'invalid_payload' }, 400);
+          }
+
+          const parsed = parseGitlabWebhook(body);
+          // Acknowledged, not rejected: GitLab retries any non-2xx, so a
+          // pipeline or merge-request hook must not become a retry loop.
+          if (!parsed) return c.json({ ok: true, ignored: true });
+          if (!ingestFactoryEvent) return c.json({ ok: true, ignored: true });
+
+          try {
+            const result = await ingestFactoryEvent({ parsed });
+            return c.json({ ok: true, event: parsed.event, status: result.status });
+          } catch (error) {
+            // 500 so GitLab retries: a storage blip should not silently drop a
+            // card transition.
+            console.warn(`[gitlab] webhook ingest failed for ${parsed.event}.`, error);
+            return c.json({ error: 'ingest_failed' }, 500);
+          }
         },
       }),
     ];
@@ -861,7 +911,12 @@ export class GitLabIntegration implements FactoryIntegration {
       oauthScope: this.oauthApp?.scope ?? null,
       staticTokenFallback: Boolean(this.fallbackToken),
       redirectUri: this.redirectUri(),
-      webhookSecretConfigured: Boolean(this.webhookSecret),
+      // Always true — construction rejects a missing secret. Reported so the
+      // startup log states the webhook is authenticated rather than implying it.
+      webhookSecretConfigured: true,
+      gitlabRuleEvents: Object.entries(this.rules)
+        .filter(([, handler]) => handler !== null)
+        .map(([event]) => event),
       storageBound: Boolean(this.storageHandle),
       projectsBound: Boolean(this.projects),
       capabilities: { intake: true, versionControl: false },
