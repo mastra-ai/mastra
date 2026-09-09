@@ -141,6 +141,76 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('installed board catalog', () => {
+  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { 'github-issue': () => [] },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(response.status).toBe(200);
+    const { boards } = await response.json();
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
+      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+    );
+    expect(boards.at(-1)).toEqual({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'preparing',
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          transitions: [{ outcome: null, to: 'shipped' }],
+        },
+        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+      ],
+    });
+  });
+
+  it('supports an empty installation', async () => {
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ includeDefaultBoards: false }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(await response.json()).toEqual({ boards: [] });
+  });
+
+  it('requires authentication and project membership', async () => {
+    expect((await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(401);
+    expect((await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(403);
+    await seedProject('other-org');
+    expect((await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(404);
+  });
+});
+
 // ── Auth / scoping ───────────────────────────────────────────────────────
 describe('auth and scoping', () => {
   it('401s without a user', async () => {

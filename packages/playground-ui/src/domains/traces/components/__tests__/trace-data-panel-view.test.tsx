@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
@@ -971,10 +971,17 @@ describe('TraceDataPanelView — trace feedback tab', () => {
     expect(screen.getByText('feedback for trace-1')).toBeTruthy();
   });
 
-  it('shows the badge count in the Feedback tab label', () => {
-    render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => null} feedbackTabBadge={2} />);
+  it('renders the feedback tab badge inside the Feedback tab label', () => {
+    render(
+      <TraceDataPanelView
+        {...baseProps}
+        feedbackTabSlot={() => null}
+        feedbackTabBadge={<span data-testid="feedback-badge" />}
+      />,
+    );
 
-    expect(screen.getByRole('tab', { name: /feedback \(2\)/i })).toBeTruthy();
+    const tab = screen.getByRole('tab', { name: /^feedback/i });
+    expect(within(tab).getByTestId('feedback-badge')).toBeTruthy();
   });
 
   it('renders no tabs when neither slot is provided', () => {

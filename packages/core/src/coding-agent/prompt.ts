@@ -3,8 +3,7 @@
  * This is the "brain" that makes the agent a good coding assistant.
  *
  * Product-specific strings (the agent's display name and the commit
- * `Co-Authored-By` name) are parameterized via `productName` / `coAuthorName`
- * and default to "Mastra Code" so existing callers keep identical output.
+ * `Co-Authored-By` name) are parameterized via `productName` / `coAuthorName`.
  */
 
 export interface PromptContext {
@@ -22,17 +21,17 @@ export interface PromptContext {
   hasSubagents?: boolean;
   /** Display name used in the prompt header. Default: "Mastra Code". */
   productName?: string;
-  /** Name used in the commit `Co-Authored-By` line. Default: "Mastra Code". */
+  /** Name used in the commit `Co-Authored-By` line. Default: "mastra-platform[bot]". */
   coAuthorName?: string;
-  /** Email used in the commit `Co-Authored-By` line. Default: "noreply@mastra.ai". */
+  /** Email used in the commit `Co-Authored-By` line. Default: the mastra-platform bot noreply address. */
   coAuthorEmail?: string;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
   const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
   const productName = ctx.productName ?? 'Mastra Code';
-  const coAuthorName = ctx.coAuthorName ?? 'Mastra Code';
-  const coAuthorEmail = ctx.coAuthorEmail ?? 'noreply@mastra.ai';
+  const coAuthorName = ctx.coAuthorName ?? 'mastra-platform[bot]';
+  const coAuthorEmail = ctx.coAuthorEmail ?? '284800079+mastra-platform[bot]@users.noreply.github.com';
 
   return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -87,7 +86,7 @@ ${ctx.toolGuidance}
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName}${ctx.modelId ? ` (${ctx.modelId})` : ''} <${coAuthorEmail}>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName} <${coAuthorEmail}>\` in the message body.
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.

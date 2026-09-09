@@ -1523,6 +1523,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return cleared;
   }
 
+  async getByProjectSource({
+    orgId,
+    factoryProjectId,
+    source,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    source: ExternalWorkItemSource;
+  }): Promise<WorkItemRow | null> {
+    const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: externalSourceKey(source),
+    });
+    return row ? toWorkItem(row) : null;
+  }
+
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     return row ? toWorkItem(row) : null;

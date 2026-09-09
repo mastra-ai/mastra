@@ -125,6 +125,7 @@ describe('api command descriptors', () => {
       'factoryWork-itemDelete': ['workItemDelete', ['id'], false, false, false],
       'factoryWork-itemTransition': ['workItemTransition', ['id', 'workItemId'], true, true, false],
       'factoryWork-itemStart': ['workItemStart', ['id'], true, true, false],
+      factoryBoards: ['boardCatalog', ['id'], false, false, false],
       factoryMetrics: ['metricsGet', ['id'], true, false, false],
       factoryHealthThresholds: ['healthThresholdsGet', ['id'], false, false, false],
       factoryDecisionList: ['decisionList', ['id'], true, false, false],

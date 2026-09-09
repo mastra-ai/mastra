@@ -38,7 +38,18 @@ describe('Postgres advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR TRUE --" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -48,9 +59,81 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).not.toContain("factuality' OR TRUE --");
     expect(compiled.values).toContain("factuality' OR TRUE --");
+    expect(compiled.text).toContain(`current_scores AS MATERIALIZED (
+    SELECT
+      s."traceId",
+      s."spanId",
+      s."timestamp",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
+    FROM`);
     expect(compiled.text.match(/EXISTS \(/g)).toHaveLength(3);
     expect(compiled.text).toContain('s."traceId" = r."traceId"');
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
+    expect(compiled.text).toContain('s."scorerVersion" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."scoreSource" IS NOT NULL');
+    expect(compiled.text).toContain('s."timestamp" IS NOT NULL AND s."timestamp" >=');
+    expect(compiled.text).toContain('s."spanId" IS NOT NULL');
+    expect(compiled.text).toContain('s."entityVersionId" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."parentEntityVersionId" IS NOT NULL');
+    expect(compiled.text).toContain('s."rootEntityVersionId" IS NULL OR s."rootEntityVersionId" NOT IN');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('projects canonical span values and compiles one richer same-span existence check', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+                { op: 'exists', path: 'entityVersionId' },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
+    expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."provider" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."status" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."startedAt" IS NOT NULL AND s."startedAt" >=');
+    expect(compiled.text).toContain('s."durationMs" IS NOT NULL AND s."durationMs" >');
+    expect(compiled.text).toContain('s."entityVersionId" IS NOT NULL');
+    expect(compiled.values).toEqual(
+      expect.arrayContaining([
+        'medication_lookup',
+        'claude-sonnet-4-6',
+        'anthropic',
+        '2026-01-01T12:00:00.000Z',
+        5000,
+        'success',
+      ]),
+    );
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {

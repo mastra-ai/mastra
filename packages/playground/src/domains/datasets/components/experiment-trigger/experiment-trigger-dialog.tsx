@@ -80,13 +80,11 @@ function RequestContextForm({
 
 function PipelineStep({
   index,
-  title,
   done,
   isLast,
   children,
 }: {
   index: number;
-  title: string;
   done: boolean;
   isLast?: boolean;
   children: React.ReactNode;
@@ -105,10 +103,7 @@ function PipelineStep({
         </span>
         {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
       </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>
-        <p className="text-ui-sm font-medium">{title}</p>
-        {children}
-      </div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>{children}</div>
     </li>
   );
 }
@@ -281,16 +276,22 @@ export function ExperimentTriggerDialog({
           </div>
 
           <ol className="list-none">
-            <PipelineStep index={1} title="Dataset" done={Boolean(datasetId)}>
+            <PipelineStep index={1} done={Boolean(datasetId)}>
               <div className="grid grid-cols-[1fr_140px] gap-3">
-                <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                <div className="grid gap-2">
+                  <Label>Dataset</Label>
+                  <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                </div>
                 {datasetId && (
-                  <DatasetVersions
-                    datasetId={datasetId}
-                    value={version}
-                    onValueChange={setVersion}
-                    container={contentRef}
-                  />
+                  <div className="grid gap-2">
+                    <Label>Version</Label>
+                    <DatasetVersions
+                      datasetId={datasetId}
+                      value={version}
+                      onValueChange={setVersion}
+                      container={contentRef}
+                    />
+                  </div>
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
@@ -300,7 +301,7 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={2} title="Target" done={Boolean(targetId)}>
+            <PipelineStep index={2} done={Boolean(targetId)}>
               <TargetSelector
                 targetType={targetType}
                 setTargetType={setTargetType}
@@ -315,9 +316,8 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={3} title="Scorers (Optional)" done={selectedScorers.length > 0} isLast>
+            <PipelineStep index={3} done={selectedScorers.length > 0} isLast>
               <ScorerSelector
-                label=""
                 selectedScorers={selectedScorers}
                 setSelectedScorers={setSelectedScorers}
                 disabled={isRunning}

@@ -82,33 +82,29 @@ export interface MountLinearRoutesOptions {
  *
  * A Linear issue carries no Factory project of its own, so without a binding
  * every board view would ingest every selected source's issues into whichever
- * project happened to be on screen. Bound sources win; when the org has no
- * bindings at all we fall back to the full selection for single-project
- * installs, where "which project" is unambiguous.
+ * project happened to be on screen. Routing is explicit: a source feeds this
+ * project only when its binding names both the project and a board. Returns
+ * the bound board per source so the ingest lands cards where the user asked.
  */
 async function scopeSourceIdsToProject({
   intake,
-  projects,
   orgId,
   factoryProjectId,
   selectedIds,
 }: {
   intake: IntakeStorage;
-  projects: MountLinearRoutesOptions['projects'];
   orgId: string;
   factoryProjectId: string;
   selectedIds: string[];
-}): Promise<string[]> {
-  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'linear', factoryProjectId });
-  if (bound.length > 0) {
-    const boundSet = new Set(bound);
-    return selectedIds.filter(id => boundSet.has(id));
+}): Promise<Record<string, string>> {
+  const selected = new Set(selectedIds);
+  const intakeBoards: Record<string, string> = {};
+  for (const binding of await intake.listBindings({ orgId, integrationId: 'linear' })) {
+    if (binding.factoryProjectId === factoryProjectId && binding.board && selected.has(binding.sourceId)) {
+      intakeBoards[binding.sourceId] = binding.board;
+    }
   }
-  const orgBindings = await intake.listBindings({ orgId, integrationId: 'linear' });
-  if (orgBindings.length > 0) return [];
-  if (!projects) return [];
-  const all = await projects.list({ orgId });
-  return all.length <= 1 ? selectedIds : [];
+  return intakeBoards;
 }
 
 /**
@@ -347,16 +343,16 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         // No projects selected means nothing is synced — don't fan out to Linear.
         const selectedIds = selection.sourceIds ?? [];
         // A board request is also an ingest, so it only ever sees the sources
-        // bound to that Factory project.
-        const projectIds = factoryProjectId
+        // routed to a board of that Factory project.
+        const intakeBoards = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
-              projects: options.projects,
               orgId: resolved.tenant.orgId,
               factoryProjectId,
               selectedIds,
             })
-          : selectedIds;
+          : null;
+        const projectIds = intakeBoards ? Object.keys(intakeBoards) : selectedIds;
         if (projectIds.length === 0) {
           return c.json({ issues: [], nextCursor: null });
         }
@@ -382,13 +378,15 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             labels: issue.labels,
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
+            sourceId: issue.sourceId ?? null,
           }));
-          if (factoryProjectId && options.ingestFactoryIssues) {
+          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,
               issues: issuePayload,
+              intakeBoards,
             });
           }
           return c.json({ issues: issuePayload, nextCursor });
@@ -429,13 +427,14 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         if (!selection.enabled) {
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
-        const projectIds = await scopeSourceIdsToProject({
-          intake,
-          projects: options.projects,
-          orgId: resolved.tenant.orgId,
-          factoryProjectId,
-          selectedIds: selection.sourceIds ?? [],
-        });
+        const projectIds = Object.keys(
+          await scopeSourceIdsToProject({
+            intake,
+            orgId: resolved.tenant.orgId,
+            factoryProjectId,
+            selectedIds: selection.sourceIds ?? [],
+          }),
+        );
         if (projectIds.length === 0) return c.json({ error: 'issue_not_found' }, 404);
 
         try {

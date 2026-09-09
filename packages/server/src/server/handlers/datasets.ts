@@ -20,6 +20,7 @@ import {
   paginationQuerySchema,
   tenancyQuerySchema,
   listItemsQuerySchema,
+  listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
   createDatasetBodySchema,
   updateDatasetBodySchema,
@@ -584,6 +585,42 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   },
 });
 
+export const PURGE_ITEM_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/items/:itemId/purge',
+  responseType: 'json',
+  pathParamSchema: datasetAndItemIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Purge dataset item data',
+  description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId, ...params }) => {
+    assertDatasetsAvailable();
+    if (!coreFeatures.has('dataset-item-purge')) {
+      throw new HTTPException(501, {
+        message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+      });
+    }
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      const history = await ds.getItemHistory({ itemId });
+      if (history.length === 0) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+      await ds.purgeItem({ itemId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error purging dataset item data');
+    }
+  },
+});
+
 export const DELETE_ITEM_ROUTE = createRoute({
   method: 'DELETE',
   path: '/datasets/:datasetId/items/:itemId',
@@ -1094,7 +1131,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments/:experimentId/results',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentResultsQuerySchema,
   responseSchema: listExperimentResultsResponseSchema,
   summary: 'List experiment results',
   description: 'Returns a paginated list of results for the experiment',
@@ -1103,14 +1140,19 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, tags } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
-      const result = await ds.listExperimentResults({ experimentId, page: page ?? 0, perPage: perPage ?? 10 });
+      const result = await ds.listExperimentResults({
+        experimentId,
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+        ...(tags !== undefined ? { tags } : {}),
+      });
       return {
         results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,

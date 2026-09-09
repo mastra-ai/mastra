@@ -206,11 +206,11 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'Include `Co-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>` in the message body.',
+      'Include `Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>` in the message body.',
     );
   });
 
-  it('uses the model-less commit co-author fallback when no model id is available', () => {
+  it('uses the platform bot commit co-author when no model id is available', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',
       projectName: 'test-project',
@@ -227,8 +227,10 @@ describe('buildFullPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('Include `Co-Authored-By: Mastra Code <noreply@mastra.ai>` in the message body.');
-    expect(prompt).not.toContain('Co-Authored-By: Mastra Code ()');
+    expect(prompt).toContain(
+      'Include `Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>` in the message body.',
+    );
+    expect(prompt).not.toContain('Co-Authored-By: mastra-platform[bot] ()');
   });
 
   it('includes common binary availability in environment details', () => {

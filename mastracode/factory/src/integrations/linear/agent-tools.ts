@@ -109,8 +109,7 @@ export async function buildLinearAgentTools({
   if (!linear.authEnabled) return {};
 
   const ctx = requestContext.get('controller') as
-    | AgentControllerRequestContext<{ factoryProjectId?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ factoryProjectId?: string }> | undefined;
   if (!ctx) return {};
 
   // Board-run resourceId is the work-item session id, not the project id stored

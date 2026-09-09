@@ -3,7 +3,7 @@ import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
 import remarkModelTokens from './src/plugins/remark-model-tokens'
 import type { Config } from '@docusaurus/types'
-import type { ThemeConfig } from '@docusaurus/preset-classic'
+import type { Options as PresetOptions, ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
 import { normalizeSiteSectionRoot, SITE_SECTION_ROOTS } from './src/utils/canonical-url'
@@ -202,7 +202,7 @@ const config: Config = {
 
             return items.map(item => ({ ...item, url: normalizeSiteSectionRoot(item.url) }))
           },
-        },
+        } satisfies PresetOptions['sitemap'],
       },
     ],
   ],
@@ -220,6 +220,58 @@ const config: Config = {
     },
     mermaid: {
       theme: { light: 'base', dark: 'base' },
+    },
+    footer: {
+      links: [
+        {
+          title: 'Product',
+          items: [
+            { label: 'Framework', href: 'https://mastra.ai/ai-agent-framework' },
+            { label: 'Observability', href: 'https://mastra.ai/platform-observability' },
+            { label: 'Studio', href: 'https://mastra.ai/studio' },
+            { label: 'Factory', href: 'https://mastra.ai/factory' },
+            { label: 'Agent Builder', href: 'https://mastra.ai/agent-builder' },
+          ],
+        },
+        {
+          title: 'Documentation',
+          items: [
+            { label: 'Mastra', to: '/docs' },
+            { label: 'Factory', href: 'https://factory.mastra.ai' },
+            { label: 'Mastra Code', href: 'https://code.mastra.ai' },
+            { label: 'Agent Builder', href: 'https://agent-builder.mastra.ai' },
+          ],
+        },
+        {
+          title: 'Resources',
+          items: [
+            { label: 'Blog', href: 'https://mastra.ai/blog' },
+            { label: 'Changelog', href: 'https://github.com/mastra-ai/mastra/releases' },
+            { label: 'Research', href: 'https://mastra.ai/research' },
+            { label: 'Podcast · Agent Hour', href: 'https://mastra.ai/podcasts' },
+            { label: 'License', to: '/docs/license' },
+          ],
+        },
+        {
+          title: 'Company',
+          items: [
+            { label: 'About', href: 'https://mastra.ai/about' },
+            { label: 'Customers', href: 'https://mastra.ai/customers' },
+            { label: 'Careers', href: 'https://mastra.ai/careers' },
+            { label: 'Newsletter', href: 'https://mastra.ai/newsletter' },
+          ],
+        },
+        {
+          title: 'Connect',
+          items: [
+            { label: 'Contact Us', href: 'https://mastra.ai/contact' },
+            { label: 'GitHub', href: 'https://github.com/mastra-ai/mastra' },
+            { label: 'Discord', href: 'https://discord.gg/BTYqqHKUrf' },
+            { label: 'YouTube', href: 'https://www.youtube.com/@mastra-ai' },
+            { label: 'X (Twitter)', href: 'https://x.com/@mastra' },
+          ],
+        },
+      ],
     },
   } satisfies ThemeConfig,
 }

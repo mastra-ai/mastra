@@ -38,6 +38,9 @@ export function linearIssueReconciliationInterval(): number | undefined {
       'MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS',
       process.env.MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS,
     ) ??
-    optionalPositiveInterval('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS', process.env.MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS)
+    optionalPositiveInterval(
+      'MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS',
+      process.env.MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS,
+    )
   );
 }

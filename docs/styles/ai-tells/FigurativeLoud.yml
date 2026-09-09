@@ -1,0 +1,30 @@
+---
+extends: existence
+message: "AI overused word: '%s'. Name the actual behavior instead of calling emphasis volume. Disable this rule for prose about sound."
+level: error
+nonword: true
+ignorecase: true
+# "Loud" is the mirror of FigurativeQuiet: an AI fingerprint for personified
+# emphasis. A check "fails loudly," a metric "sends a loud signal," a warning
+# comes through "loud and clear." Literal loudness is common (a room, music, a
+# noise), so the construction is the discriminator: the adverb "loudly" ahead
+# of an action verb, or a curated emphasis idiom. Bare "out loud" (reading,
+# thinking) is a different, literal sense and stays out of the rule. Prose
+# about actual sound disables it.
+tokens:
+  # --- Emphasis adverb: the artifact acts "loudly," the counterpart to the
+  # understatement "quietly" ("loudly complains," "fails loudly," "loudly
+  # warns about the deprecation"). "Fail loud" is a real principle, so
+  # disable the rule where that register is intended.
+  - "\\bloudly (?:announces?|proclaims?|declares?|complains?|protests?|objects?|warns?|signals?|advertises?|broadcasts?|fails?|logs?|flags?|insists?|demands?|trumpets?|telegraphs?)\\b"
+  - "\\b(?:fails?|failing|failed|breaks?|breaking|broke|errors?|erroring|errored|crashes?|complains?|complained) loudly\\b"
+
+  # --- Signal idioms: a result personified as shouting ("sends a loud
+  # signal," "a loud warning about scale," "screams for attention" rides
+  # here as the volume cousin).
+  - "\\b(?:sends?|sending|sent|throws?|throwing|threw|emits?|emitting|emitted) (?:a|an|off a|out a) loud (?:signal|warning|message|alarm|alert)\\b"
+  - "\\ba loud (?:signal|warning|message) (?:about|that|to)\\b"
+
+  # --- Clarity idiom ("comes through loud and clear," "heard loud and
+  # clear"). Literal in radio work; disable there.
+  - "\\bloud and clear\\b"

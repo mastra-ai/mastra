@@ -143,6 +143,7 @@ export const mainNav: NavSection[] = [
         name: 'Overview',
         url: '/evaluation',
         Icon: HomeIcon,
+        docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Evaluation documentation' },
         isOnMastraPlatform: true,
       },
       {
@@ -216,19 +217,7 @@ export const bottomNav: NavItem[] = [
   { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
 ];
 
-/** Section-level entries used to resolve breadcrumb label + icon for the overview routes. */
-export const sectionNav: NavItem[] = [
-  {
-    name: 'Evaluation',
-    url: '/evaluation',
-    Icon: ExperimentsIcon,
-    docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Evaluation documentation' },
-  },
-];
-
-// sectionNav comes first so /evaluation resolves to "Evaluation" (section crumb) rather than the
-// in-section "Overview" NavLink which shares the same url.
-const allItems: NavItem[] = [...sectionNav, ...mainNav.flatMap(s => s.items), ...bottomNav];
+const allItems: NavItem[] = [...mainNav.flatMap(s => s.items), ...bottomNav];
 
 export function findNavItem(url: string): NavItem | undefined {
   return allItems.find(i => i.url === url);

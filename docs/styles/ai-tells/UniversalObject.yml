@@ -1,0 +1,78 @@
+---
+extends: existence
+message: "AI totality claim: '%s'. Say which cases were checked, or drop the quantifier."
+level: error
+nonword: true
+ignorecase: true
+# The mirror of NegatedObject: the universal quantifier on the object
+# ("handles all edge cases," "addresses all concerns," "eliminates all
+# ambiguity," "covers every scenario"). Where the shifted "no" claims a
+# clean absence, "all" claims a clean sweep, and AI prose grades its own
+# work with it constantly. The general token is unbuildable: humans write
+# "returns all matches," "removes all elements," and "finds all
+# occurrences" hundreds of times per million lines, because operating on
+# every element of a collection is a spec fact. Only the overclaim
+# register survives measurement.
+#
+# The verb list is empirical, run against the same ~1.3M lines of pre-LLM
+# human technical prose as NegatedObject (Go stdlib doc comments plus
+# Python stdlib source). The operations family stays out wholesale:
+# "returns all" (37 hits), "removes all" (55 across forms), "find all"
+# (50), "clear all" (33), "delete all" (29), "check all" (32), plus
+# "protects all" (the lock-comment register: "mu protects all fields
+# below") and the past "passed all" (doctest report output: "4 items
+# passed all tests"). The verbs kept below total 36 corpus hits, led by
+# "handles all" (10, the HTTP-dispatcher register: "Handles all POST
+# requests") and "covers all" (6, the coverage-metrics register), and
+# including Python's own joke docstring "This function solves all of the
+# world's problems," which is the tell and flags on purpose.
+#
+# Base forms stay out entirely, and the grammar does the excluding:
+# modals, infinitives, and imperatives take the bare verb, so "should
+# handle all cases," "to cover all of them," "doesn't handle all the
+# non-Latin letters," and "TODO: handle all kinds" never match. That
+# register is aspiration, the opposite of the claim, and it dominates the
+# corpus hits on bare forms. The gap is the first-person present ("we
+# handle all edge cases"), which escapes. Perfect tenses keep the modal
+# hole open through the participle ("should have covered all program
+# counters" laments a gap and still fires); the corpora show one hit.
+#
+# One base form is a claim: the plural subject in the present tense
+# ("content rules cover every input under the policy"), which a
+# documentation-corpus audit (2026-09) found escaping through the same
+# hole. The last token admits it behind a determiner-fronted plural
+# subject directly ahead of the verb, where a modal or "to" cannot sit;
+# the token measures zero across both standard libraries.
+#
+# The lookahead after "all" excludes the exception idiom: "eliminates all
+# but the top level" claims an exception, not a sweep. The lookahead
+# after "every" excludes the alternation reading of "every other." One
+# sense collision survives: "passes all encountered errors" forwards
+# them rather than clearing a bar; the corpora show one hit.
+tokens:
+  # --- Coverage claims: what the change is said to blanket ("handles all
+  # edge cases," "covers every scenario," "addresses all concerns,"
+  # "supports all platforms," "considers all inputs," "captures all
+  # state").
+  - "\\b(?:handles|handled|handling|covers|covered|covering|addresses|addressed|addressing|supports|supported|supporting|considers|considered|captures|captured|capturing) (?:all (?!but\\b)|every (?!other\\b))[a-z][-a-z]*\\b"
+  # --- Elimination claims: what is said to be swept away ("eliminates
+  # all ambiguity," "prevents every race," "catches all errors," "avoids
+  # all overhead").
+  - "\\b(?:eliminates|eliminated|eliminating|prevents|prevented|preventing|catches|caught|catching|avoids|avoided|avoiding) (?:all (?!but\\b)|every (?!other\\b))[a-z][-a-z]*\\b"
+  # --- Bars cleared: requirements, tests, and contracts reported as
+  # fully met ("satisfies all constraints," "meets every requirement,"
+  # "passes all checks," "respects all invariants," "honors every
+  # setting," "fulfills all obligations"). "Passed" stays out above.
+  - "\\b(?:satisfies|satisfied|satisfying|meets|met|passes|passing|respects|respected|respecting|honors|honored|honoring|fulfills|fulfilled|fulfilling) (?:all (?!but\\b)|every (?!other\\b))[a-z][-a-z]*\\b"
+  # --- Resolution and assurance: problems reported gone and properties
+  # reported safe ("solves all of the problems," "resolves every
+  # conflict," "fixes all issues," "preserves all behavior," "maintains
+  # every invariant," "guarantees all deliveries," "survives all
+  # restarts," "validates all input," "sanitizes every field,"
+  # "anticipates all failure modes").
+  - "\\b(?:solves|solved|solving|resolves|resolved|resolving|fixes|fixed|fixing|preserves|preserved|preserving|maintains|maintained|maintaining|guarantees|guaranteed|guaranteeing|survives|survived|surviving|validates|validated|validating|sanitizes|sanitized|sanitizing|anticipates|anticipated|anticipating) (?:all (?!but\\b)|every (?!other\\b))[a-z][-a-z]*\\b"
+  # --- The plural present: a determiner-fronted plural subject with the
+  # base verb it takes ("content rules cover every input," "the wrappers
+  # handle all edge cases"). The subject sits directly ahead of the verb,
+  # so the modal and infinitive forms never match here.
+  - "\\b(?:(?:a|an|the|this|that|these|those|each|every|its|their|both|all|most|some|many|two|three|four|several|any) )?(?:[a-z'-]+ )?[a-z]+s (?:handle|cover|address|support|consider|capture|eliminate|prevent|catch|avoid|satisfy|meet|pass|respect|honor|fulfill|solve|resolve|fix|preserve|maintain|guarantee|survive|validate|sanitize|anticipate) (?:all (?!but\\b)|every (?!other\\b))[a-z][-a-z]*\\b"

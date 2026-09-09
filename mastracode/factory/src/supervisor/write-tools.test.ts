@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -102,6 +103,55 @@ async function auditByAction(audit: Awaited<ReturnType<typeof setup>>['audit'], 
 }
 
 describe('createFactorySupervisorWriteTools', () => {
+  it('transitions the persisted custom board through live membership and topology checks', async () => {
+    const seed = await createFactoryStorageForTests();
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Shipping', kind: 'working', role: 'publisher', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const { item } = await seed.workItems.upsert({
+      ...SCOPE,
+      userId: 'user-1',
+      input: {
+        board: 'release',
+        title: 'Release',
+        stages: ['queued'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'release:1' },
+      },
+    });
+    const transitionService = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'release-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+    const tools = createFactorySupervisorWriteTools({
+      scope: SCOPE,
+      userId: 'user-supervisor',
+      workItems: seed.workItems,
+      audit: seed.audit,
+      transitionService,
+    });
+    expect(tools.factory_transition_work_item.requireApproval).toBe(true);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
+    ).rejects.toThrow(/rejected/);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'shipped' }),
+    ).rejects.toThrow(/rejected/);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'shipping' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'shipping' });
+    expect(await seed.workItems.get({ orgId: SCOPE.orgId, id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['shipping'],
+    });
+  });
   it('retries a failed decision and attributes the repair to the person', async () => {
     const context = await setup();
     const { decision } = await queueDecision(context.workItems, 1);

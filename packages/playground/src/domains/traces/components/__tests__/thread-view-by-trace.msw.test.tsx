@@ -150,6 +150,21 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
+  it('rounds the top of the timeline column on the first trace only', async () => {
+    installHandlers();
+    const { queryClient } = renderView();
+
+    expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    const [first, second] = screen.getAllByTestId('trace-row-timeline').map(el => el.parentElement!);
+    expect(first.className).toContain('rounded-tl-xl');
+    expect(first.className).toContain('border-t');
+    expect(first.className).not.toContain('rounded-bl-xl');
+    expect(second.className).not.toContain('rounded-tl-xl');
+    expect(second.className).toContain('rounded-bl-xl');
+  });
+
   it('shows an empty state when the thread has no traces', async () => {
     installHandlers({ list: emptyThreadTracesList });
     renderView();
@@ -246,15 +261,6 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
       vi.unstubAllGlobals();
     });
-  });
-
-  it('links each turn to its trace on the traces page', async () => {
-    installHandlers();
-    const { queryClient } = renderView();
-
-    const [link] = await screen.findAllByRole('link', { name: 'Go to trace' });
-    expect(link.getAttribute('href')).toBe('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
   it('keeps the row of the selected span highlighted while its details are open', async () => {

@@ -60,6 +60,7 @@ import { createCustomProvidersPrimer, registerCustomProvidersSource } from './ro
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
+import { TelemetryRoutes } from './routes/telemetry.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
@@ -916,6 +917,7 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`.
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,

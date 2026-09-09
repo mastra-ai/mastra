@@ -1,0 +1,24 @@
+---
+extends: existence
+message: "AI wage metaphor: '%s'. Say what the thing gets or requires. Disable this rule for payroll or finance prose."
+level: error
+ignorecase: true
+# The wage figure applied to anything at all: a rule "earns its keep," a
+# helper "earns a caveat," a shell "earns full branch coverage," trust
+# "is earned," a promotion is "well-earned." The family started in
+# AnthropomorphicJustification as curated possessive idioms, grew a
+# grant-object list, then a determiner-gated subject token, and each new
+# gate let another inflection through ("Every shell earns" slipped the
+# determiner list). A maintainer's call (2026-08-18) ended the chase:
+# the verb itself is the tell, so one bare token flags every form, the
+# literal person-subject uses included.
+#
+# The measurement supports the ban. The Go standard library uses no form
+# of the verb at all, and the Python standard library's only occurrences
+# are one repeated spam-email test fixture ("Earn Big"), so technical
+# prose loses nothing. The vocabulary financial writing actually runs on
+# is nominal, and the word boundary already leaves it alone: "earnings,"
+# "earner," and "earnest" all stay quiet. Prose that genuinely pays
+# people (payroll, tax, HR) disables the rule.
+tokens:
+  - earn(?:s|ed|ing)?

@@ -1,0 +1,25 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say the text matches the check. Disable this rule for electrical or hiking prose."
+level: error
+nonword: true
+ignorecase: true
+# "Trips" is an AI fingerprint for setting off a check: prose "trips the
+# rule," a flag "trips the linter," writing about a rule "still trips it."
+# The object is the discriminator. Pre-LLM systems prose uses the same verb
+# for detectors, barriers, and deadlines ("trip the detector," "trip the
+# barrier"), so those objects stay out of the set, and the lookbehind keeps
+# "round-trip a string" from putting its article in the object slot.
+# Literal tripping (a hiker, a circuit breaker, a tripwire in the field)
+# takes objects outside the set; electrical or hiking writing disables the
+# rule.
+tokens:
+  # --- Object-gated: a checking noun set off by the verb, with an optional
+  # modifier word between the determiner and the head noun ("trips the
+  # commit-message gate").
+  - "(?<!-)\\btrip(?:s|ped|ping)? (?:the|a|an|this|that|every|its|another|each) (?:[a-z]+ )?(?:rule|check|checker|linter|lint|gate|guard|hook|alarm|filter|validator|validation|threshold|alert|heuristic)s?\\b"
+
+  # --- Pronoun object: the check named in a previous clause ("writing
+  # about the rule still trips it"). Measured at zero across the Go and
+  # Python standard libraries.
+  - "(?<!-)\\btrip(?:s|ped|ping) (?:it|them)\\b"

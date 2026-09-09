@@ -3,7 +3,7 @@ import { DataListRoot } from './data-list-root';
 import type { DataListFit, DataListVariant } from './data-list-root';
 import { DataListTop } from './data-list-top';
 import { DataListTopCell } from './data-list-top-cell';
-import { dataListRowOuterStyles } from './shared';
+import { dataListRowOuterStyles, splitColumns } from './shared';
 import { cn } from '@/lib/utils';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'] as const;
@@ -35,7 +35,7 @@ export function DataListSkeleton({
   fit,
   variant,
 }: DataListSkeletonProps) {
-  const columnParts = columns.trim().split(/\s+/);
+  const columnParts = splitColumns(columns);
   const columnCount = columnParts.length;
   const skeletonColumns = columnParts.map(col => (col === 'auto' ? 'minmax(6rem, auto)' : col)).join(' ');
 

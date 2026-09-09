@@ -1,5 +1,165 @@
 # @mastra/pg
 
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
+## 1.23.0
+
+### Minor Changes
+
+- Added read/write pool separation to `PostgresStore`. Pass `writePool` together with an optional `readPool` to route plain reads to a replica while writes, schema setup, transactions, locking reads, and every read-modify-write path stay on the primary. When `readPool` is omitted, reads fall back to the writer, and the existing single `pool` configuration keeps working unchanged. Closes #12035. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+  ```ts
+  import { Pool } from 'pg';
+  import { PostgresStore } from '@mastra/pg';
+
+  const store = new PostgresStore({
+    id: 'pg',
+    writePool: new Pool({ connectionString: process.env.PG_PRIMARY_URL }),
+    readPool: new Pool({ connectionString: process.env.PG_REPLICA_URL }),
+  });
+
+  store.pool; // writer
+  store.readPool; // reader (falls back to the writer when readPool is omitted)
+  ```
+
+  Standalone reads such as `getThreadById`, `listThreads`, `agents.getById`, or `knowledge.search` hit `readPool`. Lookups that feed a mutation (for example the thread check inside `saveMessages`, the metadata merge in `updateThread`, or version resolution inside `skills.update`) always hit `writePool`, so a lagging replica cannot cause false "not found" errors or overwrite recent writes. Caller-provided pools are never closed by the store.
+
+- Added portable advanced trace-query execution with parameterized PostgreSQL plans, bounded reusable relation scopes, completed-root filtering before pagination, current-row conformance, and a configurable 15-second transaction-local execution timeout. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+### Patch Changes
+
+- Fixed trace deletion to cascade to metrics, logs, scores, and feedback while respecting tenant scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Fixed PgVector `query()`, `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` failing with `column "namespace" does not exist` on vector tables created before `@mastra/pg` 1.22. ([#23281](https://github.com/mastra-ai/mastra/pull/23281))
+
+  The namespace column migration previously ran only inside `createIndex()`, so tables that were only read after upgrading were never migrated. The migration now runs lazily (once per index per process) from every data path, and is applied atomically under a database-scoped advisory lock so it is safe across concurrent processes.
+
+  When schema changes are disabled via `disableInit` or `MASTRA_DISABLE_STORAGE_INIT`, a descriptive `MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED` error is thrown instead. In that case, either call `createIndex()` with init enabled, or run the following migration as a single transaction (replace `<index>` with the table name):
+
+  ```sql
+  BEGIN;
+  SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | '<index>'::regclass::oid::bigint);
+  ALTER TABLE <index> ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default';
+  CREATE UNIQUE INDEX IF NOT EXISTS <index>_namespace_vector_id_idx ON <index> (namespace, vector_id);
+  ALTER TABLE <index> DROP CONSTRAINT IF EXISTS <index>_vector_id_key;
+  COMMIT;
+  ```
+
+  **What automatic migration requires**
+
+  - First access to a legacy table requires table-owner DDL permissions.
+  - First access takes a transaction-scoped advisory lock and PostgreSQL DDL locks.
+  - Already-migrated tables remain usable with SELECT-only access.
+  - Failed or incomplete migrations are retried on the next operation.
+  - Equivalent composite unique indexes are recognized regardless of name or key order.
+  - For long table names, automatic migration uses a bounded hashed index name and rolls back if a conflicting index prevents reconciliation.
+
+  **Before you run the SQL above**
+
+  - The example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed.
+  - For a long table name, choose a unique index name of at most 63 characters.
+  - If an index with the same name already exists, verify it is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint.
+
+  Fixes #23272
+
+- Improved PostgresStore last-N message reads. Paginated reads now avoid materializing message content for every matching row before applying the page limit, letting the `(thread_id, createdAt DESC)` index serve the page. Totals and single-round-trip behavior remain unchanged. ([#23369](https://github.com/mastra-ai/mastra/pull/23369))
+
+- # Fix namespace migration for long vector table names ([#23280](https://github.com/mastra-ai/mastra/pull/23280))
+  - Fix `PgVector.createIndex()` failing for table names of 40 or more characters by bounding generated index names with a 128-bit hash suffix. Short names remain unchanged.
+  - Preserve legacy vector-ID uniqueness if replacement-index creation fails by creating the namespace unique index before dropping the legacy constraint.
+  - Repair tables left half-migrated by earlier versions on the next `createIndex()` call, provided they contain no duplicate `(namespace, vector_id)` pairs.
+
+  Fixes #23273
+
+- `PgFactoryStorage` now widens an `integer` column to `bigint` when the collection schema says so, the way it already adds missing columns and drops stale `NOT NULL`. A Factory deployed before `factory_attention_receipts.occurrence` became `bigint` no longer needs a hand-run `ALTER TABLE` before parked-run receipts can be written. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Fixed vector operations timing out with small PostgreSQL connection pools when index metadata is not cached. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+
+## 1.23.0-alpha.7
+
+### Patch Changes
+
+- Fixed PgVector `query()`, `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` failing with `column "namespace" does not exist` on vector tables created before `@mastra/pg` 1.22. ([#23281](https://github.com/mastra-ai/mastra/pull/23281))
+
+  The namespace column migration previously ran only inside `createIndex()`, so tables that were only read after upgrading were never migrated. The migration now runs lazily (once per index per process) from every data path, and is applied atomically under a database-scoped advisory lock so it is safe across concurrent processes.
+
+  When schema changes are disabled via `disableInit` or `MASTRA_DISABLE_STORAGE_INIT`, a descriptive `MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED` error is thrown instead. In that case, either call `createIndex()` with init enabled, or run the following migration as a single transaction (replace `<index>` with the table name):
+
+  ```sql
+  BEGIN;
+  SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | '<index>'::regclass::oid::bigint);
+  ALTER TABLE <index> ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default';
+  CREATE UNIQUE INDEX IF NOT EXISTS <index>_namespace_vector_id_idx ON <index> (namespace, vector_id);
+  ALTER TABLE <index> DROP CONSTRAINT IF EXISTS <index>_vector_id_key;
+  COMMIT;
+  ```
+
+  **What automatic migration requires**
+
+  - First access to a legacy table requires table-owner DDL permissions.
+  - First access takes a transaction-scoped advisory lock and PostgreSQL DDL locks.
+  - Already-migrated tables remain usable with SELECT-only access.
+  - Failed or incomplete migrations are retried on the next operation.
+  - Equivalent composite unique indexes are recognized regardless of name or key order.
+  - For long table names, automatic migration uses a bounded hashed index name and rolls back if a conflicting index prevents reconciliation.
+
+  **Before you run the SQL above**
+
+  - The example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed.
+  - For a long table name, choose a unique index name of at most 63 characters.
+  - If an index with the same name already exists, verify it is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint.
+
+  Fixes #23272
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+
+## 1.23.0-alpha.6
+
+### Patch Changes
+
+- Improved PostgresStore last-N message reads. Paginated reads now avoid materializing message content for every matching row before applying the page limit, letting the `(thread_id, createdAt DESC)` index serve the page. Totals and single-round-trip behavior remain unchanged. ([#23369](https://github.com/mastra-ai/mastra/pull/23369))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+
 ## 1.23.0-alpha.5
 
 ### Patch Changes
