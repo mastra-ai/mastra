@@ -91,6 +91,63 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.sql).toContain(
+      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+    );
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `$.${JSON.stringify(key)}`,
+      `$.${JSON.stringify(key)}`,
+      value,
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      'assistant',
+      'tool',
+      '$."parentMessageId"',
+      '$."parentMessageId"',
+      101,
+    ]);
+  });
+
+  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+    const key = ` latency'ms `;
+    const path = `$.${JSON.stringify(key)}`;
+    const trusted = plan({
+      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
+    });
+    const ordered = {
+      ...trusted,
+      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
+    } as TrustedTraceQueryPlan;
+
+    const compiled = compileDuckDBTraceQuery(ordered);
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
   it('selects the latest logical root before applying completion and time filters', () => {
     const compiled = compileDuckDBTraceQuery(plan());
 

@@ -3,10 +3,11 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
   emptyThreadTracesList,
   threadTracesList,
@@ -31,19 +32,25 @@ const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
       {
+        // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
+        path: '/agents/:agentId',
         element: (
           <>
             <LocationProbe />
-            <AgentThread />
+            <AgentLayout>
+              <Outlet />
+            </AgentLayout>
           </>
         ),
-        path: '/agents/:agentId/threads/:threadId',
+        children: [
+          { index: true, loader: agentIndexLoader },
+          { path: 'chat', loader: legacyAgentChatLoader },
+          { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'threads', loader: agentThreadsIndexLoader },
+          { path: 'threads/:threadId', element: <AgentThread /> },
+          { path: 'overview', element: <div data-testid="overview-page" /> },
+        ],
       },
-      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
-      { path: '/agents/:agentId', loader: agentIndexLoader },
-      { path: '/agents/:agentId/overview', element: <LocationProbe /> },
-      { path: '/agents/:agentId/chat', loader: legacyAgentChatLoader },
-      { path: '/agents/:agentId/chat/:threadId', loader: legacyAgentChatLoader },
     ],
     { initialEntries: [initialEntry] },
   );
@@ -137,6 +144,7 @@ function installHandlers() {
       HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
     ),
     http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({})),
   );
 }
 
@@ -188,24 +196,29 @@ describe('Standalone thread page', () => {
 
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByTestId('thread-list-skeleton')).not.toBeNull();
-      // The overview-page sidebar skeleton (with its memory card) must not be reused here.
-      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+      expect(await screen.findByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
 
       releaseThreads();
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('thread-list-skeleton')).toBeNull();
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
     });
   });
 
-  it('shows the Mastra logo and a back link to the agent overview in the sidebar', async () => {
+  it('highlights the Chat tab in the agent tab bar', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    const back = screen.getByTestId('thread-sidebar-back');
-    expect(back.getAttribute('href')).toBe(`/agents/${AGENT_ID}/overview`);
-    expect(back.textContent).toContain('Back to');
+    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('highlights the Chat tab on /threads/new', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+    await screen.findByText('Sushi ideas');
+    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('navigates to another thread when clicked in the list', async () => {
@@ -218,14 +231,6 @@ describe('Standalone thread page', () => {
     await waitFor(() =>
       expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/thread-2`),
     );
-  });
-
-  it('does not render the agent page tabs (full-screen page)', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-    await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.queryByRole('tab')).toBeNull();
   });
 
   it('redirects /agents/:agentId/threads to /threads/new', async () => {
@@ -274,12 +279,12 @@ describe('Standalone thread page', () => {
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
-  it('does not render the "Show traces" switch nor fetch traces on /new', async () => {
+  it('does not render the "Show thread traces" switch nor fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
-    await screen.findByTestId('thread-sidebar-back');
-    expect(screen.queryByRole('switch', { name: 'Show traces' })).toBeNull();
+    await screen.findByText('Sushi ideas');
+    expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
     expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
@@ -330,7 +335,7 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      const deleteButtons = screen.getAllByRole('button', { name: 'Delete thread' });
+      const deleteButtons = screen.getAllByRole('button', { name: /delete thread/i });
       expect(deleteButtons).toHaveLength(2);
       fireEvent.click(deleteButtons[1]);
 
@@ -355,7 +360,7 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Pasta night');
 
-      fireEvent.click(screen.getAllByRole('button', { name: 'Delete thread' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: /delete thread/i })[0]);
       fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
 
       await waitFor(() =>
@@ -380,7 +385,7 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      expect(screen.queryByRole('button', { name: 'Delete thread' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /delete thread/i })).toBeNull();
     });
   });
 
@@ -413,16 +418,15 @@ describe('Standalone thread page', () => {
 
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Show traces' })).toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Show thread traces' })).toBeNull();
     });
 
-    it('is toggled from the "Show traces" switch in the Thread header', async () => {
+    it('is toggled from the "Show thread traces" switch in the tab bar', async () => {
       installHandlers();
       installTraceHandlers();
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByRole('heading', { name: 'Thread' })).not.toBeNull();
-      const toggle = screen.getByRole('switch', { name: 'Show traces' });
+      const toggle = await screen.findByRole('switch', { name: 'Show thread traces' });
       expect(toggle.getAttribute('aria-checked')).toBe('false');
 
       fireEvent.click(toggle);
@@ -433,7 +437,7 @@ describe('Standalone thread page', () => {
       );
       expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
 
-      fireEvent.click(screen.getByRole('switch', { name: 'Show traces' }));
+      fireEvent.click(screen.getByRole('switch', { name: 'Show thread traces' }));
       await waitFor(() =>
         expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
       );

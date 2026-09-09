@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, Link as LinkIcon, MessageSquarePlus, Pencil } from 'lucide-react';
+import { Check, Link as LinkIcon, Pencil } from 'lucide-react';
 
 import { useAgent } from '../hooks/use-agent';
 import { AgentEntityHeader } from './agent-entity-header';
@@ -57,18 +57,6 @@ export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
           >
             <Icon size="sm">{isShareCopied ? <Check /> : <LinkIcon />}</Icon>
             Share
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            as={FrameworkLink}
-            to={paths.agentNewThreadLink(agentId)}
-            data-testid="agent-view-header-new-chat"
-          >
-            <Icon size="sm">
-              <MessageSquarePlus />
-            </Icon>
-            Open chat
           </Button>
         </div>
       </div>
