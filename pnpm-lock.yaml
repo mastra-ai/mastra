@@ -54,7 +54,7 @@ catalogs:
       version: 6.0.3
 
 overrides:
-  onnxruntime-node: 1.23.0
+  '@mastra/fastembed>onnxruntime-node': 1.23.0
   bson: 7.2.0
   '@types/node': 22.19.15
   cookie: '>=1.1.1 <2'
@@ -28480,6 +28480,9 @@ packages:
   oniguruma-to-es@4.3.6:
     resolution: {integrity: sha512-csuQ9x3Yr0cEIs/Zgx/OEt9iBw9vqIunAPQkx19R/fiMq2oGVTgcMqO/V3Ybqefr1TBvosI6jU539ksaBULJyA==}
 
+  onnxruntime-common@1.19.2:
+    resolution: {integrity: sha512-a4R7wYEVFbZBlp0BfhpbFWqe4opCor3KM+5Wm22Az3NGDcQMiU2hfG/0MfnBs+1ZrlSGmlgWeMcXQkDk1UFb8Q==}
+
   onnxruntime-common@1.20.0-dev.20241016-2b8fc5529b:
     resolution: {integrity: sha512-KZK8b6zCYGZFjd4ANze0pqBnqnFTS3GIVeclQpa2qseDpXrCQJfkWBixRcrZShNhm3LpFOZ8qJYFC5/qsJK9WQ==}
 
@@ -28489,11 +28492,22 @@ packages:
   onnxruntime-common@1.24.0-dev.20251116-b39e144322:
     resolution: {integrity: sha512-BOoomdHYmNRL5r4iQ4bMvsl2t0/hzVQ3OM3PHD0gxeXu1PmggqBv3puZicEUVOA3AtHHYmqZtjMj9FOfGrATTw==}
 
+  onnxruntime-common@1.24.3:
+    resolution: {integrity: sha512-GeuPZO6U/LBJXvwdaqHbuUmoXiEdeCjWi/EG7Y1HNnDwJYuk6WUbNXpF6luSUY8yASul3cmUlLGrCCL1ZgVXqA==}
+
   onnxruntime-common@1.26.0:
     resolution: {integrity: sha512-qVyMR4lcWgbkc4getFV+GQijsTnbg/siteoqcDwa3sI/LxbrMSNw4ePyvCq/ymdQaRomCA7YuWmhzsswxvymdw==}
 
+  onnxruntime-node@1.19.2:
+    resolution: {integrity: sha512-9eHMP/HKbbeUcqte1JYzaaRC8JPn7ojWeCeoyShO86TOR97OCyIyAIOGX3V95ErjslVhJRXY8Em/caIUc0hm1Q==}
+    os: [win32, darwin, linux]
+
   onnxruntime-node@1.23.0:
     resolution: {integrity: sha512-j7QVuR4ouektZjOopKtXcIGsB3C6R9kVbgS10lc2e5SxoWMUhmCwxNl4qBslpWJaPrFxvrQrQaQLQdqku8V19w==}
+    os: [win32, darwin, linux]
+
+  onnxruntime-node@1.24.3:
+    resolution: {integrity: sha512-JH7+czbc8ALA819vlTgcV+Q214/+VjGeBHDjX81+ZCD0PCVCIFGFNtT0V4sXG/1JXypKPgScQcB3ij/hk3YnTg==}
     os: [win32, darwin, linux]
 
   onnxruntime-web@1.21.0-dev.20241024-d9ca84ef96:
@@ -32341,7 +32355,7 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@huggingface/transformers': ^3.8.0
-      onnxruntime-node: 1.23.0
+      onnxruntime-node: '>=1.17.0'
     peerDependenciesMeta:
       '@huggingface/transformers':
         optional: true
@@ -39291,7 +39305,7 @@ snapshots:
     dependencies:
       '@huggingface/jinja': 0.3.4
       onnxruntime-common: 1.26.0
-      onnxruntime-node: 1.23.0
+      onnxruntime-node: 1.19.2
       onnxruntime-web: 1.21.0-dev.20241024-d9ca84ef96
       sharp: 0.35.3(@types/node@22.19.15)
     transitivePeerDependencies:
@@ -39303,7 +39317,7 @@ snapshots:
       '@huggingface/jinja': 0.5.9
       '@huggingface/tokenizers': 0.1.3
       onnxruntime-common: 1.26.0
-      onnxruntime-node: 1.23.0
+      onnxruntime-node: 1.24.3
       onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
       sharp: 0.35.3(@types/node@22.19.15)
     transitivePeerDependencies:
@@ -40160,7 +40174,7 @@ snapshots:
       '@huggingface/hub': 2.4.1
       '@huggingface/transformers': 4.2.0(@types/node@22.19.15)
       '@livekit/agents': 1.7.1(@aws-sdk/credential-provider-node@3.972.78)(@livekit/rtc-node@0.13.34)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.4.3)
-      onnxruntime-node: 1.23.0
+      onnxruntime-node: 1.24.3
     transitivePeerDependencies:
       - '@types/node'
 
@@ -40168,7 +40182,7 @@ snapshots:
     dependencies:
       '@livekit/agents': 1.7.1(@aws-sdk/credential-provider-node@3.972.78)(@livekit/rtc-node@0.13.34)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.4.3)
       '@livekit/rtc-node': 0.13.34
-      onnxruntime-node: 1.23.0
+      onnxruntime-node: 1.24.3
       ws: 8.21.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
@@ -54685,6 +54699,9 @@ snapshots:
       regex: 6.1.0
       regex-recursion: 6.0.2
 
+  onnxruntime-common@1.19.2:
+    optional: true
+
   onnxruntime-common@1.20.0-dev.20241016-2b8fc5529b:
     optional: true
 
@@ -54692,13 +54709,27 @@ snapshots:
 
   onnxruntime-common@1.24.0-dev.20251116-b39e144322: {}
 
+  onnxruntime-common@1.24.3: {}
+
   onnxruntime-common@1.26.0: {}
+
+  onnxruntime-node@1.19.2:
+    dependencies:
+      onnxruntime-common: 1.19.2
+      tar: 7.5.21
+    optional: true
 
   onnxruntime-node@1.23.0:
     dependencies:
       adm-zip: 0.6.0
       global-agent: 3.0.0
       onnxruntime-common: 1.23.0
+
+  onnxruntime-node@1.24.3:
+    dependencies:
+      adm-zip: 0.6.0
+      global-agent: 3.0.0
+      onnxruntime-common: 1.24.3
 
   onnxruntime-web@1.21.0-dev.20241024-d9ca84ef96:
     dependencies:

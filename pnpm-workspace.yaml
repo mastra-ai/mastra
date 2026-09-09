@@ -230,8 +230,10 @@ overrides:
   # @mastra/fastembed's 1.26.0 pin makes every server that imports it (the
   # factory boots through @mastra/code-sdk) fail to load on Intel Macs.
   # 1.23.0 is the last release with both darwin arch builds; @mastra/fastembed
-  # only uses InferenceSession.create and Tensor, which are unchanged.
-  onnxruntime-node: 1.23.0
+  # only uses InferenceSession.create and Tensor, which are unchanged. Scoped
+  # to that one parent so @huggingface/transformers and the livekit plugins
+  # keep the native runtime they were published against.
+  '@mastra/fastembed>onnxruntime-node': 1.23.0
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
   '@types/node': 22.19.15
