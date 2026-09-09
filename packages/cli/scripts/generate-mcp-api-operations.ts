@@ -6,6 +6,7 @@ import { format } from 'oxfmt';
 import type { FormatConfig } from 'oxfmt';
 
 import { API_COMMANDS, registerApiCommand } from '../src/commands/api/index.js';
+import type { ApiCommandDescriptor } from '../src/commands/api/types.js';
 
 const executionCommands = new Set([
   'agent run',
@@ -18,12 +19,16 @@ const executionCommands = new Set([
 
 export const outputPath = path.resolve(import.meta.dirname, '../../mcp/src/server/mastra-api-operations.generated.ts');
 
+export function isApiPrefixedCommand(command: Pick<ApiCommandDescriptor, 'routePlacement'>): boolean {
+  return (command.routePlacement ?? 'api-prefix') === 'api-prefix';
+}
+
 export function getOperations() {
   registerApiCommand(new Command());
 
   // The MCP requester supports API-prefixed server routes, not origin-relative Factory/platform routes.
   return Object.values(API_COMMANDS)
-    .filter(command => (command.routePlacement ?? 'api-prefix') === 'api-prefix')
+    .filter(isApiPrefixedCommand)
     .map(command => ({
       name: command.name.replaceAll(' ', '_').replaceAll('-', '_'),
       description: command.description,

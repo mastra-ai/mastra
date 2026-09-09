@@ -4,15 +4,25 @@ import { Command } from 'commander';
 import { test } from 'vitest';
 
 import { MASTRA_API_OPERATIONS } from '../../../../mcp/src/server/mastra-api-operations.generated.js';
-import { generateOperationsSource, outputPath } from '../../../scripts/generate-mcp-api-operations.js';
+import {
+  generateOperationsSource,
+  isApiPrefixedCommand,
+  outputPath,
+} from '../../../scripts/generate-mcp-api-operations.js';
 import { API_COMMANDS, registerApiCommand } from './index.js';
 
 registerApiCommand(new Command());
 const commands = Object.values(API_COMMANDS);
 const operationName = (name: string) => name.replaceAll(' ', '_').replaceAll('-', '_');
 
+test('API-prefixed routing accepts the default and explicit prefix but excludes origin routes', () => {
+  assert.equal(isApiPrefixedCommand({}), true);
+  assert.equal(isApiPrefixedCommand({ routePlacement: 'api-prefix' }), true);
+  assert.equal(isApiPrefixedCommand({ routePlacement: 'origin' }), false);
+});
+
 test('catalog matches every API-prefixed CLI command and its routing metadata', () => {
-  const serverCommands = commands.filter(command => command.routePlacement !== 'origin');
+  const serverCommands = commands.filter(isApiPrefixedCommand);
   assert.equal(serverCommands.length, 60);
   assert.deepEqual(
     MASTRA_API_OPERATIONS.map(operation => operation.name).sort(),
