@@ -161,7 +161,7 @@ Both `/runs` and `/suspended-runs` require the `agents:read` permission. Suspend
 
 Without server auth or an authenticated identity, the request-context resource takes precedence over the query value, if set.
 
-When fine-grained authorization (FGA) is configured, resource ownership alone isn't enough. The server checks `memory:read` access for each stored thread before calculating the total and applying pagination. Admin resource bypass doesn't bypass thread FGA. Runs without a thread, with a missing thread, or with unavailable memory are excluded from resource-wide listings. Authorized runs retain their full payloads.
+When fine-grained authorization (FGA) is configured, resource ownership alone isn't enough. Before calculating totals or applying pagination, the server checks `memory:read` access for each stored thread, including for admins who bypass resource scoping. Runs without a thread, with a missing thread, or with unavailable memory are excluded from resource-wide listings. Authorized runs retain their full payloads.
 
 ### Version selection
 
