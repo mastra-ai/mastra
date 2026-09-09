@@ -74,6 +74,15 @@ export function projectCandidateContext({
     return 'No accumulated observations were available for this check.';
   }
 
+  // Below the budget the projection buys nothing: forwarding everything costs no more than the
+  // ceiling we already accept, and it lets the reminder agent notice redundancy the lexical join
+  // cannot see, such as the same fact in entirely different words. Only pay the recall cost of
+  // filtering once the accumulated memory is the size problem the filtering exists to solve.
+  const whole = observations.join('\n');
+  if (whole.length <= CANDIDATE_CONTEXT_MAX_CHARACTERS) {
+    return `All accumulated observations already visible to the parent agent:\n${whole}`;
+  }
+
   const indexed = observations.map(line => ({ line, terms: extractDistinctiveTerms(line) }));
   const sections: string[] = [];
 

@@ -427,13 +427,12 @@ describe('Subconscious remind', () => {
       expect(prompts[0]).toContain('user: what is the weather like on the moon?');
       expect(prompts[0]).toContain('already visible');
       expect(prompts[0]).toContain("What the parent's accumulated observations already say about these candidates:");
-      if (expectActiveExcerpt) {
-        expect(prompts[0]).toContain('no weather worth planning around');
+      if (activeObservations) {
+        // Accumulated memory this small stays under the projection budget, so it is forwarded whole
+        // rather than filtered: below the budget, filtering would cost recall and save nothing.
+        expect(prompts[0]).toContain(activeObservations);
       } else {
-        // Unrelated or absent accumulated memory is reported as such, and is never carried wholesale
-        // into the prompt just because it exists.
-        expect(prompts[0]).toMatch(/no accumulated observations?[^\n]*(available|references it)/i);
-        expect(prompts[0]).not.toContain('OLDER_VISIBLE_FACT');
+        expect(prompts[0]).toMatch(/no accumulated observations?[^\n]*available/i);
       }
       expect(prompts[0]).toContain('Newly extracted observations:');
       expect(prompts[0]).toContain('compare each proposed fact against ALL supplied parent context');

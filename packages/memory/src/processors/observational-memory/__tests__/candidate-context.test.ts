@@ -4,13 +4,24 @@ import { CANDIDATE_CONTEXT_MAX_CHARACTERS, projectCandidateContext } from '../su
 
 const source = (id: string, text: string) => ({ type: 'record' as const, id, text });
 
+/** Pads accumulated observations past the budget so the projection filters instead of forwarding. */
+function overBudget(...lines: string[]) {
+  const filler = Array.from(
+    { length: 120 },
+    (_, index) => `Unrelated accumulated observation ${index} about scheduling, travel, and errands.`,
+  );
+  const all = [...lines, ...filler].join('\n');
+  expect(all.length).toBeGreaterThan(CANDIDATE_CONTEXT_MAX_CHARACTERS);
+  return all;
+}
+
 describe('candidate context projection', () => {
   it('reports, per candidate, the accumulated observations that reference it', () => {
-    const activeObservations = [
+    const activeObservations = overBudget(
       'Jamie switched the invoice pipeline to quarterly billing.',
       'The kitchen renovation is blocked on the countertop supplier.',
       'Tyler prefers reviews posted before standup.',
-    ].join('\n');
+    );
 
     const result = projectCandidateContext({
       activeObservations,
@@ -26,7 +37,7 @@ describe('candidate context projection', () => {
 
   it('says plainly when nothing accumulated references a candidate, without claiming it was forgotten', () => {
     const result = projectCandidateContext({
-      activeObservations: 'The kitchen renovation is blocked on the countertop supplier.',
+      activeObservations: overBudget('The kitchen renovation is blocked on the countertop supplier.'),
       sources: [source('k-invoice', 'invoice pipeline billing cadence')],
     });
 
@@ -37,10 +48,10 @@ describe('candidate context projection', () => {
   });
 
   it('attributes each excerpt to the candidate it matched rather than merging them', () => {
-    const activeObservations = [
+    const activeObservations = overBudget(
       'Jamie switched the invoice pipeline to quarterly billing.',
       'The kitchen renovation is blocked on the countertop supplier.',
-    ].join('\n');
+    );
 
     const result = projectCandidateContext({
       activeObservations,
@@ -86,7 +97,7 @@ describe('candidate context projection', () => {
   });
 
   it('treats a candidate with no distinctive terms as unmatched rather than matching everything', () => {
-    const activeObservations = 'Jamie switched the invoice pipeline to quarterly billing.';
+    const activeObservations = overBudget('Jamie switched the invoice pipeline to quarterly billing.');
 
     const result = projectCandidateContext({
       activeObservations,
@@ -104,5 +115,25 @@ describe('candidate context projection', () => {
     });
 
     expect(result).toMatch(/no accumulated observations/i);
+  });
+
+  it('forwards the whole accumulated memory while it still fits in the budget', () => {
+    // Filtering only exists to control size. Under the budget it would cost recall for nothing:
+    // a fact worded entirely differently from the candidate is invisible to a lexical join, but a
+    // model reading the whole memory can still spot it.
+    const activeObservations = [
+      'Jamie moved the invoice pipeline to a quarterly billing cadence.',
+      'Tyler prefers reviews posted before standup.',
+    ].join('\n');
+
+    const result = projectCandidateContext({
+      activeObservations,
+      sources: [source('k-cash', 'cash collection rhythm changed')],
+    });
+
+    expect(result.length).toBeLessThanOrEqual(CANDIDATE_CONTEXT_MAX_CHARACTERS + 64);
+    // shares no distinctive term with the candidate, yet is still forwarded
+    expect(result).toContain('quarterly billing cadence');
+    expect(result).toContain('before standup');
   });
 });
