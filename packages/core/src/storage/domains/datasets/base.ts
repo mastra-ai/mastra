@@ -10,6 +10,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -197,6 +198,17 @@ export abstract class DatasetsStorage extends StorageDomain {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
 
+    const existing = await this.getItemById({ id: args.id });
+    if (existing?.datasetId === args.datasetId && existing.metadata?.__purged === true) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_PURGED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { datasetId: args.datasetId, itemId: args.id },
+        text: `Purged dataset item cannot be updated: ${args.id}`,
+      });
+    }
+
     const { id: _id, datasetId: _datasetId, filters: _filters, ...payload } = args;
     validateDatasetItemPayloadSerialization(payload, 'item');
 
@@ -236,6 +248,22 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   /** Subclasses implement actual storage delete logic with SCD-2 versioning */
   protected abstract _doDeleteItem(args: DeleteDatasetItemInput): Promise<void>;
+
+  /**
+   * Permanently scrub user-supplied content from every SCD-2 row for an item
+   * and from experiment results that reference it. The item's identity and
+   * versioning skeleton are retained.
+   */
+  async purgeItem(args: PurgeDatasetItemInput): Promise<void> {
+    if (args.filters) {
+      const dataset = await this.getDatasetForMutation({ id: args.datasetId, filters: args.filters });
+      if (!dataset) return;
+    }
+    return this._doPurgeItem(args);
+  }
+
+  /** Subclasses implement the atomic item-history and experiment-result scrub. */
+  protected abstract _doPurgeItem(args: PurgeDatasetItemInput): Promise<void>;
 
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
   abstract getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null>;

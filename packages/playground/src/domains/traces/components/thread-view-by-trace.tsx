@@ -1,3 +1,4 @@
+import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -10,11 +11,12 @@ import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-sp
 import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
+import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
@@ -42,42 +44,6 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
 
   // The list comes back newest-first; a conversation reads oldest-first.
   const traces = useMemo(() => [...(tracesData?.spans ?? [])].reverse(), [tracesData]);
-
-  const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
-  const railTurns = useThreadRailTurns(traceIds);
-  const listRef = useRef<HTMLDivElement>(null);
-  const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
-  const jumpToTrace = useCallback((turn: ThreadRailTurn) => {
-    const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-trace-id]') ?? [];
-    for (const row of rows) {
-      if (row.dataset.traceId === turn.messageId) {
-        row.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      }
-    }
-  }, []);
-
-  const [selected, setSelected] = useState<SelectedSpan | null>(null);
-  // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
-  const [highlight, setHighlight] = useState<{ traceId: string; spanIds: string[] } | null>(null);
-
-  const selectSpan = (traceId: string, spanId: string | undefined) => {
-    setSelected(spanId ? { traceId, spanId } : null);
-    // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
-    if (!spanId) setHighlight(null);
-  };
-
-  const highlightSpans = (traceId: string, spanIds: string[]) => {
-    const lastSpanId = spanIds.at(-1);
-    if (!lastSpanId) {
-      setHighlight(null);
-      return;
-    }
-    setHighlight({ traceId, spanIds });
-    // Open the detail panel on the last highlighted span: the first is always the root, the
-    // last is the deepest step behind the message. The timeline scrolls the selected row into view.
-    setSelected({ traceId, spanId: lastSpanId });
-  };
 
   if (error) {
     return (
@@ -107,6 +73,77 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     );
   }
 
+  return <LoadedThreadViewByTrace traces={traces} setEndOfListElement={setEndOfListElement} />;
+}
+
+interface LoadedThreadViewByTraceProps {
+  traces: LightSpanRecord[];
+  setEndOfListElement: (node: HTMLDivElement | null) => void;
+}
+
+/** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
+function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadViewByTraceProps) {
+  const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
+  const railTurns = useThreadRailTurns(traceIds);
+  const listRef = useRef<HTMLDivElement>(null);
+  const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
+  const findRow = (traceId: string) => {
+    const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-trace-id]') ?? [];
+    for (const row of rows) {
+      if (row.dataset.traceId === traceId) return row;
+    }
+    return undefined;
+  };
+  const jumpToTrace = useCallback((turn: ThreadRailTurn) => {
+    findRow(turn.messageId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const [selected, setSelected] = useState<SelectedSpan | null>(null);
+  // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
+  const [highlight, setHighlight] = useState<{ traceId: string; spanIds: string[] } | null>(null);
+  // "View full thread" on the traces page lands here with the originating trace: that row starts
+  // expanded and scrolls into view when it mounts (see `scrollIntoViewOnMount`). Best effort on the
+  // first page only: resolved once at mount, so a row that arrives on a later page is left alone.
+  const [searchParams] = useSearchParams();
+  const [anchorTraceId] = useState(() => {
+    const requested = searchParams.get('traceId');
+    return requested && traces.some(trace => trace.traceId === requested) ? requested : null;
+  });
+  // Rows whose timeline is shown in full rather than clamped to the messages column. Selecting a
+  // span expands its row and it stays expanded until the reader collapses it with "Show less".
+  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(
+    () => new Set(anchorTraceId ? [anchorTraceId] : []),
+  );
+
+  const setTraceExpanded = (traceId: string, expanded: boolean) => {
+    setExpandedTraceIds(current => {
+      if (current.has(traceId) === expanded) return current;
+      const next = new Set(current);
+      if (expanded) next.add(traceId);
+      else next.delete(traceId);
+      return next;
+    });
+  };
+
+  const selectSpan = (traceId: string, spanId: string | undefined) => {
+    setSelected(spanId ? { traceId, spanId } : null);
+    if (spanId) setTraceExpanded(traceId, true);
+    // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
+    if (!spanId) setHighlight(null);
+  };
+
+  const highlightSpans = (traceId: string, spanIds: string[]) => {
+    const lastSpanId = spanIds.at(-1);
+    if (!lastSpanId) {
+      setHighlight(null);
+      return;
+    }
+    setHighlight({ traceId, spanIds });
+    // Open the detail panel on the last highlighted span: the first is always the root, the
+    // last is the deepest step behind the message. The timeline scrolls the selected row into view.
+    selectSpan(traceId, lastSpanId);
+  };
+
   return (
     <div
       className={cn(
@@ -135,6 +172,10 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
               traceId={trace.traceId}
               selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
+              isCurrent={currentTraceId === trace.traceId}
+              isExpanded={expandedTraceIds.has(trace.traceId)}
+              isAnchor={anchorTraceId === trace.traceId}
+              onExpandedChange={expanded => setTraceExpanded(trace.traceId, expanded)}
               onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
               onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
             />
@@ -158,19 +199,33 @@ interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
   featuredSpanIds?: string[];
+  isCurrent: boolean;
+  isExpanded: boolean;
+  /** The row the reader came from via "View full thread"; scrolled into view once it mounts. */
+  isAnchor: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   onSpanSelect: (spanId: string | undefined) => void;
   onHighlightSpans: (spanIds: string[]) => void;
 }
+
+// Module-level so the callback ref keeps its identity and React only invokes it on mount/unmount.
+const scrollIntoViewOnMount = (row: HTMLDivElement | null) => {
+  row?.scrollIntoView({ block: 'start' });
+};
 
 function TraceThreadRow({
   traceId,
   selectedSpanId,
   featuredSpanIds,
+  isCurrent,
+  isExpanded,
+  isAnchor,
+  onExpandedChange,
   onSpanSelect,
   onHighlightSpans,
 }: TraceThreadRowProps) {
   // Deduped with the fetch inside TraceThreadItemView (same query key).
-  const { data, isLoading } = useTraceSpans(traceId);
+  const { data, isLoading } = useTraceSpans(traceId, { passive: true });
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
 
@@ -178,24 +233,33 @@ function TraceThreadRow({
 
   const [showFeedback, setShowFeedback] = useState(false);
 
-  // The whole row is dimmed until hovered, or while its span is open in the side panel, so the
-  // reader keeps track of which turn the details belong to without hovering.
+  // The whole row is dimmed unless it is the first one in view, hovered, or its span is open in
+  // the side panel, so the reader keeps track of which turn they are on without hovering.
   const isActive = selectedSpanId !== undefined;
+
+  // A long trace is clamped to the real height of its messages column (not a nominal row height),
+  // so the timeline never dwarfs the turn it belongs to. Both heights are measured because the
+  // clamp only makes sense when the timeline actually overflows.
+  const messages = useMeasuredAutoHeight<HTMLDivElement>();
+  const timeline = useMeasuredAutoHeight<HTMLDivElement>();
+  const overflows = messages.height !== null && timeline.height !== null && timeline.height > messages.height;
+  const isClamped = overflows && !isExpanded;
 
   return (
     <div
       className={cn(
         'group grid grid-cols-[1fr_1fr] pr-4 pl-14 transition-opacity hover:opacity-100',
-        isActive || showFeedback ? 'opacity-100' : 'opacity-50',
+        isActive || isCurrent || showFeedback ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
+      ref={isAnchor ? scrollIntoViewOnMount : undefined}
     >
       {/* The messages column has no bottom border so consecutive turns read as one
           continuous conversation; the vertical border separates it from the trace. */}
       <div className="border-border1 relative min-h-[240px] min-w-0 border-r pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
-        <div className="sticky top-0 flex flex-col gap-2 py-4">
+        <div ref={messages.ref} className="sticky top-0 flex flex-col gap-2 py-4" data-testid="trace-row-messages">
           <div
             className={cn(
               'z-30 flex items-center gap-1 transition-opacity',
@@ -233,17 +297,38 @@ function TraceThreadRow({
         </div>
       </div>
       <div className="border-border1 min-w-0 border-b">
-        <div className="py-4 pl-4">
-          <TraceTimeline
-            hierarchicalSpans={hierarchicalSpans}
-            selectedSpanId={selectedSpanId}
-            featuredSpanIds={featuredSpanIds}
-            onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
-            expandedSpanIds={expandedSpanIds}
-            setExpandedSpanIds={setExpandedSpanIds}
-            isLoading={isLoading}
-          />
+        <div
+          className="relative overflow-hidden"
+          style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
+          data-testid="trace-row-timeline"
+        >
+          <div ref={timeline.ref} className="py-4 pl-4">
+            <TraceTimeline
+              hierarchicalSpans={hierarchicalSpans}
+              selectedSpanId={selectedSpanId}
+              featuredSpanIds={featuredSpanIds}
+              onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
+              isLoading={isLoading}
+            />
+          </div>
+          {overflows && isClamped && (
+            <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
+              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
+                Show more
+              </Button>
+            </div>
+          )}
         </div>
+        {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
+        {overflows && !isClamped && !isActive && (
+          <div className="flex justify-center py-2">
+            <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
+              Show less
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

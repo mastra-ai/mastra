@@ -1,6 +1,6 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { TraceThreadItemView } from '../trace-thread-item-view';
 import {
@@ -81,6 +81,46 @@ describe('TraceThreadItemView', () => {
       expect(await screen.findByTestId('workflow-graph-viewport')).not.toBeNull();
       expect(screen.getAllByTestId('tool-badge')).toHaveLength(3);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when span highlighting is enabled', () => {
+    it('only exposes the highlight button on text-only messages', async () => {
+      installToolTraceHandlers();
+
+      const { queryClient } = renderWithProviders(
+        <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} onHighlightSpans={vi.fn()} />,
+        { router: true },
+      );
+
+      await screen.findByText('Your Paris itinerary is ready.');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // user text message + final assistant text message; none for the 4 tool messages
+      expect(screen.getAllByRole('button', { name: 'Highlight spans' })).toHaveLength(2);
+    });
+
+    it('highlights the spans behind a tool call when its collapsible is opened', async () => {
+      installToolTraceHandlers();
+      const onHighlightSpans = vi.fn();
+
+      const { queryClient } = renderWithProviders(
+        <TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} onHighlightSpans={onHighlightSpans} />,
+        { router: true },
+      );
+
+      await screen.findByText('Your Paris itinerary is ready.');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // Tool badges render in trace order: mcp-tool, client-tool, provider-tool.
+      const [hotelBadge] = screen.getAllByTestId('tool-badge');
+      const trigger = within(hotelBadge!).getAllByRole('button')[0]!;
+
+      fireEvent.click(trigger);
+      expect(onHighlightSpans).toHaveBeenCalledWith(['agent-root', 'mcp-tool']);
+
+      fireEvent.click(trigger);
+      expect(onHighlightSpans).toHaveBeenCalledTimes(1);
     });
   });
 

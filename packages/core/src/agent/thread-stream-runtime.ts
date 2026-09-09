@@ -5,6 +5,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { isSystemReminderSignalType } from '../memory/system-reminders';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
@@ -1062,6 +1063,8 @@ export class AgentThreadStreamRuntime {
     resourceId: string,
     threadId: string,
   ) {
+    if (isSystemReminderSignalType(signal.type)) return;
+
     let finish!: () => void;
     const finished = new Promise<void>(resolve => {
       finish = resolve;

@@ -1,6 +1,12 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Fragment, useRef, useState, type ReactNode } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import {
+  Fragment,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 
 import { clamp, type AuditTimeRange } from '../../auditPresentation';
 import {

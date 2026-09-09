@@ -1,5 +1,9 @@
 {
   "attachment": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "amazon/moonshotai.kimi-k2.5",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
@@ -152,6 +156,14 @@
     "zai/glm-5v-turbo"
   ],
   "temperature": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
+    "amazon/mistral.pixtral-large-2502-v1:0",
+    "amazon/mistral.pixtral-large-2502-v1:0@us",
     "amazon/moonshot.kimi-k2-thinking",
     "amazon/zai.glm-4.7-flash",
     "amazon/zai.glm-4.7-flash@us",
@@ -210,10 +222,10 @@
     "fireworks_ai/accounts/fireworks/models/inkling",
     "fireworks_ai/accounts/fireworks/models/muse-glimmer-30b",
     "fireworks_ai/gpt-oss-120b",
+    "flexai/DeepSeek-V4-Flash-0731",
     "flexai/Muse-Glimmer-30B",
     "flexai/Nemotron-3-Super-120B-A12B",
     "flexai/Step-3.7-Flash",
-    "flexai/deepseek-v4-flash-0731",
     "flexai/gpt-oss-120b",
     "flexai/gpt-oss-20b",
     "google/gemini-2.5-flash-image",
@@ -363,6 +375,12 @@
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",

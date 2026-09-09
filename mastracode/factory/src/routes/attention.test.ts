@@ -1,17 +1,18 @@
 /**
  * Attention over HTTP with every provider live: mention items and counts, the
  * per-kind receipt currency, read-all across kinds, the merged cursor, and the
- * activity tier that sits below the badge.
+ * kind filter beside the per-kind summary.
  */
 
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { ParkedRun } from '../session/live-sessions.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -19,6 +20,8 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
+
+const parkedBySession = new Map<string, ParkedRun>();
 
 function buildApp(user: typeof orgUser | null = orgUser) {
   const app = new Hono();
@@ -35,8 +38,12 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       workItems: seed.workItems,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
-      liveSessions: { isRunning: () => false },
+      transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
+      liveSessions: {
+        isRunning: () => false,
+        parked: sessionId => parkedBySession.get(sessionId),
+        parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
+      },
     }).routes(),
   );
   return app;
@@ -86,7 +93,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDef
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `attention-failure-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
@@ -143,8 +150,8 @@ describe('supervisor finding attention items', () => {
           workItemNumber: null,
           title: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
-          ageMs: 600_000,
-          suggestedRepair: { action: 'retry-decision', decisionId: 'decision-1' },
+          beganAt: '2029-12-31T23:50:00.000Z',
+          suggestedRepair: null,
         },
       ],
       now: new Date('2030-01-01T00:00:00.000Z'),
@@ -162,22 +169,175 @@ describe('supervisor finding attention items', () => {
           read: false,
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
-      badgeCount: 1,
-      latestOccurrenceUnread: true,
+      kinds: { 'supervisor-finding': { open: 1, unread: 1, latest: { unread: true } } },
     });
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+    ).resolves.toMatchObject({ items: [], kinds: { 'supervisor-finding': { open: 1, unread: 0 } } });
 
     expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0 },
+      { items: [], kinds: { 'supervisor-finding': { open: 0 } } },
     );
+  });
+
+  it('keeps a finding at the moment it opened when a later tick refreshes its evidence', async () => {
+    const item = await seedWorkItem('Repair stuck card');
+    const finding = {
+      id: `decision-stuck:${item.id}`,
+      kind: 'decision-stuck' as const,
+      workItemId: item.id,
+      workItemNumber: null,
+      title: 'A decision is stuck',
+      evidence: 'decision-1 has retried 2 times.',
+      beganAt: '2029-12-31T23:50:00.000Z',
+      suggestedRepair: null,
+    };
+    const openedAt = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [finding],
+      now: openedAt,
+    });
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [{ ...finding, evidence: 'decision-1 has retried 3 times.' }],
+      now: new Date('2030-01-01T00:05:00.000Z'),
+    });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open.items).toMatchObject([
+      { evidence: 'decision-1 has retried 3 times.', occurredAt: openedAt.toISOString() },
+    ]);
+  });
+});
+
+describe('agent waiting attention items', () => {
+  const sessionId = '6f1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+  const suspendedAt = new Date('2030-01-01T00:00:00.000Z').getTime();
+
+  beforeEach(() => parkedBySession.clear());
+
+  it('lists a parked session in the badge, opens its thread, and leaves once it is answered', async () => {
+    const item = await seedWorkItem('Ship the login fix');
+    await seed.workItems.update({
+      orgId: 'org1',
+      userId: 'u1',
+      id: item.id,
+      patch: { sessions: { work: { sessionId, branch: 'factory/login', threadId: 'thread-1' } } },
+    });
+    parkedBySession.set(sessionId, { toolName: 'submit_plan', suspendedAt });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'agent-waiting',
+          sessionId,
+          threadId: 'thread-1',
+          role: 'work',
+          toolName: 'submit_plan',
+          occurrence: suspendedAt,
+          workItemId: item.id,
+          title: 'Ship the login fix',
+          detail: 'Plan waiting for review',
+          occurredAt: '2030-01-01T00:00:00.000Z',
+          read: false,
+          target: { kind: 'thread', sessionId, threadId: 'thread-1' },
+        },
+      ],
+      kinds: { 'agent-waiting': { open: 1, unread: 1, latest: { unread: true } } },
+    });
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/agent-waiting/${sessionId}/${suspendedAt}`;
+    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
+    ).resolves.toMatchObject({ items: [], kinds: { 'agent-waiting': { open: 1, unread: 0 } } });
+
+    parkedBySession.delete(sessionId);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], kinds: { 'agent-waiting': { open: 0, unread: 0 } } },
+    );
+    expect((await request('POST', `${receiptPath}/archive`)).status).toBe(409);
+  });
+
+  it('pages two sessions parked in the same millisecond without repeating or losing one', async () => {
+    const otherSessionId = '7a1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+    for (const [title, id] of [
+      ['First card', sessionId],
+      ['Second card', otherSessionId],
+    ] as const) {
+      const item = await seedWorkItem(title);
+      await seed.workItems.update({
+        orgId: 'org1',
+        userId: 'u1',
+        id: item.id,
+        patch: { sessions: { work: { sessionId: id, branch: `factory/${id}`, threadId: 'thread-1' } } },
+      });
+      parkedBySession.set(id, { toolName: 'ask_user', suspendedAt });
+    }
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(first.items.map((entry: any) => entry.sessionId)).toEqual([sessionId]);
+    expect(first.hasMore).toBe(true);
+    const second = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1&before=${first.nextCursor}`)
+    ).json();
+    expect(second.items.map((entry: any) => entry.sessionId)).toEqual([otherSessionId]);
+    expect(second.hasMore).toBe(false);
+  });
+
+  it('read-all with a cursor leaves the parks newer than the cursor unread', async () => {
+    const newerSessionId = '7a1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+    for (const [title, id, at] of [
+      ['Older park', sessionId, suspendedAt],
+      ['Newer park', newerSessionId, suspendedAt + 1_000],
+    ] as const) {
+      const item = await seedWorkItem(title);
+      await seed.workItems.update({
+        orgId: 'org1',
+        userId: 'u1',
+        id: item.id,
+        patch: { sessions: { work: { sessionId: id, branch: `factory/${id}`, threadId: 'thread-1' } } },
+      });
+      parkedBySession.set(id, { toolName: 'ask_user', suspendedAt: at });
+    }
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(first.items.map((entry: any) => entry.sessionId)).toEqual([newerSessionId]);
+    const readAll = await request(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/attention/read-all?before=${first.nextCursor}`,
+    );
+    expect(readAll.status).toBe(200);
+    const unread = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json();
+    expect(unread.items.map((entry: any) => entry.sessionId)).toEqual([newerSessionId]);
+  });
+
+  it('409s a receipt for a park that has since been answered and re-parked', async () => {
+    const item = await seedWorkItem('Answer me');
+    await seed.workItems.update({
+      orgId: 'org1',
+      userId: 'u1',
+      id: item.id,
+      patch: { sessions: { work: { sessionId, branch: 'factory/answer', threadId: 'thread-1' } } },
+    });
+    parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt: suspendedAt + 1_000 });
+
+    const stale = `/web/factory/projects/${PROJECT_ID}/attention/agent-waiting/${sessionId}/${suspendedAt}/read`;
+    expect((await request('POST', stale)).status).toBe(409);
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json();
+    expect(open).toMatchObject({
+      items: [{ detail: 'Agent is waiting for an answer' }],
+      kinds: { 'agent-waiting': { unread: 1 } },
+    });
   });
 });
 
@@ -204,21 +364,18 @@ describe('mention attention items', () => {
           target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
-      badgeCount: 1,
-      latestOccurrenceUnread: true,
+      kinds: { mention: { open: 1, unread: 1, latest: { unread: true } } },
     });
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+    ).resolves.toMatchObject({ items: [], kinds: { mention: { open: 1, unread: 0 } } });
 
     expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0 },
+      { items: [], kinds: { mention: { open: 0 } } },
     );
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=archived`)).json(),
@@ -226,7 +383,7 @@ describe('mention attention items', () => {
 
     expect((await request('POST', `${receiptPath}/restore`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'mention', read: true, archived: false }], openCount: 1 },
+      { items: [{ kind: 'mention', read: true, archived: false }], kinds: { mention: { open: 1 } } },
     );
   });
 
@@ -241,7 +398,7 @@ describe('mention attention items', () => {
     });
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0, unreadCount: 0 },
+      { items: [], kinds: { mention: { open: 0, unread: 0 } } },
     );
   });
 
@@ -311,11 +468,11 @@ describe('mention attention items', () => {
     }
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'mention', detail: 'real' }], openCount: 1, unreadCount: 1, badgeCount: 1 },
+      { items: [{ kind: 'mention', detail: 'real' }], kinds: { mention: { open: 1, unread: 1 } } },
     );
   });
 
-  it('keeps the latest pointer on an unread item even when a read one is newer', async () => {
+  it('reports the newest item of each kind with its own read state', async () => {
     const item = await seedWorkItem();
     await seedMention({ workItemId: item.id, body: 'older unread', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
     const failure = await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
@@ -327,15 +484,15 @@ describe('mention attention items', () => {
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       {
-        latestOccurrenceAt: '2030-01-01T00:00:05.000Z',
-        latestOccurrenceUnread: true,
-        unreadCount: 1,
-        openCount: 2,
+        kinds: {
+          mention: { open: 1, unread: 1, latest: { at: '2030-01-01T00:00:05.000Z', unread: true } },
+          'automation-failed': { open: 1, unread: 0, latest: { at: '2030-01-01T00:00:10.000Z', unread: false } },
+        },
       },
     );
   });
 
-  it('sums counts across kinds for badge math', async () => {
+  it('counts every kind apart', async () => {
     const item = await seedWorkItem();
     await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
     await seedMention({ workItemId: item.id, body: 'one', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
@@ -343,10 +500,11 @@ describe('mention attention items', () => {
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       {
-        openCount: 3,
-        unreadCount: 3,
-        badgeCount: 3,
-        latestOccurrenceAt: '2030-01-01T00:00:15.000Z',
+        kinds: {
+          'automation-failed': { open: 1, unread: 1 },
+          mention: { open: 2, unread: 2, latest: { at: '2030-01-01T00:00:15.000Z' } },
+          activity: { open: 0, unread: 0, latest: null },
+        },
       },
     );
   });
@@ -411,7 +569,7 @@ describe('mention attention items', () => {
     await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { unreadCount: 0, openCount: 2 },
+      { kinds: { 'automation-failed': { open: 1, unread: 0 }, mention: { open: 1, unread: 0 } } },
     );
     await expect(
       seed.workItems.listAttentionReceipts({
@@ -436,7 +594,7 @@ async function seedProposal(
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `attention-proposal-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
@@ -479,8 +637,7 @@ describe('proposed attention items', () => {
             archived: false,
           },
         ],
-        openCount: 1,
-        unreadCount: 1,
+        kinds: { 'automation-proposed': { open: 1, unread: 1 } },
       },
     );
 
@@ -491,7 +648,7 @@ describe('proposed attention items', () => {
     );
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0, unreadCount: 0 },
+      { items: [], kinds: { 'automation-proposed': { open: 0, unread: 0 } } },
     );
     await expect(
       seed.workItems.listAttentionReceipts({
@@ -517,7 +674,7 @@ describe('proposed attention items', () => {
     ]);
   });
 
-  it('counts in the badge exactly the items it can list', async () => {
+  it('counts each kind exactly as it lists it', async () => {
     const item = await seedWorkItem();
     await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
     await seedFailure(item, new Date('2030-01-01T00:01:00.000Z'));
@@ -525,19 +682,24 @@ describe('proposed attention items', () => {
 
     const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
     expect(page.items).toHaveLength(3);
-    expect(page.badgeCount).toBe(3);
-    expect(page.unreadCount).toBe(3);
-    expect(page).not.toHaveProperty('approvalCount');
+    expect(page.kinds).toMatchObject({
+      'automation-proposed': { open: 1, unread: 1 },
+      'automation-failed': { open: 1, unread: 1 },
+      mention: { open: 1, unread: 1 },
+    });
   });
 
-  it('read-all zeroes the badge and leaves the run parked', async () => {
+  it('read-all reads the proposal and leaves the run parked', async () => {
     const item = await seedWorkItem();
     await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
 
     expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'automation-proposed', read: true }], badgeCount: 0, unreadCount: 0, openCount: 1 },
+      {
+        items: [{ kind: 'automation-proposed', read: true }],
+        kinds: { 'automation-proposed': { open: 1, unread: 0 } },
+      },
     );
   });
 });
@@ -555,7 +717,7 @@ describe('activity attention items', () => {
     });
   }
 
-  it('lists a comment on a followed item without ever reaching the badge', async () => {
+  it('lists a comment on a followed item with its own count and newest pointer', async () => {
     const item = await seedWorkItem();
     const comment = await seedActivity(item.id, 'moved this to review', new Date('2030-01-01T00:00:00.000Z'));
 
@@ -574,14 +736,12 @@ describe('activity attention items', () => {
           target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
         },
       ],
-      openCount: 0,
-      unreadCount: 0,
-      badgeCount: 0,
-      activityUnreadCount: 1,
+      kinds: {
+        activity: { open: 1, unread: 1, latest: { at: '2030-01-01T00:00:00.000Z', unread: true } },
+        mention: { open: 0, unread: 0, latest: null },
+      },
     });
-    // The sound is the badge tier's alone.
-    expect(page.latestOccurrenceKey).toBeNull();
-    expect(page.latestOccurrenceUnread).toBe(false);
+    expect(page.kinds.activity.latest.key).toBe(page.items[0].key);
   });
 
   it('re-unreads on the next comment and 409s the receipt the bump left behind', async () => {
@@ -591,12 +751,15 @@ describe('activity attention items', () => {
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
     expect((await request('POST', `${receiptPath}/1/read`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', read: true }], activityUnreadCount: 0 },
+      { items: [{ kind: 'activity', read: true }], kinds: { activity: { unread: 0 } } },
     );
 
     await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', occurrence: 2, detail: 'second', read: false }], activityUnreadCount: 1 },
+      {
+        items: [{ kind: 'activity', occurrence: 2, detail: 'second', read: false }],
+        kinds: { activity: { unread: 1 } },
+      },
     );
 
     const stale = await request('POST', `${receiptPath}/1/read`);
@@ -639,17 +802,17 @@ describe('activity attention items', () => {
     expect(second.items).toMatchObject([{ kind: 'activity', workItemId: item.id, occurrence: 1 }]);
   });
 
-  it('read-all clears the activity tier too', async () => {
+  it('read-all clears activity too', async () => {
     const item = await seedWorkItem();
     await seedActivity(item.id, 'ping', new Date('2030-01-01T00:00:00.000Z'));
 
     expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { activityUnreadCount: 0, items: [{ kind: 'activity', read: true }] },
+      { kinds: { activity: { unread: 0 } }, items: [{ kind: 'activity', read: true }] },
     );
   });
-  it('keeps the badge tier in the page budget when activity is newer', async () => {
+  it('lists only the requested kinds so a preview keeps its page budget', async () => {
     const mentionItem = await seedWorkItem('Mentioned item');
     const mention = await seedMention({
       workItemId: mentionItem.id,
@@ -664,17 +827,22 @@ describe('activity attention items', () => {
     const merged = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2`)).json();
     expect(merged.items.map((entry: { kind: string }) => entry.kind)).toEqual(['activity', 'activity']);
 
-    const badge = await (
-      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&tier=badge`)
+    const requested = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&kind=mention&kind=automation-failed`)
     ).json();
-    expect(badge.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
-    expect(badge.badgeCount).toBe(1);
-    expect(badge.activityUnreadCount).toBe(2);
+    expect(requested.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
+    expect(requested.kinds).toMatchObject({ mention: { unread: 1 }, activity: { unread: 2 } });
   });
 
-  it('rejects an unknown tier', async () => {
-    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?tier=bogus`);
+  it('rejects an invalid cursor', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?before=not-a-cursor`);
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'invalid_attention_tier' });
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
+  });
+
+  it('rejects an unknown kind', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?kind=bogus`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_attention_kind' });
   });
 });

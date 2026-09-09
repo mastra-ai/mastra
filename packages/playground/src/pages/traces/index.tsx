@@ -36,6 +36,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -53,8 +54,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
 
+  // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
+  // `setSearchParams` updates against the render-time params, so within one commit the last
+  // call wins. Scoping first lets hydration (which re-runs only once) land on top of it.
   useEffect(() => {
     if (!scopedEntityId) return;
     const currentRoot = searchParams.get('rootEntityType');
@@ -72,6 +75,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       { replace: true },
     );
   }, [scopedEntityId, scopedEntityType, searchParams, setSearchParams]);
+
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   const lockedFieldIds = useMemo<readonly string[]>(() => (isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
   const hiddenCreatorFieldIds = useMemo<readonly string[]>(
@@ -238,10 +246,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
 
-  const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
-
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),
     [filterFields, url],
@@ -367,8 +371,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onFilterTokensChange={url.handleFilterTokensChange}
         onClear={handleClear}
         onRemoveAll={url.handleRemoveAll}
-        onSave={persistence.handleSave}
-        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}
@@ -468,7 +470,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               showPartialThread
               featuredSpanIds={url.highlightSpanIdsParam}
               onHighlightSpans={url.handleHighlightSpans}
-              feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
+              feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
@@ -484,7 +486,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               }
               spanActiveTab={url.spanTabParam ?? 'details'}
               onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
+              spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
               spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
                 tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
               }

@@ -1,4 +1,5 @@
 import { extractApiErrorDetail, throwApiError } from '../auth/client.js';
+import type { DeployDiagnosis, DeployDiagnosisLookup } from '../deploy-suggestions.js';
 
 export interface Project {
   id: string;
@@ -178,6 +179,73 @@ export async function deleteEnvironment(token: string, orgId: string, projectId:
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to delete environment', resp.status, extractApiErrorDetail(err));
   }
+}
+
+/**
+ * Look up an existing diagnosis for a failed environment deploy.
+ *
+ * - 204: deploy has not failed; nothing to diagnose ({ state: 'healthy' })
+ * - 200 with `{ diagnosis: null }`: no diagnosis row yet ({ state: 'missing' })
+ * - 200 with `{ diagnosis: … }`: diagnosis exists ({ state: 'ready', diagnosis })
+ *
+ * The diagnosis may still be PENDING — callers should poll via
+ * `pollForDiagnosis`.
+ */
+export async function fetchEnvironmentDeployDiagnosis(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  deployId: string,
+): Promise<DeployDiagnosisLookup> {
+  const resp = await fetch(
+    `${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/deploys/${deployId}/diagnosis`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+    },
+  );
+
+  if (resp.status === 204) return { state: 'healthy' };
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to fetch deploy diagnosis', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { diagnosis: DeployDiagnosis | null };
+  if (!data.diagnosis) return { state: 'missing' };
+  return { state: 'ready', diagnosis: data.diagnosis };
+}
+
+/**
+ * Kick off a diagnosis run for a failed environment deploy. Idempotent:
+ * the API returns 304 if a non-failed diagnosis already exists.
+ */
+export async function startEnvironmentDeployDiagnosis(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  deployId: string,
+): Promise<void> {
+  const resp = await fetch(
+    `${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/deploys/${deployId}/diagnosis`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+    },
+  );
+
+  if (resp.status === 304 || resp.ok) return;
+
+  const err = await resp.json().catch(() => ({}));
+  throwApiError('Failed to start deploy diagnosis', resp.status, extractApiErrorDetail(err));
 }
 
 function getApiUrl(): string {

@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -65,7 +65,7 @@ export default function InboxPage() {
 
   const closePanel = () => updateSelection({});
 
-  const selectFeedback = (feedback: FeedbackRecord) =>
+  const selectFeedback = (feedback: FeedbackItem) =>
     updateSelection({
       feedbackId: feedback.feedbackId ?? undefined,
       traceId: feedback.traceId ?? undefined,
