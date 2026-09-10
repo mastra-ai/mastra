@@ -18,10 +18,39 @@ import pc from 'picocolors';
 
 const ANSI_SGR_SOURCE = String.raw`\x1b\[[0-9;]*m`;
 const ANSI_CSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
-/** CSI sequences other than colour/style (cursor moves, erases) that would shift the layout. */
-const ANSI_NON_SGR_CSI_RE = /\x1b\[[0-9;?]*[A-LN-Za-ln-z]/g;
-/** C0 control characters except tab (expanded separately) and escape (needed for colour). */
+/**
+ * Escape sequences that carry a payload up to a terminator: OSC (`ESC ]`,
+ * which sets titles, hyperlinks and the clipboard), DCS (`ESC P`), SOS
+ * (`ESC X`), PM (`ESC ^`) and APC (`ESC _`). Terminated by BEL or ST
+ * (`ESC \`); an unterminated one swallows the rest of the line.
+ */
+const ANSI_STRING_SEQUENCE_RE = /\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?/g;
+/** Any CSI sequence: parameters, intermediates, final byte. SGR is re-admitted by the sanitiser. */
+const ANSI_CSI_ANY_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+/** Exact shape of the SGR (colour and style) sequences the formatter keeps. */
+const ANSI_SGR_EXACT_RE = /^\x1b\[[0-9;]*m$/;
+/**
+ * Remaining two-byte and intermediate escape sequences, e.g. `ESC c` (reset)
+ * or `ESC ( B`. The final byte excludes `[` so surviving SGR sequences are
+ * left alone.
+ */
+const ANSI_OTHER_ESCAPE_RE = /\x1b[ -/]*[0-Z\\-~]/g;
+/** Any escape byte still present that does not start an SGR sequence, with a dangling `[`. */
+const STRAY_ESCAPE_RE = /\x1b(?!\[[0-9;]*m)\[?/g;
+/** C0 control characters except tab (expanded separately) and escape (handled above). */
 const CONTROL_CHARS_RE = /[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g;
+/** 8-bit C1 controls, which some terminals treat as CSI, OSC and friends. */
+const C1_CONTROL_CHARS_RE = /[\u0080-\u009f]/g;
+/** 8-bit introducers rewritten to their 7-bit form so the same stripping applies. */
+const C1_TO_ESCAPE: Record<string, string> = {
+  '\u0090': '\x1bP',
+  '\u0098': '\x1bX',
+  '\u009b': '\x1b[',
+  '\u009c': '\x1b\\',
+  '\u009d': '\x1b]',
+  '\u009e': '\x1b^',
+  '\u009f': '\x1b_',
+};
 const LINE_BREAK_RE = /\r\n|\r|\n/;
 const ANSI_SGR_AT_START_RE = new RegExp(`^${ANSI_SGR_SOURCE}`);
 const ANSI_RESET = '\x1b[0m';
@@ -146,12 +175,22 @@ function formatLabel(label: string): string {
 }
 
 /**
- * Make a raw line safe to draw on exactly one terminal row: tabs become
- * spaces so width is predictable, and control characters or cursor-moving
- * escape sequences are dropped while colour codes are kept.
+ * Make a raw line safe to print: log content is untrusted, so every escape
+ * sequence family is removed except the SGR colour and style codes the
+ * formatter keeps. Tabs become spaces so the visible width is predictable,
+ * and other C0 and C1 control characters are dropped. The result can be
+ * written to a TTY without moving the cursor, changing terminal state, or
+ * touching the clipboard, and drawn on exactly one row.
  */
 export function sanitizeLogLine(raw: string): string {
-  return raw.replace(/\t/g, '    ').replace(ANSI_NON_SGR_CSI_RE, '').replace(CONTROL_CHARS_RE, '');
+  return raw
+    .replace(/\t/g, '    ')
+    .replace(C1_CONTROL_CHARS_RE, control => C1_TO_ESCAPE[control] ?? '')
+    .replace(ANSI_STRING_SEQUENCE_RE, '')
+    .replace(ANSI_CSI_ANY_RE, sequence => (ANSI_SGR_EXACT_RE.test(sequence) ? sequence : ''))
+    .replace(ANSI_OTHER_ESCAPE_RE, '')
+    .replace(STRAY_ESCAPE_RE, '')
+    .replace(CONTROL_CHARS_RE, '');
 }
 
 /**

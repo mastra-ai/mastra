@@ -113,6 +113,42 @@ describe('sanitizeLogLine', () => {
     expect(sanitizeLogLine('a\tb')).toBe('a    b');
     expect(sanitizeLogLine('\x1b[2K\x1b[1Gprogress \x1b[32mok\x1b[0m\x07')).toBe('progress \x1b[32mok\x1b[0m');
   });
+
+  it('keeps every SGR form the formatter understands', () => {
+    const styled = '\x1b[1;38;5;208mx\x1b[38;2;1;2;3my\x1b[m';
+    expect(sanitizeLogLine(styled)).toBe(styled);
+  });
+
+  it('removes OSC sequences that set the title, hyperlinks or the clipboard', () => {
+    expect(sanitizeLogLine('a\x1b]0;pwned\x07b')).toBe('ab');
+    expect(sanitizeLogLine('a\x1b]8;;http://evil\x1b\\link\x1b]8;;\x1b\\b')).toBe('alinkb');
+    expect(sanitizeLogLine('a\x1b]52;c;cHduZWQ=\x07b')).toBe('ab');
+    // Unterminated: the rest of the line belongs to the sequence.
+    expect(sanitizeLogLine('a\x1b]0;no terminator')).toBe('a');
+  });
+
+  it('removes DCS, SOS, PM and APC strings', () => {
+    expect(sanitizeLogLine('a\x1bPq#0;2;0;0;0\x1b\\b')).toBe('ab');
+    expect(sanitizeLogLine('a\x1bXsos\x1b\\b\x1b^pm\x07c\x1b_apc\x1b\\d')).toBe('abcd');
+  });
+
+  it('removes CSI sequences with private parameters, intermediates or unusual final bytes', () => {
+    expect(sanitizeLogLine('\x1b[?25l\x1b[?1049hhidden\x1b[?25h')).toBe('hidden');
+    expect(sanitizeLogLine('a\x1b[2 qb\x1b[3~c\x1b[@d\x1b[>0;1{e')).toBe('abcde');
+  });
+
+  it('removes bare and two-byte escape sequences and 8-bit C1 controls', () => {
+    expect(sanitizeLogLine('a\x1bcb\x1b(Bc\x1b7d\x1b8e\x1b#8f\x1b')).toBe('abcdef');
+    expect(sanitizeLogLine('a\u009b2Jb\u009d0;t\u0007c\u0085d')).toBe('abcd');
+  });
+
+  it('leaves no escape byte behind except in SGR sequences', () => {
+    const hostile = '\x1b]0;t\x07\x1b[31mred\x1b[0m\x1bc\x1b[?25l\x1bPx\x1b\\\x1b_y\x1b\\\u009b1m';
+    const clean = sanitizeLogLine(hostile);
+    // The 8-bit CSI at the end is a plain bold SGR once normalised, so it stays.
+    expect(clean).toBe('\x1b[31mred\x1b[0m\x1b[1m');
+    expect(clean.replace(/\x1b\[[0-9;]*m/g, '')).not.toContain('\x1b');
+  });
 });
 
 describe('splitLogEntries', () => {
@@ -281,6 +317,17 @@ describe('createDeployLogWriter', () => {
     const writer = createDeployLogWriter({ stream, prefix: '| ' });
     writer.write(`[${ISO}] [info] a`, '', `[${ISO}] [info] b`);
     expect(stripAnsi(chunks.join(''))).toBe(`| ${localTime} info  a\n|\n| ${localTime} info  b\n`);
+  });
+
+  it('never lets non-SGR escapes reach the stream, on or off a TTY', () => {
+    const hostile = '[2026-03-20T12:00:00.000Z] [info] \x1b]0;pwned\x07\x1b[32mok\x1b[0m\x1bc\x1b[?1049h';
+    for (const isTTY of [true, false]) {
+      const { stream, chunks } = fakeStream({ isTTY });
+      createDeployLogWriter({ stream, scroll: false }).write(hostile);
+      const output = chunks.join('');
+      expect(output).toContain('\x1b[32mok\x1b[0m');
+      expect(output.replace(/\x1b\[[0-9;]*m/g, '')).not.toContain('\x1b');
+    }
   });
 
   it('prints immediately off a TTY even with scrolling on', () => {
