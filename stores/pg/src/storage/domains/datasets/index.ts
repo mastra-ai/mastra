@@ -1137,13 +1137,11 @@ export class DatasetsPG extends DatasetsStorage {
         }
 
         // Fetch current items after taking the dataset lock, skipping missing or mismatched items.
-        const currentItems: DatasetItem[] = [];
-        for (const itemId of input.itemIds) {
-          const item = await this.#getItemById(t, { id: itemId });
-          if (item && item.datasetId === input.datasetId) {
-            currentItems.push(item);
-          }
-        }
+        const currentRows = await t.manyOrNone(
+          `SELECT * FROM ${itemsTable} WHERE "id" = ANY($1::text[]) AND "datasetId" = $2 AND "validTo" IS NULL AND "isDeleted" = false`,
+          [input.itemIds, input.datasetId],
+        );
+        const currentItems = currentRows.map(row => this.transformItemRow(row));
         if (currentItems.length === 0) return;
 
         const parentOrganizationId = dataset.organizationId ?? null;
