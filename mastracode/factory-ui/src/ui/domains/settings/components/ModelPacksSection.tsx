@@ -7,6 +7,7 @@ import { Check, Hammer, Map, Plus, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import type { ModelPackInfo } from '../../../../api/types';
 import {
   useActivateModelPack,
   useClearDefaultModelPack,
@@ -19,13 +20,15 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 interface DraftPack {
+  /** id of the pack being edited, or '' for a brand-new one. */
+  editingId: string;
   name: string;
   build: string;
   plan: string;
   fast: string;
 }
 
-const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
+const EMPTY_DRAFT: DraftPack = { editingId: '', name: '', build: '', plan: '', fast: '' };
 
 interface ModelAssignmentProps {
   description: string;
@@ -109,6 +112,15 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
     }
   };
 
+  const startEdit = (pack: ModelPackInfo) =>
+    setDraft({
+      editingId: pack.id,
+      name: pack.name,
+      build: pack.models.build,
+      plan: pack.models.plan,
+      fast: pack.models.fast,
+    });
+
   const saveDraft = async () => {
     if (!draft) return;
     const name = draft.name.trim();
@@ -118,7 +130,11 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
     }
     setDraftError(null);
     try {
-      await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
+      await saveMutation.mutateAsync({
+        name,
+        models: { build: draft.build, plan: draft.plan, fast: draft.fast },
+        ...(draft.editingId ? { previousId: draft.editingId } : {}),
+      });
       setDraft(null);
     } catch (e) {
       setDraftError(e instanceof Error ? e.message : String(e));
@@ -175,7 +191,7 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
           </label>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveDraft()}>
-              Add
+              {draft.editingId ? 'Save' : 'Add'}
             </Button>
             <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
               Cancel
@@ -239,9 +255,14 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
                   </Button>
                 )}
                 {p.custom && (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
-                    Remove
-                  </Button>
+                  <>
+                    <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
+                      Edit
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
+                      Remove
+                    </Button>
+                  </>
                 )}
               </div>
             </li>

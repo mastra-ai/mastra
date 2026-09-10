@@ -228,6 +228,103 @@ describe('ModelPacksSection', () => {
     });
   });
 
+  describe('when a custom pack is edited', () => {
+    it('offers Edit only for custom packs', async () => {
+      const custom: ModelPackInfo = { ...builtinPack, id: 'mine', name: 'My Pack', custom: true };
+      server.use(http.get(PACKS_URL, () => packsResponse([builtinPack, custom])));
+
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      const builtinRow = await rowFor('Builtin Pack');
+      expect(within(builtinRow).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+
+      const customRow = await rowFor('My Pack');
+      expect(within(customRow).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+
+    it('pre-fills the draft from the pack and POSTs previousId on save', async () => {
+      const packs: ModelPackInfo[] = [
+        {
+          ...builtinPack,
+          id: 'mine',
+          name: 'My Pack',
+          models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+          custom: true,
+        },
+      ];
+      let postBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse(packs)),
+        http.post(PACKS_URL, async ({ request }) => {
+          postBody = await request.json();
+          packs[0] = { ...packs[0]!, name: (postBody as { name: string }).name };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      const row = await rowFor('My Pack');
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+
+      // The draft opens pre-filled from the pack's current state.
+      const nameInput = screen.getByPlaceholderText('e.g. my-pack');
+      expect(nameInput).toHaveValue('My Pack');
+      const selects = screen.getAllByRole('combobox');
+      expect(selects[0]).toHaveTextContent('openai/gpt-x');
+      expect(selects[1]).toHaveTextContent('anthropic/claude-x');
+      expect(selects[2]).toHaveTextContent('openai/gpt-x');
+
+      await user.clear(nameInput);
+      await user.type(nameInput, 'Renamed Pack');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(postBody).toEqual({
+          name: 'Renamed Pack',
+          models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+          previousId: 'mine',
+        }),
+      );
+      expect(await screen.findByText('Renamed Pack')).toBeInTheDocument();
+    });
+
+    it('keeps the pack as the default after it is renamed', async () => {
+      const packs: ModelPackInfo[] = [
+        {
+          ...builtinPack,
+          id: 'mine',
+          name: 'My Pack',
+          models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+          custom: true,
+          active: true,
+        },
+      ];
+      server.use(
+        http.get(PACKS_URL, () => packsResponse(packs, 'mine')),
+        http.post(PACKS_URL, async ({ request }) => {
+          const body = (await request.json()) as { name: string };
+          packs[0] = { ...packs[0]!, name: body.name };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      const row = await rowFor('My Pack');
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+      await user.clear(screen.getByPlaceholderText('e.g. my-pack'));
+      await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'Renamed Pack');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      const renamed = await rowFor('Renamed Pack');
+      expect(within(renamed).getByText('Default')).toBeInTheDocument();
+      expect(within(renamed).getByRole('button', { name: 'Clear default' })).toBeInTheDocument();
+    });
+  });
+
   describe('when a custom pack is removed', () => {
     it('DELETEs it and refetches so it drops out', async () => {
       const custom: ModelPackInfo = { ...builtinPack, id: 'mine', name: 'My Pack', custom: true };

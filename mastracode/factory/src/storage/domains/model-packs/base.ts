@@ -101,6 +101,14 @@ function toActiveModelPack(row: ActiveModelPackDbRow): ActiveModelPackRecord {
   };
 }
 
+/** Raised when an edit would give a pack a name another pack in the org already holds. */
+export class ModelPackNameConflictError extends Error {
+  constructor(name: string) {
+    super(`A model pack named "${name}" already exists`);
+    this.name = 'ModelPackNameConflictError';
+  }
+}
+
 export class ModelPacksStorage extends FactoryStorageDomain {
   constructor() {
     super('model-packs');
@@ -165,6 +173,62 @@ export class ModelPacksStorage extends FactoryStorageDomain {
       updated_at: now,
     });
     return toModelPack(row);
+  }
+
+  /**
+   * Edit an existing pack in place by id. Keeps `id`/`created_at`/`created_by`
+   * stable so an active default pointer (`custom:<id>`) survives a rename, and
+   * refreshes that pointer's model snapshot. Returns `null` when no pack with
+   * that id exists in the org; throws {@link ModelPackNameConflictError} when
+   * the new name belongs to a different pack.
+   */
+  async update({
+    orgId,
+    id,
+    input,
+  }: {
+    orgId: string;
+    id: string;
+    input: UpsertModelPackInput;
+  }): Promise<ModelPackRecord | null> {
+    const now = new Date();
+    const existing = await this.#db.findOne<ModelPackDbRow>('model_packs', { org_id: orgId, id });
+    if (!existing) return null;
+
+    if (existing.name !== input.name) {
+      const clash = await this.#db.findOne<ModelPackDbRow>('model_packs', { org_id: orgId, name: input.name });
+      if (clash && clash.id !== id) {
+        throw new ModelPackNameConflictError(input.name);
+      }
+    }
+
+    const row = await this.#db.updateAtomic<ModelPackDbRow>('model_packs', { org_id: orgId, id }, () => ({
+      name: input.name,
+      build_model_id: input.models.build,
+      plan_model_id: input.models.plan,
+      fast_model_id: input.models.fast,
+      updated_at: now,
+    }));
+    await this.#db.updateMany(
+      'active_model_packs',
+      { org_id: orgId, pack_id: `custom:${id}` },
+      {
+        build_model_id: input.models.build,
+        plan_model_id: input.models.plan,
+        fast_model_id: input.models.fast,
+        updated_at: now,
+      },
+    );
+    return toModelPack(
+      row ?? {
+        ...existing,
+        name: input.name,
+        build_model_id: input.models.build,
+        plan_model_id: input.models.plan,
+        fast_model_id: input.models.fast,
+        updated_at: now,
+      },
+    );
   }
 
   async list({ orgId }: { orgId: string }): Promise<ModelPackRecord[]> {

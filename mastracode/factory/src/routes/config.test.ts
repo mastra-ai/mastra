@@ -866,6 +866,76 @@ describe('model pack routes with a tenant', () => {
     expect((await postPack(buildApp(userA), { name: 'x', models: { build: 'a/b' } })).status).toBe(400);
   });
 
+  it('edits a custom pack in place via previousId, keeping its id', async () => {
+    const created = await postPack(buildApp(userA), packBody);
+    const { pack } = await created.json();
+    const nextModels = { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' };
+
+    const edited = await postPack(buildApp(userA), { name: 'Renamed pack', models: nextModels, previousId: pack.id });
+
+    expect(edited.status).toBe(200);
+    const { pack: editedPack } = await edited.json();
+    expect(editedPack).toMatchObject({ id: pack.id, name: 'Renamed pack', models: nextModels });
+
+    // Same row — the edit did not create a second pack under the new name.
+    const stored = await seed.modelPacks.list({ orgId: 'org1' });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ id: pack.id.replace(/^custom:/, ''), name: 'Renamed pack' });
+
+    const listed = await buildApp(userA).request('/web/config/model-packs');
+    const { packs } = await listed.json();
+    expect(packs.find((p: { id: string }) => p.id === pack.id)).toMatchObject({ name: 'Renamed pack' });
+  });
+
+  it('keeps a default pack default across an edit and refreshes its snapshot', async () => {
+    const created = await postPack(buildApp(userA), packBody);
+    const { pack } = await created.json();
+    await buildApp(userA).request(`/web/config/model-packs/${encodeURIComponent(pack.id)}/activate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ target: 'default' }),
+    });
+    const nextModels = { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' };
+
+    const edited = await postPack(buildApp(userA), { name: packBody.name, models: nextModels, previousId: pack.id });
+    expect(edited.status).toBe(200);
+
+    expect(await seed.modelPacks.getActive({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
+      packId: pack.id,
+      models: nextModels,
+    });
+
+    const listed = await buildApp(userA).request('/web/config/model-packs');
+    expect((await listed.json()).activePackId).toBe(pack.id);
+  });
+
+  it('rejects renaming a pack onto another pack name', async () => {
+    await postPack(buildApp(userA), packBody);
+    const second = await postPack(buildApp(userA), {
+      name: 'Other pack',
+      models: { build: 'openai/gpt-5.6', plan: 'openai/gpt-5.6', fast: 'openai/gpt-5.4-mini' },
+    });
+    const { pack } = await second.json();
+
+    const response = await postPack(buildApp(userA), {
+      name: 'Team pack',
+      models: packBody.models,
+      previousId: pack.id,
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'A model pack named "Team pack" already exists' });
+    expect(await seed.modelPacks.list({ orgId: 'org1' })).toHaveLength(2);
+  });
+
+  it('rejects editing a pack that no longer exists', async () => {
+    const response = await postPack(buildApp(userA), { ...packBody, previousId: 'custom:missing' });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'Unknown pack "custom:missing"' });
+    expect(await seed.modelPacks.list({ orgId: 'org1' })).toEqual([]);
+  });
+
   it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
     const app = new Hono();
     mountApiRoutes(

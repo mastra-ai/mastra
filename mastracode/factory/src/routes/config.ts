@@ -34,6 +34,7 @@ import type {
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
+import { ModelPackNameConflictError } from '../storage/domains/model-packs/base.js';
 import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -1033,7 +1034,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
           if ('response' in packContext) return packContext.response;
-          let body: { name?: unknown; models?: unknown };
+          let body: { name?: unknown; models?: unknown; previousId?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1048,7 +1049,20 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (!build || !plan || !fast) {
             return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
           }
+          // `previousId` edits a saved pack in place, keeping its id so an active
+          // default pointer (`custom:<id>`) survives a rename.
+          const previousId = typeof body.previousId === 'string' ? body.previousId.trim() : '';
           try {
+            if (previousId) {
+              const recordId = previousId.startsWith('custom:') ? previousId.slice('custom:'.length) : previousId;
+              const record = await packContext.storage.update({
+                orgId: packContext.orgId,
+                id: recordId,
+                input: { name, models: { build, plan, fast } },
+              });
+              if (!record) return c.json({ error: `Unknown pack "${previousId}"` }, 404);
+              return c.json({ ok: true, pack: recordToModePack(record) });
+            }
             const record = await packContext.storage.upsert({
               orgId: packContext.orgId,
               userId: packContext.userId,
@@ -1056,6 +1070,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             return c.json({ ok: true, pack: recordToModePack(record) });
           } catch (error) {
+            if (error instanceof ModelPackNameConflictError) {
+              return c.json({ error: error.message }, 409);
+            }
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },

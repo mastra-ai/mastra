@@ -139,6 +139,8 @@ export interface SaveCustomProviderBody {
 export interface SaveModelPackBody {
   name: string;
   models: { build: string; plan: string; fast: string };
+  /** When editing, the id of the pack being replaced. */
+  previousId?: string;
 }
 
 export interface ActivateModelPackBody {
