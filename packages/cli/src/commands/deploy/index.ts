@@ -1299,6 +1299,9 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
   if (opts.workers !== undefined && opts.workers !== 'dedicated' && opts.workers !== 'in-process') {
     throw new Error(`--workers must be "dedicated" or "in-process" (got "${String(opts.workers)}")`);
   }
+  if (opts.region !== undefined && opts.region !== 'us' && opts.region !== 'eu') {
+    throw new Error(`--region must be "us" or "eu" (got "${String(opts.region)}")`);
+  }
   const analytics = getAnalytics();
   if (!analytics) {
     return runUnifiedDeploy(dir, opts);

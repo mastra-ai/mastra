@@ -50,6 +50,7 @@ vi.mock('../server/platform-api.js', () => ({
 import {
   applyPlatformWorkersFlagGate,
   createDeployProject,
+  unifiedDeployAction,
   deployBuildNeedsRefresh,
   lookupProjectFactoryFlag,
   resolveNonFactoryTarget,
@@ -97,6 +98,17 @@ describe('project resolution', () => {
       projectName: 'project-1',
       projectSlug: 'project-1',
     });
+  });
+});
+
+describe('deploy option validation', () => {
+  it('rejects a --region other than us or eu before doing anything', async () => {
+    await expect(unifiedDeployAction(undefined, { region: 'ap-southeast' })).rejects.toThrow(
+      '--region must be "us" or "eu" (got "ap-southeast")',
+    );
+    await expect(unifiedDeployAction(undefined, { workers: 'sometimes' as never })).rejects.toThrow(
+      '--workers must be "dedicated" or "in-process"',
+    );
   });
 });
 
