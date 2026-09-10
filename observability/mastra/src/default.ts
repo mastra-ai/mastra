@@ -75,7 +75,7 @@ const RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 2000];
  * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
  * observability reference links. Use package-manager tools for virtual or archived packages.
  *
- * @see [Observability documentation](https://mastra.ai/docs/studio/observability)
+ * @see [Observability documentation](https://mastra.ai/docs/observability/overview)
  * if packaged docs are unavailable.
  */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
