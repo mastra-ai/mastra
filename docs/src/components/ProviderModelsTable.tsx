@@ -140,10 +140,10 @@ function ProviderModelsTable({ models, totalCount, catalogOnly = false }: Provid
         ))}
       </TableBody>
       <TableCaption className="my-4 caption-bottom">
-        {totalCount && models.length < totalCount
-          ? `Showing ${models.length} of ${totalCount} available models`
-          : catalogOnly
-            ? `${models.length} catalog ${models.length === 1 ? 'entry' : 'entries'}; availability depends on account eligibility`
+        {catalogOnly
+          ? `${models.length} catalog ${models.length === 1 ? 'entry' : 'entries'}; availability depends on account eligibility`
+          : totalCount && models.length < totalCount
+            ? `Showing ${models.length} of ${totalCount} available models`
             : `${models.length} available model${models.length !== 1 ? 's' : ''}`}
       </TableCaption>
     </Table>

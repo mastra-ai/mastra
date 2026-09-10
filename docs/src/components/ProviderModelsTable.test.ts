@@ -28,6 +28,18 @@ describe('ProviderModelsTable', () => {
     expect(html).not.toContain('1 available model')
   })
 
+  it('keeps catalog-only wording when a truncated totalCount is also provided', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProviderModelsTable, {
+        catalogOnly: true,
+        totalCount: 10,
+        models: [{ model: 'opencode-console/local-model', imageInput: false, toolUsage: true }],
+      }),
+    )
+    expect(html).toContain('1 catalog entry; availability depends on account eligibility')
+    expect(html).not.toContain('available model')
+  })
+
   it('preserves the available-model caption for existing providers', () => {
     const html = renderToStaticMarkup(
       createElement(ProviderModelsTable, {
