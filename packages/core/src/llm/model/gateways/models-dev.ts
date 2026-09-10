@@ -135,6 +135,7 @@ const EXTRA_PROVIDER_MODELS: Record<string, Record<string, Omit<ModelsDevModelIn
       temperature: true,
       structured_output: true,
       attachment: true,
+      modalities: { input: ['text', 'image'], output: ['text'] },
     },
   },
 };

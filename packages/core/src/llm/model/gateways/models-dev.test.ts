@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { MASTRA_USER_AGENT } from './constants.js';
-import { ModelsDevGateway } from './models-dev.js';
+import { mergeExtraModels, ModelsDevGateway } from './models-dev.js';
 
 const {
   callableModelMock,
@@ -532,6 +532,16 @@ describe('ModelsDevGateway', () => {
       expect(gateway.getTemperatureCapabilities().deepseek).toBeUndefined();
       expect(gateway.getStructuredOutputCapabilities().deepseek).toBeUndefined();
       expect(gateway.getAttachmentCapabilities().deepseek).toBeUndefined();
+    });
+  });
+
+  describe('mergeExtraModels', () => {
+    it('keeps DeepSeek deepseek-flash overlay modalities when models.dev omits it', () => {
+      const merged = mergeExtraModels('deepseek', {
+        'deepseek-v4-flash': { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+      });
+
+      expect(merged['deepseek-flash']?.modalities).toEqual({ input: ['text', 'image'], output: ['text'] });
     });
   });
 
