@@ -21,6 +21,38 @@ describe('formatOmError', () => {
     expect(formatOmError(providerError())).toBe(diagnostic);
   });
 
+  it('preserves Codex string details without including other response fields', () => {
+    const error = Object.assign(new Error('Bad Request'), {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        detail: 'Synthetic Codex rejection for diagnostic testing',
+        request: { prompt: 'private conversation', apiKey: 'secret-key' },
+      }),
+    });
+    const expected = 'Bad Request: HTTP 400: Synthetic Codex rejection for diagnostic testing';
+    expect(formatOmError(error)).toBe(expected);
+    for (const createMarker of [createBufferingFailedMarker, createObservationFailedMarker]) {
+      const marker = createMarker({
+        cycleId: 'cycle',
+        operationType: 'observation',
+        startedAt: new Date().toISOString(),
+        tokensAttempted: 100,
+        error,
+        recordId: 'record',
+        threadId: 'thread',
+      });
+      expect(JSON.parse(JSON.stringify(marker)).data.error).toBe(expected);
+    }
+  });
+
+  it.each([null, 400, { message: 'private conversation' }, [{ input: 'secret-key' }]])(
+    'ignores non-string provider details: %j',
+    detail => {
+      const error = Object.assign(new Error('Bad Request'), { responseBody: JSON.stringify({ detail }) });
+      expect(formatOmError(error)).toBe('Bad Request');
+    },
+  );
+
   it('preserves nested causes and plain serialized errors', () => {
     expect(formatOmError(new Error('Observer failed', { cause: providerError() }))).toBe(
       `Observer failed: ${diagnostic}`,
