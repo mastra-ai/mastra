@@ -22,6 +22,7 @@ jobs:
       has_examples: ${{ steps.filter.outputs.has_examples }}
       has_agents_inputs: ${{ steps.filter.outputs.has_agents_inputs }}
       has_peerdeps_inputs: ${{ steps.filter.outputs.has_peerdeps_inputs }}
+      has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -51,14 +52,16 @@ jobs:
           fi
 
           printf '%s\n' "$ALL" > /tmp/changed-files.txt
-          node -e '
-            const fs = require("node:fs");
-            const { qualityAssuranceInputs } = require("./.github/scripts/ci-routing.cjs");
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { qualityAssuranceInputs } from "./.github/scripts/ci-routing.cjs";
+            import { discoverPackages } from "./.github/scripts/check-package-readmes.mjs";
             const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
-            const { hasAgentsInputs, hasPeerdepsInputs, agentsReasons, peerdepsReasons } = qualityAssuranceInputs(changedFiles);
+            const packageReadmePaths = discoverPackages(process.cwd()).map(pkg => `${pkg.relativeDirectory}/README.md`);
+            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons } = qualityAssuranceInputs(changedFiles, packageReadmePaths);
             const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\n`);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\nhas_readme_inputs=${hasReadmeInputs}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}\n`);
           '
 
   lint:
@@ -170,6 +173,29 @@ jobs:
 
       - name: Run AGENTS.md validator
         run: node .github/scripts/validate-agents-md.mjs
+
+  readme-check:
+    name: Validate package READMEs
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          package-manager-cache: false
+          install-dependencies: false
+
+      - name: Run README validator
+        run: node .github/scripts/check-package-readmes.mjs
 
   peerdeps-check:
     name: Validate peer dependencies
