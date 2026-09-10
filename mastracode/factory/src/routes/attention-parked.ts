@@ -21,13 +21,14 @@ import type {
 import { matchesView, receiptScope } from './attention-providers.js';
 
 interface ParkedSession {
-  item: WorkItemRow;
+  item: WorkItemRow | undefined;
   role: string;
   sessionId: string;
   threadId: string;
   toolName: string;
   occurredAt: Date;
   identity: FactoryAttentionIdentity;
+  list?: 'user';
 }
 
 interface ReceiptedParkedSession {
@@ -46,6 +47,7 @@ function olderThan(entry: ParkedSession, before: AttentionStreamPosition | undef
 }
 
 function toItem(scope: AttentionScope, { entry, receipt }: ReceiptedParkedSession): Record<string, unknown> {
+  const title = entry.item?.title ?? parkedRunLabel(entry.toolName);
   return {
     key: factoryAttentionKey(scope.factoryProjectId, entry.identity),
     kind: 'agent-waiting' as const,
@@ -54,13 +56,18 @@ function toItem(scope: AttentionScope, { entry, receipt }: ReceiptedParkedSessio
     role: entry.role,
     toolName: entry.toolName,
     occurrence: entry.identity.occurrence,
-    workItemId: entry.item.id,
-    title: entry.item.title,
+    workItemId: entry.item?.id ?? null,
+    title,
     detail: parkedRunLabel(entry.toolName),
     occurredAt: entry.occurredAt.toISOString(),
     read: receipt !== undefined,
     archived: receipt?.state === 'archived',
-    target: { kind: 'thread' as const, sessionId: entry.sessionId, threadId: entry.threadId },
+    target: {
+      kind: 'thread' as const,
+      sessionId: entry.sessionId,
+      threadId: entry.threadId,
+      ...(entry.list ? { list: entry.list } : {}),
+    },
   };
 }
 
@@ -80,7 +87,7 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
     this.#liveSessions = liveSessions;
   }
 
-  /** Newest park first. A session bound to several cards is listed once, under the first card. */
+  /** Newest park first. A session bound to several cards is listed once, under the first card. Parks with no card (user sessions) still list, aimed at their own thread. */
   async #parked(scope: AttentionScope): Promise<ParkedSession[]> {
     const runBySession = new Map(
       this.#liveSessions.parkedIn(scope.factoryProjectId).map(({ sessionId, run }) => [sessionId, run]),
@@ -102,6 +109,19 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
           identity: factoryAgentWaitingAttentionIdentity(ref.sessionId, run.suspendedAt),
         });
       }
+    }
+    for (const [sessionId, run] of runBySession) {
+      if (bySession.has(sessionId)) continue;
+      bySession.set(sessionId, {
+        item: undefined,
+        role: 'user',
+        sessionId,
+        threadId: sessionId,
+        toolName: run.toolName,
+        occurredAt: new Date(run.suspendedAt),
+        identity: factoryAgentWaitingAttentionIdentity(sessionId, run.suspendedAt),
+        list: 'user',
+      });
     }
     return [...bySession.values()].sort(
       (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || a.sessionId.localeCompare(b.sessionId),
@@ -146,7 +166,9 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
     for (const receipted of await this.#withReceipts(scope, parked)) {
       const { entry, receipt } = receipted;
       if (!matchesView(view, receipt)) continue;
-      if (search && !`${entry.item.title} ${parkedRunLabel(entry.toolName)}`.toLowerCase().includes(search)) continue;
+      if (search && !`${entry.item?.title ?? ''} ${parkedRunLabel(entry.toolName)}`.toLowerCase().includes(search)) {
+        continue;
+      }
       if (entries.length === limit) return { entries, hasMore: true };
       entries.push({
         occurredAt: entry.occurredAt,

@@ -12,6 +12,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
@@ -24,6 +25,7 @@ import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import { sessionRowStatus } from '../services/sessionStatus';
+import { unreadSessionIds } from '../services/unreadSessions';
 import { UserSessionFilters } from './UserSessionFilters';
 
 export function UserSessionsSection() {
@@ -36,6 +38,10 @@ export function UserSessionsSection() {
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const [filters, setFilters] = useState<UserSessionFiltersState>(EMPTY_USER_SESSION_FILTERS);
   const { pinnedSessions, setPinned } = usePinnedSessions();
+  // Same cached preview Work Sessions reads, so a user-session park marks its
+  // row without a second poll of the inbox endpoint.
+  const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
+  const unreadSessions = unreadSessionIds(attention.data?.items ?? []);
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
@@ -190,6 +196,7 @@ export function UserSessionsSection() {
                 active={active}
                 disabled={pending}
                 status={status}
+                hasUnread={unreadSessions.has(session.sessionId)}
                 pinned={pinnedSessions.has(session.sessionId)}
                 onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}

@@ -7,7 +7,7 @@ import { requestJson } from './request';
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 export type FactoryAttentionTarget =
-  | { kind: 'thread'; sessionId: string; threadId: string }
+  | { kind: 'thread'; sessionId: string; threadId: string; list?: 'user' }
   | { kind: 'work-item'; workItemId: string; board: string; commentId?: string }
   | { kind: 'rules' };
 
@@ -66,7 +66,6 @@ export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionI
 /** A run parked on a plan or a question: the item lives exactly as long as the answer is owed. */
 export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBase {
   kind: 'agent-waiting';
-  workItemId: string;
   sessionId: string;
   threadId: string;
   role: string;
@@ -178,6 +177,9 @@ function newestOf(latests: FactoryAttentionLatest[]): FactoryAttentionLatest | n
 
 export function factoryAttentionTargetPath(factoryId: string, target: FactoryAttentionTarget): string {
   if (target.kind === 'thread') {
+    if (target.list === 'user') {
+      return `/factories/${factoryId}/user/threads/${encodeURIComponent(target.sessionId)}`;
+    }
     return `/factories/${factoryId}/workspaces/${encodeURIComponent(target.sessionId)}/threads/${encodeURIComponent(target.threadId)}`;
   }
   if (target.kind === 'work-item') {

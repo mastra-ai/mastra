@@ -131,6 +131,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDef
 }
 
 beforeEach(async () => {
+  parkedBySession.clear();
   seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'org1 project' } });
   PROJECT_ID = project.id;
@@ -337,6 +338,29 @@ describe('agent waiting attention items', () => {
     expect(open).toMatchObject({
       items: [{ detail: 'Agent is waiting for an answer' }],
       kinds: { 'agent-waiting': { unread: 1 } },
+    });
+  });
+
+  it('lists a parked session that is not bound to a work-item role', async () => {
+    parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'agent-waiting',
+          sessionId,
+          threadId: sessionId,
+          role: 'user',
+          toolName: 'ask_user',
+          workItemId: null,
+          title: 'Agent is waiting for an answer',
+          detail: 'Agent is waiting for an answer',
+          read: false,
+          target: { kind: 'thread', sessionId, threadId: sessionId, list: 'user' },
+        },
+      ],
+      kinds: { 'agent-waiting': { open: 1, unread: 1, latest: { unread: true } } },
     });
   });
 });
