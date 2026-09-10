@@ -13,7 +13,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copyMessage: 'Copied table markdown' });
 
   return (
-    <div className="my-3 max-w-full min-w-0">
+    <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
         <ButtonsGroup spacing="close" aria-label="Table actions">
           <Button
@@ -38,8 +38,9 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
                 </Button>
               }
             />
-            <DropdownMenu.Content align="end">
+            <DropdownMenu.Content align="end" size="sm" className="w-max min-w-0">
               <DropdownMenu.Item
+                size="sm"
                 onClick={() => {
                   if (typeof csv === 'string') downloadTableCsv(csv);
                 }}
@@ -51,7 +52,9 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
           </DropdownMenu>
         </ButtonsGroup>
       </div>
-      <table>{children}</table>
+      <div className="max-w-full overflow-x-auto">
+        <table className="table min-w-full">{children}</table>
+      </div>
     </div>
   );
 }
