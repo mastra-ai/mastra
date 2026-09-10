@@ -1,5 +1,73 @@
 # @mastra/server
 
+## 1.66.0-alpha.3
+
+### Patch Changes
+
+- Removed redundant type assertions without changing runtime behavior or public types. ([#23498](https://github.com/mastra-ai/mastra/pull/23498))
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb)]:
+  - @mastra/core@1.66.0-alpha.3
+
+## 1.66.0-alpha.2
+
+### Patch Changes
+
+- Added DELETE /api/observability/feedback and DELETE /api/observability/scores routes for deleting feedback and score records by id, gated behind the observability-signal-deletion core feature and the observability:delete permission. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  await fetch(`${baseUrl}/api/observability/feedback`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedbackIds: ['feedback-1'] }),
+  });
+
+  await fetch(`${baseUrl}/api/observability/scores`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scoreIds: ['score-1'], organizationId: 'org-1' }),
+  });
+  ```
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+
+## 1.66.0-alpha.1
+
+### Minor Changes
+
+- Added advanced trace-query support for richer same-span filters while keeping lightweight responses unchanged. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'exists', path: 'model' } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added a `tags` filter to `dataset.listExperimentResults()` and `GET /api/datasets/:datasetId/experiments/:experimentId/results`. Only results that carry every listed tag are returned; results with extra tags still match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results } = await dataset.listExperimentResults({
+    experimentId: 'exp-id',
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  Over HTTP, pass repeated query params: `?tags=regression&tags=p0`.
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+
+## 1.66.0-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
 ## 1.65.0
 
 ### Minor Changes

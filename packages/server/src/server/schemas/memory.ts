@@ -58,7 +58,7 @@ const storageOrderBySchema = z
  * Handles JSON parsing from query strings. See `storageOrderBySchema` for why
  * the inner object schema is also `.optional()`.
  */
-const messageOrderBySchema = z
+export const messageOrderBySchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;
@@ -83,7 +83,7 @@ const messageOrderBySchema = z
 /**
  * Include schema for message listing - handles JSON parsing from query strings
  */
-const includeSchema = z
+export const includeSchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;
@@ -124,7 +124,7 @@ const metadataFilterSchema = z.record(metadataFilterKeySchema, metadataFilterVal
 /**
  * Filter schema for message listing - handles JSON parsing from query strings
  */
-const filterSchema = z
+export const filterSchema = z
   .preprocess(
     val => {
       if (val === undefined) return val;

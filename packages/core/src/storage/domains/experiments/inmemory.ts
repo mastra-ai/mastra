@@ -307,6 +307,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.status) {
       results = results.filter(r => r.status === args.status);
     }
+    if (args.tags?.length) {
+      results = results.filter(r => args.tags!.every(tag => r.tags?.includes(tag)));
+    }
     if (args.filters?.organizationId !== undefined) {
       results = results.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
     }

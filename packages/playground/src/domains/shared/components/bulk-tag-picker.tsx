@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -11,12 +12,14 @@ export function BulkTagPicker({
   onApplyTag,
   onRemoveTag,
   onNewTag,
+  size = 'sm',
 }: {
   selectedCount: number;
   vocabulary: string[];
   onApplyTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
   onNewTag: (tag: string) => void;
+  size?: ButtonProps['size'];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -27,7 +30,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size={size}>
           <Icon size="sm">
             <Tag />
           </Icon>

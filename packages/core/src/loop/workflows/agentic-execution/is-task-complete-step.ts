@@ -71,7 +71,7 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
         if (typeof firstUserMessage.content === 'string') {
           originalTask = firstUserMessage.content;
         } else if (firstUserMessage.content?.parts?.[0]?.type === 'text') {
-          originalTask = (firstUserMessage.content.parts[0] as { type: 'text'; text: string }).text;
+          originalTask = firstUserMessage.content.parts[0].text;
         }
       }
 

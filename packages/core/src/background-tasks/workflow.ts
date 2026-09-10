@@ -3,7 +3,6 @@ import { InternalSpans } from '../observability';
 import type { SuspendOptions } from '../workflows';
 import { createStep, createWorkflow } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
-import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -180,7 +179,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { taskId, outcome: 'success' as const, result };
       } catch (error: any) {
         const currentTask = await storage.getTask(taskId);
-        if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
+        if (!currentTask || currentTask.status === 'cancelled') {
           manager.deregisterTaskContext(taskId);
           return { taskId, outcome: 'cancelled' as const };
         }
@@ -260,7 +259,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       }
 
       if (outcome === 'success') {
-        if ((task.status as BackgroundTaskStatus) === 'cancelled') {
+        if (task.status === 'cancelled') {
           manager.deregisterTaskContext(taskId);
           return { taskId, done: true };
         }

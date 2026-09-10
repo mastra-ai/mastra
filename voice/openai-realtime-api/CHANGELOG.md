@@ -1,5 +1,11 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.10-alpha.0
+
+### Patch Changes
+
+- Moved connection-failure and handshake-timeout guidance into the voice connection reference and linked it from the README. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
 ## 0.13.9
 
 ### Patch Changes

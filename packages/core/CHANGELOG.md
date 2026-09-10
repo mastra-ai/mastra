@@ -1,5 +1,133 @@
 # @mastra/core
 
+## 1.66.0-alpha.3
+
+### Minor Changes
+
+- Added typed `input` and `output` payloads for the spans Mastra records itself: `AGENT_RUN`, `MODEL_GENERATION`, `MODEL_STEP` and `MODEL_INFERENCE`. Every other span type keeps `any`. Stored spans narrow the same way with `isSpanRecordOfType`, which types `attributes`, `input` and `output` without a cast: ([#23141](https://github.com/mastra-ai/mastra/pull/23141))
+
+  ```ts
+  import { SpanType, isSpanRecordOfType } from '@mastra/core/observability';
+
+  if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
+    span.attributes?.usage; // UsageStats | undefined
+    span.input?.messages; // MessageListInput
+  }
+  ```
+
+  A resumed agent run now always records its resume data as an object on the span input, wrapping a primitive or array under `resumeData` the way it already did when the suspended tool was known.
+
+  For rendering, `describeSpanInput` and `describeSpanOutput` return the payload tagged by what it holds (`messages`, `agent-run-resume`, `interrupted`, `model-generation-result`, `json`, ...), so a UI can switch on `type` instead of checking shapes. The tag is derived at read time and never stored. `describeSpanError` returns the span's error info, typed.
+
+### Patch Changes
+
+- Improved suspended run discovery to retain fewer workflow snapshots while processing large sets of suspended runs. ([#23506](https://github.com/mastra-ai/mastra/pull/23506))
+
+- Removed redundant type assertions in workflow execution without changing runtime behavior or public types. ([#23502](https://github.com/mastra-ai/mastra/pull/23502))
+
+- Removed redundant type assertions in storage and channels without changing runtime behavior or public types. ([#23503](https://github.com/mastra-ai/mastra/pull/23503))
+
+- Fixed live agent trajectory scorers to receive extracted trajectories and save their results. ([#23490](https://github.com/mastra-ai/mastra/pull/23490))
+
+- Removed redundant type assertions without changing runtime behavior or public types. ([#23501](https://github.com/mastra-ai/mastra/pull/23501))
+
+## 1.66.0-alpha.2
+
+### Minor Changes
+
+- Added deleteFeedback() and deleteScores() to observability storage. Both accept a batch of ids and optional organizationId / resourceId tenant scope, are idempotent, and are implemented by the in-memory store. Storage adapters that don't implement them throw a not-implemented error. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  await observability.deleteFeedback({ feedbackIds: ['feedback-1'] });
+  await observability.deleteScores({ scoreIds: ['score-1'], organizationId: 'org-1' });
+  ```
+
+### Patch Changes
+
+- Fixed a terminal provider error leaving an unresolved provider-executed tool call in the final message list. When a model stream ends with an error before a provider-executed tool (e.g. Anthropic web_search) returns its result, the abandoned tool call is now reconciled to an `output-error` state instead of remaining a dangling pending `call`. This preserves the original error, keeps successful tool results and surrounding text intact, and prevents observational memory from being deferred forever by an orphaned call. ([#23356](https://github.com/mastra-ai/mastra/pull/23356))
+
+## 1.66.0-alpha.1
+
+### Minor Changes
+
+- Added trace filters for span names, model providers, timing, outcomes, identity, and version lineage. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+  });
+  ```
+
+- Added portable top-level string metadata predicates to advanced trace queries. Invalid metadata keys and values are rejected consistently, and valid predicates work inside recursive Boolean expressions. ([#23027](https://github.com/mastra-ai/mastra/pull/23027))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+  });
+  ```
+
+- Added richer `scores.some` and `scores.none` predicates for scorer versions, sources, timestamps, span anchoring, and version lineage. ([#22956](https://github.com/mastra-ai/mastra/pull/22956))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { scores: { some: { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: '2.1.0' } } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added a `tags` filter to `dataset.listExperimentResults()` and `GET /api/datasets/:datasetId/experiments/:experimentId/results`. Only results that carry every listed tag are returned; results with extra tags still match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results } = await dataset.listExperimentResults({
+    experimentId: 'exp-id',
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  Over HTTP, pass repeated query params: `?tags=regression&tags=p0`.
+
+## 1.66.0-alpha.0
+
+### Minor Changes
+
+- Added `modelSettings.timeout.firstChunkMs` so you can bound how long a streaming model call may take to produce its first content. Stream-start and metadata chunks don't count; the budget is only satisfied by the first text, reasoning, tool call, file or source chunk. Going over the limit fails with a `MastraTimeoutError` whose `timeoutType` is `'firstChunk'`. Like `stepMs`, it's not retried against the same model but does move on to the next entry in `models` when fallback models are configured, and each provider retry attempt gets a fresh budget. Nested `timeout` settings are now merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override no longer discards a call-time `firstChunkMs`. Closes #23072 ([#23090](https://github.com/mastra-ai/mastra/pull/23090))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea))
+
+- Fixed Windows LocalSandbox sh -c commands losing shell operators and argument boundaries. ([#23145](https://github.com/mastra-ai/mastra/pull/23145))
+
+- Fixed `Agent.stream()` rebuilding the observability logger and metrics contexts for every streamed chunk when tracing is enabled. The context is now resolved once per model step and reused, so tracing overhead no longer grows with the number of chunks in a response. Fixes #23198. ([#23251](https://github.com/mastra-ai/mastra/pull/23251))
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Use the Mastra Platform bot for default coding-agent commit attribution. ([#23418](https://github.com/mastra-ai/mastra/pull/23418))
+
+- Fixed persisted-signal thread broadcasts emitting a `start` chunk without `from` and `payload`. Threads created only from persisted signals (`sendSignal(..., { ifIdle: { behavior: 'persist' } })`) now stream a `start` chunk shaped like every other agent run, so chunk consumers such as Mastra Studio no longer crash when replaying them. Fixes https://github.com/mastra-ai/mastra/issues/23244 ([#23282](https://github.com/mastra-ai/mastra/pull/23282))
+
 ## 1.65.0
 
 ### Minor Changes

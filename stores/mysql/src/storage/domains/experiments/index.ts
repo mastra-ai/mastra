@@ -1008,6 +1008,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
         params.push(args.status);
       }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`JSON_CONTAINS(${quoteIdentifier('tags', 'column name')}, ?, '$')`);
+        params.push(JSON.stringify(tag));
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {

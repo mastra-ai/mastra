@@ -547,6 +547,41 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(events.filter(event => event.type === 'message_end' && event.message.role === 'assistant')).toHaveLength(1);
   });
 
+  it('Given a text span announced after a rotation but never given a delta, When the run ends, Then the announced message still ends', async () => {
+    const { engine, events } = createHarness();
+    await engine.processStream({
+      fullStream: (async function* () {
+        yield chunk({ type: 'step-start', payload: { messageId: 'response-1' } });
+        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'first' } });
+        yield chunk({ type: 'step-start', payload: { messageId: 'response-2' } });
+        yield chunk({ type: 'text-start', payload: { id: 't2' } });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+      })(),
+    });
+
+    const starts = events.filter(event => event.type === 'message_start').map(event => event.message.id);
+    const ends = events.filter(event => event.type === 'message_end').map(event => event.message.id);
+    expect(starts).toEqual(['response-1', 'response-2']);
+    expect(ends).toEqual(starts);
+  });
+
+  it('Given a text span announced but never given a delta, When the next step rotates the id, Then the announced message ends before the new one starts', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-2' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'second' } }), ctx);
+
+    const ends = events.filter(event => event.type === 'message_end').map(event => event.message.id);
+    expect(ends).toEqual(['response-1']);
+    expect(lastMessageEvent(events).id).toBe('response-2');
+    expect(textOf(lastMessageEvent(events))).toBe('second');
+  });
+
   it('Given a rotated response id mid-turn, When the next step starts, Then the stream splits where the loop did', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

@@ -262,6 +262,7 @@ export class DockerSandbox extends MastraSandbox {
       ...base,
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
+      ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
     });
   }
 

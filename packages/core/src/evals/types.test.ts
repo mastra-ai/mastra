@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SpanType } from '../observability';
 import type { SpanRecord } from '../storage';
 import { extractTrajectory, extractTrajectoryFromTrace, saveScorePayloadSchema } from './types';
+import type { ScorerRunOutputForAgent } from './types';
 
 function createSpan(overrides: Partial<SpanRecord> & { spanId: string; spanType: SpanRecord['spanType'] }): SpanRecord {
   return {
@@ -26,6 +27,25 @@ function createSpan(overrides: Partial<SpanRecord> & { spanId: string; spanType:
 }
 
 describe('extractTrajectoryFromTrace', () => {
+  it.each([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])(
+    'uses canonical tool identity instead of the trace display label (%s)',
+    spanType => {
+      const result = extractTrajectoryFromTrace([
+        createSpan({
+          spanId: 'tool',
+          spanType,
+          name: "tool: 'save_result'",
+          entityId: 'save_result',
+          entityName: 'Save result',
+          input: { attempt: 1 },
+          attributes: { success: false },
+        }),
+      ]);
+      expect(result.steps).toHaveLength(1);
+      expect(result.steps[0]).toMatchObject({ name: 'save_result', success: false, toolArgs: { attempt: 1 } });
+    },
+  );
+
   it('returns empty trajectory for empty spans', () => {
     const result = extractTrajectoryFromTrace([]);
     expect(result.steps).toEqual([]);
@@ -780,6 +800,122 @@ describe('saveScorePayloadSchema', () => {
 });
 
 describe('extractTrajectory', () => {
+  it.each(['parts-only', 'mixed'] as const)('retains native thrown calls as failed steps (%s)', shape => {
+    const good = { state: 'result' as const, toolCallId: 'good', toolName: 'read', args: {}, result: { ok: true } };
+    const bad = {
+      state: 'output-error' as const,
+      toolCallId: 'bad',
+      toolName: 'save',
+      args: { value: 1 },
+      errorText: 'Save failed',
+    };
+    const output: ScorerRunOutputForAgent = [
+      {
+        id: 'message',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: (shape === 'mixed' ? [good, bad] : [bad]).map(toolInvocation => ({
+            type: 'tool-invocation',
+            toolInvocation,
+          })),
+          ...(shape === 'mixed' ? { toolInvocations: [good] } : {}),
+        },
+      },
+    ];
+    const result = extractTrajectory(output);
+    expect(result.steps).toHaveLength(shape === 'mixed' ? 2 : 1);
+    expect(result.steps.at(-1)).toMatchObject({
+      stepType: 'tool_call',
+      name: 'save',
+      toolArgs: { value: 1 },
+      success: false,
+    });
+    expect(result.rawOutput).toBe(output);
+  });
+
+  it('retains the native error marker on result-state invocations', () => {
+    const output: ScorerRunOutputForAgent = [
+      {
+        id: 'marked',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'bad',
+                toolName: 'save',
+                args: {},
+                result: 'Save failed',
+                isError: true,
+              },
+            },
+          ],
+        },
+      },
+    ];
+    expect(extractTrajectory(output).steps).toEqual([
+      { stepType: 'tool_call', name: 'save', toolArgs: {}, toolResult: { value: 'Save failed' }, success: false },
+    ]);
+  });
+
+  it.each([
+    { legacy: ['read', 'save'], parts: ['save'], expected: ['read', 'save'] },
+    { legacy: ['read', 'check', 'save'], parts: ['read', 'save'], expected: ['read', 'check', 'save'] },
+    { legacy: ['save'], parts: ['read', 'save'], expected: ['read', 'save'] },
+  ])('preserves both compatible call sequences when merging $legacy and $parts', ({ legacy, parts, expected }) => {
+    const invocation = (name: string) => ({
+      state: 'result' as const,
+      toolCallId: name,
+      toolName: name,
+      args: {},
+      result: {},
+    });
+    const output: ScorerRunOutputForAgent = [
+      {
+        id: 'ordered',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          toolInvocations: legacy.map(invocation),
+          parts: parts.map(name => ({ type: 'tool-invocation', toolInvocation: invocation(name) })),
+        },
+      },
+    ];
+    expect(extractTrajectory(output).steps.map(step => step.name)).toEqual(expected);
+  });
+
+  it('prefers the completed native part over its stale legacy call mirror', () => {
+    const invocation = {
+      state: 'result' as const,
+      toolCallId: 'save',
+      toolName: 'save',
+      args: {},
+      result: { saved: true },
+    };
+    const output: ScorerRunOutputForAgent = [
+      {
+        id: 'mirror',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          toolInvocations: [{ ...invocation, state: 'call' }],
+          parts: [{ type: 'tool-invocation', toolInvocation: invocation }],
+        },
+      },
+    ];
+    expect(extractTrajectory(output).steps).toEqual([
+      { stepType: 'tool_call', name: 'save', toolArgs: {}, toolResult: { saved: true }, success: true },
+    ]);
+  });
+
   // --- legacy toolInvocations path ---
 
   it('extracts tool calls from content.toolInvocations when present', () => {
@@ -896,7 +1032,7 @@ describe('extractTrajectory', () => {
 
   // --- precedence ---
 
-  it('prefers content.toolInvocations over content.parts when both are present', () => {
+  it('preserves distinct calls from content.toolInvocations and content.parts', () => {
     const output = [
       {
         role: 'assistant',
@@ -921,9 +1057,13 @@ describe('extractTrajectory', () => {
 
     const result = extractTrajectory(output);
 
-    expect(result.steps).toHaveLength(1);
-    expect(result.steps[0]).toMatchObject({ name: 'topLevelTool', success: false });
-    expect(result.steps[0].name).not.toBe('partsTool');
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'topLevelTool', success: false }),
+        expect.objectContaining({ name: 'partsTool', success: true }),
+      ]),
+    );
   });
 
   // --- edge cases ---

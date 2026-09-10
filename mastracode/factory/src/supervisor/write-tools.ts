@@ -5,7 +5,8 @@ import { boardForWorkItem } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import type { AuditStorage } from '../storage/domains/audit/base.js';
+import type { AuditAction } from '../storage/domains/audit/actions.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
 
@@ -13,7 +14,7 @@ interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
-  audit: AuditStorage;
+  audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
   signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
@@ -22,7 +23,11 @@ interface SupervisorWriteDependencies {
 
 export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependencies): IntegrationTools {
   const now = deps.now ?? (() => new Date());
-  const audit = async (action: string, target: { type: string; id: string }, metadata: Record<string, unknown> = {}) =>
+  const audit = async (
+    action: AuditAction,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown> = {},
+  ) =>
     deps.audit.record({
       orgId: deps.scope.orgId,
       actorId: deps.userId,
@@ -135,13 +140,6 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
           ingress: { type: 'human', identity: `supervisor:${deps.userId}:${workItemId}:${item.revision}:${stage}` },
           cause: 'supervisor',
         });
-        await audit(
-          result.status === 'accepted' ? 'factory.work_item.stage_moved' : 'factory.work_item.transition_rejected',
-          { type: 'work_item', id: workItemId },
-          result.status === 'accepted'
-            ? { from, to: result.stage, revision: result.revision, transitionId: result.transitionId }
-            : { from, to: stage, code: result.code, reason: result.reason, transitionId: result.transitionId },
-        );
         if (result.status !== 'accepted') {
           throw new Error(`The transition was rejected (${result.code}): ${result.reason}`);
         }

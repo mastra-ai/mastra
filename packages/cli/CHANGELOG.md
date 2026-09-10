@@ -1,5 +1,51 @@
 # mastra
 
+## 1.28.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb)]:
+  - @mastra/core@1.66.0-alpha.3
+  - @mastra/deployer@1.66.0-alpha.3
+
+## 1.28.1-alpha.2
+
+### Patch Changes
+
+- Added `mastra api` commands for deleting observability feedback and scores, including optional organization and resource filters. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```bash
+  mastra api feedback delete '{"feedbackIds":["feedback-1"],"organizationId":"org-1"}'
+  ```
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/deployer@1.66.0-alpha.2
+
+## 1.28.1-alpha.1
+
+### Patch Changes
+
+- Moved the Studio agent chat page under the agent tabs. Opening a thread at `/agents/:agentId/threads/:threadId` now keeps the Studio sidebar and the agent tab bar visible, with a new **Chat** tab selected, and shows the thread list in a resizable side panel. Rows in the agents table now open a new chat for the agent instead of its overview page. ([#23438](https://github.com/mastra-ai/mastra/pull/23438))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/deployer@1.66.0-alpha.1
+
+## 1.28.1-alpha.0
+
+### Patch Changes
+
+- Added Tokens and Latency cells to the Studio experiment page. The meta bar now shows the total tokens used and estimated cost of the run, plus the average agent run duration across items, scoped to that experiment only. While an experiment is running the numbers update live. These cells only appear when the configured observability storage supports metrics. ([#23405](https://github.com/mastra-ai/mastra/pull/23405))
+
+- Removed the "Remove from review" button from the review queue detail panel in Studio. To take an item out of the review queue from the panel, use "Mark as reviewed" instead. ([#23428](https://github.com/mastra-ai/mastra/pull/23428))
+
+- Refresh Studio working memory after observational-memory completion and background buffering, and prevent an older refresh response from overwriting newer working memory. ([#23391](https://github.com/mastra-ai/mastra/pull/23391))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`2693231`](https://github.com/mastra-ai/mastra/commit/2693231988aab35f057969dff0abd914f84df2b1), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+  - @mastra/deployer@1.66.0-alpha.0
+
 ## 1.28.0
 
 ### Minor Changes

@@ -149,12 +149,12 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
   }
 
   if (Array.isArray(input)) {
-    const messages = input.filter(isSpanMessage) as SpanMessage[];
+    const messages = input.filter(isSpanMessage);
     return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
 
   if (hasMessagesArray(input)) {
-    const messages = input.messages.filter(isSpanMessage) as SpanMessage[];
+    const messages = input.messages.filter(isSpanMessage);
     return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
   return [];
@@ -255,7 +255,7 @@ function prepareTraceForTransformation(trace: TraceRecord) {
   const spanTree = buildSpanTree(trace.spans);
 
   // Find the root agent run span
-  const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run') as SpanRecord | undefined;
+  const rootAgentSpan = spanTree.rootSpans.find(span => span.spanType === 'agent_run');
 
   if (!rootAgentSpan) {
     throw new Error('No root agent_run span found in trace');

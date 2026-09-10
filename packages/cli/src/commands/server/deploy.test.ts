@@ -51,17 +51,31 @@ vi.mock('@clack/prompts', () => ({
   outro: vi.fn(),
 }));
 
+let archiveInstance:
+  | {
+      on: ReturnType<typeof vi.fn>;
+      pipe: ReturnType<typeof vi.fn>;
+      glob: ReturnType<typeof vi.fn>;
+      file: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+      finalize: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
+
 vi.mock('archiver', () => ({
   ZipArchive: vi.fn(function () {
-    return {
+    const archive = {
       on: vi.fn(),
       pipe: vi.fn(),
       glob: vi.fn(),
       file: vi.fn(),
+      append: vi.fn(),
       finalize: vi.fn(async () => {
         closeHandler?.();
       }),
     };
+    archiveInstance = archive;
+    return archive;
   }),
 }));
 
@@ -673,5 +687,37 @@ describe('serverDeployAction', () => {
 
     await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
     expect(fetchOrgs).not.toHaveBeenCalled();
+  });
+});
+
+// ─── legacy workers-manifest strip ──────────────────────────────────────
+// Server deploys must never ship a worker manifest — only the unified
+// `mastra deploy` flow may trigger worker-service provisioning. The strip
+// decision lives in `utils/workers-manifest-guard.ts` (tested there); these
+// tests cover the archive-side override mechanics.
+
+describe('worker manifest archive override', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: '.mastra/output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: '.mastra/output/workers.json' });
+  });
+
+  it('leaves the archive untouched when no override is given', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith('**', expect.objectContaining({ ignore: ['node_modules/**'] }), {
+      prefix: '.mastra/output',
+    });
+    expect(archiveInstance?.append).not.toHaveBeenCalled();
   });
 });

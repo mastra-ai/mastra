@@ -19,11 +19,19 @@ function runPlugin(
 ): {
   metadata: PreflightMetadata;
   legacy: LocalStorageDetection[];
+  workersConfig: Record<string, unknown> | null;
   emitted: Array<{ fileName: string; source: string }>;
+  parseCalls: number;
 } {
   const plugin = localStorageDetector(rootDir) as Plugin & { transform: Function; generateBundle: Function };
 
-  const transformCtx = { parse: (code: string) => parseAst(code) };
+  let parseCalls = 0;
+  const transformCtx = {
+    parse: (code: string) => {
+      parseCalls += 1;
+      return parseAst(code);
+    },
+  };
   for (const { id, code } of modules) {
     plugin.transform.call(transformCtx, code, id);
   }
@@ -44,14 +52,23 @@ function runPlugin(
   const legacyFile = emitted.find(f => f.fileName === 'preflight-local-paths.json');
   if (!metadataFile || !legacyFile) throw new Error('expected both metadata assets to be emitted');
 
+  const workersFile = emitted.find(f => f.fileName === 'workers.json');
   return {
     metadata: JSON.parse(metadataFile.source),
     legacy: JSON.parse(legacyFile.source),
+    workersConfig: workersFile ? JSON.parse(workersFile.source) : null,
     emitted,
+    parseCalls,
   };
 }
 
 describe('localStorageDetector', () => {
+  it('does not parse modules that cannot contain worker config or guarded local paths', () => {
+    const { parseCalls } = runPlugin([{ id: '/project/src/helper.ts', code: `export const answer = 42;` }]);
+
+    expect(parseCalls).toBe(0);
+  });
+
   it('collects file: paths from user modules', () => {
     const { metadata, legacy } = runPlugin([
       { id: '/project/src/mastra/index.ts', code: `const url = 'file:./mastra.db';` },
@@ -62,6 +79,134 @@ describe('localStorageDetector', () => {
     expect(metadata.localPaths[0]!.module).toBe('/project/src/mastra/index.ts');
     expect(metadata.localPaths[0]!.guardedBy).toBeUndefined();
     expect(legacy).toHaveLength(1);
+  });
+
+  it('emits statically discoverable custom worker names with the worker topology', () => {
+    const { metadata, workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `class CleanupWorker extends MastraWorker {
+          name = 'cleanup-jobs';
+        }
+        const cleanupWorker = new CleanupWorker();
+        export const mastra = new Mastra({
+          storage,
+          pubsub,
+          scheduler: { enabled: false, tickIntervalMs: 10_000, batchSize: 25, onError: () => {} },
+          backgroundTasks: {
+            enabled: true,
+            mode: 'worker',
+            globalConcurrency: 20,
+            defaultRetries: { maxRetries: 3, retryableErrors: () => true },
+            cleanup: { completedTtlMs: 60_000 },
+            onTaskComplete: () => {},
+            dynamicSetting: process.env.DYNAMIC_SETTING,
+            futureSetting: 'preserved'
+          },
+          workers: [cleanupWorker]
+        });`,
+      },
+    ]);
+
+    expect(metadata).not.toHaveProperty('backgroundTasksEnabled');
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: false, tickIntervalMs: 10_000, batchSize: 25 },
+      backgroundTasks: {
+        enabled: true,
+        mode: 'worker',
+        globalConcurrency: 20,
+        defaultRetries: { maxRetries: 3 },
+        cleanup: { completedTtlMs: 60_000 },
+        futureSetting: 'preserved',
+      },
+      custom: ['cleanup-jobs'],
+    });
+  });
+
+  it('emits defaults for optional worker configuration that is absent or dynamic', () => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `const enabled = process.env.WORKERS === 'true';
+          export const mastra = new Mastra({ storage, pubsub, backgroundTasks: { enabled } });`,
+      },
+    ]);
+
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: true },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+  });
+
+  it('emits worker topology when a MastraFactory prepare result is spread into Mastra', () => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `const factory = new MastraFactory({ storage, pubsub });
+          const preparedArgs = await factory.prepare();
+          export const mastra = new Mastra({ ...preparedArgs });`,
+      },
+    ]);
+
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: true },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+  });
+
+  it.each([
+    [
+      'direct configuration',
+      `export const mastra = new Mastra({
+        storage,
+        pubsub,
+        workers: false,
+        scheduler: { enabled: true },
+        backgroundTasks: { enabled: true },
+      });`,
+    ],
+    [
+      'MastraFactory prepared configuration',
+      `const factory = new MastraFactory({ storage, pubsub });
+        const preparedArgs = await factory.prepare();
+        export const mastra = new Mastra({ ...preparedArgs, workers: false });`,
+    ],
+  ])('emits a null manifest when workers are explicitly disabled through %s', (_label, code) => {
+    const { workersConfig } = runPlugin([{ id: '/project/src/mastra/index.ts', code }]);
+
+    expect(workersConfig).toBeNull();
+  });
+
+  it('emits a null manifest without shared storage and pubsub or when tree-shaken', () => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/missing-storage.ts',
+        code: `export const mastra = new Mastra({ pubsub });`,
+      },
+      {
+        id: '/project/src/mastra/missing-pubsub.ts',
+        code: `export const mastra = new Mastra({ storage });`,
+      },
+      {
+        id: '/project/src/mastra/unrelated.ts',
+        code: `const config = { storage, pubsub };`,
+      },
+      {
+        id: '/project/src/mastra/unused.ts',
+        code: `export const mastra = new Mastra({ storage, pubsub });`,
+        renderedLength: 0,
+      },
+    ]);
+
+    expect(workersConfig).toBeNull();
   });
 
   it('ignores modules from node_modules', () => {
