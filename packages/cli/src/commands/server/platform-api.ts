@@ -528,9 +528,16 @@ async function pollServerLogs(
         const combined = (data as { logs?: string }).logs;
         if (data.buildLogs.length === 0 && data.deployLogs.length === 0 && combined) {
           const lines = combined.split('\n');
-          if (lines[lines.length - 1] === '') lines.pop();
-          logWriter.write(...lines.slice(printedCombined));
-          printedCombined = lines.length;
+          const endsComplete = lines[lines.length - 1] === '';
+          if (endsComplete) lines.pop();
+          // A snapshot can end mid-line. Hold that partial line back until a
+          // later snapshot completes it, otherwise the finished line would be
+          // skipped. The closing fetch prints whatever is left.
+          const printable = endsComplete || finalFetchDone ? lines.length : lines.length - 1;
+          if (printable > printedCombined) {
+            logWriter.write(...lines.slice(printedCombined, printable));
+            printedCombined = printable;
+          }
         }
       }
     } catch {

@@ -501,6 +501,61 @@ describe('pollServerDeploy', () => {
     expect(logsCalls).toBe(3);
   });
 
+  it('holds back a partial trailing line in the combined logs until a later snapshot completes it', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    const snapshots = [
+      '[build] first\n[build] second is cut he',
+      '[build] first\n[build] second is cut here and now complete\n[build] third\n',
+      '[build] first\n[build] second is cut here and now complete\n[build] third\n[build] final without newline',
+    ];
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return {
+          data: { logs: snapshots[Math.min(logsCalls, snapshots.length) - 1], buildLogs: [], deployLogs: [] },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 3 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+
+    const writes: string[] = [];
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    await vi.advanceTimersByTimeAsync(3000);
+    const afterFirst = writes.join('');
+    await vi.advanceTimersByTimeAsync(10_000);
+    const result = await pollPromise;
+    vi.useRealTimers();
+    writeSpy.mockRestore();
+
+    expect(result.status).toBe('running');
+    // eslint-disable-next-line no-control-regex
+    const strip = (text: string) => text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    expect(strip(afterFirst)).toContain('first');
+    expect(strip(afterFirst)).not.toContain('second is cut');
+    const output = strip(writes.join(''));
+    expect(output).toContain('second is cut here and now complete');
+    expect(output).not.toContain('second is cut he\n');
+    expect(output.match(/second is cut/g)).toHaveLength(1);
+    expect(output).toContain('third');
+    // The closing fetch prints the last partial line rather than dropping it.
+    expect(output).toContain('final without newline');
+  });
+
   it('prints the combined logs string when the build and deploy arrays are empty', async () => {
     let logsCalls = 0;
     let deployStatusCalls = 0;
