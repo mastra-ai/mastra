@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import { saveScorePayloadSchema } from '../evals';
+import { extractTrajectory, saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
 import { isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
@@ -55,6 +55,10 @@ export function createOnScorerHook(mastra: Mastra) {
 
       let input = hookData.input;
       let output = hookData.output;
+
+      if (entityType === 'AGENT' && scorerToUse.scorer.type === 'trajectory' && Array.isArray(output)) {
+        output = extractTrajectory(output);
+      }
 
       const { structuredOutput, ...rest } = hookData;
 
