@@ -91,6 +91,20 @@ export interface CommandOptions {
   /** Abort signal to cancel the command */
   abortSignal?: AbortSignal;
   /**
+   * How the command's stdin is wired.
+   *
+   * `'ignore'` attaches an empty stdin (`/dev/null`), so commands that fall
+   * back to reading standard input when given no file arguments — `rg`, `grep`,
+   * `cat`, `sort`, `wc` — see EOF immediately instead of blocking forever.
+   * `'pipe'` keeps stdin open for {@link ProcessHandle.sendStdin}.
+   *
+   * Defaults to `'pipe'` for spawned processes, which stay writable for their
+   * lifetime, and to `'ignore'` for the built-in executeCommand, whose
+   * one-shot commands have no writer. Providers whose transport cannot wire
+   * stdin may ignore this option.
+   */
+  stdin?: 'pipe' | 'ignore';
+  /**
    * Maximum UTF-8 byte length retained in stdout and stderr per stream.
    * When exceeded, the oldest output is dropped and the newest output is kept.
    * Callbacks and reader streams still receive every chunk in full.

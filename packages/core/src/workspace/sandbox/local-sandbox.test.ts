@@ -554,6 +554,84 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Stdin Wiring
+  // ===========================================================================
+  describe('stdin wiring', () => {
+    beforeEach(async () => {
+      await sandbox._start();
+    });
+
+    it('should give foreground commands an empty stdin instead of an open pipe', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      // `cat` with no file arguments reads standard input. Nothing can write to
+      // a one-shot command's stdin, so an open pipe would block until the
+      // command is killed.
+      const result = await sandbox.executeCommand('cat', []);
+
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('');
+    });
+
+    it('should not block a stdin-reading command inside a shell pipeline', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      // The shape that hung in practice: a search with only glob filters and no
+      // path argument, piped into `head`.
+      const result = await sandbox.executeCommand('grep -r "needle" --include "*.txt" | head -5', []);
+
+      expect(result.exitCode).not.toBe(128);
+      expect(result.timedOut).toBeFalsy();
+    });
+
+    it('should honor an explicit stdin option for foreground commands', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const result = await sandbox.executeCommand('sh', ['-c', 'head -1'], { stdin: 'pipe', timeout: 300 });
+
+      // Stdin stays open, so `head` waits for input and is killed by the timeout.
+      expect(result.timedOut).toBe(true);
+      expect(result.exitCode).toBe(124);
+    });
+
+    it('should keep spawned processes writable by default', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const handle = await sandbox.processes!.spawn('cat');
+      await handle.sendStdin('piped input\n');
+      await handle.closeStdin();
+
+      const result = await handle.wait();
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toContain('piped input');
+      sandbox.processes!.release(handle.pid);
+    });
+
+    it('should support spawning a process with stdin ignored', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const handle = await sandbox.processes!.spawn('cat', { stdin: 'ignore' });
+
+      const result = await handle.wait();
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('');
+      await expect(handle.sendStdin('too late')).rejects.toThrow();
+      sandbox.processes!.release(handle.pid);
+    });
+
+    it('should report the signal when a process is killed', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const handle = await sandbox.processes!.spawn('sleep 30');
+      await handle.kill();
+
+      const result = await handle.wait();
+
+      expect(result.exitCode).toBe(128);
+      expect(result.killed).toBe(true);
+      expect(result.stderr).toContain('terminated by signal');
+      sandbox.processes!.release(handle.pid);
+    });
+  });
+
+  // ===========================================================================
   // Spawn Failure Handling
   // ===========================================================================
   describe('spawn failure handling', () => {

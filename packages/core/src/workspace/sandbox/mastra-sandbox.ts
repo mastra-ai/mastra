@@ -322,6 +322,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
             ...opts,
             ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
             maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity,
+            // No caller can write to a one-shot command's stdin, so leaving it
+            // open makes commands that read standard input when given no file
+            // arguments (`rg`, `grep`, `cat`) block until they are killed.
+            stdin: opts?.stdin ?? 'ignore',
           });
           try {
             const result = await handle.wait();

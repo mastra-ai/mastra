@@ -914,6 +914,19 @@ describe('DockerSandbox', () => {
       expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: true });
     });
 
+    it('should leave stdin detached when asked to ignore it', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      // What the built-in executeCommand asks for: commands that read standard
+      // input when given no file arguments must see EOF, not an open pipe.
+      const handle = await sandbox.processes!.spawn('cat', { stdin: 'ignore' });
+
+      expect(mockContainer.exec).toHaveBeenCalledWith(expect.objectContaining({ AttachStdin: false }));
+      expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: false });
+      await expect(handle.sendStdin('too late')).rejects.toThrow(/stdin/i);
+    });
+
     it('should close the writable side of the exec stream to signal EOF', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();

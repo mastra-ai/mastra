@@ -93,7 +93,7 @@ describe('LocalProcessManager Windows argv boundary', () => {
         shell: false,
         windowsHide: true,
         cwd: process.cwd(),
-        stdio: 'pipe',
+        stdio: ['pipe', 'pipe', 'pipe'],
         env: expect.objectContaining({ TEST_ARGV: 'preserved' }),
       }),
     );

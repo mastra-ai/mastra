@@ -81,8 +81,13 @@ class LocalProcessHandle extends ProcessHandle {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
           this.exitCode = 124;
+        } else if (signal && code === null) {
+          // A bare 128 reads like a command error; say which signal ended the
+          // process so callers can tell a kill/abort from a failed command.
+          this.emitStderr(`\nProcess terminated by signal ${signal}`);
+          this.exitCode = 128;
         } else {
-          this.exitCode = signal && code === null ? 128 : (code ?? 0);
+          this.exitCode = code ?? 0;
         }
         resolve({
           success: this.exitCode === 0,
@@ -238,7 +243,11 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const baseOptions = {
       cwd,
       env,
-      stdio: 'pipe' as const,
+      // stdin defaults to a pipe so spawned processes stay writable via
+      // sendStdin(); `'ignore'` (the built-in executeCommand default) attaches
+      // /dev/null so commands that read standard input when given no file
+      // arguments hit EOF instead of hanging.
+      stdio: [options.stdin ?? 'pipe', 'pipe', 'pipe'] as ['pipe' | 'ignore', 'pipe', 'pipe'],
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
       // Don't buffer output — we stream it via ProcessHandle callbacks.

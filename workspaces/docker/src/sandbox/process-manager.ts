@@ -218,22 +218,28 @@ export class DockerProcessManager extends SandboxProcessManager {
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);
 
+    // Attaching stdin keeps it open for sendStdin(). `stdin: 'ignore'` (what
+    // the built-in executeCommand asks for) leaves it detached so commands that
+    // read standard input when given no file arguments hit EOF instead of
+    // blocking until they are killed.
+    const attachStdin = (options.stdin ?? 'pipe') === 'pipe';
+
     // Create exec instance
     const exec = await container.exec({
       Cmd: ['sh', '-c', command],
       AttachStdout: true,
       AttachStderr: true,
-      AttachStdin: true,
+      AttachStdin: attachStdin,
       Tty: false,
       Env: envArray.length > 0 ? envArray : undefined,
       WorkingDir: options.cwd,
     });
 
     // Start exec and get the multiplexed stream
-    const stream = await exec.start({ hijack: true, stdin: true });
+    const stream = await exec.start({ hijack: true, stdin: attachStdin });
 
     const startTime = Date.now();
-    const handle = new DockerProcessHandle(exec, container, startTime, stream, options);
+    const handle = new DockerProcessHandle(exec, container, startTime, attachStdin ? stream : null, options);
     handle._setExecStream(stream);
 
     // Create the wait promise that resolves when the stream ends
