@@ -285,6 +285,10 @@ function TraceThreadRow({
         defaultTab="spans"
         className={cn(
           'border-border1 min-w-0 overflow-hidden border-b border-l',
+          // While collapsed the messages column alone sets the row height: `h-0` keeps this
+          // cell out of the grid's row sizing (so measurement rounding can't nudge the row by
+          // a pixel between tabs) and `min-h-full` stretches it back to the row afterwards.
+          !isExpanded && 'h-0 min-h-full',
           isFirst && 'rounded-tl-xl border-t',
           isLast && 'rounded-bl-xl',
         )}
