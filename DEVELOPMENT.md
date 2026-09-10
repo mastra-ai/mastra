@@ -5,8 +5,8 @@ This guide provides instructions for developers who want to contribute to or wor
 ## Prerequisites
 
 - **Node.js** (v22.13.0 or later)
-- **pnpm** (v10.18.0 or later) - Mastra uses pnpm for package management
-- **Docker** (for local development services) - Only needed for a subset of tests, not required for general development
+- **pnpm** (v10.18.0 or later): Mastra uses pnpm for package management
+- **Docker** (for local development services): Only needed for a subset of tests, not required for general development
 
 ## Getting started
 
@@ -169,6 +169,8 @@ pnpm run dev:services:up
 
 ## Contributing
 
+You can _best_ help by creating high-quality issues with good reproductions and descriptions. If you want to open a pull request, follow the steps below to ensure a smooth contribution process. **Important:** Always link your pull request to a relevant issue and provide a clear description of the changes.
+
 1. **Create a branch for your changes**:
 
    ```bash
@@ -189,9 +191,9 @@ pnpm run dev:services:up
 
    Follow the prompts to describe your changes.
 
-4. **Open a pull request** with your changes. Link the related issue(s) in the PR description (e.g. with `Fixes #1234`) and provide a clear description of the problem and solution. PRs without linked issues may be closed.
+4. **Open a pull request** with your changes. Link the related issue(s) in the PR description (e.g. with `Fixes #1234`) and provide a clear description of the problem and solution. PRs without linked issues will be closed.
 
-5. **Resolve all Coderabbit comments**. Coderabbit is our AI assistant that helps maintainers review code. It will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review.
+5. **Resolve all comments**. Coderabbit and Mastra Platform help maintainers review code. They will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review.
 
 ## Documentation
 
