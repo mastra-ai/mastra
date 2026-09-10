@@ -21,6 +21,7 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { createToolInputState, persistedToolInput, TOOL_INPUT_STATE } from '../../../tools/resumable-input';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -46,6 +47,7 @@ import {
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { loadAutoResumeToolInput } from '../../shared/resumable-tool-input';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -93,6 +95,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
+      const toolInputState = createToolInputState(suspendData);
       // Resolve run-scoped state from either the Mastra-managed RunScope (production
       // path via loop.ts hydration) or the legacy `_internal` bag (tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
@@ -479,6 +482,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
         const isResumeToolCall = !!resumeDataFromArgs;
+        if (resumeDataFromArgs !== undefined && !toolInputState.accepted) {
+          toolInputState.accepted = await loadAutoResumeToolInput({
+            mastra,
+            messages: messageList.get.all.db(),
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            suspendedToolRunId: args?.suspendedToolRunId,
+            resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+            threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+            agentId,
+            durable: false,
+          });
+        }
 
         // Check if approval is required.
         //
@@ -706,7 +722,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
             return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
+          [TOOL_INPUT_STATE]: toolInputState,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
+            const acceptedInput = persistedToolInput(toolInputState);
             if (options?.requireToolApproval) {
               const innerApproval =
                 typeof options.requireToolApproval === 'object' && options.requireToolApproval
@@ -787,6 +805,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // same id as delegatedRunId for cold reloads, while the snapshot remains the
                   // runtime source for routing this targeted resume.
                   suspendedToolRunId: options.runId,
+                  __mastraToolInput: acceptedInput,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -829,6 +848,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return await suspend(
                 {
                   toolCallSuspended: suspendPayload,
+                  __mastraToolInput: acceptedInput,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
                   ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
@@ -1018,13 +1038,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 executor: {
                   execute: async (
                     bgArgs: Record<string, unknown>,
-                    opts?: {
+                    opts?: import('../../../tools/resumable-input').ToolInputOptions & {
                       abortSignal?: AbortSignal;
                       onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
                       suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
                       resumeData?: unknown;
                     },
                   ) => {
+                    const backgroundInputState = opts?.[TOOL_INPUT_STATE] ?? toolInputState;
+                    backgroundInputState.accepted ??= toolInputState.accepted;
                     // Override the agent loop's `suspend`/`resumeData` (which
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
@@ -1039,8 +1061,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         invocationKind: isAgentTool ? 'agent' : 'tool',
                         disposition: bgResolved.disposition === 'awaited' ? 'awaited' : 'deferred',
                       },
+                      [TOOL_INPUT_STATE]: backgroundInputState,
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
+                        Object.assign(toolInputState, backgroundInputState);
                         await toolOptions.suspend?.(data, options);
                         return opts?.suspend?.(data, options);
                       },
