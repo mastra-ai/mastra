@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_589 =
+type Shared_Auxiliary_590 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,32 +52,32 @@ type Shared_Auxiliary_589 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_589[];
+      args: Shared_Auxiliary_590[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_589;
+      arg: Shared_Auxiliary_590;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_608;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_608;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_608;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_608;
           };
     };
 
-type Shared_Auxiliary_607 =
+type Shared_Auxiliary_608 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -112,14 +112,14 @@ type Shared_Auxiliary_607 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_607[];
+      args: Shared_Auxiliary_608[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_607;
+      arg: Shared_Auxiliary_608;
     };
 
-type Shared_Auxiliary_1138 =
+type Shared_Auxiliary_1139 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +164,19 @@ type Shared_Auxiliary_1138 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1138[];
+      args: Shared_Auxiliary_1139[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1138;
+      arg: Shared_Auxiliary_1139;
     };
 
-type Shared_Auxiliary_1278 = {
+type Shared_Auxiliary_1279 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1278[] | undefined;
+  children?: Shared_Auxiliary_1279[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2684,7 +2684,7 @@ type Shared_Type_113 = {
       }
     | undefined;
   steps: Shared_Type_108;
-  predicates: Shared_Auxiliary_1138[];
+  predicates: Shared_Auxiliary_1139[];
 };
 
 type Shared_Type_114 = {
@@ -2707,7 +2707,7 @@ type Shared_Type_114 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1138;
+  predicate: Shared_Auxiliary_1139;
 };
 
 type Shared_Type_115 =
@@ -3061,7 +3061,7 @@ type Shared_Type_128 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1278[] | undefined;
+  files?: Shared_Auxiliary_1279[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -7965,6 +7965,44 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /memory/threads/:threadId/transfer
+// ============================================================================
+export type PostMemoryThreadsThreadIdTransfer_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdTransfer_QueryParams = GetMemoryConfig_QueryParams;
+
+export type PostMemoryThreadsThreadIdTransfer_Body = {
+  resourceId: string;
+};
+
+export type PostMemoryThreadsThreadIdTransfer_Response = GetMemoryThreadsThreadId_Response;
+
+export type PostMemoryThreadsThreadIdTransfer_Request = Simplify<
+  (PostMemoryThreadsThreadIdTransfer_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdTransfer_PathParams }) &
+    (PostMemoryThreadsThreadIdTransfer_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdTransfer_QueryParams }
+        : { query: PostMemoryThreadsThreadIdTransfer_QueryParams }) &
+    (PostMemoryThreadsThreadIdTransfer_Body extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_Body
+        ? { body?: PostMemoryThreadsThreadIdTransfer_Body }
+        : { body: PostMemoryThreadsThreadIdTransfer_Body })
+>;
+
+export interface PostMemoryThreadsThreadIdTransfer_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdTransfer_PathParams;
+  queryParams: PostMemoryThreadsThreadIdTransfer_QueryParams;
+  body: PostMemoryThreadsThreadIdTransfer_Body;
+  request: PostMemoryThreadsThreadIdTransfer_Request;
+  response: PostMemoryThreadsThreadIdTransfer_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/threads/:threadId/working-memory
 // ============================================================================
 export type PostMemoryThreadsThreadIdWorkingMemory_PathParams = GetMemoryThreadsThreadId_PathParams;
@@ -9182,7 +9220,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_589 | undefined;
+  where?: Shared_Auxiliary_590 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16731,7 +16769,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1278[] | undefined;
+  files?: Shared_Auxiliary_1279[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16789,7 +16827,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1278[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1279[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22077,6 +22115,7 @@ export interface RouteTypes {
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
+  'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
   'GET /memory/search': GetMemorySearch_RouteContract;
@@ -22922,6 +22961,9 @@ export interface Client {
   };
   '/memory/threads/:threadId/messages': {
     GET: GetMemoryThreadsThreadIdMessages_RouteContract;
+  };
+  '/memory/threads/:threadId/transfer': {
+    POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
   };
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;

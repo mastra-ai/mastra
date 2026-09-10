@@ -188,6 +188,54 @@ export abstract class MemoryStorage extends StorageDomain {
     );
   }
 
+  /**
+   * Reassign a thread and all of its messages to a different resource.
+   *
+   * Unlike a plain `saveThread`, this preserves the thread's `createdAt` and moves the
+   * `resourceId` of every message row so the thread and its history stay consistent under
+   * the new owner. Same-resource calls are a no-op. Callers are responsible for authorizing
+   * the reassignment; this method performs no ownership checks.
+   *
+   * @param args.threadId - The thread to reassign.
+   * @param args.resourceId - The resource that should own the thread after the call.
+   * @returns The updated thread.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread "${threadId}" not found`);
+    }
+
+    if (thread.resourceId === resourceId) {
+      return thread;
+    }
+
+    const updatedThread = await this.saveThread({
+      thread: {
+        ...thread,
+        resourceId,
+        createdAt: thread.createdAt,
+        updatedAt: new Date(),
+      },
+    });
+
+    const { messages } = await this.listMessages({ threadId, perPage: false });
+    const messagesToMove = messages.filter(message => message.resourceId !== resourceId);
+    if (messagesToMove.length > 0) {
+      await this.updateMessages({
+        messages: messagesToMove.map(message => ({ id: message.id, resourceId })),
+      });
+    }
+
+    return updatedThread;
+  }
+
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +

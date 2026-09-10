@@ -421,6 +421,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
         { type: 'doc', id: 'memory/settled', label: '.settled()' },
         { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
+        { type: 'doc', id: 'memory/updateThreadResourceId', label: '.updateThreadResourceId()' },
       ],
     },
     {

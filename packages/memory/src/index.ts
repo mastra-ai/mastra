@@ -2961,6 +2961,17 @@ Notes:
     return result;
   }
 
+  public async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.updateThreadResourceId({ threadId, resourceId });
+  }
+
   /**
    * Clone observational memory records when cloning a thread.
    * Thread-scoped: always cloned to the new thread.

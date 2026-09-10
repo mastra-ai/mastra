@@ -19,6 +19,7 @@ import {
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
   CLONE_THREAD_ROUTE,
+  TRANSFER_THREAD_ROUTE,
   SEARCH_MEMORY_ROUTE,
   getTextContent,
 } from './memory';
@@ -2467,6 +2468,90 @@ describe('Memory Handlers', () => {
           }),
         );
         expect(result.thread.resourceId).toBe('user-a');
+      });
+    });
+
+    describe('TRANSFER_THREAD_ROUTE', () => {
+      it('transfers a thread and its messages to a new resource for a privileged caller', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        const createdAt = new Date('2024-01-01T00:00:00.000Z');
+        await mockMemory.createThread({ threadId: 'transfer-thread', resourceId: 'user-a', title: 'Src' });
+        // Overwrite createdAt to a fixed value so we can assert it is preserved.
+        const seeded = await mockMemory.getThreadById({ threadId: 'transfer-thread' });
+        await mockMemory.saveThread({ thread: { ...seeded!, createdAt } });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'tmsg-1',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'transfer-thread',
+              resourceId: 'user-a',
+              content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+            },
+          ] as MastraDBMessage[],
+        });
+
+        // Privileged context: no MASTRA_RESOURCE_ID_KEY set.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          threadId: 'transfer-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        expect(new Date(result.createdAt).getTime()).toBe(createdAt.getTime());
+
+        const reread = await mockMemory.getThreadById({ threadId: 'transfer-thread' });
+        expect(reread!.resourceId).toBe('user-b');
+
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        const { messages } = await memoryStore.listMessages({ threadId: 'transfer-thread', perPage: false });
+        expect(messages.every(m => m.resourceId === 'user-b')).toBe(true);
+      });
+
+      it('rejects with 403 when the caller is resource-scoped', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        await mockMemory.createThread({ threadId: 'scoped-thread', resourceId: 'user-a' });
+
+        // Resource-scoped context: MASTRA_RESOURCE_ID_KEY is set.
+        const ctx = createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'scoped-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toThrow(HTTPException);
+      });
+
+      it('returns 404 when the thread does not exist', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'missing-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toThrow(HTTPException);
       });
     });
 

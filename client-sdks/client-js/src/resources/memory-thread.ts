@@ -8,6 +8,7 @@ import type {
   ListMemoryThreadMessagesResponse,
   CloneMemoryThreadParams,
   CloneMemoryThreadResponse,
+  TransferMemoryThreadParams,
 } from '../types';
 
 import { requestContextQueryString } from '../utils';
@@ -164,6 +165,25 @@ export class MemoryThread extends BaseResource {
     const agentIdParam = `?agentId=${agentId}`;
     const contextParam = requestContextQueryString(requestContext, '&');
     return this.request(`/memory/threads/${this.threadId}/clone${agentIdParam}${contextParam}`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Transfers ownership of the thread (and all of its messages) to a different resource.
+   *
+   * This is a privileged operation: the server rejects it when the caller is resource-scoped
+   * (i.e. a per-user/tenant context). Unlike `update`, it does not reset the thread's `createdAt`.
+   * @param params - Transfer parameters including the target `resourceId`, optional `agentId`, and request context.
+   * @returns Promise containing the transferred thread with its new `resourceId`
+   */
+  transfer(params: TransferMemoryThreadParams): Promise<StorageThreadType> {
+    const { agentId, requestContext, ...body } = params;
+    const resolvedAgentId = agentId ?? this.agentId;
+    const agentIdParam = resolvedAgentId ? `?agentId=${resolvedAgentId}` : '';
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}/transfer${agentIdParam}${contextParam}`, {
       method: 'POST',
       body,
     });

@@ -45,6 +45,8 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  transferThreadBodySchema,
+  transferThreadResponseSchema,
   getObservationalMemoryQuerySchema,
   getObservationalMemoryResponseSchema,
   awaitBufferStatusBodySchema,
@@ -61,7 +63,13 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
-import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
+import {
+  validateBody,
+  getEffectiveResourceId,
+  getContextResourceId,
+  getEffectiveThreadId,
+  enforceThreadAccess,
+} from './utils';
 
 interface MemoryContext extends Context {
   agentId?: string;
@@ -1653,6 +1661,66 @@ export const CLONE_THREAD_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error cloning thread');
+    }
+  },
+});
+
+export const TRANSFER_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/memory/threads/:threadId/transfer',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  bodySchema: transferThreadBodySchema,
+  responseSchema: transferThreadResponseSchema,
+  summary: 'Transfer thread ownership',
+  description:
+    'Reassigns a thread and all of its messages to a different resource. Requires a privileged (non-resource-scoped) context.',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
+    try {
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+      validateBody({ threadId: effectiveThreadId });
+
+      // Privilege gate: a resource-scoped caller (user/tenant) must not reassign ownership.
+      const scopeId = getContextResourceId(requestContext);
+      if (scopeId) {
+        throw new HTTPException(403, {
+          message: 'Thread transfer requires a privileged (non-resource-scoped) context',
+        });
+      }
+
+      const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
+      if (agent && (await isGatewayAgentAsync(agent))) {
+        throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
+      }
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const sourceThread = await memory.getThreadById({ threadId: effectiveThreadId! });
+      if (!sourceThread) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+
+      // Privileged context: ownership check is a no-op, but FGA MEMORY_WRITE still applies when configured.
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId!,
+        thread: sourceThread,
+        effectiveResourceId: undefined,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+
+      const result = await memory.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId });
+
+      return { ...result, resourceId: result.resourceId ?? null };
+    } catch (error) {
+      return handleError(error, 'Error transferring thread');
     }
   },
 });
