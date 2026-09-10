@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -616,15 +617,24 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollDeploy(deployResult.id, token, orgId, undefined, { showAllLogs: opts.debug });
+  const collectedLogs: string[] = [];
+  const finalStatus = await pollDeploy(deployResult.id, token, orgId, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
-    process.exit(1);
   } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs,
+      dashboardUrl: deployDashboardUrl('environment', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     process.exit(1);
   }
 }

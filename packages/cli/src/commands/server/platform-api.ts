@@ -194,6 +194,8 @@ export async function uploadServerDeploy(
 export interface PollDeployOptions {
   /** Print every log line instead of the rolling tail shown on a TTY. */
   showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: string[];
 }
 
 export async function pollServerDeploy(
@@ -448,7 +450,7 @@ async function pollServerLogs(
 ): Promise<void> {
   await abortableDelay(3000, signal);
 
-  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
   let printedBuild = 0;
   let printedDeploy = 0;
   let printedCombined = 0;

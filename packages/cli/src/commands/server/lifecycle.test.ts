@@ -34,9 +34,11 @@ vi.mock('@clack/prompts', () => ({
   })),
   log: {
     step: (...a: unknown[]) => mockLogStep(...a),
+    info: vi.fn(),
     error: (...a: unknown[]) => mockLogError(...a),
     warning: (...a: unknown[]) => mockLogWarning(...a),
   },
+  S_BAR: '│',
 }));
 
 beforeEach(() => {
@@ -93,7 +95,13 @@ describe('serverRestartAction', () => {
     await serverRestartAction({});
 
     expect(mockRestartServerProject).toHaveBeenCalledWith('t', 'o', 'proj-1');
-    expect(mockPollServerDeploy).toHaveBeenCalledWith('dep-1', 't', 'o');
+    expect(mockPollServerDeploy).toHaveBeenCalledWith(
+      'dep-1',
+      't',
+      'o',
+      undefined,
+      expect.objectContaining({ collectLogs: expect.any(Array) }),
+    );
     expect(mockOutro).toHaveBeenCalledWith('Restart complete! https://app.example');
   });
 
@@ -128,7 +136,7 @@ describe('serverRestartAction', () => {
 
     const { serverRestartAction } = await import('./lifecycle.js');
     await expect(serverRestartAction({})).rejects.toThrow('exit:1');
-    expect(mockLogWarning).toHaveBeenCalledWith('Restart ended with status: cancelled');
+    expect(mockLogError).toHaveBeenCalledWith('Restart ended with status: cancelled');
 
     mockExit.mockRestore();
   });

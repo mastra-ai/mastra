@@ -371,6 +371,8 @@ export interface DeployLogWriterOptions {
   scroll?: boolean;
   /** Text placed before each line, e.g. the clack bar. */
   prefix?: string;
+  /** Every raw entry written is also pushed here, for a failure excerpt later. */
+  collect?: string[];
   stream?: DeployLogStream;
 }
 
@@ -471,6 +473,7 @@ export function createDeployLogWriter(options: DeployLogWriterOptions = {}): Dep
 
   return {
     write(...rawEntries: string[]) {
+      options.collect?.push(...rawEntries);
       const incoming = splitLogEntries(rawEntries).flatMap(render);
       if (incoming.length === 0) return;
 
@@ -495,4 +498,81 @@ export function createDeployLogWriter(options: DeployLogWriterOptions = {}): Dep
       commit(pending.splice(0));
     },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Failure excerpt                                                    */
+/* ------------------------------------------------------------------ */
+
+const ERROR_LEVELS = new Set(['error', 'err', 'fatal']);
+const ERROR_TEXT_RE = /\b(error|errors|fatal|failed|failure|exception|unhandled|panic|crashed)\b/i;
+
+export interface FailureExcerptOptions {
+  /** Rows kept before and after each matching row. */
+  context?: number;
+  /** Upper bound on rows returned; the most recent matches win. */
+  maxLines?: number;
+  /** Rows returned from the end of the log when nothing matches. */
+  fallbackLines?: number;
+}
+
+export interface FailureExcerpt {
+  /** Raw rows to print; an empty string marks a gap between ranges. */
+  lines: string[];
+  /** False when no row looked like an error and the tail was used instead. */
+  matched: boolean;
+}
+
+/** True when the row is tagged as an error or its text mentions one. */
+export function isErrorLogLine(raw: string): boolean {
+  const { labels, message } = parseDeployLogLine(sanitizeLogLine(raw));
+  if (labels.some(label => ERROR_LEVELS.has(label.toLowerCase()))) return true;
+  return ERROR_TEXT_RE.test(stripAnsi(message));
+}
+
+/**
+ * Pick the rows worth showing after a failed deploy: every row that looks
+ * like an error, with a few rows either side for context, ranges merged and
+ * separated by a blank row. When nothing matches, the last rows are used.
+ */
+export function selectFailureExcerpt(entries: string[], options: FailureExcerptOptions = {}): FailureExcerpt {
+  const context = options.context ?? 3;
+  const maxLines = options.maxLines ?? 120;
+  const fallbackLines = options.fallbackLines ?? 40;
+  const rows = splitLogEntries(entries);
+
+  const ranges: Array<[number, number]> = [];
+  rows.forEach((row, index) => {
+    if (!isErrorLogLine(row)) return;
+    const start = Math.max(0, index - context);
+    const end = Math.min(rows.length - 1, index + context);
+    const last = ranges[ranges.length - 1];
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else ranges.push([start, end]);
+  });
+
+  if (ranges.length === 0) {
+    return { lines: rows.slice(-fallbackLines), matched: false };
+  }
+
+  // Keep the most recent ranges when the excerpt would run long.
+  const kept: Array<[number, number]> = [];
+  let total = 0;
+  for (let i = ranges.length - 1; i >= 0; i -= 1) {
+    const [start, end] = ranges[i]!;
+    const size = end - start + 1;
+    if (total + size > maxLines) {
+      if (kept.length === 0) kept.unshift([end - maxLines + 1, end]);
+      break;
+    }
+    kept.unshift([start, end]);
+    total += size;
+  }
+
+  const lines: string[] = [];
+  kept.forEach(([start, end], i) => {
+    if (i > 0) lines.push('');
+    lines.push(...rows.slice(start, end + 1));
+  });
+  return { lines, matched: true };
 }

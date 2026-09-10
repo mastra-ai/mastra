@@ -5,6 +5,8 @@ import {
   sanitizeLogLine,
   splitLogEntries,
   advanceSgrState,
+  isErrorLogLine,
+  selectFailureExcerpt,
   DeployLogRowRenderer,
   sgrOpenSequence,
   formatDeployLogLine,
@@ -400,5 +402,50 @@ describe('createDeployLogWriter', () => {
     const { stream, chunks } = fakeStream();
     createDeployLogWriter({ stream }).write();
     expect(chunks).toHaveLength(0);
+  });
+});
+
+describe('selectFailureExcerpt', () => {
+  const ts = (i: number) => `[2026-03-20T12:00:${String(i).padStart(2, '0')}.000Z]`;
+  const log = (i: number, level = 'info', text = `step ${i}`) => `${ts(i)} [${level}] ${text}`;
+
+  it('flags error levels and error-like text', () => {
+    expect(isErrorLogLine(log(1, 'error'))).toBe(true);
+    expect(isErrorLogLine(log(1, 'fatal'))).toBe(true);
+    expect(isErrorLogLine(log(1, 'info', 'npm ERR! Error: boom'))).toBe(true);
+    expect(isErrorLogLine(log(1, 'info', 'Healthcheck failed'))).toBe(true);
+    expect(isErrorLogLine(log(1, 'info', 'Healthcheck succeeded'))).toBe(false);
+    expect(isErrorLogLine(log(1, 'warn', 'slow'))).toBe(false);
+  });
+
+  it('returns matching rows with context, merging overlapping ranges and marking gaps', () => {
+    const entries = Array.from({ length: 30 }, (_, i) => log(i));
+    entries[5] = log(5, 'error', 'first');
+    entries[7] = log(7, 'error', 'second');
+    entries[25] = log(25, 'error', 'third');
+    const excerpt = selectFailureExcerpt(entries, { context: 2 });
+
+    expect(excerpt.matched).toBe(true);
+    expect(excerpt.lines).toEqual([...entries.slice(3, 10), '', ...entries.slice(23, 28)]);
+  });
+
+  it('keeps the most recent ranges when over the line budget', () => {
+    const entries = Array.from({ length: 40 }, (_, i) => log(i));
+    entries[2] = log(2, 'error', 'old');
+    entries[30] = log(30, 'error', 'new');
+    const excerpt = selectFailureExcerpt(entries, { context: 1, maxLines: 5 });
+    expect(excerpt.lines).toEqual(entries.slice(29, 32));
+  });
+
+  it('falls back to the tail of the log when nothing matches', () => {
+    const entries = Array.from({ length: 10 }, (_, i) => log(i));
+    const excerpt = selectFailureExcerpt(entries, { fallbackLines: 4 });
+    expect(excerpt.matched).toBe(false);
+    expect(excerpt.lines).toEqual(entries.slice(6));
+  });
+
+  it('splits multi-row entries before selecting', () => {
+    const excerpt = selectFailureExcerpt([`${ts(1)} [info] ok\n${ts(2)} [error] bad\nnext`], { context: 0 });
+    expect(excerpt.lines).toEqual([`${ts(2)} [error] bad`]);
   });
 });

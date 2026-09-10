@@ -1,5 +1,6 @@
 import * as p from '@clack/prompts';
 
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { resolveAuth, resolveProjectId } from './env.js';
 import { pauseServerProject, pollServerDeploy, restartServerProject } from './platform-api.js';
 
@@ -28,15 +29,20 @@ export async function serverRestartAction(opts: { config?: string; project?: str
     s.stop(`Restart queued: ${deployId}`);
 
     p.log.step('Streaming deploy logs...');
-    const finalStatus = await pollServerDeploy(deployId, token, orgId);
+    const collectedLogs: string[] = [];
+    const finalStatus = await pollServerDeploy(deployId, token, orgId, undefined, { collectLogs: collectedLogs });
 
     if (finalStatus.status === 'running') {
       p.outro(finalStatus.instanceUrl ? `Restart complete! ${finalStatus.instanceUrl}` : 'Restart complete!');
-    } else if (finalStatus.status === 'failed') {
-      p.log.error(`Restart failed: ${finalStatus.error ?? 'unknown error'}`);
-      process.exit(1);
     } else {
-      p.log.warning(`Restart ended with status: ${finalStatus.status}`);
+      printDeployFailure({
+        message:
+          finalStatus.status === 'failed'
+            ? `Restart failed: ${finalStatus.error ?? 'unknown error'}`
+            : `Restart ended with status: ${finalStatus.status}`,
+        collectedLogs,
+        dashboardUrl: deployDashboardUrl('server', { orgId, projectId, deployId }),
+      });
       process.exit(1);
     }
   } catch (err) {

@@ -23,6 +23,7 @@ import pc from 'picocolors';
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import type { DeployLogWriter } from '../../utils/deploy-log-format.js';
 import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { runBuild } from '../../utils/run-build.js';
@@ -413,6 +414,8 @@ interface UnifiedDeployStatus {
 interface PollDeployOptions {
   /** Print every log line instead of the rolling tail shown on a TTY. */
   showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: string[];
 }
 
 /**
@@ -496,7 +499,7 @@ async function pollEnvironmentDeploy(
 
   // Stream logs in parallel with status polling
   const logAbort = new AbortController();
-  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
   streamEnvironmentDeployLogs(
     currentToken,
     orgId,
@@ -935,8 +938,10 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   await rm(zipPath, { force: true });
 
   p.log.step('Waiting for deploy to finish...');
+  const collectedLogs: string[] = [];
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id, undefined, {
     showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
   });
 
   if (finalStatus.status === 'running') {
@@ -944,19 +949,24 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
     p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
+  } else {
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs,
+      dashboardUrl: deployDashboardUrl('environment', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     // Progressive discovery: only hint at `mastra env diagnosis` when the
     // command is actually registered (same feature gate as index.ts). The
     // failed-deploy webhook has already inserted a PENDING diagnosis row,
     // so the command returns "in progress" immediately rather than 404-ing
     // while the agent runs.
-    if (coreFeatures.has('deploy-diagnosis')) {
+    if (finalStatus.status === 'failed' && coreFeatures.has('deploy-diagnosis')) {
       p.log.info(`Run \`mastra env diagnosis ${deployResult.id}\` for suggestions.`);
     }
-    process.exit(1);
-  } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
     process.exit(1);
   }
 }

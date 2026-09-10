@@ -210,6 +210,8 @@ export async function uploadDeploy(
 export interface PollDeployOptions {
   /** Print every log line instead of the rolling tail shown on a TTY. */
   showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: string[];
 }
 
 async function streamDeployLogs(
@@ -279,7 +281,7 @@ export async function pollDeploy(
 
   // Start streaming logs in the background via SSE
   const logAbort = new AbortController();
-  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
   streamDeployLogs(deployId, currentToken, orgId, logAbort.signal, logWriter).catch(() => {});
 
   let client = createApiClient(currentToken, orgId);
