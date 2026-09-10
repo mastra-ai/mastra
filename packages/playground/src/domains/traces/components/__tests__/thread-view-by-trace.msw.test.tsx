@@ -157,7 +157,10 @@ describe('ThreadViewByTrace', () => {
     expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    const [first, second] = screen.getAllByTestId('trace-row-timeline').map(el => el.parentElement!);
+    // The timeline column is the row's second grid child (the Spans / Feedback tabs root).
+    const [first, second] = screen
+      .getAllByTestId('trace-row-timeline')
+      .map(el => el.closest<HTMLElement>('[data-trace-id]')!.children[1] as HTMLElement);
     expect(first.className).toContain('rounded-tl-xl');
     expect(first.className).toContain('border-t');
     expect(first.className).not.toContain('rounded-bl-xl');
@@ -450,49 +453,74 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  it('toggles an embed feedback panel from the icon button', async () => {
-    installHandlers();
-    installFeedbackHandlers();
-    renderView();
+  describe('the trace panel tabs', () => {
+    it('shows the span tree by default and switches to the feedback thread on the Feedback tab', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      renderView();
 
-    // Wait for traces to render.
-    await screen.findByText('Chef agent run');
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-    // No feedback panel before clicking.
-    expect(screen.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      // The old hover toggle is gone; each row carries a Spans / Feedback tab list instead.
+      expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
+      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
+      expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
 
-    // Click the feedback toggle icon button on the first trace row.
-    const feedbackButtons = screen.getAllByRole('button', { name: 'Toggle feedback' });
-    fireEvent.click(feedbackButtons[0]);
+      fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
 
-    // The embed feedback panel appears with the composer.
-    expect(await screen.findByPlaceholderText('Leave feedback...')).not.toBeNull();
-  });
+      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
+    });
 
-  it('submits feedback from the embed panel', async () => {
-    installHandlers();
-    const onPost = vi.fn();
-    installFeedbackHandlers();
-    server.use(
-      http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost((await request.json()) as Record<string, unknown>);
-        return HttpResponse.json({ success: true });
-      }),
-    );
+    it('marks the Feedback tab only when some feedback still needs review', async () => {
+      installHandlers();
+      installFeedbackHandlers(
+        listFeedbackResponse([
+          feedbackRecord({ feedbackId: 'trace-a-fb-1', traceId: 'trace-a', reviewStatus: 'needs-review' }),
+        ]),
+      );
+      renderView();
 
-    renderView();
+      await screen.findByText('Chef agent run');
+      const feedbackTabs = screen.getAllByRole('tab', { name: /Feedback/ });
+      await waitFor(() => expect(within(feedbackTabs[0]).queryByTestId('needs-review-dot')).not.toBeNull());
+    });
 
-    await screen.findByText('Chef agent run');
-    const feedbackButtons = screen.getAllByRole('button', { name: 'Toggle feedback' });
-    fireEvent.click(feedbackButtons[0]);
+    it('shows no badge on the Feedback tab when there is no feedback', async () => {
+      installHandlers();
+      installFeedbackHandlers(listFeedbackResponse([]));
+      renderView();
 
-    const input = await screen.findByPlaceholderText('Leave feedback...');
-    fireEvent.change(input, { target: { value: 'great turn' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
+      await screen.findByText('Chef agent run');
+      // Give the feedback query a chance to resolve before asserting the absence of the dot.
+      await waitFor(() => expect(screen.getAllByRole('tab', { name: /Feedback/ }).length).toBeGreaterThan(0));
+      expect(screen.queryByTestId('needs-review-dot')).toBeNull();
+    });
 
-    await waitFor(() => expect(onPost).toHaveBeenCalled());
-    expect(onPost.mock.calls[0][0]).toMatchObject({
-      feedback: { traceId: 'trace-a', value: 'great turn' },
+    it('submits trace-level feedback from the Feedback tab', async () => {
+      installHandlers();
+      const onPost = vi.fn();
+      installFeedbackHandlers();
+      server.use(
+        http.post(FEEDBACK_URL, async ({ request }) => {
+          onPost((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        }),
+      );
+
+      renderView();
+
+      await screen.findByText('Chef agent run');
+      fireEvent.click(screen.getAllByRole('tab', { name: /Feedback/ })[0]);
+
+      const input = await screen.findByPlaceholderText('Leave feedback...');
+      fireEvent.change(input, { target: { value: 'great turn' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
+
+      await waitFor(() => expect(onPost).toHaveBeenCalled());
+      expect(onPost.mock.calls[0][0]).toMatchObject({
+        feedback: { traceId: 'trace-a', value: 'great turn' },
+      });
     });
   });
 });

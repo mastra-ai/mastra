@@ -1,5 +1,6 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -13,14 +14,15 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useExpandedSpanIds } from '@/domains/traces/hooks/use-expanded-span-ids';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useVisibleTraceRows } from '@/domains/traces/hooks/use-visible-trace-rows';
 
 export interface ThreadViewByTraceProps {
@@ -195,6 +197,8 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
   );
 }
 
+type TraceRowTab = 'spans' | 'feedback';
+
 interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
@@ -237,7 +241,9 @@ function TraceThreadRow({
 
   const { expandedSpanIds, setExpandedSpanIds } = useExpandedSpanIds(hierarchicalSpans);
 
-  const [showFeedback, setShowFeedback] = useState(false);
+  // First page only, for the tab badge; the Feedback tab body owns its own pagination and
+  // shares this query through the React Query cache.
+  const { data: feedbackData } = useTraceFeedback({ traceId });
 
   // The whole row is dimmed unless it is the first one in view, hovered, or its span is open in
   // the side panel, so the reader keeps track of which turn they are on without hovering.
@@ -255,7 +261,7 @@ function TraceThreadRow({
     <div
       className={cn(
         'group grid grid-cols-[1fr_1fr] pr-4 pl-14 transition-opacity hover:opacity-100',
-        isActive || isCurrent || showFeedback ? 'opacity-100' : 'opacity-50',
+        isActive || isCurrent ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
@@ -265,73 +271,63 @@ function TraceThreadRow({
           conversation; the timeline column carries the divider and the bottom border. */}
       <div className="relative min-h-[240px] min-w-0 pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
-        <div ref={messages.ref} className="sticky top-0 flex flex-col gap-2 py-4" data-testid="trace-row-messages">
-          <div
-            className={cn(
-              'z-30 flex items-center gap-1 transition-opacity',
-              showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-            )}
-          >
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              tooltip="Feedback"
-              aria-label="Toggle feedback"
-              onClick={() => setShowFeedback(v => !v)}
-            >
-              <MessageSquare />
-            </Button>
-          </div>
-          <div className="min-h-0">
-            <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
-          </div>
-          {showFeedback && (
-            <div className="border-border1 bg-surface3 absolute top-12 left-0 z-20 w-80 overflow-y-auto rounded-lg border shadow-lg">
-              <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
-            </div>
-          )}
+        <div ref={messages.ref} className="sticky top-0 py-4" data-testid="trace-row-messages">
+          <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
         </div>
       </div>
-      <div
+      <Tabs<TraceRowTab>
+        defaultTab="spans"
         className={cn(
           'border-border1 min-w-0 overflow-hidden border-b border-l',
           isFirst && 'rounded-tl-xl border-t',
           isLast && 'rounded-bl-xl',
         )}
       >
-        <div
-          className="relative overflow-hidden"
-          style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
-          data-testid="trace-row-timeline"
-        >
-          <div ref={timeline.ref} className="py-4 pl-4">
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              selectedSpanId={selectedSpanId}
-              featuredSpanIds={featuredSpanIds}
-              onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-              isLoading={isLoading}
-            />
+        <TabList variant="pill-ghost" className="px-3 pt-2">
+          <Tab value="spans">Spans</Tab>
+          <Tab value="feedback">
+            Feedback
+            <NeedsReviewDot feedback={feedbackData?.feedback} />
+          </Tab>
+        </TabList>
+        <TabContent value="spans" className="py-0">
+          <div
+            className="relative overflow-hidden"
+            style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
+            data-testid="trace-row-timeline"
+          >
+            <div ref={timeline.ref} className="py-4 pl-4">
+              <TraceTimeline
+                hierarchicalSpans={hierarchicalSpans}
+                selectedSpanId={selectedSpanId}
+                featuredSpanIds={featuredSpanIds}
+                onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
+                expandedSpanIds={expandedSpanIds}
+                setExpandedSpanIds={setExpandedSpanIds}
+                isLoading={isLoading}
+              />
+            </div>
+            {overflows && isClamped && (
+              <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
+                <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
+                  Show more
+                </Button>
+              </div>
+            )}
           </div>
-          {overflows && isClamped && (
-            <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
-              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
-                Show more
+          {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
+          {overflows && !isClamped && !isActive && (
+            <div className="flex justify-center py-2">
+              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
+                Show less
               </Button>
             </div>
           )}
-        </div>
-        {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
-        {overflows && !isClamped && !isActive && (
-          <div className="flex justify-center py-2">
-            <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
-              Show less
-            </Button>
-          </div>
-        )}
-      </div>
+        </TabContent>
+        <TabContent value="feedback" className="px-4 py-2">
+          <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+        </TabContent>
+      </Tabs>
     </div>
   );
 }
