@@ -1,5 +1,4 @@
 ---
-'@mastra/react': patch
 'mastra': patch
 ---
 
