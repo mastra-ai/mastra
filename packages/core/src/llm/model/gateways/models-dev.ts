@@ -129,6 +129,14 @@ const EXTRA_PROVIDER_MODELS: Record<string, Record<string, Omit<ModelsDevModelIn
       structured_output: true,
     },
   },
+  deepseek: {
+    'deepseek-flash': {
+      name: 'DeepSeek V4.1 Flash',
+      temperature: true,
+      structured_output: true,
+      attachment: true,
+    },
+  },
 };
 
 export function mergeExtraModels(

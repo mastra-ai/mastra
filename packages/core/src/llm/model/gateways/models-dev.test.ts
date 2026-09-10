@@ -459,6 +459,80 @@ describe('ModelsDevGateway', () => {
       expect(gateway.getTemperatureCapabilities().inception).toBeUndefined();
       expect(gateway.getStructuredOutputCapabilities().inception).toBeUndefined();
     });
+
+    it('includes DeepSeek deepseek-flash when models.dev omits it', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          deepseek: {
+            id: 'deepseek',
+            name: 'DeepSeek',
+            models: {
+              'deepseek-v4-flash': { name: 'DeepSeek V4 Flash', temperature: true, structured_output: true },
+              'deepseek-v4-flash-vision-exp': {
+                name: 'DeepSeek V4 Flash Vision Exp',
+                temperature: true,
+                structured_output: true,
+                attachment: true,
+              },
+              'deepseek-v4-pro': { name: 'DeepSeek V4 Pro', temperature: true, structured_output: true },
+            },
+            env: ['DEEPSEEK_API_KEY'],
+            api: 'https://api.deepseek.com',
+            npm: '@ai-sdk/deepseek',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.deepseek.models).toEqual([
+        'deepseek-flash',
+        'deepseek-v4-flash',
+        'deepseek-v4-flash-vision-exp',
+        'deepseek-v4-pro',
+      ]);
+      expect(gateway.getTemperatureCapabilities().deepseek).toEqual([
+        'deepseek-flash',
+        'deepseek-v4-flash',
+        'deepseek-v4-flash-vision-exp',
+        'deepseek-v4-pro',
+      ]);
+      expect(gateway.getStructuredOutputCapabilities().deepseek).toEqual([
+        'deepseek-flash',
+        'deepseek-v4-flash',
+        'deepseek-v4-flash-vision-exp',
+        'deepseek-v4-pro',
+      ]);
+      expect(gateway.getAttachmentCapabilities().deepseek).toEqual(['deepseek-flash', 'deepseek-v4-flash-vision-exp']);
+    });
+
+    it('does not duplicate deepseek-flash or overwrite models.dev capabilities', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          deepseek: {
+            id: 'deepseek',
+            name: 'DeepSeek',
+            models: {
+              'deepseek-flash': { name: 'DeepSeek V4.1 Flash', temperature: false, structured_output: false },
+              'deepseek-v4-flash': { name: 'DeepSeek V4 Flash' },
+              'deepseek-v4-pro': { name: 'DeepSeek V4 Pro' },
+            },
+            env: ['DEEPSEEK_API_KEY'],
+            api: 'https://api.deepseek.com',
+            npm: '@ai-sdk/deepseek',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.deepseek.models).toEqual(['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-pro']);
+      expect(gateway.getTemperatureCapabilities().deepseek).toBeUndefined();
+      expect(gateway.getStructuredOutputCapabilities().deepseek).toBeUndefined();
+      expect(gateway.getAttachmentCapabilities().deepseek).toBeUndefined();
+    });
   });
 
   describe('buildUrl', () => {

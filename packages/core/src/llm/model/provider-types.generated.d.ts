@@ -5083,7 +5083,12 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-flash',
   ];
-  readonly deepseek: readonly ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'];
+  readonly deepseek: readonly [
+    'deepseek-flash',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp',
+    'deepseek-v4-pro',
+  ];
   readonly abacus: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',

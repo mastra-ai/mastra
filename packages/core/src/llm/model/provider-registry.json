@@ -6259,7 +6259,7 @@
       "url": "https://api.deepseek.com",
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
       "name": "DeepSeek",
-      "models": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
+      "models": ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
       "docUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "gateway": "models.dev"
     },
@@ -14834,7 +14834,7 @@
       "zai/glm-5.3",
       "zai/glm-5.3-flash"
     ],
-    "deepseek": ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
+    "deepseek": ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4-pro"],
     "abacus": [
       "MiniMaxAI/MiniMax-M2.7",
       "MiniMaxAI/MiniMax-M3",
