@@ -43,12 +43,21 @@ export function UserSessionsSection() {
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   // Pinned rows stay on top; within each pin group the viewer's own sessions
-  // sort before sessions started by other org members.
+  // sort before sessions started by other org members, and inside each of those
+  // groups the most recently updated session comes first.
+  // Sorting on activity is safe here in a way it is not for factory workspaces:
+  // a session row's `updatedAt` only moves on rename, sandbox attach, and the
+  // write-once materialize/first-message stamps, so the run-start and run-end
+  // refetches cannot reshuffle the list under the reader.
+  // Session id closes it into a total order — the sessions endpoint sorts
+  // nothing, so anything falling through to its order would still shuffle.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
   const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
     (a, b) =>
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
-      Number(isOwn(b)) - Number(isOwn(a)),
+      Number(isOwn(b)) - Number(isOwn(a)) ||
+      b.updatedAt.localeCompare(a.updatedAt) ||
+      b.sessionId.localeCompare(a.sessionId),
   );
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
