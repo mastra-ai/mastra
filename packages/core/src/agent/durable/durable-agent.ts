@@ -197,6 +197,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Maximum processor retries */
   maxProcessorRetries?: number;
+  /** Input processors for this invocation; automatic memory and workspace layers remain enabled. */
+  inputProcessors?: AgentExecutionOptions<OUTPUT>['inputProcessors'];
+  /** Output processors for this invocation. */
+  outputProcessors?: AgentExecutionOptions<OUTPUT>['outputProcessors'];
   /** Structured output configuration */
   structuredOutput?: AgentExecutionOptions<OUTPUT>['structuredOutput'];
   /** Whether to return detailed scoring data in the response */
@@ -1414,8 +1418,8 @@ export class DurableAgent<
     return this.#wrappedAgent.getConfiguredProcessorWorkflows();
   }
 
-  override async listInputProcessors(requestContext?: any) {
-    return this.#wrappedAgent.listInputProcessors(requestContext);
+  override async listInputProcessors(...args: Parameters<Agent['listInputProcessors']>) {
+    return this.#wrappedAgent.listInputProcessors(...args);
   }
 
   override async listOutputProcessors(requestContext?: any) {
