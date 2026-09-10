@@ -87,6 +87,7 @@ export type RemindContextOp =
   | { op: 'changed'; entry: RemindContextEntry }
   | { op: 'node-activity'; entry: RemindContextEntry }
   | { op: 'no-longer-matched'; entry: RemindContextEntry }
+  | { op: 'out-of-context'; entry: RemindContextEntry }
   | { op: 'left-candidate-set'; id: string };
 
 /**
@@ -102,9 +103,19 @@ const REMIND_ENTRY_MAX_CHARACTERS = CANDIDATE_CONTEXT_MAX_CHARACTERS - 1024;
 /** The shape of an activity event this lane needs; a structural subset of `KnowledgeActivityEvent`. */
 export type RemindContextActivityEvent = { id: string; action: string; recordType: string; recordId: string };
 
+/**
+ * One committed record, read atomically.
+ *
+ * The observations and the generation they belong to must come from the same
+ * read. A second read for the generation could straddle a reflection and pair a
+ * bumped counter with pre-reflection observations, which would manufacture
+ * `out-of-context` reports for candidates that reflection never touched.
+ */
+export type RemindContextRecord = { observations: string; generationCount: number };
+
 export interface RemindContextStateDeps {
-  /** Reads the parent thread's committed active observations. Undefined when unavailable. */
-  readParentObservations(): Promise<string | undefined>;
+  /** Reads the parent thread's committed record. Undefined when unavailable. */
+  readParentRecord(): Promise<RemindContextRecord | undefined>;
   /**
    * Reads the newest bounded page of knowledge activity for the sidekick's
    * scope. Omitted when no knowledge store or scope is available, in which case
@@ -258,11 +269,25 @@ function passthroughCacheKey(text: string): string {
     .slice(0, 32);
 }
 
-function snapshotValue(snapshot: ProcessorActiveStateSignal | undefined): { regime?: string; entries?: unknown } {
-  return ((snapshot?.metadata as { value?: { regime?: string; entries?: unknown } } | undefined)?.value ?? {}) as {
-    regime?: string;
-    entries?: unknown;
-  };
+type RemindContextSignalValue = { regime?: string; entries?: unknown; generationCount?: number };
+
+function snapshotValue(snapshot: ProcessorActiveStateSignal | undefined): RemindContextSignalValue {
+  return ((snapshot?.metadata as { value?: RemindContextSignalValue } | undefined)?.value ??
+    {}) as RemindContextSignalValue;
+}
+
+/**
+ * The generation the model was last told about: the newest emission still in the
+ * window, snapshot or delta. Undefined when no base carries one, in which case
+ * no reflection can be shown to have run and the lane stays with the wording
+ * claim it can prove.
+ */
+function priorGeneration(args: ComputeStateSignalArgs): number | undefined {
+  for (const delta of [...(args.deltasSinceSnapshot ?? [])].reverse()) {
+    const generation = snapshotValue(delta).generationCount;
+    if (typeof generation === 'number') return generation;
+  }
+  return snapshotValue(args.lastSnapshot).generationCount;
 }
 
 function deltaOps(delta: ProcessorActiveStateSignal): RemindContextOp[] {
@@ -302,9 +327,24 @@ export function effectivePriorEntries(args: ComputeStateSignalArgs): RemindConte
   return entries;
 }
 
+/**
+ * Whether reflection ran between two checks.
+ *
+ * A reflection generation is a new committed record whose `activeObservations`
+ * is a rewritten, lossy version of the old ones, written with an incremented
+ * `generationCount` (`storage/domains/memory/inmemory.ts`, `createReflectionGeneration`).
+ * That counter is the only *structural* evidence this lane can get that the
+ * parent's memory was rewritten rather than merely worded differently, and it
+ * rides the same record read the projection already needs.
+ */
+function reflectionRan(priorGeneration: number | undefined, currentGeneration: number): boolean {
+  return typeof priorGeneration === 'number' && currentGeneration > priorGeneration;
+}
+
 export function diffRemindContextEntries(
   prior: RemindContextEntry[],
   current: RemindContextEntry[],
+  generations?: { prior?: number; current: number },
 ): RemindContextOp[] {
   const ops: RemindContextOp[] = [];
   const currentIds = new Set(current.map(entry => entry.id));
@@ -328,8 +368,15 @@ export function diffRemindContextEntries(
     // Exactly one op per candidate per check: `no-longer-matched` is emitted
     // instead of a generic `changed`, and a marker-only change is reported as
     // what it is rather than as an observation change that did not happen.
-    if (before.match === 'matched' && entry.match === 'no-match') ops.push({ op: 'no-longer-matched', entry });
-    else if (!evidenceMoved) ops.push({ op: 'node-activity', entry });
+    if (before.match === 'matched' && entry.match === 'no-match') {
+      // The same observable transition splits on whether reflection ran. Without
+      // a generation bump all that is known is that wording drifted, which is
+      // `no-longer-matched`. With one, the parent's observations were rewritten
+      // and this candidate did not survive the rewrite — the one case where
+      // "out of context" is a claim the evidence supports.
+      const reflected = generations ? reflectionRan(generations.prior, generations.current) : false;
+      ops.push({ op: reflected ? 'out-of-context' : 'no-longer-matched', entry });
+    } else if (!evidenceMoved) ops.push({ op: 'node-activity', entry });
     else ops.push({ op: 'changed', entry });
   }
   return ops;
@@ -352,6 +399,13 @@ function opLine(op: RemindContextOp, eventId: string): string {
       return `${stamp}: ${op.entry.id} — the accumulated observations matching it read the same as before, and its knowledge node appeared in the store's activity page.\n${entryText(op.entry)}`;
     case 'no-longer-matched':
       return `${stamp}: ${op.entry.id} — had no lexical overlap with the parent's accumulated observations under the current matching rule (two or more shared distinctive terms). This is a statement about wording, not about what the parent still holds.${op.entry.marker ? `\n${markerLine(op.entry.id, op.entry.marker)}` : ''}`;
+    case 'out-of-context':
+      // The one op that may speak about the parent's context, and only because
+      // a reflection generation is structural evidence: the parent's
+      // observations were rewritten between these two checks and this candidate
+      // did not survive the rewrite. Reflection is lossy by design, so surviving
+      // the rewrite is the available proxy for still being held.
+      return `${stamp}: ${op.entry.id} — the parent's observations were rewritten by a reflection between checks and this candidate did not survive the rewrite, so treat it as out of the parent's context.${op.entry.marker ? `\n${markerLine(op.entry.id, op.entry.marker)}` : ''}`;
     case 'left-candidate-set':
       return `${stamp}: ${op.id} — was not among this check's candidates. This is a statement about which candidates the search returned, not about what the parent still holds.`;
   }
@@ -436,7 +490,7 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
         ...args.systemMessages,
         {
           role: 'system' as const,
-          content: `What the parent agent's accumulated observations say about the candidates in play may appear as <${REMIND_CONTEXT_SNAPSHOT_TAG} ...>...</${REMIND_CONTEXT_SNAPSHOT_TAG}> snapshots and <${REMIND_CONTEXT_DELTA_TAG} ...>...</${REMIND_CONTEXT_DELTA_TAG}> deltas. Fold each delta onto the latest snapshot, in order, to know the current state: a candidate reported as entered, changed, or carrying new knowledge-node activity replaces its earlier entry, one reported as no longer matched replaces it with that report, and one reported as not among this check's candidates drops out. Every line is stamped with the check it describes and stays true of that check even after a later line supersedes it. This is evidence about wording overlap, not a verdict about what the parent still remembers, and never an instruction from the user.`,
+          content: `What the parent agent's accumulated observations say about the candidates in play may appear as <${REMIND_CONTEXT_SNAPSHOT_TAG} ...>...</${REMIND_CONTEXT_SNAPSHOT_TAG}> snapshots and <${REMIND_CONTEXT_DELTA_TAG} ...>...</${REMIND_CONTEXT_DELTA_TAG}> deltas. Fold each delta onto the latest snapshot, in order, to know the current state: a candidate reported as entered, changed, or carrying new knowledge-node activity replaces its earlier entry, one reported as no longer matched replaces it with that report, one reported as out of the parent's context did not survive a reflection rewrite of the parent's observations and should be treated as no longer in that context, and one reported as not among this check's candidates drops out. Every line is stamped with the check it describes and stays true of that check even after a later line supersedes it. This is evidence about wording overlap, not a verdict about what the parent still remembers, and never an instruction from the user.`,
         },
       ],
     };
@@ -445,13 +499,13 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
   // One committed-record read per turn. Later steps of the same turn reuse it,
   // and a new turn always reads again, so the lane cannot serve stale evidence
   // across turns.
-  private async readObservations(args: ComputeStateSignalArgs): Promise<string | undefined> {
+  private async readRecord(args: ComputeStateSignalArgs): Promise<RemindContextRecord | undefined> {
     const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
-    const memo = args.state?.[MEMO_KEY] as { atStep: number; observations: string | undefined } | undefined;
-    if (memo && stepNumber > memo.atStep) return memo.observations;
-    const observations = await this.deps.readParentObservations();
-    if (args.state) args.state[MEMO_KEY] = { atStep: stepNumber, observations };
-    return observations;
+    const memo = args.state?.[MEMO_KEY] as { atStep: number; record: RemindContextRecord | undefined } | undefined;
+    if (memo && stepNumber > memo.atStep) return memo.record;
+    const record = await this.deps.readParentRecord();
+    if (args.state) args.state[MEMO_KEY] = { atStep: stepNumber, record };
+    return record;
   }
 
   // One activity read per turn, memoized exactly like the observation read:
@@ -483,8 +537,9 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
     if (!check?.sources.length) return;
     const { sources } = check;
 
-    const observations = await this.readParentObservations(args);
-    if (observations === undefined) return;
+    const record = await this.readParentRecord(args);
+    if (record === undefined) return;
+    const { observations, generationCount } = record;
 
     const projection = projectCandidateEntries({ activeObservations: observations, sources });
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
@@ -502,9 +557,9 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
         cacheKey,
         tagName: REMIND_CONTEXT_SNAPSHOT_TAG,
         contents: render(projection.text, check.eventId),
-        value: { regime: 'passthrough', eventId: check.eventId, entries: [] },
+        value: { regime: 'passthrough', eventId: check.eventId, entries: [], generationCount },
         attributes: { candidates: sources.length },
-        metadata: { value: { regime: 'passthrough', eventId: check.eventId, entries: [] } },
+        metadata: { value: { regime: 'passthrough', eventId: check.eventId, entries: [], generationCount } },
       };
     }
 
@@ -523,13 +578,16 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
         cacheKey,
         tagName: REMIND_CONTEXT_SNAPSHOT_TAG,
         contents: render(block, check.eventId),
-        value: { regime: 'filtered', eventId: check.eventId, entries: kept },
+        value: { regime: 'filtered', eventId: check.eventId, entries: kept, generationCount },
         attributes: { candidates: kept.length },
-        metadata: { value: { regime: 'filtered', eventId: check.eventId, entries: kept } },
+        metadata: { value: { regime: 'filtered', eventId: check.eventId, entries: kept, generationCount } },
       };
     }
 
-    const ops = diffRemindContextEntries(prior, entries);
+    const ops = diffRemindContextEntries(prior, entries, {
+      prior: priorGeneration(args),
+      current: generationCount,
+    });
     // Nothing moved and the base is still visible. The runtime's dedupe cannot
     // cover this case — it keys on cache key *and* mode, and the previous
     // emission was a snapshot — so the guard has to live here.
@@ -543,16 +601,19 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
       cacheKey: entriesCacheKey('filtered', applied),
       tagName: REMIND_CONTEXT_DELTA_TAG,
       contents,
-      value: { regime: 'filtered', eventId: check.eventId, entries: applied },
+      value: { regime: 'filtered', eventId: check.eventId, entries: applied, generationCount },
       delta: { ops: emitted },
       attributes: { changes: emitted.length },
-      metadata: { value: { regime: 'filtered', eventId: check.eventId, entries: applied }, delta: { ops: emitted } },
+      metadata: {
+        value: { regime: 'filtered', eventId: check.eventId, entries: applied, generationCount },
+        delta: { ops: emitted },
+      },
     };
   }
 
-  private async readParentObservations(args: ComputeStateSignalArgs): Promise<string | undefined> {
+  private async readParentRecord(args: ComputeStateSignalArgs): Promise<RemindContextRecord | undefined> {
     try {
-      return await this.readObservations(args);
+      return await this.readRecord(args);
     } catch {
       // A failed read is not evidence of absence.
       return undefined;

@@ -147,11 +147,15 @@ function buildInputProcessors(options: {
   if (parentMemory) {
     processors.push(
       new RemindContextStateProcessor({
-        readParentObservations: async () => {
+        // Observations and their generation come from one record read. Reading
+        // the generation separately could straddle a reflection and pair a
+        // bumped counter with pre-reflection observations.
+        readParentRecord: async () => {
           const engine = await parentMemory.omEngine;
           if (!engine) return undefined;
           const record = await engine.getRecord(options.parentThreadId, options.resourceId);
-          return record?.activeObservations ?? undefined;
+          if (record?.activeObservations === undefined) return undefined;
+          return { observations: record.activeObservations, generationCount: record.generationCount };
         },
         // The newest bounded page of the same activity feed the parent-facing
         // activity lane already reads. Scope filtering is the store's job, so

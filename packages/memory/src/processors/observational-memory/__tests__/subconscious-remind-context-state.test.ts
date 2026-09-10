@@ -17,6 +17,15 @@ import { REMIND_MESSAGE_METADATA_KEY } from '../subconscious/remind-protocol';
 
 const sources = [{ id: 'source-1', text: 'The datastore migration is blocked on the counters rewrite.' }];
 
+/**
+ * The committed record shape the lane reads. Generation 0 is the pre-reflection
+ * default, so a test only names a generation when the reflection split is what
+ * it is testing.
+ */
+function asRecord(observations: string | undefined, generationCount = 0) {
+  return observations === undefined ? undefined : { observations, generationCount };
+}
+
 function checkMessage(eventId = 'subconscious:remind:abc:event'): MastraDBMessage {
   return {
     id: `${eventId}:message`,
@@ -90,7 +99,7 @@ function args(overrides: Partial<ComputeStateSignalArgs> = {}): ComputeStateSign
 describe('Subconscious reminder parent-context state lane', () => {
   it('emits a snapshot of what the parent already says about the candidates', async () => {
     const processor = new RemindContextStateProcessor({
-      readParentObservations: async () => 'The datastore migration is blocked on the counters rewrite.',
+      readParentRecord: async () => asRecord('The datastore migration is blocked on the counters rewrite.'),
     });
 
     const signal = await processor.computeStateSignal(args());
@@ -101,8 +110,8 @@ describe('Subconscious reminder parent-context state lane', () => {
   });
 
   it('spends nothing when the parent context has not moved', async () => {
-    const readParentObservations = vi.fn(async () => 'The datastore migration is blocked on the counters rewrite.');
-    const processor = new RemindContextStateProcessor({ readParentObservations });
+    const readParentRecord = vi.fn(async () => asRecord('The datastore migration is blocked on the counters rewrite.'));
+    const processor = new RemindContextStateProcessor({ readParentRecord });
 
     const first = await processor.computeStateSignal(args());
     const repeat = await processor.computeStateSignal(
@@ -117,7 +126,7 @@ describe('Subconscious reminder parent-context state lane', () => {
 
   it('emits a fresh snapshot once the parent context changes', async () => {
     let observations = 'The datastore migration is blocked on the counters rewrite.';
-    const processor = new RemindContextStateProcessor({ readParentObservations: async () => observations });
+    const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(observations) });
 
     const first = await processor.computeStateSignal(args());
     observations = 'The datastore migration shipped; the counters rewrite is done.';
@@ -135,24 +144,24 @@ describe('Subconscious reminder parent-context state lane', () => {
 
   it('stays silent rather than reporting an absence it did not observe', async () => {
     const failing = new RemindContextStateProcessor({
-      readParentObservations: async () => {
+      readParentRecord: async () => {
         throw new Error('storage unavailable');
       },
     });
-    const missing = new RemindContextStateProcessor({ readParentObservations: async () => undefined });
+    const missing = new RemindContextStateProcessor({ readParentRecord: async () => undefined });
 
     await expect(failing.computeStateSignal(args())).resolves.toBeUndefined();
     await expect(missing.computeStateSignal(args())).resolves.toBeUndefined();
   });
 
   it('says nothing when no passive check is in play', async () => {
-    const readParentObservations = vi.fn(async () => 'Something the parent knows.');
-    const processor = new RemindContextStateProcessor({ readParentObservations });
+    const readParentRecord = vi.fn(async () => asRecord('Something the parent knows.'));
+    const processor = new RemindContextStateProcessor({ readParentRecord });
 
     const signal = await processor.computeStateSignal(args({ messages: [] }));
 
     expect(signal).toBeUndefined();
-    expect(readParentObservations).not.toHaveBeenCalled();
+    expect(readParentRecord).not.toHaveBeenCalled();
   });
 
   it('reaches the model when the reminder agent is actually prompted', async () => {
@@ -259,15 +268,15 @@ describe('Subconscious reminder parent-context state lane', () => {
   });
 
   it('reads the parent record once per turn, not once per step', async () => {
-    const readParentObservations = vi.fn(async () => 'The datastore migration is blocked on the counters rewrite.');
-    const processor = new RemindContextStateProcessor({ readParentObservations });
+    const readParentRecord = vi.fn(async () => asRecord('The datastore migration is blocked on the counters rewrite.'));
+    const processor = new RemindContextStateProcessor({ readParentRecord });
     const state: Record<string, unknown> = {};
 
     await processor.computeStateSignal(args({ state, stepNumber: 0 }));
     await processor.computeStateSignal(args({ state, stepNumber: 1 }));
     await processor.computeStateSignal(args({ state, stepNumber: 2 }));
 
-    expect(readParentObservations).toHaveBeenCalledTimes(1);
+    expect(readParentRecord).toHaveBeenCalledTimes(1);
   });
 
   /**
@@ -296,7 +305,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     }
 
     it('keeps the newest batch out of the lane and the accumulated memory in it', async () => {
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => committedFact });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(committedFact) });
 
       const signal = await processor.computeStateSignal(args({ messages: [checkMessageWithBatch()] }));
 
@@ -393,7 +402,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     }
 
     async function firstSnapshot(observations: string, srcs = candidates) {
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => observations });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(observations) });
       const signal = await processor.computeStateSignal(args({ messages: [checkWith('check-one', srcs)] }));
       return signal!;
     }
@@ -418,11 +427,13 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('sends only the candidate that moved once a base is visible', async () => {
       const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
       const processor = new RemindContextStateProcessor({
-        readParentObservations: async () =>
-          bigObservations({
-            first: 'The datastore migration counters rewrite is finished and the blocked flag is cleared.',
-            second: secondFact,
-          }),
+        readParentRecord: async () =>
+          asRecord(
+            bigObservations({
+              first: 'The datastore migration counters rewrite is finished and the blocked flag is cleared.',
+              second: secondFact,
+            }),
+          ),
       });
 
       const delta = await processor.computeStateSignal(secondArgs(snapshot));
@@ -437,7 +448,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('emits nothing at all when a check changes nothing', async () => {
       const observations = bigObservations({ first: firstFact, second: secondFact });
       const snapshot = await firstSnapshot(observations);
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => observations });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(observations) });
 
       // The runtime's dedupe cannot cover this: it keys on cache key *and*
       // mode, and the previous emission was a snapshot.
@@ -447,7 +458,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('re-sends a full snapshot when the base has been evicted from the window', async () => {
       const observations = bigObservations({ first: firstFact, second: secondFact });
       const snapshot = await firstSnapshot(observations);
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => observations });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(observations) });
 
       const second = await processor.computeStateSignal(
         args({
@@ -463,7 +474,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('never emits a delta in the passthrough regime, even with a base present', async () => {
       const snapshot = await firstSnapshot('The datastore migration is blocked on the counters rewrite.');
       const processor = new RemindContextStateProcessor({
-        readParentObservations: async () => 'The datastore migration counters rewrite is finished.',
+        readParentRecord: async () => asRecord('The datastore migration counters rewrite is finished.'),
       });
 
       const second = await processor.computeStateSignal(secondArgs(snapshot));
@@ -476,7 +487,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('treats a passthrough base as no base at all rather than an empty one', async () => {
       const passthrough = await firstSnapshot('The datastore migration is blocked on the counters rewrite.');
       const processor = new RemindContextStateProcessor({
-        readParentObservations: async () => bigObservations({ first: firstFact, second: secondFact }),
+        readParentRecord: async () => asRecord(bigObservations({ first: firstFact, second: secondFact })),
       });
 
       const second = await processor.computeStateSignal(secondArgs(passthrough));
@@ -518,7 +529,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('falls back to a snapshot when a filtered base shrinks into the passthrough regime', async () => {
       const filtered = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
       const processor = new RemindContextStateProcessor({
-        readParentObservations: async () => 'The datastore migration is blocked on the counters rewrite.',
+        readParentRecord: async () => asRecord('The datastore migration is blocked on the counters rewrite.'),
       });
 
       const second = await processor.computeStateSignal(secondArgs(filtered));
@@ -554,10 +565,10 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('stamps every line with the check it describes, so superseded lines stay true', async () => {
       const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
       const stopped = new RemindContextStateProcessor({
-        readParentObservations: async () => bigObservations({ second: secondFact }),
+        readParentRecord: async () => asRecord(bigObservations({ second: secondFact })),
       });
       const returned = new RemindContextStateProcessor({
-        readParentObservations: async () => bigObservations({ first: firstFact, second: secondFact }),
+        readParentRecord: async () => asRecord(bigObservations({ first: firstFact, second: secondFact })),
       });
 
       const dropOut = await stopped.computeStateSignal(secondArgs(snapshot, 'check-two'));
@@ -605,7 +616,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('reports a candidate that stopped matching as a wording fact, never as a loss', async () => {
       const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
       const processor = new RemindContextStateProcessor({
-        readParentObservations: async () => bigObservations({ second: secondFact }),
+        readParentRecord: async () => asRecord(bigObservations({ second: secondFact })),
       });
 
       const delta = await processor.computeStateSignal(secondArgs(snapshot));
@@ -622,7 +633,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     it('separates leaving the candidate set from losing a wording match', async () => {
       const observations = bigObservations({ first: firstFact, second: secondFact });
       const snapshot = await firstSnapshot(observations);
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => observations });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord(observations) });
 
       const delta = await processor.computeStateSignal(secondArgs(snapshot, 'check-two', [candidates[0]!]));
       const ops = (delta as { delta: { ops: { op: string; id?: string }[] } }).delta.ops;
@@ -632,10 +643,124 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(delta!.contents).not.toContain('had no lexical overlap');
     });
 
+    /**
+     * A candidate that stops matching looks identical whether the parent's
+     * wording drifted or the parent's memory was rewritten underneath it. The
+     * reflection generation is the only structural evidence separating the two,
+     * and it decides which of the two claims the lane is allowed to make.
+     */
+    describe('reflection and the out-of-context op', () => {
+      /** The observations a reflection rewrote: the first candidate did not survive it. */
+      const afterReflection = bigObservations({ second: secondFact });
+
+      function laneAt(observations: string, generationCount: number) {
+        return new RemindContextStateProcessor({
+          readParentRecord: async () => asRecord(observations, generationCount),
+        });
+      }
+
+      it('reports a candidate that did not survive a reflection as out of context', async () => {
+        const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+
+        const delta = await laneAt(afterReflection, 1).computeStateSignal(secondArgs(snapshot));
+        const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
+
+        expect(ops).toEqual([expect.objectContaining({ op: 'out-of-context' })]);
+        expect(delta!.contents).toContain('rewritten by a reflection between checks');
+        expect(delta!.contents).toContain('did not survive the rewrite');
+        expect(delta!.contents).toContain("out of the parent's context");
+        // The sanctioned claim is the reflection one, in those words. None of the
+        // vocabulary the lexical join cannot support may ride in with it.
+        for (const forbidden of [
+          'evicted',
+          'removed from context',
+          'dropped',
+          'left the parent',
+          'forgot',
+          'removed',
+        ]) {
+          expect(delta!.contents).not.toContain(forbidden);
+        }
+      });
+
+      it('keeps calling it a wording fact when no reflection ran', async () => {
+        const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+
+        const delta = await laneAt(afterReflection, 0).computeStateSignal(secondArgs(snapshot));
+        const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
+
+        expect(ops).toEqual([expect.objectContaining({ op: 'no-longer-matched' })]);
+        expect(delta!.contents).toContain('had no lexical overlap with the parent');
+        expect(delta!.contents).not.toContain('reflection');
+      });
+
+      it('says nothing about a candidate that survived the reflection', async () => {
+        const observations = bigObservations({ first: firstFact, second: secondFact });
+        const snapshot = await firstSnapshot(observations);
+
+        // Reflection ran, but this candidate still matches. A generation bump is
+        // not by itself news about any candidate that survived it.
+        const delta = await laneAt(observations, 1).computeStateSignal(secondArgs(snapshot));
+
+        expect(delta).toBeUndefined();
+      });
+
+      it('takes the prior generation from the newest emission, not just the snapshot', async () => {
+        const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+        // The snapshot is generation 0, but a delta since then already reported
+        // generation 1. A check at generation 1 has seen no new reflection.
+        const sinceReflection = {
+          metadata: {
+            value: {
+              regime: 'filtered',
+              eventId: 'check-two',
+              entries: (snapshot.value as { entries: unknown[] }).entries,
+              generationCount: 1,
+            },
+            delta: { ops: [] },
+          },
+        } as never;
+
+        const delta = await laneAt(afterReflection, 1).computeStateSignal(
+          args({
+            messages: [checkWith('check-three', candidates)],
+            contextWindow: { hasSnapshot: true },
+            lastSnapshot: base(snapshot),
+            deltasSinceSnapshot: [sinceReflection],
+          } as Partial<ComputeStateSignalArgs>),
+        );
+        const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
+
+        expect(ops).toEqual([expect.objectContaining({ op: 'no-longer-matched' })]);
+      });
+
+      it('stamps the out-of-context line so it stays true once superseded', async () => {
+        const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+
+        const delta = await laneAt(afterReflection, 1).computeStateSignal(secondArgs(snapshot, 'check-two'));
+        const verdict = String(delta!.contents)
+          .split('\n')
+          .map(line => line.trim())
+          .find(line => line.includes("out of the parent's context"));
+
+        expect(verdict).toBeDefined();
+        expect(verdict!.startsWith('as of check check-two')).toBe(true);
+      });
+
+      it('carries the generation it read in the emitted value', async () => {
+        const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+
+        const delta = await laneAt(afterReflection, 4).computeStateSignal(secondArgs(snapshot));
+
+        expect((snapshot.value as { generationCount: number }).generationCount).toBe(0);
+        expect((delta!.value as { generationCount: number }).generationCount).toBe(4);
+      });
+    });
+
     it('stays silent on a failed read in the filtered regime too', async () => {
       const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
       const failing = new RemindContextStateProcessor({
-        readParentObservations: async () => {
+        readParentRecord: async () => {
           throw new Error('storage unavailable');
         },
       });
@@ -656,7 +781,7 @@ describe('Subconscious reminder parent-context state lane', () => {
         .join('\n');
 
       const snapshot = await new RemindContextStateProcessor({
-        readParentObservations: async () => observationLines,
+        readParentRecord: async () => asRecord(observationLines),
       }).computeStateSignal(args({ messages: [checkWith('check-one', many)] }));
 
       const stored = (snapshot as { value: { entries: { id: string; excerpt: string }[] } }).value.entries;
@@ -666,7 +791,7 @@ describe('Subconscious reminder parent-context state lane', () => {
     });
 
     it('tells the model how to fold deltas onto the snapshot', async () => {
-      const processor = new RemindContextStateProcessor({ readParentObservations: async () => 'anything' });
+      const processor = new RemindContextStateProcessor({ readParentRecord: async () => asRecord('anything') });
 
       const result = processor.processInput({ messages: [], systemMessages: [] } as never);
 
@@ -689,7 +814,7 @@ describe('Subconscious reminder parent-context state lane', () => {
 
       function laneWith(events: ReturnType<typeof event>[], obs = observations()) {
         return new RemindContextStateProcessor({
-          readParentObservations: async () => obs,
+          readParentRecord: async () => asRecord(obs),
           readRecentNodeActivity: async () => events,
         });
       }
@@ -817,7 +942,7 @@ describe('Subconscious reminder parent-context state lane', () => {
       it('reads the activity feed once per turn, not once per step', async () => {
         const readRecentNodeActivity = vi.fn(async () => [event()]);
         const processor = new RemindContextStateProcessor({
-          readParentObservations: async () => observations(),
+          readParentRecord: async () => asRecord(observations()),
           readRecentNodeActivity,
         });
         const state: Record<string, unknown> = {};
@@ -842,7 +967,7 @@ describe('Subconscious reminder parent-context state lane', () => {
 
       it('still ships the projection when the activity read fails', async () => {
         const processor = new RemindContextStateProcessor({
-          readParentObservations: async () => observations(),
+          readParentRecord: async () => asRecord(observations()),
           readRecentNodeActivity: async () => {
             throw new Error('knowledge store unavailable');
           },
@@ -856,10 +981,10 @@ describe('Subconscious reminder parent-context state lane', () => {
     });
   });
 
-  // Every other test in this file injects `readParentObservations`, and so does the
+  // Every other test in this file injects `readParentRecord`, and so does the
   // proof demo. That leaves the six lines of wiring in `buildInputProcessors` — resolve
   // the parent's OM engine, read the record by parent thread and resource, hand over
-  // `activeObservations` — exercised by nothing. A wrong thread id or a changed record
+  // `activeObservations` and its `generationCount` — exercised by nothing. A wrong thread id or a changed record
   // shape would keep every one of those tests green while the lane silently carried
   // nothing in production. This test closes that seam with a real parent Memory whose
   // observations were committed by the real observer, and no injected reader anywhere.
@@ -944,6 +1069,89 @@ describe('Subconscious reminder parent-context state lane', () => {
 
       expect(prompts[0]).toContain('said about the candidates in play, as of check');
       expect(prompts[0]).toContain('counters rewrite');
+    });
+
+    /**
+     * Risk D: the generation the lane compares against is produced by the real
+     * reflection cycle, which in production runs on a background/buffered path
+     * and can therefore commit between two checks. The unit tests above inject
+     * generations; this one takes them from `engine.reflect()` — the real
+     * reflector agent writing a real new generation — so the discriminator is
+     * validated against the mechanism rather than against a fixture number.
+     */
+    it('reads a generation bump produced by a real reflection cycle', async () => {
+      const observation = 'The datastore migration is blocked on the counters rewrite.';
+      const parentMemory = new Memory({
+        storage: new InMemoryStore(),
+        vector: {} as never,
+        embedder: {} as never,
+        options: {
+          observationalMemory: {
+            observation: { model: createObserverModel(observation), messageTokens: 1, bufferTokens: false },
+            // The reflector rewrites the parent's memory without the candidate's
+            // wording — lossy reflection, which is the case Tyler's rule is about.
+            reflection: { model: createObserverModel('The team is planning next quarter.') },
+            experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+          },
+        },
+      });
+
+      const messageStore = (await parentMemory.storage.getStore('memory'))!;
+      const now = new Date();
+      await messageStore.saveMessages({
+        messages: [
+          {
+            id: 'beta-user',
+            threadId: 'beta',
+            resourceId: 'resource-1',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Migration status? '.repeat(20) }] },
+            createdAt: now,
+          },
+          {
+            id: 'beta-assistant',
+            threadId: 'beta',
+            resourceId: 'resource-1',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Understood. '.repeat(20) }] },
+            createdAt: new Date(now.getTime() + 1),
+          },
+        ] as never,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'acme');
+      const engine = (await parentMemory.omEngine)!;
+      await engine.observe({ threadId: 'beta', resourceId: 'resource-1', requestContext });
+
+      const before = await engine.getRecord('beta', 'resource-1');
+      expect(before?.activeObservations).toContain('counters rewrite');
+
+      const reflection = await engine.reflect('beta', 'resource-1');
+      expect(reflection.reflected).toBe(true);
+
+      const after = await engine.getRecord('beta', 'resource-1');
+      // The two halves the lane depends on, from the real cycle: the generation
+      // advanced, and the observations were rewritten without the candidate.
+      expect(after!.generationCount).toBe(before!.generationCount + 1);
+      expect(after!.activeObservations).not.toContain('counters rewrite');
+
+      // And the lane reads both off one record, through the real wiring.
+      const seen: { observations: string; generationCount: number }[] = [];
+      const lane = new RemindContextStateProcessor({
+        readParentRecord: async () => {
+          const record = await engine.getRecord('beta', 'resource-1');
+          if (record?.activeObservations === undefined) return undefined;
+          const value = { observations: record.activeObservations, generationCount: record.generationCount };
+          seen.push(value);
+          return value;
+        },
+      });
+      await lane.computeStateSignal(args());
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.generationCount).toBe(after!.generationCount);
+      expect(seen[0]!.observations).toBe(after!.activeObservations);
     });
   });
 });
