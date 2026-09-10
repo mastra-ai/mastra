@@ -1268,6 +1268,32 @@ describe('DockerSandbox Shared Conformance', () => {
 });
 
 describe('DockerSandbox.clone', () => {
+  it.each([
+    { options: { workingDirectory: '/original' }, expected: '/original' },
+    { options: { workingDir: '/legacy' }, expected: '/legacy' },
+    { options: {}, expected: '/workspace' },
+  ])('overrides the working directory for a $expected template', ({ options, expected }) => {
+    const template = new DockerSandbox(options);
+    const child = template.clone({ workingDirectory: '/clone' });
+
+    expect(child.workingDirectory).toBe('/clone');
+    expect(template.workingDirectory).toBe(expected);
+    expect(child.clone().workingDirectory).toBe('/clone');
+    expect(child.status).toBe('pending');
+  });
+
+  it.each([
+    { options: { workingDirectory: '/original' }, expected: '/original' },
+    { options: { workingDir: '/legacy' }, expected: '/legacy' },
+    { options: {}, expected: '/workspace' },
+  ])('inherits the $expected working directory without an override', ({ options, expected }) => {
+    const template = new DockerSandbox(options);
+
+    expect(template.clone().workingDirectory).toBe(expected);
+    expect(template.clone({ workingDirectory: undefined }).workingDirectory).toBe(expected);
+    expect(template.workingDirectory).toBe(expected);
+  });
+
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new DockerSandbox({ image: 'node:22', workingDir: '/workspace' });
 

@@ -1,30 +1,11 @@
-export interface AuditTarget {
-  type: string;
-  id: string;
-  name?: string;
-}
+import { isAuditActorType } from '@mastra/factory/storage/domains/audit/actors';
+import type { AuditTarget } from '@mastra/factory/storage/domains/audit/base';
+import type { WireAuditActor, WireAuditEvent, WireAuditPage } from '@mastra/factory/storage/domains/audit/wire';
 
-export interface AuditActorProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-export interface AuditEvent {
-  id: string;
-  actorId: string;
-  actorType: 'human' | 'agent';
-  action: string;
-  targets: AuditTarget[];
-  metadata: Record<string, unknown>;
-  occurredAt: string;
-}
-
-export interface AuditEventPage {
-  events: AuditEvent[];
-  actors: Record<string, AuditActorProfile>;
-  nextCursor?: string;
-}
+export type { AuditTarget };
+export type AuditActorProfile = WireAuditActor;
+export type AuditEvent = WireAuditEvent;
+export type AuditEventPage = WireAuditPage;
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
@@ -60,7 +41,7 @@ function isAuditEvent(value: unknown): value is AuditEvent {
     'actorId' in value &&
     typeof value.actorId === 'string' &&
     'actorType' in value &&
-    (value.actorType === 'human' || value.actorType === 'agent') &&
+    isAuditActorType(value.actorType) &&
     'action' in value &&
     typeof value.action === 'string' &&
     'targets' in value &&
@@ -105,10 +86,10 @@ async function throwRequestError(res: Response): Promise<never> {
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { actions?: string[]; actorIds?: string[]; before?: string; limit?: number; signal?: AbortSignal } = {},
+  options: { namespaces?: string[]; actorIds?: string[]; before?: string; limit?: number; signal?: AbortSignal } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
-  if (options.actions && options.actions.length > 0) query.set('actions', options.actions.join(','));
+  if (options.namespaces && options.namespaces.length > 0) query.set('namespaces', options.namespaces.join(','));
   if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));

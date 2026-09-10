@@ -992,6 +992,17 @@ describe('MastraClient', () => {
       );
     });
 
+    it('serializes tags as repeated query params for experiment result listings', async () => {
+      mockSuccess();
+
+      await client.listDatasetExperimentResults('dataset-1', 'experiment-1', { page: 1, tags: ['a', 'b c'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1/results?page=1&tags=a&tags=b+c',
+        expect.any(Object),
+      );
+    });
+
     it('issues a DELETE for a dataset-scoped experiment', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

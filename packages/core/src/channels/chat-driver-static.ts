@@ -331,7 +331,7 @@ export async function runStaticDriver({
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
         startedAt: Date.now(),
-        runId: (chunk as { runId?: string }).runId,
+        runId: chunk.runId,
         toolName: enr.toolName,
         args: (enr.args ?? {}) as Record<string, unknown>,
       });

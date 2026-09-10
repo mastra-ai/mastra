@@ -45,6 +45,12 @@ import { buildScopedWhere, tenancyWhere } from '../utils';
 
 const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
+// Is the `tags` column safe to pass to json_each()/json_extract()?
+// LibSQLDB writes jsonb columns through jsonb(), so a BLOB is always valid JSONB;
+// only legacy TEXT rows need json_valid(). The 1-arg form is used on purpose:
+// json_valid(x, flags) requires SQLite >= 3.45 and is missing from older libsql builds.
+const TAGS_IS_JSON = `CASE typeof(tags) WHEN 'blob' THEN 1 WHEN 'text' THEN json_valid(tags) ELSE 0 END`;
+
 export class ExperimentsLibSQL extends ExperimentsStorage {
   /**
    * An experiment is pruned as a whole unit: when `experiments.completedAt` is
@@ -868,6 +874,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push('status = ?');
         queryParams.push(args.status);
+      }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        // CASE guards json_each() so a NULL or malformed tags value excludes the row instead of erroring.
+        conditions.push(
+          `CASE WHEN ${TAGS_IS_JSON} THEN EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?) ELSE 0 END`,
+        );
+        queryParams.push(tag);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

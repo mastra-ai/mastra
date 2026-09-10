@@ -233,6 +233,13 @@ export class ExperimentsPG extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['organizationId', 'projectId'],
       },
+      // Tags JSONB GIN index — backs the `"tags" @> ...::jsonb` containment filter.
+      {
+        name: 'idx_experiment_results_tags_gin',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['tags'],
+        method: 'gin',
+      },
     ];
   }
 
@@ -948,6 +955,11 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
+      }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`"tags" @> $${paramIndex++}::jsonb`);
+        queryParams.push(JSON.stringify([tag]));
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

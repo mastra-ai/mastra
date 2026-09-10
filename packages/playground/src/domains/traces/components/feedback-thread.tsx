@@ -1,6 +1,6 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
@@ -9,6 +9,7 @@ import {
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
+  CommentItemActions,
   CommentItemAuthor,
   CommentItemAvatar,
   CommentItemBody,
@@ -19,8 +20,10 @@ import {
 } from '@mastra/playground-ui/components/Comment';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
+import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 type FeedbackThreadProps = {
@@ -30,6 +33,9 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
+  /** When provided, records with a feedbackId get a delete action. */
+  onDelete?: (feedbackId: string) => void | Promise<unknown>;
+  isDeleting?: boolean;
   /**
    * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
    * `embed` renders a compact card suitable for inline use.
@@ -42,15 +48,12 @@ type FeedbackThreadProps = {
 };
 
 // The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
-function ReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
-  return status === 'reviewed' ? (
-    <Badge data-slot="feedback-review-status" variant="green" size="xs" indicator="dot">
-      Reviewed
-    </Badge>
-  ) : (
-    <Badge data-slot="feedback-review-status" variant="yellow" size="xs" indicator="dot">
-      Needs review
-    </Badge>
+function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  const resolved = status === 'reviewed' ? 'reviewed' : 'needs-review';
+  return (
+    <ReviewStatusBadge data-slot="feedback-review-status" status={resolved}>
+      {resolved === 'reviewed' ? 'Reviewed' : 'Needs review'}
+    </ReviewStatusBadge>
   );
 }
 
@@ -64,9 +67,18 @@ function formatBody(fb: FeedbackItem): string {
 type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
   variant: CommentVariant;
   items: FeedbackItem[];
+  onRequestDelete?: (feedbackId: string) => void;
+  isDeleting: boolean;
 };
 
-function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: FeedbackItemsProps) {
+function FeedbackItems({
+  variant,
+  items,
+  onRequestDelete,
+  isDeleting,
+  onMarkReviewed,
+  pendingFeedbackId,
+}: FeedbackItemsProps) {
   const rows = items.map((fb, index) => {
     const ts = new Date(fb.timestamp);
     const author = feedbackAuthorLabel(fb);
@@ -76,17 +88,33 @@ function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: Fe
       <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const status = <ReviewStatusBadge status={fb.reviewStatus} />;
+    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
     const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
       <Button
         variant="ghost"
         size="sm"
-        className="ml-auto"
         disabled={pendingFeedbackId === feedbackId}
         onClick={() => onMarkReviewed(feedbackId)}
       >
         Mark reviewed
       </Button>
+    );
+    const deleteAction = onRequestDelete && feedbackId && (
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        aria-label="Delete feedback"
+        disabled={isDeleting}
+        onClick={() => onRequestDelete(feedbackId)}
+      >
+        <Trash2Icon />
+      </Button>
+    );
+    const actions = (markReviewed || deleteAction) && (
+      <CommentItemActions className="ml-auto">
+        {markReviewed}
+        {deleteAction}
+      </CommentItemActions>
     );
     const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
     const key = feedbackId ?? `${fb.traceId}-${index}`;
@@ -102,7 +130,7 @@ function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: Fe
               {name}
               {timestamp}
               {status}
-              {markReviewed}
+              {actions}
             </CommentItemHeader>
             {body}
           </CommentItemContent>
@@ -118,7 +146,7 @@ function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: Fe
           {name}
           {timestamp}
           {status}
-          {markReviewed}
+          {actions}
         </CommentItemHeader>
         {body}
       </CommentItem>
@@ -130,8 +158,8 @@ function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: Fe
 }
 
 /**
- * Feedback rendered as a comment thread: existing records above, a composer below.
- * Owns nothing but the draft text — pagination and submission are driven by the caller.
+ * Feedback rendered as a comment thread: a composer above, existing records below.
+ * Pagination, submission, deletion, and review status are driven by the caller.
  */
 export function FeedbackThread({
   feedbackData,
@@ -139,54 +167,33 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
+  onDelete,
+  isDeleting = false,
   variant = 'thread',
   onMarkReviewed,
   pendingFeedbackId,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
+  const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
   const sendBlocked = text.trim().length === 0 || isSubmitting;
 
   const feedbackItems = feedbackData?.feedback ?? [];
   const currentPage = feedbackData?.pagination?.page ?? 0;
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
 
+  const handleDeleteConfirm = async () => {
+    if (!feedbackIdToDelete || !onDelete) return;
+
+    try {
+      await onDelete(feedbackIdToDelete);
+      setFeedbackIdToDelete(undefined);
+    } catch {
+      // Keep the confirmation open so the deletion can be retried.
+    }
+  };
+
   return (
     <Comment variant={variant} className="min-h-0 gap-4 px-3">
-      <div className="min-h-0 overflow-y-auto">
-        {isLoadingFeedbackData ? (
-          <Txt variant="ui-md" className="text-neutral3">
-            Loading feedback...
-          </Txt>
-        ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3">
-            No feedback yet
-          </Txt>
-        ) : (
-          <FeedbackItems
-            variant={variant}
-            items={feedbackItems}
-            onMarkReviewed={onMarkReviewed}
-            pendingFeedbackId={pendingFeedbackId}
-          />
-        )}
-      </div>
-
-      {(hasMore || currentPage > 0) && (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={currentPage === 0}
-            onClick={() => onPageChange?.(currentPage - 1)}
-          >
-            Previous
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!hasMore} onClick={() => onPageChange?.(currentPage + 1)}>
-            Next
-          </Button>
-        </div>
-      )}
-
       <CommentComposer
         aria-label="Leave feedback"
         onSubmit={async event => {
@@ -209,6 +216,65 @@ export function FeedbackThread({
           <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
         </CommentComposerInput>
       </CommentComposer>
+
+      <div className="min-h-0 overflow-y-auto">
+        {isLoadingFeedbackData ? (
+          <Txt variant="ui-md" className="text-neutral3">
+            Loading feedback...
+          </Txt>
+        ) : feedbackItems.length === 0 ? (
+          <Txt variant="ui-md" className="text-neutral3 text-center">
+            No feedback yet
+          </Txt>
+        ) : (
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
+            isDeleting={isDeleting}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
+          />
+        )}
+      </div>
+
+      {(hasMore || currentPage > 0) && (
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={currentPage === 0}
+            onClick={() => onPageChange?.(currentPage - 1)}
+          >
+            Previous
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!hasMore} onClick={() => onPageChange?.(currentPage + 1)}>
+            Next
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog
+        open={feedbackIdToDelete !== undefined}
+        onOpenChange={open => {
+          if (!open && !isDeleting) setFeedbackIdToDelete(undefined);
+        }}
+      >
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete feedback?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This permanently deletes this feedback comment. This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+            <Button variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </Comment>
   );
 }

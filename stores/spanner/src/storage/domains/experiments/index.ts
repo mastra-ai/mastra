@@ -896,6 +896,15 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         conditions.push(`${quoteIdent('status', 'column name')} = @status`);
         params.status = args.status;
       }
+      // All requested tags must be present (AND semantics)
+      (args.tags ?? []).forEach((tag, i) => {
+        const param = `tag${i}`;
+        const tagsCol = quoteIdent('tags', 'column name');
+        conditions.push(
+          `(${tagsCol} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${tagsCol})) AS t WHERE JSON_VALUE(t) = @${param}))`,
+        );
+        params[param] = tag;
+      });
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
