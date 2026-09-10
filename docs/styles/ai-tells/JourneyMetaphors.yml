@@ -1,0 +1,90 @@
+---
+extends: existence
+message: "AI journey metaphor: '%s'. Say what literally happened and what the next step is. Disable this rule for travel writing."
+level: error
+nonword: true
+ignorecase: true
+# The project narrated as travel: a fix is "on its way," lessons are
+# learned "along the way," groundwork "paves the way," the service is
+# "on the road to" recovery, the team is "halfway there." The register
+# substitutes motion for status, where the plain sentence names what
+# happened and what happens next. Literal travel is the disable-in-domain
+# register.
+#
+# Costs across the Go and Python standard libraries: "along the way"
+# measures nineteen, almost all the incidental-work idiom of traversal
+# narration ("creates missing directories along the way"), flagged by
+# the maintainer's call because the same phrase in documentation and
+# commit prose waves at unnamed side work instead of naming it. The
+# finding-a-way token measures three, "a long way," "down the road,"
+# "down the line," and "most of the way there" one each, and the
+# journey determiners two, one of them Go's scheduler narrating a
+# goroutine's "own journey"; each is the figure itself and fires by
+# design.
+#
+# Measured out: bare "on the way," which the corpora use for the manner
+# sense ("depends on the way that...") and the entry-and-exit idiom
+# ("closed on the way out"); "on the path to," whose every corpus hit
+# is a literal pointer or tree path; and the first-person possessives
+# of the finding-a-way token, the corpora's traversal narration ("work
+# our way down the tree"). The sibling tokens stay with their owners:
+# "paving the way" in AICompoundPhrases, "Embark on a journey" in
+# OpeningCliches, "Enjoy the journey" in ClosingPleasantries, and
+# "stays out of the way" in FigurativeStays.
+tokens:
+  # --- The way as progress: the project as a walk ("learned a lot
+  # along the way," "supported every step of the way," "gets us most of
+  # the way there," "halfway there").
+  - "\\balong the way\\b"
+  - "\\bevery step of the way\\b"
+  - "\\bof the way there\\b"
+  - "\\bhalfway there\\b"
+
+  # --- The deliverable in transit ("a fix is on the way," "well on its
+  # way to stable," "with more on the way," "en route to general
+  # availability"). The copula and possessive gates keep the manner
+  # sense of "way" out.
+  - "\\bon (?:its|their|our|your) way\\b"
+  - "\\b(?:is|are|was|were) on the way\\b"
+  - "\\bmore on the way\\b"
+  - "\\bwell on the way\\b"
+  - "\\ben route to\\b"
+
+  # --- Finding a way: the change as a wanderer ("the bug found its way
+  # into production," "the value makes its way through the queue,"
+  # "this paves the way for streaming").
+  - "\\b(?:finds?|found|finding|makes?|made|making|works?|worked|working|winds?|wound|winding|weaves?|wove|weaving) (?:its|their) way\\b"
+  - "\\bpav(?:es?|ed) the way\\b"
+
+  # --- Making it: the record as a traveler who arrives ("items that
+  # never made it through the first stage," "the value makes it into the
+  # index," "made it to production"). Added after a documentation-corpus
+  # audit (2026-09); eleven hits across the Go and Python standard
+  # libraries ("won't make it into the final mantissa"), each the figure.
+  - "\\bma(?:de|kes?|king) it (?:through|past|to|into|out|in|over|across)\\b"
+
+  # --- Walking the workflow: a reader or a tool taken along a path
+  # ("walks the workflow," "walk the pipeline"). "Walks the tree" stays
+  # out as the traversal term of art.
+  - "\\bwalk(?:s|ed|ing)? (?:the|each|every|all|its|their|up|down|two|three|four|five|\\d+) (?:[a-z]+ )?(?:workflow|pipeline|stages?|steps?|process|procedure|tiers?|levels?|ladder|rungs?|precedence)\\b"
+
+  # --- Distance as progress ("goes a long way toward clean diffs,"
+  # "has come a long way," "a long way to go").
+  - "\\ba long way\\b"
+
+  # --- Path and road ("a path forward," "on a path to stability," "on
+  # the road to recovery," "a few bumps in the road," "bites us down
+  # the road," "problems down the line").
+  - "\\bpath forward\\b"
+  - "\\bon a path to\\b"
+  - "\\bon the road to\\b"
+  - "\\b(?:the|a) (?:long )?road ahead\\b"
+  - "\\bbumps? in the road\\b"
+  - "\\bdown the road\\b"
+  - "\\bdown the line\\b"
+
+  # --- The journey itself ("our journey began with one rule," "the
+  # journey from prototype to production"). The adjacency gate keeps
+  # the UX term of art "the user journey" quiet.
+  - "\\b(?:the|a|our|this|that|its) (?:own )?journey\\b"
+  - "\\bjourney (?:from|to|into|toward|towards)\\b"

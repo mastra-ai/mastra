@@ -53,6 +53,12 @@ describe('buildFullPromptSections', () => {
     expect(joinPromptSections(buildFullPromptSections(ctx))).toBe(buildFullPrompt(ctx));
   });
 
+  it('rejoins custom co-author output exactly', () => {
+    const ctx = makeCtx({ coAuthorName: 'mastracode', coAuthorEmail: 'custom@example.test' });
+
+    expect(joinPromptSections(buildFullPromptSections(ctx))).toBe(buildFullPrompt(ctx));
+  });
+
   it('rejoins into exactly buildFullPrompt output with agent instructions present', () => {
     writeFileSync(join(projectPath, 'AGENTS.md'), '# Project rules\n\nAlways run the tests.\n');
     const ctx = makeCtx();
@@ -103,6 +109,23 @@ describe('getDynamicInstructionSections', () => {
           : undefined,
     };
   }
+
+  it.each([true, false])('matches delegation guidance to registration (%s)', async hasSubagents => {
+    const args = { requestContext: makeRequestContext({}), hasSubagents };
+    const prompt = await getDynamicInstructions(args);
+    expect(prompt.includes('**subagent**')).toBe(hasSubagents);
+    expect(prompt.includes('# Subagent Rules')).toBe(hasSubagents);
+    expect(joinPromptSections(await getDynamicInstructionSections(args))).toBe(prompt);
+  });
+
+  it('omits delegation guidance when permission denies the registered tool', async () => {
+    const prompt = await getDynamicInstructions({
+      requestContext: makeRequestContext({ permissionRules: { tools: { subagent: 'deny' } } }),
+      hasSubagents: true,
+    });
+    expect(prompt).not.toContain('**subagent**');
+    expect(prompt).not.toContain('# Subagent Rules');
+  });
 
   it('rejoins into exactly getDynamicInstructions output without plugins', async () => {
     const requestContext = makeRequestContext({});

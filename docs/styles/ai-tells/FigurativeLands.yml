@@ -15,73 +15,129 @@ ignorecase: true
 # span.
 exceptions:
   # Common aircraft
-  - '(?i)planes?'
-  - '(?i)airplanes?'
-  - '(?i)jets?'
-  - '(?i)aircraft'
-  - '(?i)helicopters?'
-  - '(?i)drones?'
-  - '(?i)gliders?'
-  - '(?i)balloons?'
-  - '(?i)flights?'
+  - "(?i)planes?"
+  - "(?i)airplanes?"
+  - "(?i)jets?"
+  - "(?i)aircraft"
+  - "(?i)helicopters?"
+  - "(?i)drones?"
+  - "(?i)gliders?"
+  - "(?i)balloons?"
+  - "(?i)flights?"
   # Spacecraft
-  - '(?i)rockets?'
-  - '(?i)spacecraft'
-  - '(?i)probes?'
-  - '(?i)landers?'
-  - '(?i)rovers?'
-  - '(?i)capsules?'
-  - '(?i)shuttles?'
-  - '(?i)satellites?'
+  - "(?i)rockets?"
+  - "(?i)spacecraft"
+  - "(?i)probes?"
+  - "(?i)landers?"
+  - "(?i)rovers?"
+  - "(?i)capsules?"
+  - "(?i)shuttles?"
+  - "(?i)satellites?"
   # Birds (generic; rare species fire, so nature writing disables the rule)
-  - '(?i)birds?'
+  - "(?i)birds?"
   # Common falling or thrown things
-  - '(?i)balls?'
-  - '(?i)snow'
-  - '(?i)snowflakes?'
-  - '(?i)leaf'
-  - '(?i)leaves'
-  - '(?i)meteors?'
-  - '(?i)asteroids?'
+  - "(?i)balls?"
+  - "(?i)snow"
+  - "(?i)snowflakes?"
+  - "(?i)leaf"
+  - "(?i)leaves"
+  - "(?i)meteors?"
+  - "(?i)asteroids?"
   # People who land
-  - '(?i)skydivers?'
+  - "(?i)skydivers?"
   # "Lands" as a territory noun, not the verb (public lands in the west)
-  - '(?i)public'
-  - '(?i)federal'
-  - '(?i)tribal'
-  - '(?i)private'
-  - '(?i)ancestral'
-  - '(?i)indigenous'
-  - '(?i)native'
-  - '(?i)grazing'
-  - '(?i)crown'
-  - '(?i)common'
+  - "(?i)public"
+  - "(?i)federal"
+  - "(?i)tribal"
+  - "(?i)private"
+  - "(?i)ancestral"
+  - "(?i)indigenous"
+  - "(?i)native"
+  - "(?i)grazing"
+  - "(?i)crown"
+  - "(?i)common"
   # Assessment subjects owned by ColloquialAssessments ("the joke lands")
-  - '(?i)joke'
-  - '(?i)point'
-  - '(?i)argument'
-  - '(?i)line'
-  - '(?i)metaphor'
-  - '(?i)analogy'
-  - '(?i)comparison'
-  - '(?i)critique'
-  - '(?i)distinction'
-  - '(?i)observation'
-  - '(?i)framing'
-  - '(?i)insight'
-  - '(?i)takeaway'
-  - '(?i)punchline'
-  - '(?i)callback'
-  - '(?i)bit'
-  - '(?i)reference'
-  - '(?i)callout'
+  - "(?i)joke"
+  - "(?i)point"
+  - "(?i)argument"
+  - "(?i)line"
+  - "(?i)metaphor"
+  - "(?i)analogy"
+  - "(?i)comparison"
+  - "(?i)critique"
+  - "(?i)distinction"
+  - "(?i)observation"
+  - "(?i)framing"
+  - "(?i)insight"
+  - "(?i)takeaway"
+  - "(?i)punchline"
+  - "(?i)callback"
+  - "(?i)bit"
+  - "(?i)reference"
+  - "(?i)callout"
+  # Human-achievement idiom, a different figure than the arrival tell
+  # ("landed a new job," "landed the deal"). The transitive token below
+  # includes its object in the span, which is what lets these fire as
+  # exceptions.
+  - "(?i)jobs?"
+  - "(?i)roles?"
+  - "(?i)gigs?"
+  - "(?i)deals?"
+  - "(?i)contracts?"
+  - "(?i)clients?"
+  - "(?i)interviews?"
+  - "(?i)punch(?:es)?"
+  - "(?i)blows?"
+  - "(?i)fish"
+  # Athletic execution, the same different figure ("lands the jump," "lands
+  # the field goal")
+  - "(?i)goals?"
+  - "(?i)jumps?"
+  - "(?i)tricks?"
+  - "(?i)flips?"
+  - "(?i)kicks?"
+  - "(?i)dismounts?"
 tokens:
   # <subject> lands on/in/at: the figurative arrival with an explicit
   # destination ("the PR lands in main," "the request lands on the node").
-  - "\\b\\w+ land(?:s|ed)? (?:on|in|into|at|here|there)\\b"
+  # The adverb alternatives extend the same token to the destinations agent
+  # prose actually names ("the change lands upstream," "the fix lands as a
+  # separate commit," "both halves land together"). The one match across
+  # the Go and Python standard libraries is a Go comment promising that
+  # semantics "all land as expected," which is the tell itself.
+  - "\\b\\w+ land(?:s|ed)? (?:on|in|into|at|here|there|upstream|downstream|alongside|as|first|next|separately|together|soon|later|cleanly|safely|via|early|late)\\b"
   # A temporal or conditional subordinator + <subject> + "lands" with no
   # destination ("once the feature lands," "when the PR lands," "until the fix
   # lands"). The subordinator is the tell: bare "X lands" is too broad to flag,
   # but "once/when/after X lands" reliably means ships or merges in prose. The
   # shared exceptions still fire, so "when the plane lands" stays quiet.
   - "\\b(?:once|when|whenever|after|before|until|till|if|as soon as|the (?:moment|second|minute|day|instant)) (?:\\w+ ){1,4}land(?:s|ed)?\\b"
+  # Perfect and adverbial arrival with the subject in the span ("the fix
+  # has landed," "support finally landed"). The subject word rides inside
+  # the match so the shared exceptions still apply, and "the plane has
+  # landed" stays quiet; an optional determiner-led object rides along too,
+  # so "she finally landed a job" puts its object where the achievement
+  # exceptions can see it. The one match across the Go and Python standard
+  # libraries is a Go comment waiting until "the multi-value proposal has
+  # landed," which is the tell itself.
+  - "\\b\\w+ (?:has|have|had|hasn't|haven't|just|finally|already|eventually|recently|never) (?:just |finally |already |now |recently |not )?landed(?: (?:a|an|the|this|that) \\w+)?\\b"
+  # Bare arrival at a clause boundary ("once merged, the fix lands." "the
+  # rewrite landed, and everything broke"). The lookahead keeps the
+  # punctuation out of the span while gating on it, and the subject word
+  # stays inside the span for the exceptions.
+  - "\\b\\w+ land(?:s|ed)(?=[.,;:!?])"
+  # Transitive landing: the change as cargo to be set down ("land the
+  # rule," "landed a fix," "landing this in v2 means"). Verb-first, so the
+  # subject gate above cannot see it. The object rides inside the span,
+  # which is what lets "landed the plane" and "landed a job" reach the
+  # exceptions. The bare infinitive is left out: "the land the settlers
+  # cleared" puts the territory noun in the verb slot, the same collision
+  # that keeps the bare "carry" out of CommitFigurativeVerbs, and the
+  # rejection corpus only ever inflects the verb. Measured at zero across
+  # the Go and Python standard libraries. The known false positive is the
+  # gerund noun read ("the landing the pilot made"); aviation writing
+  # already disables the rule.
+  - "\\bland(?:s|ed|ing) (?:a|an|the|this|that|these|those|its|their|every|each|one|any|some) (?:[a-z]+ )?\\w+"
+  # The same transitive construction with a pronoun object ("landing it means
+  # rewording this package first," "lands them separately").
+  - "\\bland(?:s|ed|ing) (?:it|them|everything|both)\\b"

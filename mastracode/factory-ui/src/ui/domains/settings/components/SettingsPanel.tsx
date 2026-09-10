@@ -114,7 +114,7 @@ export function SettingsPanel() {
             sessionScope={sessionScope}
           />
         )}
-        {section === 'skills' && <FactorySkillsSection />}
+        {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}

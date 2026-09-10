@@ -1519,8 +1519,8 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
       const updatedThread = {
         ...thread,
-        title: title || thread.title,
-        metadata: metadata || thread.metadata,
+        title: title !== undefined ? title : thread.title,
+        metadata: metadata !== undefined ? metadata : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,

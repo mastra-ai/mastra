@@ -1,26 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDatasetTargetTypes } from '../helpers';
+import { getDatasetTagOptions } from '../helpers';
+import { dataset, taggedDatasets } from './fixtures/datasets';
 
-describe('getDatasetTargetTypes', () => {
-  it('uses the explicit dataset targetType when set, ignoring experiments', () => {
-    expect(getDatasetTargetTypes('workflow', [{ targetType: 'agent' }])).toEqual(['workflow']);
+describe('getDatasetTagOptions', () => {
+  describe('when datasets have overlapping tags', () => {
+    it('offers each tag once in alphabetical order after the all-tags option', () => {
+      expect(getDatasetTagOptions(taggedDatasets)).toEqual([
+        { value: 'all', label: 'All tags' },
+        { value: 'english', label: 'english' },
+        { value: 'reviewed', label: 'reviewed' },
+        { value: 'support', label: 'support' },
+      ]);
+    });
   });
 
-  it('derives distinct target types from experiments when the dataset has none, in stable sorted order', () => {
-    expect(
-      getDatasetTargetTypes(null, [{ targetType: 'workflow' }, { targetType: 'agent' }, { targetType: 'agent' }]),
-    ).toEqual(['agent', 'workflow']);
-  });
-
-  it('ignores experiments without a targetType', () => {
-    expect(
-      getDatasetTargetTypes(undefined, [{ targetType: undefined }, { targetType: null }, { targetType: 'agent' }]),
-    ).toEqual(['agent']);
-  });
-
-  it('returns an empty list when neither the dataset nor its experiments carry a type', () => {
-    expect(getDatasetTargetTypes(null, [])).toEqual([]);
-    expect(getDatasetTargetTypes(undefined, [{ targetType: null }])).toEqual([]);
+  describe('when datasets have no tags', () => {
+    it('offers only the all-tags option', () => {
+      expect(getDatasetTagOptions([dataset('ds-a', 'Dataset A')])).toEqual([{ value: 'all', label: 'All tags' }]);
+    });
   });
 });

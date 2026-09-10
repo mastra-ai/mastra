@@ -13,6 +13,8 @@ import {
   listScoresResponseSchema as obsListScoresResponseSchema,
   createScoreBodySchema,
   createScoreResponseSchema,
+  deleteScoresArgsSchema,
+  deleteScoresResponseSchema,
   scoreRecordSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
@@ -27,9 +29,10 @@ import {
   feedbackOrderBySchema,
   feedbackRecordSchema,
   feedbackReviewStatusSchema,
-  listFeedbackResponseSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
+  deleteFeedbackArgsSchema,
+  deleteFeedbackResponseSchema,
   getFeedbackAggregateArgsSchema,
   getFeedbackAggregateResponseSchema,
   getFeedbackBreakdownArgsSchema,
@@ -67,9 +70,12 @@ import { generateSignalId } from '@mastra/core/observability';
 import type { ValidationErrorHook } from '@mastra/core/server';
 import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
+import { MASTRA_USER_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
 import { HTTPException } from '../http-exception';
+import { listFeedbackResponseSchema } from '../schemas/feedback';
 import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
+import { prepareAuthorEnrichment } from './author-enrichment';
 import { handleError } from './error';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
@@ -359,6 +365,22 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   },
 });
 
+export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
+  bodySchema: deleteScoresArgsSchema,
+  responseSchema: deleteScoresResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Score deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteScoresArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteScores(args);
+    return { success: true };
+  },
+});
+
 export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
   pathParamSchema: z.object({ scoreId: z.string() }),
   responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
@@ -416,41 +438,72 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
-  handler: async ({ mastra, mode, after, limit, ...params }) => {
+  handler: async ({ mastra, requestContext, request, mode, after, limit, ...params }) => {
     const filters = pickParams(feedbackFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
 
     if (mode === 'delta') {
       assertObservabilityDeltaSupported(observabilityStore, OBSERVABILITY_LIST_ENDPOINTS.feedback);
-      return await observabilityStore.listFeedback({
-        mode,
-        filters,
-        after: typeof after === 'string' ? after : undefined,
-        limit,
-      });
     }
-
     const pagination = pickParams(paginationArgsSchema, params);
     const orderBy = pickParams(feedbackOrderBySchema, params);
-    return await observabilityStore.listFeedback(
-      mode === 'page' ? { mode, filters, pagination, orderBy } : { filters, pagination, orderBy },
+    const result = await observabilityStore.listFeedback(
+      mode === 'delta'
+        ? { mode, filters, after: typeof after === 'string' ? after : undefined, limit }
+        : mode === 'page'
+          ? { mode, filters, pagination, orderBy }
+          : { filters, pagination, orderBy },
     );
+    const authors = await prepareAuthorEnrichment(
+      mastra,
+      requestContext,
+      result.feedback.map(record => record.feedbackUserId),
+      isStudioClientTypeHeader(request?.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined),
+    );
+    return {
+      ...result,
+      feedback: result.feedback.map(record => {
+        const author = record.feedbackUserId ? authors?.get(record.feedbackUserId) : undefined;
+        return author ? { ...record, author } : record;
+      }),
+    };
   },
 });
 
 export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
-  handler: async ({ mastra, feedback }) => {
+  handler: async ({ mastra, requestContext, feedback }) => {
+    const user = requestContext.get(MASTRA_USER_KEY);
+    const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createFeedback({
       feedback: {
         ...feedback,
+        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+          ? { feedbackUserId: authenticatedId }
+          : {}),
         feedbackId: feedback.feedbackId ?? generateSignalId(),
         timestamp: new Date(),
         reviewStatus: feedback.reviewStatus ?? 'needs-review',
       },
     });
+    return { success: true };
+  },
+});
+
+export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
+  bodySchema: deleteFeedbackArgsSchema,
+  responseSchema: deleteFeedbackResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Feedback deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteFeedbackArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteFeedback(args);
     return { success: true };
   },
 });
@@ -665,6 +718,7 @@ export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
+  DELETE_SCORES,
   GET_SCORE,
   GET_SCORE_AGGREGATE,
   GET_SCORE_BREAKDOWN,
@@ -672,6 +726,7 @@ export const NEW_ROUTES = {
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,

@@ -13,7 +13,7 @@
             "id": "call_commit_attribution_git_commit",
             "name": "execute_command",
             "arguments": {
-              "command": "printf 'commit attribution e2e\\n' > commit-attribution-e2e.txt && git add commit-attribution-e2e.txt && git commit -m 'test: commit attribution e2e' -m 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>'",
+              "command": "printf 'commit attribution e2e\\n' > commit-attribution-e2e.txt && git add commit-attribution-e2e.txt && git commit -m 'test: commit attribution e2e' -m 'Co-Authored-By: mastracode <284800079+mastra-platform[bot]@users.noreply.github.com>'",
               "timeout": 10,
               "cwd": null,
               "tail": 40,

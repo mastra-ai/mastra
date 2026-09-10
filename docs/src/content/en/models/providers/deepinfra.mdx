@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 63 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 64 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -156,7 +156,7 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.08,
+    "inputCost": 0.06,
     "outputCost": 0.18
   },
   {
@@ -194,6 +194,18 @@ for await (const chunk of stream) {
     "maxOutput": 384000,
     "inputCost": 1.3,
     "outputCost": 2.6
+  },
+  {
+    "model": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "deepinfra/google/gemma-4-26B-A4B-it",
@@ -290,18 +302,6 @@ for await (const chunk of stream) {
     "maxOutput": 512000,
     "inputCost": 0.28,
     "outputCost": 1.1
-  },
-  {
-    "model": "deepinfra/moonshotai/Kimi-K2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.45,
-    "outputCost": 2.25
   },
   {
     "model": "deepinfra/moonshotai/Kimi-K2.6",
@@ -797,14 +797,3 @@ const agent = new Agent({
 });
 ```
 
-
-
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/deepinfra) for more details.
-
-```bash npm2yarn
-npm install @ai-sdk/deepinfra
-```
-
-For detailed provider-specific documentation, see the [AI SDK Deep Infra provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/deepinfra).

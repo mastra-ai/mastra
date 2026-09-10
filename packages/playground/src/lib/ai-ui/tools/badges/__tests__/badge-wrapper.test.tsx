@@ -1,10 +1,21 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BadgeWrapper } from '../badge-wrapper';
 
 afterEach(() => cleanup());
 
 describe('BadgeWrapper', () => {
+  it('reveals the body when the trigger is clicked', () => {
+    render(
+      <BadgeWrapper title="Ran tool">
+        <span>tool output</span>
+      </BadgeWrapper>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /ran tool/i }));
+    expect(screen.getByText('tool output')).toBeTruthy();
+  });
+
   it('keeps the body of a badge that cannot be collapsed visible', () => {
     render(
       <BadgeWrapper title="Working" collapsible={false}>

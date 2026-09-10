@@ -100,12 +100,13 @@ describe('DatasetReview keyboard navigation', () => {
   });
 
   describe('when the review queue is empty', () => {
-    it('hides the Filter action', async () => {
+    it('keeps the status filter but hides the tag filter', async () => {
       setupHandlers([]);
       renderWithProviders(<DatasetReview datasetId="ds-1" />);
 
       expect(await screen.findByText('No items to review')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: 'Filter' })).toBeNull();
+      // Only the status select remains; the tag select needs tags to filter by.
+      expect(screen.getAllByRole('combobox')).toHaveLength(1);
     });
   });
 });

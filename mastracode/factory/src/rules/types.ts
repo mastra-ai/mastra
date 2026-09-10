@@ -181,7 +181,7 @@ export interface FactoryRuleContextBase {
   ingress: FactoryRuleIngressIdentity;
   cause: string;
   causalChain: readonly FactoryRuleCausalEntry[];
-  ruleSetVersion: string;
+  configVersion: string;
 }
 
 export interface FactoryBoundRuleContext extends FactoryRuleContextBase {
@@ -212,6 +212,11 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /**
+   * Board an issue's labels route it to, when the project has a matching label route and that board
+   * is installed. Absent for pull requests and for issues whose labels select nothing.
+   */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
@@ -262,10 +267,21 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   review?: { id: number; state: string; url: string };
 }
 
+/**
+ * Where an intake source binding says new items from this source should land.
+ * Absent when the source is unbound or bound without a board (built-in routing).
+ */
+export interface FactoryRuleIntakeTarget {
+  board: string;
+  initialPhase: string;
+}
+
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
   issue: {
     id: string;
@@ -291,19 +307,6 @@ export type FactoryRuleHandler<TContext> = (
 export interface FactoryBoardRuleLeaf {
   onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
   onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
-
-export interface FactoryToolRuleLeaf {
-  onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
-}
-
-export interface FactoryRules {
-  version: string;
-  tools: Record<string, FactoryToolRuleLeaf>;
-}
-
-export interface FactoryRulesOverrides {
-  tools?: Record<string, FactoryToolRuleLeaf>;
 }
 
 export type FactoryRuleRejectionCode =

@@ -118,7 +118,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
     } else {
       // Mixed/non-string enums (e.g. [1, 2, 3] or ['a', 1]): preserve the
       // original member types via literal union instead of coercing to string.
-      const literals: z.ZodTypeAny[] = values.map(v => z.literal(v as string | number | boolean | null));
+      const literals: z.ZodTypeAny[] = values.map(v => z.literal(v));
       out = literals.length === 1 ? literals[0]! : z.union(literals as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
     }
   } else if (Array.isArray(schema.type)) {

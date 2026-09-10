@@ -834,6 +834,7 @@ describe('Dataset', () => {
         retryCount: 0,
         traceId: 'trace-a',
         status: 'reviewed',
+        tags: ['a'],
         organizationId: 'org-1',
         projectId: 'proj-1',
       });
@@ -850,6 +851,7 @@ describe('Dataset', () => {
         retryCount: 0,
         traceId: 'trace-b',
         status: 'needs-review',
+        tags: ['a', 'b'],
         organizationId: 'org-2',
         projectId: 'proj-2',
       });
@@ -887,6 +889,15 @@ describe('Dataset', () => {
       const { results } = await ds.listExperimentResults({ experimentId, status: 'reviewed' });
       expect(results).toHaveLength(1);
       expect(results[0]!.status).toBe('reviewed');
+    });
+
+    it('filters by tags (all must match)', async () => {
+      const both = await ds.listExperimentResults({ experimentId, tags: ['a', 'b'] });
+      expect(both.results.map(r => r.itemId)).toEqual(['item-2']);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await ds.listExperimentResults({ experimentId, tags: ['a'] });
+      expect(onlyA.results.map(r => r.itemId)).toEqual(['item-1', 'item-2']);
     });
 
     it('forwards tenancy filters', async () => {

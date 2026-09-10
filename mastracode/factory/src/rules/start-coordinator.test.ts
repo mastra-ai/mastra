@@ -6,7 +6,6 @@ import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -129,7 +128,8 @@ function startRequest(
 
 describe('FactoryStartCoordinator', () => {
   it('commits the item session, exact binding, and durable pending start', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
@@ -167,6 +167,7 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
   it('seeds caller identity into an existing request context', async () => {
@@ -319,7 +320,7 @@ describe('FactoryStartCoordinator', () => {
     let bindingsDuringRule = 0;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: {
           issue: {
@@ -476,7 +477,7 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),
@@ -513,8 +514,9 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+  it('replays the same durable pending kickoff and binding without dispatching or auditing it again', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
@@ -531,6 +533,7 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
   it('revokes only the prior binding for the same item role', async () => {

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ApiCommandDescriptor } from './types';
 import { API_COMMANDS, executeDescriptor, registerApiCommand } from './index';
 
 const fetchMock = vi.fn();
@@ -62,6 +63,28 @@ describe('api command registration', () => {
     expect(API_COMMANDS.traceSpan).toMatchObject({
       method: 'GET',
       path: '/observability/traces/:traceId/spans/:spanId',
+    });
+  });
+
+  it('exposes score and feedback deletion commands', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const score = api?.commands.find(command => command.name() === 'score');
+    const feedback = api?.commands.find(command => command.name() === 'feedback');
+
+    expect(score?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(feedback?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(API_COMMANDS.scoreDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/scores',
+      inputRequired: true,
+    });
+    expect(API_COMMANDS.feedbackDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/feedback',
+      inputRequired: true,
     });
   });
 });
@@ -135,6 +158,252 @@ describe('api command executor', () => {
     });
   });
 
+  it('routes origin descriptors outside the API prefix while preserving shared options', async () => {
+    const descriptor: ApiCommandDescriptor = {
+      key: 'rootItemList',
+      name: 'root-item list',
+      description: 'List root-level items',
+      method: 'GET',
+      path: '/web/items',
+      positionals: [],
+      acceptsInput: true,
+      inputRequired: false,
+      list: true,
+      responseShape: { kind: 'array' },
+      queryParams: ['status'],
+      bodyParams: [],
+      routePlacement: 'origin',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 'item-1' }]));
+
+    await executeDescriptor(descriptor, [], '{"status":"open"}', {
+      url: 'https://example.com',
+      serverApiPrefix: '/custom-api',
+      header: ['X-Test-Run: root-route'],
+      timeout: '2500',
+      pretty: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/items?status=open', {
+      method: 'GET',
+      headers: { 'X-Test-Run': 'root-route' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(stdout).toBe(
+      `${JSON.stringify(
+        {
+          data: [{ id: 'item-1' }],
+          page: { total: 1, page: 0, perPage: 1, hasMore: false },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it('runs Factory project list through the shared flags and normalizes the generated projects shape', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ projects: [{ id: 'project-1', name: 'Factory One' }] }));
+
+    const program = new Command();
+    registerApiCommand(program);
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'api',
+      '--url',
+      'https://example.com',
+      '--server-api-prefix',
+      '/custom-api',
+      '--header',
+      'Authorization: Bearer factory-token',
+      '--header',
+      'X-Test-Run: factory-list',
+      '--timeout',
+      '2500',
+      '--pretty',
+      'factory',
+      'project',
+      'list',
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/factory/projects', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer factory-token', 'X-Test-Run': 'factory-list' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(stdout).toBe(
+      `${JSON.stringify(
+        {
+          data: [{ id: 'project-1', name: 'Factory One' }],
+          page: { total: 1, page: 0, perPage: 1, hasMore: false },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it('splits Factory project updates and governed transitions into root-level path and body fields', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ id: 'project-1', name: 'Renamed Factory' }))
+      .mockResolvedValueOnce(jsonResponse({ workItem: { id: 'work-item-1', stage: 'planning', revision: 2 } }));
+
+    await executeDescriptor(API_COMMANDS.factoryProjectUpdate, ['project-1'], '{"name":"Renamed Factory"}', {
+      url: 'https://example.com',
+      serverApiPrefix: '/custom-api',
+      header: [],
+      pretty: false,
+    });
+    stdout = '';
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemTransition'],
+      ['project-1', 'work-item-1'],
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.com/web/factory/projects/project-1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ name: 'Renamed Factory' }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/work-items/work-item-1/transition',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: expect.any(AbortSignal),
+        body: JSON.stringify({
+          board: 'work',
+          stage: 'planning',
+          requestId: '00000000-0000-4000-8000-000000000000',
+          cause: 'manual',
+          expectedRevision: 1,
+        }),
+      },
+    );
+  });
+
+  it('preserves companion fields in Factory work-item, decision, and attention list responses', async () => {
+    const workItems = { workItems: [{ id: 'work-item-1' }], runningSessionIds: ['session-1'] };
+    const decisions = { decisions: [{ id: 'decision-1' }], nextCursor: 'decision-cursor' };
+    const attention = {
+      items: [{ kind: 'automation-failed', sourceId: 'decision-1' }],
+      unreadCount: 1,
+      nextCursor: 'attention-cursor',
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(workItems))
+      .mockResolvedValueOnce(jsonResponse(decisions))
+      .mockResolvedValueOnce(jsonResponse(attention));
+
+    await executeDescriptor(API_COMMANDS['factoryWork-itemList'], ['project-1'], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: workItems });
+    stdout = '';
+    await executeDescriptor(API_COMMANDS.factoryDecisionList, ['project-1'], '{"limit":10}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: decisions });
+    stdout = '';
+    await executeDescriptor(API_COMMANDS.factoryAttentionList, ['project-1'], '{"view":"unread","limit":20}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: attention });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/decisions?limit=10',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://example.com/web/factory/projects/project-1/attention?view=unread&limit=20',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('executes Factory decision and supervisor actions at the resolved origin', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ sessionId: 'factory-supervisor:project-1' }));
+
+    await executeDescriptor(API_COMMANDS.factoryDecisionApprove, ['project-1', 'decision-1'], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    await executeDescriptor(API_COMMANDS.factorySupervisorSession, ['project-1'], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/web/factory/projects/project-1/decisions/decision-1/approve',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/supervisor/session',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('uses the configured API prefix for implicit localhost probing but not for Factory requests', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ routes: [] }))
+      .mockResolvedValueOnce(jsonResponse({ workItem: { id: 'work-item-1', revision: 2 } }));
+
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemTransition'],
+      ['project-1', 'work-item-1'],
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      { serverApiPrefix: '/custom-api', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:4111/custom-api/system/api-schema', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:4111/web/factory/projects/project-1/work-items/work-item-1/transition',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('prints generated Factory schemas without requesting the target schema manifest', async () => {
+    await executeDescriptor(API_COMMANDS['factoryWork-itemTransition'], [], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+      schema: true,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout)).toMatchObject({
+      command: 'mastra api factory work-item transition <id> <workItemId> <input>',
+      method: 'POST',
+      path: '/web/factory/projects/:id/work-items/:workItemId/transition',
+      input: { required: true, source: 'body' },
+      schemas: {
+        pathParams: { type: 'object' },
+        body: { type: 'object' },
+      },
+    });
+  });
+
   it('runs an agent with JSON body and writes concise normalized output', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -159,6 +428,40 @@ describe('api command executor', () => {
       body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
+  });
+
+  it('sends score and feedback deletion filters in request bodies', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+
+    await executeDescriptor(
+      API_COMMANDS.scoreDelete,
+      [],
+      '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+    await executeDescriptor(
+      API_COMMANDS.feedbackDelete,
+      [],
+      '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.com/api/observability/scores', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({
+        scoreIds: ['score_123'],
+        organizationId: 'org_123',
+        resourceId: 'resource_123',
+      }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.com/api/observability/feedback', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ feedbackIds: ['feedback_123'], organizationId: 'org_123' }),
+    });
   });
 
   it('does not treat JSON input as an identity argument', async () => {

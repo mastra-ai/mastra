@@ -2273,6 +2273,90 @@ describe('Memory Handlers', () => {
       });
     });
 
+    describe('UPDATE_THREAD_ROUTE - clearing title/metadata', () => {
+      it('should clear the title when an empty string is provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'thread-1', resourceId: 'user-1', title: 'Old Title' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-1',
+          title: '',
+        });
+
+        expect(result.title).toBe('');
+      });
+
+      it('should keep the stored title when title is absent', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'thread-2', resourceId: 'user-1', title: 'Old Title' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-2',
+          metadata: { foo: 'bar' },
+        });
+
+        expect(result.title).toBe('Old Title');
+      });
+
+      it('should replace metadata with an empty object when provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'thread-3',
+          resourceId: 'user-1',
+          title: 'Old Title',
+          metadata: { foo: 'bar' },
+        });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-3',
+          metadata: {},
+        });
+
+        expect(result.metadata).toEqual({});
+      });
+
+      it('should keep the stored metadata when metadata is absent', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'thread-4',
+          resourceId: 'user-1',
+          title: 'Old Title',
+          metadata: { foo: 'bar' },
+        });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-4',
+          title: 'New Title',
+        });
+
+        expect(result.metadata).toEqual({ foo: 'bar' });
+      });
+    });
+
     describe('SAVE_MESSAGES_ROUTE - resourceId validation', () => {
       it('should return 403 when saving messages for different resource', async () => {
         const mastra = new Mastra({

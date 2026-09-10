@@ -92,40 +92,41 @@ const RESPONSE_CHUNK_TYPES = new Set(['text', 'object']);
 const isResponseChunkSpan = (span: SpanRecord) =>
   span.spanType === SpanType.MODEL_CHUNK && RESPONSE_CHUNK_TYPES.has(readString(span.attributes, 'chunkType') ?? '');
 
+interface ToolCallPart {
+  part: MastraMessagePart;
+  /** The tool-call span plus any top-level execution it started (workflow/agent run). */
+  spanIds: string[];
+}
+
 /**
- * Walks the span tree collecting the tool-call parts to render, plus the ids of every span
- * that contributed to the assistant message: tool-call spans and the model chunks that
- * produced the response text.
+ * Walks the span tree collecting each tool call (with the spans behind it) in visit order,
+ * plus the ids of the model chunks that produced the response text.
  */
-const collectAssistantSpans = (
-  root: UISpan,
-  spans: SpanRecord[],
-): { parts: MastraMessagePart[]; spanIds: string[] } => {
+const collectAssistantSpans = (root: UISpan, spans: SpanRecord[]): { tools: ToolCallPart[]; textSpanIds: string[] } => {
   const spanById = new Map(spans.map(span => [span.spanId, span]));
-  const parts: MastraMessagePart[] = [];
-  const spanIds: string[] = [];
+  const tools: ToolCallPart[] = [];
+  const textSpanIds: string[] = [];
 
   const visit = (nodes: UISpan[]) => {
     for (const node of nodes) {
       const span = spanById.get(node.id);
       if (!span) continue;
       if (TOOL_SPAN_TYPES.has(span.spanType)) {
-        parts.push(toToolPart(span));
-        spanIds.push(span.spanId);
         // A tool that runs a workflow or an agent gets that top-level execution featured too,
         // so the user can see what the tool call actually did without featuring every nested step.
-        for (const child of node.spans ?? []) {
-          if (TOOL_EXECUTION_SPAN_TYPES.has(child.type)) spanIds.push(child.id);
-        }
+        const executionIds = (node.spans ?? []).flatMap(child =>
+          TOOL_EXECUTION_SPAN_TYPES.has(child.type) ? [child.id] : [],
+        );
+        tools.push({ part: toToolPart(span), spanIds: [span.spanId, ...executionIds] });
         continue;
       }
-      if (isResponseChunkSpan(span)) spanIds.push(span.spanId);
+      if (isResponseChunkSpan(span)) textSpanIds.push(span.spanId);
       visit(node.spans ?? []);
     }
   };
 
   visit(root.spans ?? []);
-  return { parts, spanIds };
+  return { tools, textSpanIds };
 };
 
 const messageContent = (parts: MastraMessagePart[]) =>
@@ -155,25 +156,40 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
 
   const userParts = getUserParts(root.input);
   const responseText = getResponseText(root.output);
-  const { parts: assistantParts, spanIds: assistantSpanIds } = collectAssistantSpans(hierarchicalRoot, spans);
-  if (responseText) assistantParts.push({ type: 'text', text: responseText });
+  const { tools, textSpanIds } = collectAssistantSpans(hierarchicalRoot, spans);
+  const assistantCreatedAt = new Date(root.endedAt ?? root.startedAt);
+  const threadId = root.threadId ?? undefined;
 
-  return [
+  const messages: TraceViewMastraDBMessage[] = [
     {
       id: `${root.traceId}:${root.spanId}:user`,
       role: 'user',
       createdAt: new Date(root.startedAt),
-      threadId: root.threadId ?? undefined,
+      threadId,
       content: { format: 2, parts: userParts, content: messageContent(userParts) },
       traceSpanIds: [root.spanId],
     },
-    {
+    // One message per tool call so each part maps to exactly the spans behind it.
+    ...tools.map<TraceViewMastraDBMessage>(({ part, spanIds }) => ({
+      id: `${root.traceId}:${spanIds[0]}:tool`,
+      role: 'assistant',
+      createdAt: assistantCreatedAt,
+      threadId,
+      content: { format: 2, parts: [part], content: '' },
+      traceSpanIds: [root.spanId, ...spanIds],
+    })),
+  ];
+
+  if (responseText) {
+    messages.push({
       id: `${root.traceId}:${root.spanId}:assistant`,
       role: 'assistant',
-      createdAt: new Date(root.endedAt ?? root.startedAt),
-      threadId: root.threadId ?? undefined,
-      content: { format: 2, parts: assistantParts, content: responseText },
-      traceSpanIds: [root.spanId, ...assistantSpanIds],
-    },
-  ];
+      createdAt: assistantCreatedAt,
+      threadId,
+      content: { format: 2, parts: [{ type: 'text', text: responseText }], content: responseText },
+      traceSpanIds: [root.spanId, ...textSpanIds],
+    });
+  }
+
+  return messages;
 }

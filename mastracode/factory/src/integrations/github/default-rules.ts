@@ -49,17 +49,18 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
 
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
-  // Everything arrives in Intake; arrival only stamps whether `onArrival` may
-  // suggest this card's run without a person.
+  // Everything arrives on the routed board's initial phase (Work › Intake when
+  // no label route selects another board); arrival only stamps whether
+  // `onArrival` may suggest this card's run without a person.
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-intake`,
-    board: 'work',
+    board: context.intake?.board ?? 'work',
     source: 'github-issue',
     sourceKey: `github-issue:${context.issue.number}`,
     title: context.issue.title,
     url: context.issue.url,
-    stage: 'intake',
+    stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,

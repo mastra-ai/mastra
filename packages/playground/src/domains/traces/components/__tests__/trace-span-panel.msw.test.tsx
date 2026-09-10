@@ -95,11 +95,14 @@ describe('TraceSpanPanel', () => {
 
       await screen.findByText('No rain is expected.');
 
-      const [userAction, assistantAction] = screen.getAllByRole('button', { name: 'Highlight spans' });
+      // One action per message: user, the two tool calls, and the assistant reply.
+      const actions = screen.getAllByRole('button', { name: 'Highlight spans' });
+      expect(actions).toHaveLength(4);
+      const [userAction, , , assistantAction] = actions;
       if (!userAction || !assistantAction) throw new Error('expected one highlight action per message');
 
       fireEvent.click(assistantAction);
-      expect(onHighlightSpans).toHaveBeenCalledWith(['span-root', 'span-child-1', 'span-child-2']);
+      expect(onHighlightSpans).toHaveBeenCalledWith(['span-root']);
 
       fireEvent.click(userAction);
       expect(onHighlightSpans).toHaveBeenLastCalledWith(['span-root']);
@@ -113,7 +116,9 @@ describe('TraceSpanPanel', () => {
       await screen.findByText('No rain is expected.');
 
       const link = screen.getByRole('link', { name: 'View full thread' });
-      expect(link.getAttribute('href')).toBe('/agents/weather-agent/threads/weather-thread?variant=advanced');
+      expect(link.getAttribute('href')).toBe(
+        '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
+      );
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -272,7 +277,8 @@ describe('TraceSpanPanel', () => {
 
     expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    // Anchor spans render the trace-context fields even though they have a parent.
-    expect(screen.getByText('Trace Id')).not.toBeNull();
+    // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
+    expect(screen.getByText('Session Id')).not.toBeNull();
+    expect(screen.getByText('session-42')).not.toBeNull();
   });
 });

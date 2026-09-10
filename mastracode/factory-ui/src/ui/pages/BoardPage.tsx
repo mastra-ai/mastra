@@ -4,13 +4,15 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Plus } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
+import type { InstalledBoardInfo } from '../../api/types';
+import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
-import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
+import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../domains/factory/components/BoardAutomationSettings';
 import { BoardTooltipDelay } from '../domains/factory/components/BoardCardParts';
@@ -70,7 +72,22 @@ export function ReviewBoardPage() {
   return <FactoryPageShell bleed>{factory => <Board factory={factory} kind="review" />}</FactoryPageShell>;
 }
 
+export function CustomBoardPage() {
+  const { boardId } = useParams<{ boardId: string }>();
+  return <FactoryPageShell bleed>{factory => <Board factory={factory} kind={boardId ?? ''} />}</FactoryPageShell>;
+}
+
 function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) {
+  const catalog = useBoardCatalog(factory.id);
+  if (catalog.isPending) return <p role="status">Loading boards…</p>;
+  if (catalog.isError) return <p role="alert">Unable to load boards.</p>;
+  const definition = catalog.data.find(board => board.id === kind);
+  if (!definition) return <p role="alert">Board unavailable: this board is not installed.</p>;
+  return <InstalledBoard factory={factory} definition={definition} />;
+}
+
+function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
+  const kind = definition.id;
   const repository = factory.repositories[0];
   const review = kind === 'review';
 
@@ -99,7 +116,7 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
     );
   }
 
-  return <BoardContent factory={factory} repository={repository} kind={kind} />;
+  return <BoardContent factory={factory} repository={repository} kind={kind} definition={definition} />;
 }
 
 /** The open card and the comment it deep-links to are one selection: clear them together. */
@@ -112,14 +129,17 @@ function BoardContent({
   factory,
   repository,
   kind,
+  definition,
 }: {
   factory: FactoryProject;
   repository: LinkedRepositoryPayload;
   kind: BoardKind;
+  definition: InstalledBoardInfo;
 }) {
   const factoryProjectId = factory.id;
   const review = kind === 'review';
-  const stages = boardStages(kind);
+  const builtin = kind === 'work' || review;
+  const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const [searchParams, setSearchParams] = useSearchParams();
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
@@ -130,15 +150,22 @@ function BoardContent({
 
   const auth = useFactoryAuth();
   const items = useBoardItems({ factoryProjectId, kind });
-  const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
+  const intake = useBoardIntake({
+    factoryProjectId,
+    repository,
+    definition,
+    knownSourceKeys: items.knownSourceKeys,
+    elsewhereSourceKeys: items.elsewhereSourceKeys,
+  });
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
+    factoryProjectId,
     projectRepositoryId: repository.projectRepositoryId,
     items: items.all,
   });
   const decisions = useBoardDecisions(factoryProjectId);
-  const composer = useBoardComposer(factoryProjectId);
+  const composer = useBoardComposer(factoryProjectId, definition);
   const activityProfileActorIds = [...new Set(items.all.flatMap(workItemHumanActorIds))];
   const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;
@@ -217,7 +244,7 @@ function BoardContent({
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
       if (item.id === targetItemId) return true;
-      if (stage !== 'intake' || review || item.source === 'manual') return true;
+      if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
       return false;
@@ -278,7 +305,8 @@ function BoardContent({
       composerOpen,
       columnFeed,
       feedFailed,
-      collapsed: stage.id !== 'intake' && !loading && !composerOpen && !feedFailed && taskCount === 0,
+      collapsed:
+        builtin && stage.id !== definition.initialPhase && !loading && !composerOpen && !feedFailed && taskCount === 0,
     };
   });
 
@@ -311,16 +339,19 @@ function BoardContent({
                 onReset={resetFilters}
               />
               <div className="w-full lg:w-auto [&>div]:w-full [&>div]:justify-between lg:[&>div]:w-auto lg:[&>div]:justify-start">
-                <BoardAutomationSettings
-                  factoryProjectId={factoryProjectId}
-                  autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
-                />
+                {builtin && (
+                  <BoardAutomationSettings
+                    factoryProjectId={factoryProjectId}
+                    autoRunEnabled={factory.autoRunEnabled ?? false}
+                    autoApprovePlans={factory.autoApprovePlans ?? false}
+                  />
+                )}
               </div>
             </div>
             <div className="from-surface2 via-surface2 sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-5 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
               {stageViews.map(({ stage, loading, taskCount, composerOpen, collapsed }) => (
                 <BoardColumnHeader
+                  phaseKind={stage.kind}
                   key={stage.id}
                   stage={stage.id}
                   label={stage.label}
@@ -331,7 +362,7 @@ function BoardContent({
                   headerAction={
                     !review &&
                     !loading &&
-                    !isTerminalStage(stage.id) &&
+                    stage.kind !== 'terminal' &&
                     (composer.stage === undefined || composerOpen) ? (
                       <Button
                         ref={composer.registerTrigger(stage.id)}
@@ -349,7 +380,7 @@ function BoardContent({
                     ) : undefined
                   }
                   headerExtras={
-                    stage.id === 'intake' && intake.showSwitch ? (
+                    stage.id === definition.initialPhase && intake.showSwitch ? (
                       <IntakeSourceSwitch
                         available={intake.available}
                         active={intake.active}
@@ -445,10 +476,11 @@ function BoardContent({
                         kind={kind}
                         hasIntakeSource={intake.active !== undefined}
                         filtersExcludeAll={filtersExcludeAll}
+                        alreadyMaterialized={stage.id === definition.initialPhase ? intake.alreadyMaterialized : 0}
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {stage.id === 'intake' && <IntakeColumnExtras feed={columnFeed} />}
+                    {stage.id === definition.initialPhase && <IntakeColumnExtras feed={columnFeed} />}
                   </BoardColumn>
                 ),
               )}

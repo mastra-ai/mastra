@@ -14,6 +14,7 @@ import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
+import { GithubLabelRouting } from './GithubLabelRouting';
 import { LinearRouting } from './LinearRouting';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -209,6 +210,25 @@ export function IntakeSection() {
   return (
     <div className="flex flex-col gap-8">
       <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
+      {config.github.enabled && linkedSlugs.length > 0 && (factoriesQuery.data?.length ?? 0) > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="GitHub routing"
+          description="Issues carrying a routed label file onto that board in the Factory; everything else stays on Work."
+        >
+          {(factoriesQuery.data ?? [])
+            .filter(factory => factory.repositories.length > 0)
+            .map(factory => (
+              <SettingsCard key={factory.id}>
+                <GithubLabelRouting
+                  factoryProjectId={factory.id}
+                  name={factory.name}
+                  repositories={factory.repositories.map(r => r.slug)}
+                />
+              </SettingsCard>
+            ))}
+        </SettingsSubsection>
+      )}
       <LinearIntakeSection
         config={config}
         busy={busy}

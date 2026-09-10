@@ -12,7 +12,7 @@ import { ToolCallProvider } from '@/services/tool-call-provider';
 
 export interface TraceThreadItemViewProps {
   traceId: string;
-  /** Called with the ids of the spans used to build a message when its "Highlight spans" action is clicked. */
+  /** Called with the ids of the spans behind a message (text or tool call) when its "Highlight spans" action is clicked. */
   onHighlightSpans?: (spanIds: string[]) => void;
   className?: string;
 }
@@ -20,7 +20,7 @@ export interface TraceThreadItemViewProps {
 const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans(traceId);
+  const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
 
   if (isLoading) {
     return (
@@ -39,6 +39,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   }
 
   const messages = data ? formatTraceThreadMessages(data.spans) : [];
+
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
@@ -63,21 +64,22 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
           toolCallApprovals={{}}
           networkToolCallApprovals={{}}
         >
-          {messages.map(message => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              readOnly
-              footer={
-                onHighlightSpans && message.traceSpanIds.length > 0 ? (
-                  <Button variant="ghost" size="xs" onClick={() => onHighlightSpans(message.traceSpanIds)}>
-                    <ListTreeIcon />
-                    Highlight spans
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
+          {messages.map(message => {
+            const action =
+              onHighlightSpans && message.traceSpanIds.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  tooltip="Highlight spans"
+                  aria-label="Highlight spans"
+                  onClick={() => onHighlightSpans(message.traceSpanIds)}
+                >
+                  <ListTreeIcon />
+                </Button>
+              ) : undefined;
+
+            return <MessageRow key={message.id} message={message} readOnly footer={action} />;
+          })}
         </ToolCallProvider>
       </div>
     </div>
