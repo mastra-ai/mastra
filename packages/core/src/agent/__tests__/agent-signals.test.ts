@@ -1159,7 +1159,7 @@ describe('Agent signals', () => {
         const finished = new Promise<void>(resolve => {
           finish = resolve;
         });
-        owner.registerRun(
+        await owner.registerRun(
           agent,
           {
             runId,
