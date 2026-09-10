@@ -1007,14 +1007,30 @@ function textCovers(onScreen: MastraMessagePart[], incoming: MastraMessagePart[]
 }
 
 /**
+ * Keep the drawn parts, plus any tool part only the incoming snapshot carries.
+ * Holding the drawn parts wholesale would drop a call the regressing snapshot
+ * is the sole carrier of: `reconcileToolResults` only replaces a part already
+ * on screen, so it cannot bring one back.
+ */
+function partsKeepingDrawnText(onScreen: MastraMessagePart[], incoming: MastraMessagePart[]): MastraMessagePart[] {
+  const drawnToolCallIds = new Set(toolCallIdsOf(onScreen));
+  const introduced = incoming.filter(part => {
+    const toolCallId = toolCallIdForPart(part);
+    return toolCallId !== undefined && !drawnToolCallIds.has(toolCallId);
+  });
+  return introduced.length === 0 ? onScreen : [...onScreen, ...introduced];
+}
+
+/**
  * Fold a streamed or sealed message into the timeline.
  *
  * `message_*` events carry the full cumulative snapshot of the run's current
  * message, so a snapshot that arrives stale or out of order would otherwise
  * roll a bubble back to a shorter state. Drawn text never regresses: a snapshot
- * that fails `textCovers` keeps the parts already on screen. Everything else it
- * carries still applies — sealing (`streaming`), `content.metadata` such as
- * `stopReason`, and the tool states `reconcileToolResults` folds in below.
+ * that fails `textCovers` keeps the text already on screen, gaining only the
+ * tool parts it introduces. Everything else it carries still applies — sealing
+ * (`streaming`), `content.metadata` such as `stopReason`, and the tool states
+ * `reconcileToolResults` folds in below.
  */
 function upsertMessage(
   state: TranscriptState,
@@ -1055,7 +1071,13 @@ function upsertMessage(
           ? {
               message: {
                 ...canonicalEntry.message,
-                content: { ...canonicalEntry.message.content, parts: prevEntry.message.content.parts },
+                content: {
+                  ...canonicalEntry.message.content,
+                  parts: partsKeepingDrawnText(
+                    prevEntry.message.content.parts,
+                    canonicalEntry.message.content.parts,
+                  ),
+                },
               },
             }
           : {}),

@@ -692,6 +692,55 @@ describe('transcript reducer message entries', () => {
     expect(messageParts(state.entries[0])).toEqual(drawnParts);
   });
 
+  it('keeps a tool part only the shorter snapshot carries', () => {
+    // Holding the drawn parts wholesale would drop a call the regressing
+    // snapshot is the sole carrier of: reconcileToolResults only replaces a
+    // part already on screen, so it could not bring this one back.
+    const newCall: MastraMessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: {} },
+    };
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'long answer' }]),
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'long' }, newCall]),
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'long answer' }, newCall]);
+  });
+
+  it('keeps a terminal tool part only the shorter snapshot carries', () => {
+    const newResult: MastraMessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+    };
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'long answer' }]),
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'long' }, newResult]),
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'long answer' }, newResult]);
+  });
+
   it('still applies a snapshot that extends the drawn text', () => {
     // The guard must not block the ordinary streaming case it sits in front of.
     let state = transcriptReducer(initialTranscript, {
