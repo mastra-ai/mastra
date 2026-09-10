@@ -38,18 +38,18 @@ export async function fetchServerProjects(token: string, orgId: string): Promise
   return data.projects;
 }
 
-export type ServerProjectRegion = 'eu' | 'us';
+type CreateServerProjectBody = paths['/v1/server/projects']['post']['requestBody']['content']['application/json'];
 
-export interface CreateServerProjectOptions {
-  /**
-   * Mark the project as a Mastra Factory project. The platform only
-   * provisions factory backing (workspace sandboxes, factory route) for
-   * projects created with this flag; it cannot be set on an existing project
-   * through the unified deploy path.
-   */
-  factoryEnabled?: boolean;
-  region?: ServerProjectRegion;
-}
+/**
+ * Creation options beyond the name, taken from the generated request body so
+ * they cannot drift from the platform contract. `factoryEnabled` marks the
+ * project as a Mastra Factory project: the platform only provisions factory
+ * backing (workspace sandboxes, factory route) for projects created with it,
+ * and the unified deploy path cannot set it afterwards.
+ */
+export type CreateServerProjectOptions = Pick<CreateServerProjectBody, 'factoryEnabled' | 'region'>;
+
+export type ServerProjectRegion = NonNullable<CreateServerProjectOptions['region']>;
 
 export async function createServerProject(
   token: string,
