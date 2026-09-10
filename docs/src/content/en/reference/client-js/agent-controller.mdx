@@ -247,7 +247,9 @@ Read the known resource IDs for the session and change the session's resource id
 
 ### `getOMRecord()`
 
-Returns the observational memory record for the session's thread.
+Returns the observational memory record for the session's thread, or `undefined` when nothing has been read into memory yet. The record carries the committed observation log in `activeObservations`, along with any `bufferedObservationChunks` and `bufferedReflection` that have not been folded into it.
+
+Returns: `Promise<AgentControllerOMRecord | undefined>`
 
 ### `sendNotification(input)`
 

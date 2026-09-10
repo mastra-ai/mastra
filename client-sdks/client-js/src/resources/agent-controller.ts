@@ -12,6 +12,7 @@ import type {
   AgentControllerAvailableModel,
   AgentControllerGoalRecord,
   AgentControllerModeInfo,
+  AgentControllerOMRecord,
   AgentControllerSessionState,
   AgentControllerThreadInfo,
   AgentControllerWorkspaceStatus,
@@ -707,8 +708,8 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the observational memory record for this session's thread. */
-  async getOMRecord(): Promise<unknown> {
-    const body = await this.request<{ record: unknown }>(this.url(`${this.base()}/om`));
+  async getOMRecord(): Promise<AgentControllerOMRecord | undefined> {
+    const body = await this.request<{ record?: AgentControllerOMRecord }>(this.url(`${this.base()}/om`));
     return body.record;
   }
 

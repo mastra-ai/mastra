@@ -18,6 +18,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
+import { observationalMemoryRecordSchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
@@ -380,7 +381,7 @@ const workspaceStatusResponseSchema = z.object({
   isReady: z.boolean(),
 });
 const omRecordResponseSchema = z.object({
-  record: z.unknown().optional(),
+  record: observationalMemoryRecordSchema.optional(),
 });
 const permissionPolicyEnum = z.enum(['allow', 'ask', 'deny']);
 const toolCategoryEnum = z.enum(['read', 'edit', 'execute', 'mcp', 'other']);

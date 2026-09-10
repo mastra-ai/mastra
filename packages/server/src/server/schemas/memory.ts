@@ -668,7 +668,7 @@ export const getObservationalMemoryQuerySchema = z.object({
  * Observational Memory record schema for API responses
  * Matches the ObservationalMemoryRecord type from @mastra/core/storage
  */
-const bufferedObservationChunkSchema = z.object({
+export const bufferedObservationChunkSchema = z.object({
   id: z.string().optional(),
   cycleId: z.string(),
   observations: z.string(),
@@ -684,7 +684,7 @@ const bufferedObservationChunkSchema = z.object({
   extractionFailures: z.array(z.object({ slug: z.string(), error: z.string() })).optional(),
 });
 
-const observationalMemoryRecordSchema = z.object({
+export const observationalMemoryRecordSchema = z.object({
   id: z.string(),
   scope: z.enum(['thread', 'resource']),
   resourceId: z.string(),

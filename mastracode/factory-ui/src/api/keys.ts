@@ -163,6 +163,13 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'permissions'] as const,
+  // Distinct from `om` above, which keys the observational-memory *config*.
+  // This keys the persisted record (observation log + buffered content).
+  agentControllerOMRecord: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'om-record'] as const,
   agentControllerThreads: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,

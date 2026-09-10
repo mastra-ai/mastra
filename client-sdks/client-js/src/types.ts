@@ -3782,6 +3782,16 @@ export type AgentControllerGoalRecord = NonNullable<
   GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
 >;
 
+/**
+ * A persisted observational memory record, as returned by `getOMRecord()`.
+ *
+ * Carries the committed observation log alongside any buffered observation
+ * chunks and buffered reflection that have not yet been folded into it.
+ */
+export type AgentControllerOMRecord = NonNullable<
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/om'>['record']
+>;
+
 /** Per-category and per-tool approval policies. */
 export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
 

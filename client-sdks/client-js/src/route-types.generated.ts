@@ -21788,7 +21788,7 @@ export type GetAgentControllerControllerIdSessionsResourceIdOm_QueryParams =
   PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
-  record?: unknown | undefined;
+  record?: Shared_Type_65 | undefined;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdOm_Request = Simplify<

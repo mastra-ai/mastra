@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeQueryParams } from '../server-adapter/index';
-import { awaitBufferStatusResponseSchema, listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
+import {
+  awaitBufferStatusResponseSchema,
+  listMessagesQuerySchema,
+  listThreadsQuerySchema,
+  observationalMemoryRecordSchema,
+} from './memory';
 
 /**
  * Regression tests for GitHub Issue #11761
@@ -645,5 +650,79 @@ describe('Observational Memory buffer status schema', () => {
         { slug: 'status', error: 'missing value' },
       ]);
     }
+  });
+});
+
+describe('observationalMemoryRecordSchema', () => {
+  const validRecord = {
+    id: 'record-1',
+    scope: 'thread' as const,
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    activeObservations: '<observations>committed</observations>',
+    originType: 'observation' as const,
+    generationCount: 2,
+    totalTokensObserved: 120,
+    observationTokenCount: 40,
+    pendingMessageTokens: 10,
+    isObserving: false,
+    isReflecting: false,
+    config: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it('accepts a record carrying only committed observations', () => {
+    const result = observationalMemoryRecordSchema.safeParse(validRecord);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.activeObservations).toBe('<observations>committed</observations>');
+      expect(result.data.bufferedObservationChunks).toBeUndefined();
+      expect(result.data.bufferedReflection).toBeUndefined();
+    }
+  });
+
+  it('retains buffered observation chunks and buffered reflection', () => {
+    const result = observationalMemoryRecordSchema.safeParse({
+      ...validRecord,
+      bufferedObservations: 'pending observations',
+      bufferedObservationChunks: [
+        {
+          cycleId: 'cycle-1',
+          observations: 'not yet activated',
+          tokenCount: 8,
+          messageTokens: 16,
+        },
+      ],
+      bufferedReflection: 'pending reflection',
+      isObserving: true,
+      isReflecting: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.bufferedObservations).toBe('pending observations');
+      expect(result.data.bufferedObservationChunks?.[0]?.observations).toBe('not yet activated');
+      expect(result.data.bufferedReflection).toBe('pending reflection');
+      expect(result.data.isObserving).toBe(true);
+      expect(result.data.isReflecting).toBe(true);
+    }
+  });
+
+  it('rejects a record missing required committed observations', () => {
+    const { activeObservations: _omitted, ...withoutObservations } = validRecord;
+
+    expect(observationalMemoryRecordSchema.safeParse(withoutObservations).success).toBe(false);
+  });
+
+  it('rejects an unknown scope and malformed buffered chunks', () => {
+    expect(observationalMemoryRecordSchema.safeParse({ ...validRecord, scope: 'session' }).success).toBe(false);
+    expect(
+      observationalMemoryRecordSchema.safeParse({
+        ...validRecord,
+        bufferedObservationChunks: [{ cycleId: 'cycle-1', observations: 'missing token counts' }],
+      }).success,
+    ).toBe(false);
   });
 });
