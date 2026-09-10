@@ -1,6 +1,6 @@
 {
   "name": "@mastra/oracledb",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Oracle Database provider for Mastra storage and vector retrieval",
   "type": "module",
   "main": "dist/index.js",

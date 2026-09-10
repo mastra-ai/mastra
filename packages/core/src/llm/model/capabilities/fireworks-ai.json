@@ -7,6 +7,7 @@
     "accounts/fireworks/models/kimi-k2p7-code",
     "accounts/fireworks/models/kimi-k3",
     "accounts/fireworks/models/minimax-m3",
+    "accounts/fireworks/models/mistral-large-3-fp8",
     "accounts/fireworks/models/muse-glimmer-30b",
     "accounts/fireworks/models/qwen3p7-plus",
     "accounts/fireworks/routers/kimi-k3-fast"
@@ -23,6 +24,7 @@
     "accounts/fireworks/models/kimi-k2p6",
     "accounts/fireworks/models/kimi-k2p7-code",
     "accounts/fireworks/models/minimax-m3",
+    "accounts/fireworks/models/mistral-large-3-fp8",
     "accounts/fireworks/models/muse-glimmer-30b",
     "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
     "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",

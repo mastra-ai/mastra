@@ -232,8 +232,10 @@ vi.mock('@mastra/core/processors', () => ({
   },
 }));
 
+const getDynamicInstructionsMock = vi.fn();
+
 vi.mock('../agents/instructions.js', () => ({
-  getDynamicInstructions: vi.fn(),
+  getDynamicInstructions: getDynamicInstructionsMock,
 }));
 
 const getDynamicMemoryMock = vi.fn();
@@ -425,6 +427,7 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
     getDynamicMemoryMock.mockReturnValue(() => undefined);
+    getDynamicInstructionsMock.mockReset();
     controllerSubscribeMock.mockReset();
     controllerGetCurrentThreadIdMock.mockReset();
     controllerGetCurrentThreadIdMock.mockReturnValue(undefined);
@@ -490,6 +493,33 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
+
+  it('passes configured co-author identity into the agent instruction callback', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ coAuthor: { name: 'mastracode' } });
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as { instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string> },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    const requestContext = {
+      get: (key: string) =>
+        key === 'controller'
+          ? {
+              getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+              session: { modeId: 'build' },
+            }
+          : undefined,
+    };
+    await agentConfig.instructions({ requestContext });
+
+    expect(getDynamicInstructionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requestContext, coAuthor: { name: 'mastracode' } }),
+    );
+  });
 
   it.each([{}, { subagents: undefined }])(
     'registers native defaults when subagents is omitted or undefined (%j)',

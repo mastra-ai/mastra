@@ -55,7 +55,7 @@ createObservabilityVNextTests({
     label: 'ClickHouse vNext',
     preferredStrategy: 'insert-only',
     traceQuery: true,
-    traceQueryWriteModel: 'completion-only',
+    traceQuerySpanWriteModel: 'completion-only',
   },
   getStorage: async () => {
     if (!sharedSuiteStorage) {
@@ -2014,6 +2014,155 @@ LIMIT 1`,
         });
       });
 
+      it('retains changed-timestamp feedback versions as distinct physical rows', async () => {
+        const feedback = {
+          feedbackId: 'feedback-physical-supersession',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'feedback-physical-trace',
+          spanId: null,
+          feedbackSource: 'old-physical-source',
+          feedbackType: 'rating',
+          value: 1,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        await storage.createFeedback({ feedback });
+        await storage.createFeedback({
+          feedback: {
+            ...feedback,
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            feedbackSource: 'current-physical-source',
+          },
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT feedbackSource, toString(writeVersion) AS writeVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} ORDER BY timestamp`,
+            query_params: { feedbackId: feedback.feedbackId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ feedbackSource: string; writeVersion: string }>()).toEqual([
+            { feedbackSource: 'current-physical-source', writeVersion: '2' },
+            { feedbackSource: 'old-physical-source', writeVersion: '1' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('starts post-migration replacements at version 1 above legacy version-0 rows', async () => {
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        const legacyFeedback = {
+          feedbackId: 'feedback-legacy-write-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'feedback-legacy-trace',
+          spanId: null,
+          feedbackSource: 'legacy-current-by-timestamp',
+          feedbackType: 'rating',
+          value: 1,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        try {
+          await client.insert({
+            table: TABLE_FEEDBACK_EVENTS,
+            values: [
+              feedbackRecordToRow({
+                ...legacyFeedback,
+                timestamp: new Date('2026-01-01T00:00:00Z'),
+                feedbackSource: 'legacy-older-by-timestamp',
+              }),
+              feedbackRecordToRow(legacyFeedback),
+            ],
+            format: 'JSONEachRow',
+          });
+          await storage.createFeedback({
+            feedback: {
+              ...legacyFeedback,
+              timestamp: new Date('2025-12-31T00:00:00Z'),
+              feedbackSource: 'post-migration-current',
+            },
+          });
+
+          const result = await client.query({
+            query: `SELECT feedbackSource, toString(writeVersion) AS writeVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} ORDER BY writeVersion, timestamp`,
+            query_params: { feedbackId: legacyFeedback.feedbackId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ feedbackSource: string; writeVersion: string }>()).toEqual([
+            { feedbackSource: 'legacy-older-by-timestamp', writeVersion: '0' },
+            { feedbackSource: 'legacy-current-by-timestamp', writeVersion: '0' },
+            { feedbackSource: 'post-migration-current', writeVersion: '1' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
+      it('updates review status on the current accepted feedback write', async () => {
+        const feedback = {
+          feedbackId: 'feedback-review-current-version',
+          timestamp: new Date('2026-01-02T00:00:00Z'),
+          traceId: 'feedback-review-trace',
+          spanId: null,
+          feedbackSource: 'superseded-review-source',
+          feedbackType: 'rating',
+          value: 1,
+          comment: null,
+          experimentId: null,
+          sourceId: null,
+          metadata: null,
+        };
+        await storage.createFeedback({ feedback });
+        await storage.createFeedback({
+          feedback: {
+            ...feedback,
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            feedbackSource: 'current-review-source',
+          },
+        });
+
+        const updated = await storage.updateFeedbackReviewStatus({
+          feedbackId: feedback.feedbackId,
+          reviewStatus: 'reviewed',
+        });
+        expect(updated).toMatchObject({
+          feedbackSource: 'current-review-source',
+          reviewStatus: 'reviewed',
+        });
+
+        const client = createClient({
+          url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+          username: process.env.CLICKHOUSE_USERNAME || 'default',
+          password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        });
+        try {
+          const result = await client.query({
+            query: `SELECT feedbackSource, reviewStatus, toString(writeVersion) AS writeVersion FROM ${TABLE_FEEDBACK_EVENTS} FINAL WHERE feedbackId = {feedbackId:String} ORDER BY writeVersion DESC, timestamp DESC LIMIT 1`,
+            query_params: { feedbackId: feedback.feedbackId },
+            format: 'JSONEachRow',
+          });
+          expect(await result.json<{ feedbackSource: string; reviewStatus: string; writeVersion: string }>()).toEqual([
+            { feedbackSource: 'current-review-source', reviewStatus: 'reviewed', writeVersion: '3' },
+          ]);
+        } finally {
+          await client.close();
+        }
+      });
+
       it('filters by organizationId', async () => {
         const result = await storage.listFeedback({ filters: { organizationId: 'org-A' } });
         expect(result.feedback).toHaveLength(1);
@@ -2534,7 +2683,7 @@ LIMIT 1`,
   // ==========================================================================
 
   describe('feedback', () => {
-    it('maps every persisted feedback column', async () => {
+    it('maps every public feedback column while keeping writeVersion internal', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
         username: process.env.CLICKHOUSE_USERNAME || 'default',
@@ -2556,7 +2705,13 @@ LIMIT 1`,
           value: 0,
         });
 
-        expect(Object.keys(row).sort()).toEqual(columns.map(column => column.name).sort());
+        expect(row).not.toHaveProperty('writeVersion');
+        expect(Object.keys(row).sort()).toEqual(
+          columns
+            .map(column => column.name)
+            .filter(column => column !== 'writeVersion')
+            .sort(),
+        );
       } finally {
         await client.close();
       }
@@ -4509,6 +4664,21 @@ LIMIT 1`,
   describe('init idempotence', () => {
     // --- Unit tests for ALL_MIGRATIONS shape ---
 
+    it('includes durable feedback write versions in fresh and migrated schemas', () => {
+      const tableDdl = buildAllTableDDL().find(ddl =>
+        ddl.includes(`CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS}`),
+      );
+      expect(tableDdl).toContain('writeVersion       UInt64 DEFAULT 0');
+      expect(
+        ALL_MIGRATIONS.find(
+          migration =>
+            migration.kind === 'column' &&
+            migration.table === TABLE_FEEDBACK_EVENTS &&
+            migration.name === 'writeVersion',
+        )?.sql,
+      ).toContain('ADD COLUMN IF NOT EXISTS writeVersion UInt64 DEFAULT 0');
+    });
+
     it('ALL_MIGRATIONS entries carry table + name consistent with their SQL', () => {
       expect(ALL_MIGRATIONS.length).toBeGreaterThan(0);
       for (const entry of ALL_MIGRATIONS) {
@@ -4631,9 +4801,10 @@ LIMIT 1`,
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
       });
 
-      // Pick a migration we know is additive and safe to drop/re-add.
+      // writeVersion is additive: legacy feedback rows default to version 0
+      // until the first post-migration write supersedes them.
       const target = ALL_MIGRATIONS.find(
-        m => m.kind === 'column' && m.table === 'mastra_log_events' && m.name === 'entityVersionId',
+        m => m.kind === 'column' && m.table === TABLE_FEEDBACK_EVENTS && m.name === 'writeVersion',
       );
       expect(target).toBeDefined();
 

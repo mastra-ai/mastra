@@ -25,7 +25,7 @@ import {
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
@@ -85,7 +85,7 @@ export interface FactoryApiRoutesDeps {
   /** Optional user directory for resolving persisted owners to display profiles. */
   users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
-  audit: AuditEmitter;
+  audit: AuditEmitter & AuditRecorder;
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
@@ -486,6 +486,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         configVersion: deps.configVersion,
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
+        audit: deps.audit,
       }))
     : undefined;
   const startCoordinator = transitionService

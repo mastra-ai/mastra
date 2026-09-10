@@ -115,6 +115,9 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Score | `score`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Score | `spanId` | `exists`, `notExists` |
+| Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `comment` | `exists`, `notExists` |
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
@@ -273,6 +276,45 @@ const messageTrace = {
 The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
 
 Metadata fields aren't available for grouping or field discovery.
+
+### Filter by feedback
+
+Every condition inside one `feedback.some` or `feedback.none` clause applies to the same current feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
+
+```typescript
+const negativePatientRating = {
+  feedback: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+        { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+      ],
+    },
+  },
+}
+```
+
+Strict stored-value types are the portable contract for feedback predicates. PostgreSQL and ClickHouse distinguish numeric `3` from textual `'3'` for equality and ordered comparisons. DuckDB currently persists feedback values as `VARCHAR`, so numeric-looking strings may be coerced for equality and ordered numeric predicates. OBS-306 will remove this DuckDB exception through typed persistence. Ordered operators require a finite numeric literal. `eq` and `ne` accept one string or number, while `in` and `notIn` require a non-empty set containing only strings or only numbers. `exists` and `notExists` test for either value type.
+
+Use `none` to select traces without a matching record. Traces with no feedback also match:
+
+```typescript
+const missingClinicianReview = {
+  feedback: {
+    none: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+      ],
+    },
+  },
+}
+```
+
+Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
 ## Responses
 

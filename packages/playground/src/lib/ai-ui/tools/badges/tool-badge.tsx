@@ -73,7 +73,6 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      toolCallId={toolCallId}
       header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} />}
       status={status}
       extraInfo={

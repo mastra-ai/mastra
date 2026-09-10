@@ -1,5 +1,37 @@
 # create-factory
 
+## 0.1.17
+
+### Patch Changes
+
+- Improved the README with direct CLI installation commands and platform setup guidance. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+- Updated dependencies [[`1406a75`](https://github.com/mastra-ai/mastra/commit/1406a75e2b95eab95e11fcb80a57569cb74394ea), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`9893b73`](https://github.com/mastra-ai/mastra/commit/9893b7387ccd47fe37f31ab5a0cf314ab65f141a), [`566e881`](https://github.com/mastra-ai/mastra/commit/566e88170ffd51310bf18233f77f30c3b73a094e), [`b29d2d9`](https://github.com/mastra-ai/mastra/commit/b29d2d93c46a801cd5757b7a822a443aa0802ad9), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa)]:
+  - mastra@1.29.0
+
+## 0.1.17-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa)]:
+  - mastra@1.29.0-alpha.4
+
+## 0.1.17-alpha.3
+
+### Patch Changes
+
+- Improved the README with direct CLI installation commands and platform setup guidance. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+- Updated dependencies:
+  - mastra@1.28.1-alpha.3
+
+## 0.1.17-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9)]:
+  - mastra@1.28.1-alpha.2
+
 ## 0.1.17-alpha.1
 
 ### Patch Changes

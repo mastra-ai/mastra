@@ -765,7 +765,7 @@ FROM (
 }
 
 // ---------------------------------------------------------------------------
-// feedback_events — ReplacingMergeTree with feedbackId dedup
+// feedback_events — ReplacingMergeTree history with durable per-feedback write order
 // ---------------------------------------------------------------------------
 
 export const FEEDBACK_EVENTS_DDL = `
@@ -775,6 +775,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- IDs
   feedbackId         String,
+  writeVersion       UInt64 DEFAULT 0,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -1155,6 +1156,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
+  addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

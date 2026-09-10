@@ -32,8 +32,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
     if (!scorers) return [];
     return Object.entries(scorers).map(([id, scorer]) => ({
       value: id,
-      label: (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id,
-      description: (scorer as { scorer?: { config?: { description?: string } } }).scorer?.config?.description || '',
+      label: scorer.scorer?.config?.name || id,
+      description: scorer.scorer?.config?.description || '',
     }));
   }, [scorers]);
 
