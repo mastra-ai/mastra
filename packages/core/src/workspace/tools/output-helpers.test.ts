@@ -179,6 +179,23 @@ describe('applyTail', () => {
 // ---------------------------------------------------------------------------
 
 describe('applyTokenLimit', () => {
+  it.each(['start', 'end'] as const)('repairs a split emoji when truncating from %s', async from => {
+    const text = 'a'.repeat(100) + '😀' + 'b'.repeat(100);
+    const result = await applyTokenLimit(text, 17, from);
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    expect(result).toContain(from === 'start' ? '\uFFFD' + 'b'.repeat(100) : 'a'.repeat(100) + '\uFFFD');
+    expect(result).toContain('[output truncated:');
+  });
+
+  it.each(['start', 'end'] as const)('preserves complete Unicode when truncating from %s', async from => {
+    const text = '😀 café 日本語\n' + 'word '.repeat(200) + '\n😀 café 日本語';
+    const result = await applyTokenLimit(text, 30, from);
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    expect(result).toContain('😀 café 日本語');
+    expect(result).not.toContain('\uFFFD');
+    expect(await applyTokenLimit('😀 café 日本語', 100, from)).toBe('😀 café 日本語');
+  });
+
   it('returns output unchanged when within token limit', async () => {
     const short = 'hello world';
     const result = await applyTokenLimit(short, 1000);
@@ -214,6 +231,33 @@ describe('applyTokenLimit', () => {
 // ---------------------------------------------------------------------------
 
 describe('applyTokenLimitSandwich', () => {
+  it('repairs both split emoji boundaries independently', async () => {
+    const text = 'a'.repeat(100) + '😀' + 'b'.repeat(100);
+    const result = await applyTokenLimitSandwich(`${text}\n${text}`, 34, 0.5);
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    expect(result).toContain('a'.repeat(100) + '\uFFFD');
+    expect(result).toContain('\uFFFD' + 'b'.repeat(100));
+    expect(result).toContain('[...output truncated');
+  });
+
+  it.each([0, 0.1, 1])('keeps Unicode well-formed with head ratio %s', async ratio => {
+    const text = ('a'.repeat(100) + '😀' + 'b'.repeat(100) + '\n').repeat(10);
+    for (const budget of [1, 17, 34, 170]) {
+      const result = await applyTokenLimitSandwich(text, budget, ratio);
+      expect(() => encodeURIComponent(result)).not.toThrow();
+      expect(result).toContain('[...output truncated');
+    }
+    expect(await applyTokenLimitSandwich('😀 café 日本語', 100, ratio)).toBe('😀 café 日本語');
+  });
+
+  it('preserves complete emoji in retained head and tail', async () => {
+    const text = '😀 café 日本語\n' + 'word '.repeat(200) + '\n😀 café 日本語';
+    const result = await applyTokenLimitSandwich(text, 60, 0.5);
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    expect(result.match(/😀/gu)).toHaveLength(2);
+    expect(result).not.toContain('\uFFFD');
+  });
+
   it('returns output unchanged when within token limit', async () => {
     const short = 'brief output';
     expect(await applyTokenLimitSandwich(short, 1000)).toBe(short);
