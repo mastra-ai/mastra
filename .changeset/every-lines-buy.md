@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed Factory issue, Linear, and manual sessions failing to push over HTTPS by installing the gh credential helper for every session type, not only pull request sessions
+Fixed `git push` over HTTPS failing in Factory issue, Linear, and manual sandbox sessions. The Git credential helper is now installed for every session type, not only pull request sessions.
