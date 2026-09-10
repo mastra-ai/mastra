@@ -317,7 +317,7 @@ function TraceThreadRow({
             </Button>
           </DataPanel.Header>
         </div>
-        <TabContent value="spans" className="min-h-0 py-0">
+        <TabContent value="spans" className="min-h-0 px-4 py-0">
           {/* The clamp is applied whenever the row is collapsed, not only once `overflows` is known:
               the timeline remounts on every tab switch and its measurement lags a frame, which
               would otherwise let the cell grow and snap back. A short timeline ignores it anyway. */}
@@ -326,7 +326,7 @@ function TraceThreadRow({
             style={!isExpanded && timelineBudget !== null ? { maxHeight: timelineBudget } : undefined}
             data-testid="trace-row-timeline"
           >
-            <div ref={timeline.ref} className="pt-2 pb-4 pl-4">
+            <div ref={timeline.ref} className="pt-2 pb-4">
               <TraceTimeline
                 hierarchicalSpans={hierarchicalSpans}
                 selectedSpanId={selectedSpanId}
