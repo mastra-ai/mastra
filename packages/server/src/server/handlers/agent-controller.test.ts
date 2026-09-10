@@ -483,6 +483,45 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
+    it('opens with the message a run in flight has streamed so far', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-joins-mid-run',
+        id: 'user-joins-mid-run',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'live-1',
+        role: 'assistant',
+        createdAt: new Date('2026-09-08T10:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Checking out the pull request.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+            },
+          ],
+        },
+      } as any;
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'message_update', message });
+
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-joins-mid-run',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const { value } = await reader.read();
+      await reader.cancel();
+
+      expect(value).toEqual({ type: 'message_update', message });
+    });
+
     it('preserves live streamed messages across the SSE boundary without cloning', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -598,18 +637,16 @@ describe('agent-controller routes', () => {
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
 
-      let received: unknown;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      // The subscribe-time snapshot carries no tool yet; wait for the one that does.
+      let wire: { displayState: { activeTools: Record<string, unknown> } } | undefined;
+      for (let i = 0; i < 10 && wire === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
-          received = value;
-        }
+        const frame = JSON.parse(JSON.stringify(value));
+        if (frame?.type === 'display_state_changed' && frame.displayState.activeTools['call-1']) wire = frame;
       }
       await reader.cancel();
 
-      expect(received).toBeDefined();
-      const wire = JSON.parse(JSON.stringify(received));
-      expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+      expect(wire?.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });
   });
 

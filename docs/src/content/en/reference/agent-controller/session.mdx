@@ -140,7 +140,7 @@ Returns: `Record<string, string>`
 
 #### `subscribe(listener)`
 
-Subscribe to this session's isolated event bus. The method returns an unsubscribe function.
+Subscribe to this session's isolated event bus. The method returns an unsubscribe function. A listener attaching while a run is in flight first receives that run's messages so far, then the current display state as `display_state_changed`; the display state is replayed on every subscribe.
 
 ```typescript
 const unsubscribe = session.subscribe(event => {

@@ -13,8 +13,8 @@ describe('Session event bus', () => {
 
     session.emit({ type: 'mode_changed', modeId: 'build', previousModeId: 'plan' });
 
-    // The mode_changed event plus the synthetic display_state_changed fan-out.
-    expect(received.map(e => e.type)).toEqual(['mode_changed', 'display_state_changed']);
+    // The snapshot at subscribe, then the mode_changed event plus its synthetic display_state_changed fan-out.
+    expect(received.map(e => e.type)).toEqual(['display_state_changed', 'mode_changed', 'display_state_changed']);
   });
 
   it("does not deliver one session's events to another session's subscribers", () => {
@@ -32,7 +32,7 @@ describe('Session event bus', () => {
     a.emit({ type: 'mode_changed', modeId: 'build', previousModeId: 'plan' });
 
     expect(aReceived.some(e => e.type === 'mode_changed')).toBe(true);
-    expect(bReceived).toEqual([]);
+    expect(bReceived.some(e => e.type === 'mode_changed')).toBe(false);
 
     b.emit({ type: 'mode_changed', modeId: 'plan', previousModeId: 'build' });
 

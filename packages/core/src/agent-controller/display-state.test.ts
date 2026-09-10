@@ -1520,6 +1520,7 @@ describe('display_state_changed emission', () => {
     session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
+    events = []; // drop the subscribe-time snapshot: these tests count what each event emits
   });
 
   it('emits display_state_changed after every non-display_state_changed event', () => {
@@ -1628,10 +1629,7 @@ describe('display_state_changed emission', () => {
     emit(session, { type: 'agent_start' });
     emit(session, { type: 'agent_end', reason: 'complete' });
 
-    // Note: there are 2 sets of snapshots from the first subscriber and this one
-    // Just check the second subscriber's snapshots
-    expect(snapshots[0]).toBe(true); // after agent_start
-    expect(snapshots[1]).toBe(false); // after agent_end
+    expect(snapshots).toEqual([false, true, false]); // at subscribe, after agent_start, after agent_end
   });
 });
 
@@ -1722,5 +1720,90 @@ describe('Display state OMProgressState', () => {
     expect(omp).toHaveProperty('generationCount');
     expect(omp).toHaveProperty('stepNumber');
     expect(omp).toHaveProperty('preReflectionTokens');
+  });
+});
+
+describe('a subscriber attaching mid-run', () => {
+  let session: Session;
+  const prompt = {
+    id: 'prompt-1',
+    role: 'signal',
+    createdAt: new Date('2026-09-08T09:59:59.000Z'),
+    content: { format: 2, parts: [{ type: 'data-user-message', data: { content: 'Review the pull request' } }] },
+  } as any;
+  const message = {
+    id: 'live-1',
+    role: 'assistant',
+    createdAt: new Date('2026-09-08T10:00:00.000Z'),
+    content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
+  } as any;
+
+  beforeEach(async () => {
+    const ctx = await createSession();
+    session = ctx.session;
+  });
+
+  function attach(): AgentControllerEvent[] {
+    const received: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      received.push(event);
+    });
+    return received;
+  }
+
+  function replayedMessages(): AgentControllerEvent[] {
+    return attach().filter(event => event.type.startsWith('message_'));
+  }
+
+  it('first receives the messages the run ended, then the one it is streaming', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_start', message: prompt });
+    emit(session, { type: 'message_end', message: prompt });
+    emit(session, { type: 'message_start', message });
+    emit(session, { type: 'message_update', message });
+
+    expect(replayedMessages()).toEqual([
+      { type: 'message_end', message: prompt },
+      { type: 'message_update', message },
+    ]);
+  });
+
+  it('does not replay an ended message as still streaming', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_update', message });
+    emit(session, { type: 'message_end', message });
+
+    expect(replayedMessages()).toEqual([{ type: 'message_end', message }]);
+  });
+
+  it('receives the display state last, so a running tool lands on the messages', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_update', message });
+    emit(session, { type: 'tool_start', toolCallId: 'call-1', toolName: 'checkout', args: {} });
+
+    const replayed = attach();
+    expect(replayed.map(event => event.type)).toEqual(['message_update', 'display_state_changed']);
+    const snapshot = replayed.at(-1);
+    if (snapshot?.type !== 'display_state_changed') throw new Error('expected the display state last');
+    expect(snapshot.displayState.isRunning).toBe(true);
+    expect(snapshot.displayState.activeTools.get('call-1')?.status).toBe('running');
+  });
+
+  it('receives nothing of a run that already ended', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_end', message: prompt });
+    emit(session, { type: 'message_update', message });
+    emit(session, { type: 'agent_end', reason: 'complete' });
+
+    expect(attach().map(event => event.type)).toEqual(['display_state_changed']);
+  });
+
+  it('receives nothing of the previous run once a new one starts', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_end', message: prompt });
+    emit(session, { type: 'agent_end', reason: 'complete' });
+    emit(session, { type: 'agent_start' });
+
+    expect(replayedMessages()).toEqual([]);
   });
 });

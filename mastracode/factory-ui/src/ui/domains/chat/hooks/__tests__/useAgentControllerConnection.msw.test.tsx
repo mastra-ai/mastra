@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { queryKeys } from '../../../../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
@@ -271,6 +271,67 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
     expect(result.current.status).toBe('ready');
     expect(onStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('given a state refetch started before the run ends, then the stale response does not restore running', async () => {
+    const encoder = new TextEncoder();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          running: true,
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    await waitForMutationsIdle(client);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+
+    releaseRefetch?.();
+    await waitForMutationsIdle(client);
+
+    expect(result.current.state?.running).toBe(false);
   });
 
   it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {

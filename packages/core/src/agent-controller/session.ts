@@ -2222,6 +2222,9 @@ class SessionState<TState = unknown> {
  */
 export class SessionDisplayState {
   #state: AgentControllerDisplayState = defaultDisplayState();
+  /** Messages the running turn has ended so far; history holds them only once the turn ends. */
+  #endedRunMessages: MastraDBMessage[] = [];
+  #currentMessageStreaming = false;
 
   constructor(
     private readonly deps: {
@@ -2242,6 +2245,19 @@ export class SessionDisplayState {
    */
   get(): Readonly<AgentControllerDisplayState> {
     return this.#state;
+  }
+
+  /** What a subscriber attaching mid-run has missed: the ended messages, then the one still streaming. */
+  runMessages(): { ended: readonly MastraDBMessage[]; streaming: MastraDBMessage | null } {
+    return {
+      ended: this.#endedRunMessages,
+      streaming: this.#currentMessageStreaming ? this.#state.currentMessage : null,
+    };
+  }
+
+  #forgetRunMessages(): void {
+    this.#endedRunMessages = [];
+    this.#currentMessageStreaming = false;
   }
 
   /**
@@ -2293,6 +2309,7 @@ export class SessionDisplayState {
     ds.pendingSuspensions = new Map();
     ds.activeSubagents = new Map();
     ds.currentMessage = null;
+    this.#forgetRunMessages();
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
     ds.modifiedFiles = new Map();
@@ -2318,6 +2335,7 @@ export class SessionDisplayState {
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
+        this.#forgetRunMessages();
         ds.pendingApproval = null;
         // Parked tool suspensions are intentionally NOT cleared here: resuming
         // one parked tool restarts the run (a fresh agent_start) and the other
@@ -2326,6 +2344,7 @@ export class SessionDisplayState {
 
       case 'agent_end':
         ds.isRunning = false;
+        this.#forgetRunMessages();
         ds.pendingApproval = null;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
@@ -2345,15 +2364,15 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
-        break;
-
       case 'message_update':
         ds.currentMessage = event.message;
+        this.#currentMessageStreaming = true;
         break;
 
       case 'message_end':
         ds.currentMessage = event.message;
+        this.#currentMessageStreaming = false;
+        if (ds.isRunning) this.#endedRunMessages.push(event.message);
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────
@@ -2725,17 +2744,9 @@ export class SessionBus {
   }
 
   subscribe(listener: AgentControllerEventListener): () => void {
-    // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status regardless of when initialization occurs.
-    for (const event of this.#lastWorkspaceEvents) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
-      }
+    const replay = [...this.#lastWorkspaceEvents, ...this.#inFlightMessageEvents(), ...this.#displayStateEvent()];
+    for (const event of replay) {
+      this.#deliver(listener, event);
     }
     this.#listeners.push(listener);
     return () => {
@@ -2821,16 +2832,35 @@ export class SessionBus {
     }
   }
 
+  /** Nothing once the run ended: history carries the messages then. */
+  #inFlightMessageEvents(): AgentControllerEvent[] {
+    const displayState = this.#displayState;
+    if (!displayState?.get().isRunning) return [];
+    const { ended, streaming } = displayState.runMessages();
+    const events: AgentControllerEvent[] = ended.map(message => ({ type: 'message_end', message }));
+    if (streaming) events.push({ type: 'message_update', message: streaming });
+    return events;
+  }
+
+  #displayStateEvent(): AgentControllerEvent[] {
+    const displayState = this.#displayState;
+    return displayState ? [{ type: 'display_state_changed', displayState: displayState.get() }] : [];
+  }
+
   #dispatch(event: AgentControllerEvent): void {
     for (const listener of [...this.#listeners]) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
+      this.#deliver(listener, event);
+    }
+  }
+
+  #deliver(listener: AgentControllerEventListener, event: AgentControllerEvent): void {
+    try {
+      const result = listener(event);
+      if (result && typeof result === 'object' && 'catch' in result) {
+        (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
       }
+    } catch (err) {
+      console.error('Error in session event listener:', err);
     }
   }
 }
