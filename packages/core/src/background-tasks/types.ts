@@ -304,7 +304,7 @@ export type BackgroundTaskResultChunk = BackgroundTaskCompletedChunk | Backgroun
 export interface ToolExecutor {
   execute(
     args: Record<string, unknown>,
-    options?: {
+    options?: import('../tools/resumable-input').ToolInputOptions & {
       abortSignal?: AbortSignal;
       /**
        * Emit intermediate progress during execution.

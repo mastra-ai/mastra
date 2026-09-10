@@ -571,7 +571,7 @@ export class Tool<
         const resumeData =
           organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
 
-        if (resumeData) {
+        if (resumeData !== undefined) {
           const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
           if (resumeValidation.error) {
             return resumeValidation.error as any;

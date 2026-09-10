@@ -285,6 +285,7 @@ export interface MCPToolExecutionContext {
  * - Returns: Results back to AI SDK
  */
 export type MastraToolInvocationOptions = ToolInvocationOptions &
+  import('./resumable-input').ToolInputOptions &
   Partial<ObservabilityContext> & {
     suspend?: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     resumeData?: any;

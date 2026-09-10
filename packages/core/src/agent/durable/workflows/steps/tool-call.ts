@@ -3,6 +3,7 @@ import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { loadAutoResumeToolInput } from '../../../../loop/shared/resumable-tool-input';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -13,6 +14,7 @@ import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
+import { createToolInputState, persistedToolInput, TOOL_INPUT_STATE } from '../../../../tools/resumable-input';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -235,6 +237,7 @@ export function createDurableToolCallStep() {
         actor,
         getInitData,
       } = params;
+      const toolInputState = createToolInputState(suspendData);
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -782,6 +785,19 @@ export function createDurableToolCallStep() {
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
       if (isResumingFromSuspension) {
+        if (resumeDataFromArgs !== undefined && !toolInputState.accepted) {
+          toolInputState.accepted = await loadAutoResumeToolInput({
+            mastra,
+            messages: messageList?.get.all.db() ?? [],
+            toolCallId,
+            toolName,
+            suspendedToolRunId: args?.suspendedToolRunId,
+            resourceId: state?.resourceId,
+            threadId: state?.threadId,
+            agentId: initData.agentId,
+            durable: true,
+          });
+        }
         await removeToolMetadata('suspension');
       }
 
@@ -888,7 +904,9 @@ export function createDurableToolCallStep() {
           : undefined,
 
         // In-execution suspend callback — allows tools to suspend mid-execution
+        [TOOL_INPUT_STATE]: toolInputState,
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+          const acceptedInput = persistedToolInput(toolInputState);
           wasSuspended = true;
           // When a delegated sub-agent requests approval, the delegation tool
           // wrapper passes its inner suspended run id via `suspendOptions.runId`
@@ -962,6 +980,7 @@ export function createDurableToolCallStep() {
               {
                 type: 'approval',
                 requireToolApproval: { toolCallId, toolName: approvalToolName, args: approvalArgs },
+                __mastraToolInput: acceptedInput,
                 // Persist the inner suspended run id in the workflow snapshot,
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.
@@ -1013,6 +1032,7 @@ export function createDurableToolCallStep() {
               {
                 type: 'suspension',
                 toolCallSuspended: suspendPayload,
+                __mastraToolInput: acceptedInput,
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
@@ -1053,10 +1073,14 @@ export function createDurableToolCallStep() {
               context: {
                 executor: {
                   execute: async (taskArgs: any, taskContext: any) => {
+                    const backgroundInputState = taskContext?.[TOOL_INPUT_STATE] ?? toolInputState;
+                    backgroundInputState.accepted ??= toolInputState.accepted;
                     return tool.execute!(taskArgs, {
                       ...toolOptions,
+                      [TOOL_INPUT_STATE]: backgroundInputState,
                       ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
+                        Object.assign(toolInputState, backgroundInputState);
                         await toolOptions.suspend?.(data, options);
                         return taskContext?.suspend?.(data, options);
                       },
