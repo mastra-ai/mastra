@@ -43,12 +43,13 @@ const schedule = await mastra.schedules.create({
 
 Schedules require a storage adapter that implements the schedules domain. Supported adapters include `@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/spanner`.
 
-### Require a decision for each scheduled tool
+### Set approval policy for a scheduled run
 
 Set `ifIdle.streamOptions.toolApprovalPolicy` to `'manual'` to keep each tool call
 pending until a user approves or declines it. The run retains this policy when
 resumed, even if an attached controller Session has automatic approval enabled
-or has previously granted the tool permission.
+or has previously granted the tool permission. Use `'auto'` to approve allowed
+tools automatically. Explicit tool and category denies override either policy.
 
 ```typescript
 const schedule = await mastra.schedules.create({
@@ -59,16 +60,37 @@ const schedule = await mastra.schedules.create({
   prompt: 'Prepare the daily report.',
   ifIdle: {
     behavior: 'wake',
-    streamOptions: { toolApprovalPolicy: 'manual' },
+    streamOptions: {
+      toolApprovalPolicy: 'manual',
+      controllerTarget: {
+        controllerId: 'report-controller',
+        scope: 'thread:existing-result-thread',
+      },
+    },
   },
-});
+})
 ```
 
-Approve or decline the pending tool using the native Agent or Session approval
-API. Approving one call does not approve subsequent calls. Explicit Session
-tool or category denies still apply. Without an attached Session, the run stays
-suspended until a consumer responds. Omitting the policy preserves existing
-tool approval behavior; it does not force automatic approval of every tool.
+Register the controller with the same agent and use the same resource and scope
+as the result chat. The target thread must already exist and belong to the
+schedule's resource. A cached Session bound elsewhere is rejected rather than
+switched. The native controller consumes approvals even when no browser is open.
+Automatic schedules require a controller target.
+
+Approve or decline manual gates through the Session approval API. One decision
+does not approve subsequent calls. The run saves its policy and a snapshot of
+denied tools and categories; current Session denies also apply. It never changes
+the chat's automatic approval setting or grants. Interactive tool suspensions
+such as questions still require an answer.
+
+Durable recovery reconnects the saved controller target. Saved manual gates
+remain waiting; saved automatic gates follow the same native decision path.
+`recoverActiveRuns()` reports reconnected gates in `restoredApprovals`, separate
+from restarted running work. Restart proof requires persistent storage and the
+same registered controller and agent on the new server.
+
+Omitting the policy preserves existing approval behavior. A manual policy
+without a controller target stays suspended until a consumer responds.
 
 ## Methods
 
