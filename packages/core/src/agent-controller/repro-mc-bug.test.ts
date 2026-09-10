@@ -101,12 +101,17 @@ describe('mc send-message reproduction', () => {
 
     await session.sendMessage({ content: 'Hello!' });
 
-    const assistantEnd = events.find(
-      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        e.type === 'message_end' && e.message.role === 'assistant',
+    const assistantStart = events.find(
+      (e): e is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        e.type === 'message_start' && e.message.role === 'assistant',
     );
-    expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from the agent!' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello from the agent!' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   }, 30000);
 
   it('surfaces error event when model function throws during idle-start', async () => {
@@ -201,11 +206,16 @@ describe('mc send-message reproduction', () => {
 
     await session.sendMessage({ content: 'Hello!' });
 
-    const assistantEnd = events.find(
-      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        e.type === 'message_end' && e.message.role === 'assistant',
+    const assistantStart = events.find(
+      (e): e is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        e.type === 'message_start' && e.message.role === 'assistant',
     );
-    expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from push-only!' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello from push-only!' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   }, 30000);
 });

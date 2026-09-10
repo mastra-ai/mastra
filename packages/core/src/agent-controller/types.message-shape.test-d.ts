@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from 'vitest';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentControllerDisplayState, AgentControllerEvent } from './types';
 
 /**
@@ -12,8 +12,21 @@ describe('agent-controller message shape contract', () => {
     expectTypeOf<AgentControllerDisplayState['currentMessage']>().toEqualTypeOf<MastraDBMessage | null>();
   });
 
-  it('carries a MastraDBMessage on message_start/update/end events', () => {
-    type MessageEvent = Extract<AgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>;
-    expectTypeOf<MessageEvent['message']>().toEqualTypeOf<MastraDBMessage>();
+  it('uses compact start, delta, and end payloads', () => {
+    expectTypeOf<
+      Extract<AgentControllerEvent, { type: 'message_start' }>['message']
+    >().toEqualTypeOf<MastraDBMessage>();
+    expectTypeOf<Extract<AgentControllerEvent, { type: 'message_update' }>>().toEqualTypeOf<{
+      type: 'message_update';
+      id: string;
+      event:
+        | { type: 'text-delta'; delta: string }
+        | { type: 'reasoning-delta'; index: number; delta: string }
+        | { type: 'part'; index: number; part: MastraMessagePart };
+    }>();
+    expectTypeOf<Extract<AgentControllerEvent, { type: 'message_end' }>>().toEqualTypeOf<{
+      type: 'message_end';
+      id: string;
+    }>();
   });
 });

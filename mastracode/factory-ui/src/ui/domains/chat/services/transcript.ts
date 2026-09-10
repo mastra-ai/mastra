@@ -295,26 +295,57 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
+      return upsertMessage(state, event.message, true, viewerId);
+
     case 'message_update': {
-      const message = event.message;
-      const next = upsertMessage(state, message, true, viewerId);
-      if (message.role !== 'assistant') return next;
-      // Only streamed assistant content opens the decode window — empty or
-      // tool-only updates must not count toward tokens/sec.
-      if (!hasAssistantText(next)) {
-        return next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const parts = [...entry.message.content.parts];
+      if (event.event.type === 'text-delta') {
+        if (event.event.delta.length === 0) return state;
+        const partIndex = parts.findLastIndex(part => part.type === 'text');
+        const part = parts[partIndex];
+        if (!part || part.type !== 'text') return state;
+        parts[partIndex] = { ...part, text: part.text + event.event.delta };
+      } else if (event.event.type === 'reasoning-delta') {
+        const part = parts[event.event.index];
+        if (!part || part.type !== 'reasoning') return state;
+        const reasoning = part.reasoning + event.event.delta;
+        parts[event.event.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+      } else {
+        parts[event.event.index] = event.event.part;
       }
-      // Mark the start of decoding for the current step on the first streamed
-      // content delta, so tokens/sec is measured over decode time only (it
-      // excludes TTFT before this point and tool gaps between steps). usage_update
-      // at step-finish closes this window and re-arms it for the next step.
-      const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
-      // First streamed assistant content clears the "thinking" pending state.
-      return { ...decoded, pending: false };
+
+      const message = { ...entry.message, content: { ...entry.message.content, parts } };
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+      );
+      const next = { ...state, entries };
+      if (event.event.type !== 'text-delta' || message.role !== 'assistant') return next;
+
+      // The empty shell from message_start does not start decode timing. The
+      // first non-empty assistant delta does, and also clears the pending turn.
+      return {
+        ...next,
+        pending: false,
+        _decodeStartedAt: next._decodeStartedAt > 0 ? next._decodeStartedAt : Date.now(),
+      };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false, viewerId);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, streaming: false } : candidate,
+      );
+      return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
 
     case 'tool_input_start':
