@@ -3,6 +3,91 @@ import { describe, expect, test } from 'vitest';
 import { createTestMessage, createTrajectoryTestRun } from '../../utils';
 import { createTrajectoryAccuracyScorerCode, createTrajectoryScorerCode } from './index';
 
+describe('trajectory expectation boundaries', () => {
+  const unexpected: Trajectory = { steps: [{ stepType: 'tool_call', name: 'unexpected' }] };
+
+  test.each(['array', 'object', 'item'] as const)(
+    'honors an explicit empty accuracy expectation from %s',
+    async source => {
+      const scorer = createTrajectoryAccuracyScorerCode({
+        expectedTrajectory: source === 'array' ? [] : source === 'object' ? { steps: [] } : undefined,
+        comparisonOptions: { ordering: 'strict' },
+      });
+      for (const trajectory of [{ steps: [] } as Trajectory, unexpected]) {
+        const run = createTrajectoryTestRun({ trajectory });
+        if (source === 'item') run.expectedTrajectory = { steps: [] };
+        const result = await scorer.run(run);
+        expect(result.score).toBe(trajectory.steps.length === 0 ? 1 : 0);
+        expect(result.preprocessStepResult?.comparison).toMatchObject({ totalExpectedSteps: 0 });
+        expect(result.preprocessStepResult?.error).toBeUndefined();
+      }
+    },
+  );
+
+  test('keeps a static empty accuracy expectation ahead of a dataset expectation', async () => {
+    const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory: [] });
+    const run = createTrajectoryTestRun({ trajectory: unexpected });
+    run.expectedTrajectory = { steps: [{ name: 'unexpected' }] };
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+    expect(result.preprocessStepResult?.comparison?.totalExpectedSteps).toBe(0);
+  });
+
+  test.each(['defaults', 'item'] as const)('activates empty unified accuracy from %s', async source => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: source === 'defaults' ? { steps: [], ordering: 'strict' } : { steps: [{ name: 'unexpected' }] },
+    });
+    for (const trajectory of [{ steps: [] } as Trajectory, unexpected]) {
+      const run = createTrajectoryTestRun({ trajectory });
+      if (source === 'item') run.expectedTrajectory = { steps: [], ordering: 'strict' };
+      const result = await scorer.run(run);
+      expect(result.score).toBe(trajectory.steps.length === 0 ? 1 : 0);
+      expect(result.preprocessStepResult?.accuracy?.totalExpectedSteps).toBe(0);
+    }
+  });
+
+  test.each([
+    { label: 'absent', children: undefined },
+    { label: 'empty', children: [] },
+    { label: 'unexpected', children: unexpected.steps },
+  ])('evaluates empty nested expectations against $label children', async ({ children }) => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: {
+        steps: [{ name: 'agent', stepType: 'agent_run', children: { steps: [], ordering: 'strict' } }],
+      },
+    });
+    const result = await scorer.run(
+      createTrajectoryTestRun({
+        trajectory: {
+          steps: [{ name: 'agent', stepType: 'agent_run', children }],
+        },
+      }),
+    );
+    expect(result.preprocessStepResult?.nested?.[0]?.accuracy?.score).toBe(children?.length ? 0 : 1);
+    expect(result.score).toBe(children?.length ? 0.7 : 1);
+  });
+
+  test.each([1, 2, 3, 4])('propagates forbidden tool and sequence failures at depth %i', async depth => {
+    for (const forbidden of [false, true])
+      for (const sequence of [false, true]) {
+        let steps: Trajectory['steps'] = [{ stepType: 'tool_call', name: forbidden ? 'forbidden' : 'allowed' }];
+        let config: TrajectoryExpectation = sequence
+          ? { blacklistedSequences: [['forbidden']] }
+          : { blacklistedTools: ['forbidden'] };
+        for (let level = depth; level >= 1; level--) {
+          const name = `agent-${level}`;
+          steps = [{ stepType: 'agent_run', name, children: steps }];
+          config = { steps: [{ stepType: 'agent_run', name, children: config }] };
+        }
+        const scorer = createTrajectoryScorerCode({ defaults: config, weights: { blacklist: 0 } });
+        const result = await scorer.run(createTrajectoryTestRun({ trajectory: { steps } }));
+        expect(result.score).toBe(forbidden ? 0 : 1);
+        if (forbidden) expect(result.reason).toContain('Nested blacklist violation');
+        else expect(result.reason).not.toContain('blacklist violation');
+      }
+  });
+});
+
 describe('createTrajectoryAccuracyScorerCode', () => {
   /**
    * Helper to build a Trajectory from step names.
