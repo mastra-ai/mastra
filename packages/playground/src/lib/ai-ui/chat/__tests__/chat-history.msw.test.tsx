@@ -151,6 +151,20 @@ describe('Chat history recovery', () => {
       expect(result.current.isAwaitingToolApproval).toBe(true);
     });
 
+    it.each([false, true])('hydrates only active-run approvals from mixed history (reverse=%s)', async reverse => {
+      const { result, rerender } = await setup();
+      server.use(
+        http.post('http://localhost:4111/api/agents/agent/send-tool-approval', () =>
+          HttpResponse.json({ accepted: true, runId: 'recovery-run' }),
+        ),
+      );
+      const messages = [...approvalHistory('older-run', 'old-tool').messages, ...approvalHistory().messages];
+      rerender({ threadId: 'first', history: { messages: reverse ? messages.reverse() : messages } });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+      await act(async () => result.current.approveToolCall('approval-tool'));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+    });
+
     it('ignores approvals belonging to an older run while a new run streams', async () => {
       const { result, rerender } = await setup();
       rerender({ threadId: 'first', history: approvalHistory('older-run') });

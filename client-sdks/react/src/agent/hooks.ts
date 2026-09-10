@@ -26,7 +26,7 @@ import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ModelSettings } from './types';
 
-const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
+const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
 
   for (const message of messages) {
@@ -37,12 +37,13 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
       metadata.pendingToolApprovals,
       metadata.requireApprovalMetadata,
       metadata.suspendedTools,
-    ] as Array<Record<string, { toolCallId?: unknown }> | undefined>;
+    ] as Array<Record<string, { toolCallId?: unknown; runId?: unknown }> | undefined>;
 
     for (const source of metadataSources) {
       if (!source || typeof source !== 'object') continue;
 
       for (const suspensionData of Object.values(source)) {
+        if (runId && suspensionData?.runId !== runId) continue;
         const toolCallId = suspensionData?.toolCallId;
         if (typeof toolCallId === 'string' && toolCallId.length > 0) {
           pendingToolApprovalIds.add(toolCallId);
@@ -358,7 +359,6 @@ export const useChat = ({
       // a live approval decision or terminal event, nor switch the active run.
       const historyRunId = extractRunIdFromMessages(formattedMessages);
       if (liveRunFinished.current) return;
-      if (liveRunId.current && historyRunId && historyRunId !== liveRunId.current) return;
       if (!liveRunId.current && isRunning && historyRunId !== _currentRunId.current) return;
     } else {
       liveTasks.current = undefined;
@@ -369,7 +369,7 @@ export const useChat = ({
       setMessages(formattedMessages);
       setTasks(extractLatestTasksFromMessages(formattedMessages));
     }
-    const pendingApprovals = extractPendingToolApprovalIdsFromMessages(formattedMessages);
+    const pendingApprovals = extractPendingToolApprovalIdsFromMessages(formattedMessages, liveRunId.current);
     for (const toolCallId of liveApprovalIds.current) {
       if (pendingToolApprovalIdsRef.current.has(toolCallId)) pendingApprovals.add(toolCallId);
       else pendingApprovals.delete(toolCallId);
