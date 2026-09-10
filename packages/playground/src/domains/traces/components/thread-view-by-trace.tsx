@@ -1,5 +1,6 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -283,14 +284,17 @@ function TraceThreadRow({
           isLast && 'rounded-bl-xl',
         )}
       >
-        <TabList variant="pill-ghost" className="px-3 pt-2">
-          <Tab value="spans">Spans</Tab>
-          <Tab value="feedback">
-            Feedback
-            <NeedsReviewDot feedback={feedbackData?.feedback} />
-          </Tab>
-        </TabList>
-        <TabContent value="spans" className="py-0">
+        {/* Same header/tab layout as the traces page so both surfaces read identically. */}
+        <DataPanel.Header className="py-2">
+          <TabList variant="pill-ghost" className="px-0">
+            <Tab value="spans">Spans</Tab>
+            <Tab value="feedback">
+              Feedback
+              <NeedsReviewDot feedback={feedbackData?.feedback} />
+            </Tab>
+          </TabList>
+        </DataPanel.Header>
+        <TabContent value="spans" className="min-h-0 py-0">
           <div
             className="relative overflow-hidden"
             style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
@@ -324,8 +328,10 @@ function TraceThreadRow({
             </div>
           )}
         </TabContent>
-        <TabContent value="feedback" className="px-4 py-2">
-          <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+        <TabContent value="feedback" className="min-h-0 py-0">
+          <DataPanel.Content>
+            <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+          </DataPanel.Content>
         </TabContent>
       </Tabs>
     </div>
