@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
+  knowledgeImporterBindingKey,
   KnowledgeSchemaError,
   MastraCompositeStore,
   TABLE_KNOWLEDGE_CURSORS,
@@ -21,10 +22,12 @@ const pool = new Pool({ connectionString });
 const schemas: string[] = [];
 let schemaCounter = 0;
 
-createKnowledgeStorageTests(async () => {
-  const schemaName = `knowledge_canonical_${process.pid}_${schemaCounter++}`;
-  schemas.push(schemaName);
-  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+createKnowledgeStorageTests(async reopen => {
+  const schemaName = reopen ? schemas.at(-1)! : `knowledge_canonical_${process.pid}_${schemaCounter++}`;
+  if (!reopen) {
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  }
   return new KnowledgePG({ pool, schemaName });
 });
 
