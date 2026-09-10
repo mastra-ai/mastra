@@ -36,6 +36,18 @@ describe('DatasetItems empty state', () => {
     expect(link.getAttribute('target')).toBe('_blank');
   });
 
+  it('does not render the search field when the dataset has no items', () => {
+    renderEmpty();
+
+    expect(screen.queryByRole('textbox', { name: 'Search items' })).toBeNull();
+  });
+
+  it('keeps the search field when a search matches no items', () => {
+    renderEmpty({ searchQuery: 'nothing', onSearchChange: () => {} });
+
+    expect(screen.getByRole('textbox', { name: 'Search items' })).not.toBeNull();
+  });
+
   it('wires the add and import actions', () => {
     const onAddClick = vi.fn();
     const onImportClick = vi.fn();

@@ -65,11 +65,13 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+    await this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
   }
 
   protected getAdditionalEntries(): Record<string, string> {
-    return { worker: getWorkerEntry() };
+    return {
+      worker: getWorkerEntry(),
+    };
   }
 
   protected getEntry(): string {

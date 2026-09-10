@@ -34,6 +34,7 @@
     "@cf/qwen/qwq-32b",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
+    "@cf/zai-org/glm-5.3",
     "@cf/zai-org/glm-5.3-flash"
   ],
   "structuredOutput": [
@@ -48,6 +49,7 @@
     "@cf/qwen/qwen3.8-27b",
     "@cf/zai-org/glm-4.7-flash",
     "@cf/zai-org/glm-5.2",
+    "@cf/zai-org/glm-5.3",
     "@cf/zai-org/glm-5.3-flash"
   ]
 }

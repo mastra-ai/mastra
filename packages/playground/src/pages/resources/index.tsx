@@ -27,7 +27,7 @@ const resources = [
     title: 'Community',
     description: 'Join the Mastra Discord community for help, discussion, and collaboration.',
     icon: MessageSquareIcon,
-    href: 'https://discord.gg/BTYqqHKUrf',
+    href: 'https://discord.gg/mastra-ai',
     external: true,
   },
   {

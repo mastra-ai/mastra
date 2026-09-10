@@ -134,6 +134,73 @@ describe('QUERY_TRACES', () => {
     expect(response).not.toHaveProperty('matches');
   });
 
+  it('passes feedback predicates through without adding matching evidence', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    const response = await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: {
+          feedback: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+                { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          type: 'relation',
+          collection: 'feedback',
+          quantifier: 'some',
+          predicate: expect.objectContaining({ type: 'boolean', operator: 'and' }),
+        }),
+      }),
+    );
+    expect(response).toEqual({ traces: [], page: { next: null } });
+    expect(response).not.toHaveProperty('feedback');
+    expect(response).not.toHaveProperty('matches');
+  });
+
+  it('rejects invalid feedback value types before touching storage', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const cases = [
+      {
+        predicate: { op: 'in', value: { path: 'value' }, set: [3, 'sensitive-3'] },
+        issue: { code: 'invalid_literal', path: ['where', 'feedback', 'some', 'set'] },
+      },
+      {
+        predicate: { op: 'lt', left: { path: 'value' }, right: { literal: 'sensitive-3' } },
+        issue: { code: 'invalid_literal', path: ['where', 'feedback', 'some', 'right', 'literal'] },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const error = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(mastra, {
+            timeRange: TIME_RANGE,
+            where: { feedback: { some: testCase.predicate } },
+          }),
+        ),
+      );
+      expect(error.status).toBe(422);
+      const body = await error.getResponse().json();
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
+      expect(body.issues).toContainEqual(expect.objectContaining(testCase.issue));
+      expect(JSON.stringify(body)).not.toContain('sensitive');
+    }
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
   it('preserves the shared canonical semantics and fixed response projections', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));

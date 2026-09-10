@@ -37,6 +37,50 @@ type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   userId?: string | null;
 };
 
+const FEEDBACK_UPSERT_COLUMNS = [
+  'timestamp',
+  'cursorId',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'feedbackUserId',
+  'sourceId',
+  'reviewStatus',
+  'feedbackSource',
+  'feedbackType',
+  'value',
+  'comment',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT (feedbackId) DO UPDATE SET ${FEEDBACK_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
+
 const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'timestamp',
   'traceId',
@@ -302,7 +346,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 
@@ -310,7 +354,8 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const tuples = args.feedbacks.map(f => {
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
     const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
@@ -364,7 +409,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     ${FEEDBACK_UPSERT_CLAUSE}`,
   );
 }
 

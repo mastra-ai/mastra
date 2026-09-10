@@ -38,10 +38,32 @@ export async function fetchServerProjects(token: string, orgId: string): Promise
   return data.projects;
 }
 
-export async function createServerProject(token: string, orgId: string, name: string): Promise<ServerProject> {
+type CreateServerProjectBody = paths['/v1/server/projects']['post']['requestBody']['content']['application/json'];
+
+/**
+ * Creation options beyond the name, taken from the generated request body so
+ * they cannot drift from the platform contract. `factoryEnabled` marks the
+ * project as a Mastra Factory project: the platform only provisions factory
+ * backing (workspace sandboxes, factory route) for projects created with it,
+ * and the unified deploy path cannot set it afterwards.
+ */
+export type CreateServerProjectOptions = Pick<CreateServerProjectBody, 'factoryEnabled' | 'region'>;
+
+export type ServerProjectRegion = NonNullable<CreateServerProjectOptions['region']>;
+
+export async function createServerProject(
+  token: string,
+  orgId: string,
+  name: string,
+  options: CreateServerProjectOptions = {},
+): Promise<ServerProject> {
   const client = createApiClient(token, orgId);
   const { data, error, response } = await client.POST('/v1/server/projects', {
-    body: { name },
+    body: {
+      name,
+      ...(options.factoryEnabled !== undefined ? { factoryEnabled: options.factoryEnabled } : {}),
+      ...(options.region ? { region: options.region } : {}),
+    },
   });
 
   if (error) {
@@ -126,7 +148,17 @@ export async function uploadServerDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { projectName?: string; envVars?: Record<string, string>; disablePlatformObservability?: boolean },
+  meta?: {
+    projectName?: string;
+    envVars?: Record<string, string>;
+    disablePlatformObservability?: boolean;
+    /**
+     * Set for Factory builds. The legacy server deploy route marks the
+     * project as a Factory project and provisions factory backing when it
+     * sees this, including on projects created without the flag.
+     */
+    factoryEnabled?: boolean;
+  },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
@@ -139,6 +171,7 @@ export async function uploadServerDeploy(
       ...(meta?.disablePlatformObservability !== undefined
         ? { disablePlatformObservability: meta.disablePlatformObservability }
         : {}),
+      ...(meta?.factoryEnabled ? { factoryEnabled: true } : {}),
     },
   });
 
