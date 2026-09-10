@@ -14,6 +14,7 @@ import { VNEXT_BASE_DATE, makeSpan } from './data';
 import {
   normalizeTraceQueryResponse,
   TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
 } from './trace-query';
@@ -33,11 +34,13 @@ export interface ObservabilityVNextCapabilities {
   /** Whether this adapter implements the advanced trusted trace-query plan. */
   traceQuery?: boolean;
   /**
-   * The write model used to seed trace-query conformance fixtures. Completion-only
-   * adapters receive only each fixture's final completed record, because they do
-   * not accept pending events or logical replacement writes.
+   * The span write model used to seed trace-query conformance fixtures. Completion-only
+   * adapters receive only completed span records. Score and feedback history is always
+   * written unchanged so adapters must implement their own current-record semantics.
    */
-  traceQueryWriteModel?: 'current-record' | 'completion-only';
+  traceQuerySpanWriteModel?: 'event-sourced' | 'completion-only';
+  /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
+  traceQueryStrictFeedbackValueTypes?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -98,13 +101,11 @@ function completionOnlyTraceQueryFixture() {
     }
   }
 
-  const scores = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.scores)[number]>();
-  for (const score of TRACE_QUERY_FIXTURE_DATA.scores) scores.set(score.scoreId, score);
-
   return {
     spans: [...roots.values()].filter(root => !root.isPending),
     relatedSpans: [...spans.values()],
-    scores: [...scores.values()],
+    scores: TRACE_QUERY_FIXTURE_DATA.scores,
+    feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
   };
 }
 
@@ -150,12 +151,13 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     if (capabilities.traceQuery) {
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         const fixture =
-          capabilities.traceQueryWriteModel === 'completion-only'
+          capabilities.traceQuerySpanWriteModel === 'completion-only'
             ? completionOnlyTraceQueryFixture()
             : {
                 spans: TRACE_QUERY_FIXTURE_DATA.spans,
                 relatedSpans: [],
                 scores: TRACE_QUERY_FIXTURE_DATA.scores,
+                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
               };
         const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)
@@ -206,7 +208,31 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           });
         for (const score of scores) await storage.createScore({ score });
 
+        for (const feedback of fixture.feedback) {
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: feedback.feedbackId,
+              traceId: feedback.traceId,
+              spanId: null,
+              timestamp: new Date(feedback.timestamp),
+              feedbackType: feedback.feedbackType,
+              feedbackSource: feedback.feedbackSource,
+              feedbackUserId: feedback.feedbackUserId,
+              sourceId: feedback.sourceId,
+              value: feedback.value,
+              comment: feedback.comment,
+              entityVersionId: feedback.entityVersionId,
+              parentEntityVersionId: feedback.parentEntityVersionId,
+              rootEntityVersionId: feedback.rootEntityVersionId,
+              metadata: null,
+            },
+          });
+        }
+
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
@@ -228,6 +254,71 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         } while (after);
         expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
         expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      describe('feedback replacement conformance', () => {
+        for (const scenario of TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS) {
+          it(scenario.name, async () => {
+            for (const span of scenario.fixture.spans) {
+              await storage.createSpan({
+                span: {
+                  traceId: span.traceId!,
+                  spanId: span.spanId,
+                  parentSpanId: span.parentSpanId,
+                  name: span.name,
+                  spanType: span.spanType as SpanType,
+                  isEvent: false,
+                  startedAt: new Date(span.startedAt),
+                  endedAt: span.endedAt ? new Date(span.endedAt) : null,
+                  threadId: span.threadId,
+                  resourceId: span.resourceId,
+                  entityType: span.entityType as EntityType,
+                  entityId: span.entityId,
+                  entityName: span.entityName,
+                  entityVersionId: span.entityVersionId,
+                  parentEntityVersionId: span.parentEntityVersionId,
+                  rootEntityVersionId: span.rootEntityVersionId,
+                  environment: span.environment,
+                  attributes: span.attributes,
+                  metadata: span.metadata,
+                  error: span.error as CreateSpanRecord['error'],
+                },
+              });
+            }
+
+            for (const write of scenario.writes) {
+              const feedbacks: CreateFeedbackRecord[] = write.feedback.map(feedback => ({
+                feedbackId: feedback.feedbackId,
+                traceId: feedback.traceId,
+                spanId: null,
+                timestamp: new Date(feedback.timestamp),
+                feedbackType: feedback.feedbackType,
+                feedbackSource: feedback.feedbackSource,
+                feedbackUserId: feedback.feedbackUserId,
+                sourceId: feedback.sourceId,
+                value: feedback.value,
+                comment: feedback.comment,
+                entityVersionId: feedback.entityVersionId,
+                parentEntityVersionId: feedback.parentEntityVersionId,
+                rootEntityVersionId: feedback.rootEntityVersionId,
+                metadata: null,
+              }));
+              if (write.method === 'batch') {
+                await storage.batchCreateFeedback({ feedbacks });
+              } else {
+                await storage.createFeedback({ feedback: feedbacks[0]! });
+              }
+            }
+
+            if (flushPendingMerges) await flushPendingMerges(storage);
+
+            for (const assertion of scenario.assertions) {
+              const plan = planTraceQuery(parseTraceQueryRequest(assertion.request));
+              const response = await storage.queryTraces(plan);
+              expect.soft(normalizeTraceQueryResponse(response), assertion.name).toEqual(assertion.expected);
+            }
+          });
+        }
       });
 
       it('paginates mixed-case and non-ASCII trace and thread IDs in ordinal order', async () => {

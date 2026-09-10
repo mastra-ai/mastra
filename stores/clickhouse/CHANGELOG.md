@@ -1,5 +1,23 @@
 # @mastra/clickhouse
 
+## 1.18.0-alpha.2
+
+### Minor Changes
+
+- Added ClickHouse support for filtering traces by related feedback. Durable per-feedback write versions make the last accepted write current before trace correlation, independently of caller timestamps. Existing version-0 rows retain latest-timestamp ordering until their first post-migration replacement. ([#23033](https://github.com/mastra-ai/mastra/pull/23033))
+
+  ```typescript
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { feedback: { some: { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } } } },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa)]:
+  - @mastra/core@1.66.0-alpha.4
+
 ## 1.18.0-alpha.1
 
 ### Patch Changes
