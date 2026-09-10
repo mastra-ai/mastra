@@ -430,6 +430,8 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
 
 const SERVER_LOG_POLL_INTERVAL_MS = 2000;
 const FINAL_LOG_FETCH_TIMEOUT_MS = 3000;
+/** Consecutive 401s after which log polling gives up; status polling surfaces the auth error. */
+const MAX_LOG_AUTH_FAILURES = 3;
 
 /**
  * Poll the server deploy logs endpoint and print new log lines.
@@ -457,6 +459,7 @@ async function pollServerLogs(
   let currentToken = token;
   let client = createApiClient(currentToken, orgId);
   let finalFetchDone = false;
+  let authFailures = 0;
 
   while (!finalFetchDone) {
     if (signal.aborted) finalFetchDone = true;
@@ -469,10 +472,17 @@ async function pollServerLogs(
       });
 
       if (response.status === 401) {
+        // Refresh once per interval, never in a tight loop: a headless token
+        // that stays invalid would otherwise hammer the endpoint until the
+        // deploy finishes. After a few failures leave it to status polling.
+        authFailures += 1;
+        if (authFailures >= MAX_LOG_AUTH_FAILURES) break;
         currentToken = await getToken();
         client = createApiClient(currentToken, orgId);
+        if (!finalFetchDone) await abortableDelay(SERVER_LOG_POLL_INTERVAL_MS, signal);
         continue;
       }
+      authFailures = 0;
 
       if (data) {
         logWriter.write(...data.buildLogs.slice(printedBuild));

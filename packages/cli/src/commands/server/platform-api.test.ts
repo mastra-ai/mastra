@@ -455,6 +455,39 @@ describe('pollServerDeploy', () => {
     expect(result.instanceUrl).toBe('https://app.example');
   });
 
+  it('waits the poll interval after a 401 on the logs endpoint and gives up after three', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return { data: undefined, error: { detail: 'expired' }, response: { status: 401 } };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 6 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation((() => true) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    // 3s initial delay, then one logs call per 2s interval.
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(logsCalls).toBe(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(logsCalls).toBe(2);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await vi.advanceTimersByTimeAsync(5000);
+    await pollPromise;
+    vi.useRealTimers();
+
+    expect(logsCalls).toBe(3);
+  });
+
   it('prints the combined logs string when the build and deploy arrays are empty', async () => {
     let logsCalls = 0;
     let deployStatusCalls = 0;
