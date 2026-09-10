@@ -33,12 +33,27 @@ export type ScoringProperties = {
   scoringData?: ScoringData;
 };
 
+/**
+ * Which OpenAI wire protocol a custom `url` endpoint speaks.
+ *
+ * - `'chat'` (default): `POST {url}/chat/completions` via `@ai-sdk/openai-compatible`.
+ * - `'responses'`: `POST {url}/responses` via the OpenAI Responses model from `@ai-sdk/openai`.
+ *   Use this for gateways that only expose some models or features (for example function
+ *   tools combined with `reasoning_effort`) through the Responses API.
+ *
+ * Only applies when `url` is set. Provider options differ between the two protocols: the
+ * chat model reads `providerOptions['openai-compatible']` / `providerOptions[providerId]`,
+ * the Responses model reads `providerOptions.openai`.
+ */
+export type OpenAICompatibleApi = 'chat' | 'responses';
+
 export type OpenAICompatibleConfig =
   | {
       id: `${string}/${string}`; // Model ID like "openai/gpt-4o" or "custom-provider/my-model"
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: OpenAICompatibleApi; // Wire protocol for custom URL endpoints (defaults to 'chat')
     }
   | {
       providerId: string; // Provider ID like "openai" or "custom-provider"
@@ -46,6 +61,7 @@ export type OpenAICompatibleConfig =
       url?: string; // Optional custom URL endpoint
       apiKey?: string; // Optional API key (falls back to env vars)
       headers?: Record<string, string>; // Additional headers
+      api?: OpenAICompatibleApi; // Wire protocol for custom URL endpoints (defaults to 'chat')
     };
 
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;

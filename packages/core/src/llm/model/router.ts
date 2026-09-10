@@ -25,7 +25,7 @@ import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
 import { modelSupportsTemperature } from './provider-registry.js';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
+import type { MastraLanguageModelV2, OpenAICompatibleApi, OpenAICompatibleConfig } from './shared.types';
 
 export { defaultGateways, gateways } from './gateways/defaults.js';
 
@@ -140,6 +140,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: OpenAICompatibleApi;
     };
 
     if (typeof config === 'string') {
@@ -151,6 +152,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     } else {
       // config has 'id' field
@@ -159,6 +161,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         url: config.url,
         apiKey: config.apiKey,
         headers: config.headers,
+        api: config.api,
       };
     }
 
@@ -168,6 +171,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       url?: string;
       apiKey?: string;
       headers?: Record<string, string>;
+      api?: OpenAICompatibleApi;
     } = {
       ...normalizedConfig,
       routerId: normalizedConfig.id,
@@ -509,6 +513,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           modelId,
           providerId,
           this.config.url || '',
+          this.config.api ?? 'chat',
           apiKey,
           stableHeaderKey(headers),
           resolvedTransport,
@@ -522,15 +527,24 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return cache.modelInstances.get(key)!;
     }
 
-    // If custom URL is provided, use it directly with openai-compatible
+    // If custom URL is provided, use it directly. Default to the OpenAI-compatible
+    // Chat Completions model; opt into the OpenAI Responses model with `api: 'responses'`
+    // (`@ai-sdk/openai-compatible` has no Responses factory, so reuse `@ai-sdk/openai`).
     if (this.config.url) {
-      const modelInstance = createOpenAICompatible({
-        name: providerId,
-        apiKey,
-        baseURL: this.config.url,
-        headers,
-        supportsStructuredOutputs: true,
-      }).chatModel(modelId);
+      const modelInstance =
+        this.config.api === 'responses'
+          ? createOpenAI({
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+            }).responses(modelId)
+          : createOpenAICompatible({
+              name: providerId,
+              apiKey,
+              baseURL: this.config.url,
+              headers,
+              supportsStructuredOutputs: true,
+            }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
       this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;

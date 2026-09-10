@@ -394,6 +394,37 @@ const agent = new Agent({
 })
 ```
 
+### Use the OpenAI Responses API
+
+By default, a custom `url` is called through the OpenAI Chat Completions protocol (`{url}/chat/completions`). Some gateways only serve certain models, or certain features such as function tools combined with a reasoning effort, through the OpenAI Responses API. Set `api: "responses"` to call `{url}/responses` instead:
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "my-gateway/gpt-5",
+    url: "https://my-gateway.example.com/openai/v1",
+    apiKey: process.env.MY_GATEWAY_API_KEY,
+    api: "responses"
+  },
+  defaultOptions: {
+    providerOptions: {
+      openai: {
+        reasoningEffort: "high",
+        store: false,
+        include: ["reasoning.encrypted_content"]
+      }
+    }
+  }
+})
+```
+
+The two protocols read different provider option keys. The Responses model reads `providerOptions.openai`, while the default Chat Completions model reads `providerOptions["openai-compatible"]` or the key matching your provider id. If your gateway does not persist responses, set `store: false` so the full conversation is replayed on every request, and include `reasoning.encrypted_content` to carry reasoning across tool calls.
+
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.
