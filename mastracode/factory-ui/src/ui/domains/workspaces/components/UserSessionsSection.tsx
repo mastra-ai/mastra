@@ -45,10 +45,21 @@ export function UserSessionsSection() {
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members, and inside each of those
   // groups the most recently updated session comes first.
-  // Sorting on activity is safe here in a way it is not for factory workspaces:
-  // a session row's `updatedAt` only moves on rename, sandbox attach, and the
-  // write-once materialize/first-message stamps, so the run-start and run-end
-  // refetches cannot reshuffle the list under the reader.
+  // This deliberately diverges from `WorkspacesSection`, which sorts on
+  // `createdAt` to hold rows still. `updatedAt` here is not inert: `setSandbox`
+  // is called from the workspace start hook, which runs on every sandbox start
+  // — including a `'connected'` reconnect, not just the first attach — so a
+  // run-start refetch can lift the row whose run just started to the top of
+  // its tier.
+  // That is acceptable here where it was not for the board, because this list
+  // renders every filtered row: a reordered row changes position but can never
+  // cross a fold and leave view, which is the harm the board avoids by slicing
+  // to `COLLAPSED_ROW_COUNT` and pulling the open row back in. The movement is
+  // also bounded — window-focus refetch is off and the sessions poll only runs
+  // while a session is unmaterialized — and it is the reader's own click
+  // promoting the reader's own row.
+  // Recency is also the ask: `createdAt` is the insertion order this ordering
+  // exists to replace.
   // Session id closes it into a total order — the sessions endpoint sorts
   // nothing, so anything falling through to its order would still shuffle.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
