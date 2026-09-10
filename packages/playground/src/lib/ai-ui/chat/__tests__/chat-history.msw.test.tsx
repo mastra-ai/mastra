@@ -12,6 +12,7 @@ import {
   approvalChunk,
   emptyHistory,
   finishChunk,
+  terminalChunks,
   liveChunks,
   staleHistory,
   taskHistory,
@@ -67,6 +68,27 @@ afterEach(() => {
 });
 
 describe('Chat history recovery', () => {
+  describe.each(terminalChunks)('when a terminal $type arrives', chunk => {
+    it.each([false, true])('ignores stale runs and handles the current run (awaiting approval=%s)', async awaiting => {
+      const { result, rerender } = await setup();
+      if (awaiting) {
+        await act(async () => push(approvalChunk));
+        await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      }
+      const messages = result.current.messages;
+      await act(async () => push({ ...chunk, runId: 'older-run' }));
+      expect(result.current.isAwaitingToolApproval).toBe(awaiting);
+      expect(result.current.isRunning).toBe(!awaiting);
+      expect(result.current.messages).toEqual(messages);
+      rerender({ threadId: 'first', history: { messages: [] } });
+      expect(result.current.isAwaitingToolApproval).toBe(awaiting);
+      await act(async () => push(chunk));
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      rerender({ threadId: 'first', history: approvalHistory() });
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+    });
+  });
   describe.each(['pendingToolApprovals', 'requireApprovalMetadata', 'suspendedTools'] as const)(
     'when history contains %s',
     key => {

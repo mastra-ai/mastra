@@ -483,6 +483,10 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+      const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
+      // A delayed terminal event must not finish another run's message, clear
+      // its approvals, or trigger its completion callback.
+      if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
       const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
@@ -520,7 +524,7 @@ export const useChat = ({
         setIsRunning(false);
       }
 
-      if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+      if (isTerminal) {
         if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
         for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.clear();

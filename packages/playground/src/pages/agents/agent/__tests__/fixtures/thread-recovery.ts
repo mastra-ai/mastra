@@ -125,6 +125,12 @@ export const finishChunk: ChunkType = {
   },
 };
 
+export const terminalChunks = [
+  finishChunk,
+  { type: 'abort', runId: 'recovery-run', from: ChunkFrom.AGENT, payload: {} },
+  { type: 'error', runId: 'recovery-run', from: ChunkFrom.AGENT, payload: { error: 'Test failure' } },
+] satisfies ChunkType[];
+
 export const liveChunks: ChunkType[] = [
   { type: 'start', runId: 'recovery-run', from: ChunkFrom.AGENT, payload: { messageId: 'recovery-assistant' } },
   { type: 'text-start', runId: 'recovery-run', from: ChunkFrom.AGENT, payload: { id: 'recovery-text' } },
