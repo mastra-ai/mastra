@@ -313,7 +313,7 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
     if (!schedule?.workflowId) {
       return { triggers };
     }
-    const workflowName = (schedule as WorkflowSchedule).workflowId;
+    const workflowName = schedule.workflowId;
     const hydrated = await Promise.all(
       triggers.map(async trigger => {
         if (trigger.outcome !== 'published' || !trigger.runId) return trigger;
