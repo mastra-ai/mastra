@@ -12,7 +12,7 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChatRunning } from '../chat/chat-context';
+import { ChatRunningContext, useChatRunning } from '../chat/chat-context';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
@@ -230,7 +230,8 @@ export const MessageRow = memo(function MessageRow({
   const metadata = getMessageMetadata(message);
   const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
   const dataParts = useMemo(() => getDataParts(message), [message]);
-  const { isRunning } = useChatRunning();
+  const running = useChatRunning();
+  const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
   const { data: mcpAppTools } = useMcpAppTools();
 
   // One clock for the whole message, so a tool row waits behind the sentence written before it.
@@ -364,7 +365,9 @@ export const MessageRow = memo(function MessageRow({
   return (
     <div className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
       <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-        <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+        <ChatRunningContext.Provider value={{ ...running, isRunning }}>
+          <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+        </ChatRunningContext.Provider>
       </div>
       {(showActionBar || footerSlot) && (
         <div className="flex h-6 items-center gap-2 pt-4">

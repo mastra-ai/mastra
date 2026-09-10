@@ -101,6 +101,7 @@ export function ChatProvider({
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
+    activeRunId,
     isAwaitingToolApproval,
     setMessages,
     approveToolCall,
@@ -331,8 +332,8 @@ export function ChatProvider({
 
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages: renderMessages }), [renderMessages]);
   const runningValue = useMemo<RunningContextValue>(
-    () => ({ isRunning, cancelRun: cancel, canSendWhileStreaming }),
-    [isRunning, cancel, canSendWhileStreaming],
+    () => ({ isRunning, activeRunId, cancelRun: cancel, canSendWhileStreaming }),
+    [isRunning, activeRunId, cancel, canSendWhileStreaming],
   );
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);

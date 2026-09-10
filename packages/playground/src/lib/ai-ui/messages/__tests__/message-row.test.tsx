@@ -461,8 +461,11 @@ describe('MessageRow', () => {
         toolCall('two', 'genericTool', 'call'),
         toolCall('three', 'genericTool', 'call'),
       ]);
+      message.content.metadata = { runId: 'live-run' };
       const row = (isRunning: boolean) => (
-        <ChatRunningContext.Provider value={{ isRunning, cancelRun: () => {}, canSendWhileStreaming: false }}>
+        <ChatRunningContext.Provider
+          value={{ isRunning, activeRunId: 'live-run', cancelRun: () => {}, canSendWhileStreaming: false }}
+        >
           <MessageRow message={message} />
         </ChatRunningContext.Provider>
       );

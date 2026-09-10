@@ -3,15 +3,23 @@ import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/ho
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MessageRow } from '../../messages/message-row';
 import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
+import {
+  acceptedToolRun,
+  emptyMcpServers,
+  toolRunChunks,
+  toolRunFinish,
+  unfinishedToolHistory,
+} from './fixtures/tool-run';
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
@@ -203,6 +211,102 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe('when a later run starts after an interrupted run', () => {
+    it.each(['legacy', 'signals'])(
+      'keeps historical calls incomplete while the new %s run progresses',
+      async transport => {
+        Object.assign(window, { MASTRA_AGENT_SIGNALS: transport === 'signals' ? 'true' : 'false' });
+        const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+        let requests = 0;
+        const streamResponse = () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                streams.push(controller);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        server.use(
+          http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+          http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+            requests++;
+            return streamResponse();
+          }),
+          http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, streamResponse),
+          http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+            requests++;
+            return HttpResponse.json(acceptedToolRun(requests === 1 ? 'first-run' : 'second-run'));
+          }),
+          ...baseHandlers([]),
+        );
+        const Transcript = () => {
+          const messages = useChatMessages();
+          const send = useChatSend();
+          const { isRunning } = useChatRunning();
+          return (
+            <>
+              <button onClick={() => send({ message: 'Run tools' })}>Run tools</button>
+              <output>{isRunning ? 'Running' : 'Stopped'}</output>
+              {messages.map(message => (
+                <section key={message.id} aria-label={message.id}>
+                  <MessageRow message={message} />
+                </section>
+              ))}
+            </>
+          );
+        };
+        render(
+          <Wrapper>
+            <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={unfinishedToolHistory}>
+              <Transcript />
+            </ChatProvider>
+          </Wrapper>,
+        );
+        const emit = (index: number, chunks: ReturnType<typeof toolRunChunks>) =>
+          act(() => {
+            for (const chunk of chunks)
+              streams[index].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          });
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(1));
+        expect(within(screen.getByRole('region', { name: 'first-response' })).getByText('3 incomplete')).toBeTruthy();
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(0, 1));
+        await screen.findByText('0/3');
+        await emit(0, toolRunChunks('first-run', 'first-response').slice(1));
+        await emit(0, [toolRunFinish('first-run')]);
+        if (transport === 'legacy') await act(() => streams[0].close());
+        await screen.findByText('Stopped');
+        const history = screen.getByRole('region', { name: 'first-response' });
+        fireEvent.click(within(history).getByRole('button', { name: /3 steps/ }));
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
+        await waitFor(() => expect(requests).toBe(2));
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        const currentStream = transport === 'legacy' ? 1 : 0;
+        await emit(currentStream, toolRunChunks('second-run', 'second-response'));
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        await emit(currentStream, [
+          { type: 'step-start', runId: 'second-run', from: 'AGENT', payload: { messageId: 'rotated-response' } },
+          ...toolRunChunks('second-run', 'rotated-response').slice(1),
+        ]);
+        await waitFor(() =>
+          expect(within(screen.getByRole('region', { name: 'rotated-response' })).getByText('0/3')).toBeTruthy(),
+        );
+        expect(within(screen.getByRole('region', { name: 'second-response' })).getByText('0/3')).toBeTruthy();
+        expect(within(history).getByText('3 incomplete')).toBeTruthy();
+        expect(within(history).getAllByText('Incomplete')).toHaveLength(3);
+        expect(within(history).queryAllByRole('group', { busy: true })).toHaveLength(0);
+        await emit(currentStream, [toolRunFinish('second-run')]);
+        await act(() => streams[currentStream].close());
+      },
+    );
   });
 
   describe('when Studio selects a request-scoped model', () => {
