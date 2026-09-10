@@ -21,6 +21,45 @@ describe('formatOmError', () => {
     expect(formatOmError(providerError())).toBe(diagnostic);
   });
 
+  it.each([
+    {
+      provider: 'Anthropic',
+      statusCode: 529,
+      responseBody: {
+        type: 'error',
+        error: { type: 'overloaded_error', message: 'Synthetic provider overload' },
+        request_id: 'private-request-id',
+      },
+      diagnostic: 'Synthetic provider overload',
+    },
+    {
+      provider: 'Gemini',
+      statusCode: 429,
+      responseBody: {
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          message: 'Synthetic quota exhausted',
+          details: [{ metadata: { consumer: 'private-project-id', apiKey: 'secret-key' } }],
+        },
+      },
+      diagnostic: 'Synthetic quota exhausted',
+    },
+  ])(
+    'preserves $provider diagnostics without including other response fields',
+    ({ statusCode, responseBody, diagnostic }) => {
+      const error = Object.assign(new Error('Provider request failed'), {
+        statusCode,
+        responseBody: JSON.stringify(responseBody),
+      });
+      expect(formatOmError(error)).toBe(`Provider request failed: HTTP ${statusCode}: ${diagnostic}`);
+
+      // SDKs may also copy the provider diagnostic into the outer error message.
+      error.message = diagnostic;
+      expect(formatOmError(error)).toBe(`${diagnostic}: HTTP ${statusCode}`);
+    },
+  );
+
   it('preserves Codex string details without including other response fields', () => {
     const error = Object.assign(new Error('Bad Request'), {
       statusCode: 400,
