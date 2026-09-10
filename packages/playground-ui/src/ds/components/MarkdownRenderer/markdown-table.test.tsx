@@ -77,7 +77,8 @@ describe('Markdown table copy', () => {
         .join('\n')}`,
       table.replaceAll('\n', '\r\n'),
       table.replaceAll('\n', '\r'),
-      table.replace('\n', '\r'),
+      // Mixed CR/LF separators exercise a different case than uniform CR-only input.
+      '| Name | Value |\r| :--- | ---: |\n| **東京** | a\\|b `code` |',
     ])('copies a standalone table without container prefixes', async source => {
       const writeText = clipboard();
       render(<MarkdownRenderer tableActions>{source}</MarkdownRenderer>);
