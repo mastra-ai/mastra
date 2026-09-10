@@ -10,6 +10,7 @@ export type WorkItemBranchSource =
   | 'github-pr'
   | 'linear-issue'
   | 'gitlab-issue'
+  | 'gitlab-mr'
   | 'slack-thread'
   | 'manual';
 
@@ -23,7 +24,9 @@ export interface WorkItemBranchInput {
 export function workItemBranchSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
   if (!externalSource) return 'manual';
   if (externalSource.integrationId === 'linear') return 'linear-issue';
-  if (externalSource.integrationId === 'gitlab') return 'gitlab-issue';
+  if (externalSource.integrationId === 'gitlab') {
+    return externalSource.type === 'merge-request' ? 'gitlab-mr' : 'gitlab-issue';
+  }
   // Only GitHub, Linear, and GitLab carry provider identities; anything else (a
   // Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId !== 'github') return 'manual';
@@ -35,11 +38,16 @@ function branchNumber(metadata: Record<string, unknown>, key: string): number | 
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
-/** The provider number a GitHub card carries — the `#12` its runs and thread titles name it by. */
+/**
+ * The provider number a card carries — the `#12` its runs and thread titles name
+ * it by. GitLab's per-project `iid` is the same idea, so a GitLab card names
+ * itself by that rather than falling through to its opaque id.
+ */
 export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metadata'>): number | undefined {
   const metadata = item.metadata ?? {};
   if (item.source === 'github-issue') return branchNumber(metadata, 'githubIssueNumber');
   if (item.source === 'github-pr') return branchNumber(metadata, 'githubPullRequestNumber');
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-mr') return branchNumber(metadata, 'iid');
   return;
 }
 
@@ -49,6 +57,10 @@ export function workItemThreadTitle(
 ): string {
   const number = workItemNumber(item);
   if (number === undefined) return item.title;
+  // A GitLab card's title already opens with `group/project#7` (the rule builds
+  // it that way, since an iid alone is ambiguous across projects), so prefixing
+  // it again would read `MR #7: group/project!7: ...`.
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-mr') return item.title;
   return `${item.source === 'github-pr' ? 'PR' : 'Issue'} #${number}: ${item.title}`;
 }
 
@@ -61,6 +73,21 @@ export function workItemThreadTitle(
  */
 export function workItemBranch(item: WorkItemBranchInput): string {
   const metadata = item.metadata ?? {};
+  // GitLab identifiers are paths (`group/project#7`), which cannot go in a
+  // branch name as-is: `#` is invalid and the slashes would nest refs under a
+  // directory that collides with `factory/`. The per-project iid is what makes
+  // it readable, so `group/project#7` becomes `factory/gitlab-7`.
+  //
+  // Issues and merge requests are numbered in separate sequences, so both
+  // prefixes are needed: `factory/gitlab-7` and `factory/gitlab-mr-7` are
+  // different pieces of work that would otherwise share one branch.
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-mr') {
+    const iid = branchNumber(metadata, 'iid');
+    if (iid !== undefined) {
+      return item.source === 'gitlab-mr' ? `factory/gitlab-mr-${iid}` : `factory/gitlab-${iid}`;
+    }
+    return `factory/item-${item.id}`;
+  }
   const githubNumber = workItemNumber(item);
   if (githubNumber !== undefined) {
     return item.source === 'github-issue' ? `factory/issue-${githubNumber}` : `factory/pr-${githubNumber}`;
@@ -68,14 +95,6 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   if (item.source === 'linear-issue' && typeof metadata.identifier === 'string') {
     const identifier = metadata.identifier.trim();
     if (identifier) return `factory/linear-${identifier.toLowerCase()}`;
-  }
-  // GitLab identifiers are paths (`group/project#7`), which cannot go in a
-  // branch name as-is: `#` is invalid and the slashes would nest refs under a
-  // directory that collides with `factory/`. The per-project iid is what makes
-  // it readable, so `group/project#7` becomes `factory/gitlab-7`.
-  if (item.source === 'gitlab-issue') {
-    const iid = branchNumber(metadata, 'iid');
-    if (iid !== undefined) return `factory/gitlab-${iid}`;
   }
   return `factory/item-${item.id}`;
 }

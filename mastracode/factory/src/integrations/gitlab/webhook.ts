@@ -10,13 +10,38 @@ import type { FactoryGitlabEventName } from '../../rules/types.js';
 import { formatIssueRef } from './client.js';
 
 /** Kinds Factory acts on. Anything else is acknowledged and dropped. */
-const SUPPORTED_OBJECT_KINDS = new Set(['issue', 'note']);
+const SUPPORTED_OBJECT_KINDS = new Set(['issue', 'note', 'merge_request']);
 
 export interface ParsedGitlabWebhook {
   event: FactoryGitlabEventName;
   deliveryId: string;
   project: { id: number; pathWithNamespace: string };
-  issue: {
+  mergeRequest?: {
+    iid: number;
+    ref: string;
+    title: string;
+    url: string;
+    state: 'open' | 'closed';
+    merged: boolean;
+    draft: boolean;
+    headBranch: string;
+    baseBranch: string;
+    author: string | null;
+    assignees?: readonly string[];
+    reviewers?: readonly string[];
+    labels?: readonly string[];
+    createdAt?: string;
+    updatedAt?: string;
+    headChanged: boolean;
+  };
+  mergeRequestNote?: {
+    id: number;
+    body: string;
+    url?: string;
+    author?: string;
+    createdAt?: string;
+  };
+  issue?: {
     iid: number;
     ref: string;
     title: string;
@@ -84,6 +109,35 @@ function issueEvent(action: string | undefined): FactoryGitlabEventName | undefi
 }
 
 /**
+ * GitLab's merge-request actions. `open` and `reopen` both put the MR in the
+ * state a new one arrives in. `merge` and `close` are distinct outcomes —
+ * merged work is finished, closed work was abandoned — so they map to separate
+ * events rather than one "no longer open".
+ *
+ * `approved`/`unapproved` and `approval`/`unapproval` are deliberately dropped:
+ * an approval is a verdict on a review Factory did not necessarily run, and
+ * acting on it would move cards a reviewer never asked to move.
+ */
+function mergeRequestEvent(action: string | undefined, merged: boolean): FactoryGitlabEventName | undefined {
+  switch (action) {
+    case 'open':
+    case 'reopen':
+      return 'mergeRequestOpened';
+    case 'update':
+      return 'mergeRequestUpdated';
+    case 'merge':
+      return 'mergeRequestMerged';
+    case 'close':
+      return 'mergeRequestClosed';
+    default:
+      // GitLab has shipped deliveries whose `action` is absent but whose state
+      // already reads `merged`; treating that as a merge is truer than dropping
+      // the one delivery that retires the card.
+      return merged ? 'mergeRequestMerged' : undefined;
+  }
+}
+
+/**
  * Parse a delivery body into the one event it maps to, or `null` when Factory
  * has no rule for it.
  *
@@ -101,13 +155,85 @@ export function parseGitlabWebhook(body: unknown): ParsedGitlabWebhook | null {
   const projectPath = str(project?.['path_with_namespace']);
   if (projectId === undefined || !projectPath) return null;
 
+  const attributes = object(payload['object_attributes']);
+  if (!attributes) return null;
+
+  // A `note` delivery carries the thing it is attached to alongside it, so
+  // `noteable_type` decides whether this is an issue comment or an MR comment.
+  const noteableType = kind === 'note' ? str(attributes['noteable_type']) : undefined;
+  const isMergeRequest = kind === 'merge_request' || noteableType === 'MergeRequest';
+
+  if (isMergeRequest) {
+    const mrSource = kind === 'note' ? object(payload['merge_request']) : attributes;
+    if (!mrSource) return null;
+
+    const iid = num(mrSource['iid']);
+    const title = str(mrSource['title']);
+    const headBranch = str(mrSource['source_branch']);
+    const baseBranch = str(mrSource['target_branch']);
+    if (iid === undefined || !title || !headBranch || !baseBranch) return null;
+
+    const rawState = str(mrSource['state']);
+    const merged = rawState === 'merged';
+    const event = kind === 'note' ? 'mergeRequestNoteCreated' : mergeRequestEvent(str(attributes['action']), merged);
+    if (!event) return null;
+
+    const updatedAt = str(mrSource['updated_at']);
+    const mrUrl = str(mrSource['url']) ?? str(mrSource['web_url']) ?? `${projectPath}!${iid}`;
+    const noteId = kind === 'note' ? (num(attributes['id']) ?? 0) : undefined;
+    const noteAuthor = str(object(payload['user'])?.['username']);
+
+    const note =
+      kind === 'note'
+        ? {
+            id: noteId ?? 0,
+            body: str(attributes['note']) ?? '',
+            ...(str(attributes['url']) ? { url: str(attributes['url'])! } : {}),
+            ...(noteAuthor ? { author: noteAuthor } : {}),
+            ...(str(attributes['created_at']) ? { createdAt: str(attributes['created_at'])! } : {}),
+          }
+        : undefined;
+
+    return {
+      event,
+      deliveryId: note
+        ? `gitlab:mr-note:${note.id}`
+        : `gitlab:merge-request:${projectId}!${iid}:${event}:${updatedAt ?? 'unknown'}`,
+      project: { id: projectId, pathWithNamespace: projectPath },
+      mergeRequest: {
+        iid,
+        ref: formatIssueRef({ projectId: String(projectId), iid }),
+        title,
+        url: mrUrl,
+        // `locked` is a transient lock during merge, not a lifecycle state: an
+        // MR is open until it is merged or closed.
+        state: rawState === 'closed' ? 'closed' : 'open',
+        merged,
+        draft: mrSource['draft'] === true || mrSource['work_in_progress'] === true,
+        headBranch,
+        baseBranch,
+        author: noteAuthor ?? null,
+        // GitLab sets `oldrev` only when the head moved, which is the only way
+        // to tell a push from a title edit inside one `update` action.
+        headChanged: str(attributes['oldrev']) !== undefined,
+        ...(strings(mrSource['assignees']) ? { assignees: strings(mrSource['assignees'])! } : {}),
+        ...(strings(mrSource['reviewers']) ? { reviewers: strings(mrSource['reviewers'])! } : {}),
+        ...(strings(payload['labels']) ?? strings(mrSource['labels'])
+          ? { labels: (strings(payload['labels']) ?? strings(mrSource['labels']))! }
+          : {}),
+        ...(str(mrSource['created_at']) ? { createdAt: str(mrSource['created_at'])! } : {}),
+        ...(updatedAt ? { updatedAt } : {}),
+      },
+      ...(note ? { mergeRequestNote: note } : {}),
+    };
+  }
+
   // An `issue` delivery describes the issue in `object_attributes`; a `note`
   // describes the note there and the issue alongside it.
-  const attributes = object(payload['object_attributes']);
   const issueSource = kind === 'note' ? object(payload['issue']) : attributes;
-  if (!attributes || !issueSource) return null;
+  if (!issueSource) return null;
 
-  if (kind === 'note' && str(attributes['noteable_type']) !== 'Issue') return null;
+  if (kind === 'note' && noteableType !== 'Issue') return null;
 
   const iid = num(issueSource['iid']);
   const title = str(issueSource['title']);

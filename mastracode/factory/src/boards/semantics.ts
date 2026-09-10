@@ -14,7 +14,12 @@ export interface PhaseSemantics {
  * legacy assignment the transition service performs on their next move.
  */
 export function boardForWorkItem(item: Pick<WorkItemRow, 'board' | 'externalSource'>): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  if (item.board) return item.board;
+  // A proposed change belongs in review regardless of which provider named it:
+  // GitHub calls it a pull request, GitLab a merge request. Anything else is
+  // work to be done.
+  const type = item.externalSource?.type;
+  return type === 'pull-request' || type === 'merge-request' ? 'review' : 'work';
 }
 
 /**

@@ -434,9 +434,20 @@ describe('diagnostics', () => {
       oauthConfigured: true,
       staticTokenFallback: true,
       webhookSecretConfigured: true,
-      // Intake-only for now: GitLab ships no versionControl surface.
       capabilities: { intake: true, versionControl: true },
-      gitlabRuleEvents: ['issueOpened', 'issueEdited', 'issueClosed', 'issueNoteCreated'],
+      // Every event the integration dispatches, so a deployment can see which
+      // GitLab hooks are worth enabling.
+      gitlabRuleEvents: [
+        'issueOpened',
+        'issueEdited',
+        'issueClosed',
+        'issueNoteCreated',
+        'mergeRequestOpened',
+        'mergeRequestUpdated',
+        'mergeRequestMerged',
+        'mergeRequestClosed',
+        'mergeRequestNoteCreated',
+      ],
     });
   });
 });

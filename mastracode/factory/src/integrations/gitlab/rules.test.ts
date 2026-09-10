@@ -60,6 +60,53 @@ function noteDelivery(overrides: Record<string, unknown> = {}, user: { username:
   };
 }
 
+function mrDelivery(overrides: Record<string, unknown> = {}, projectId = 42) {
+  return {
+    object_kind: 'merge_request',
+    user: { username: 'contributor' },
+    project: { id: projectId, path_with_namespace: 'acme/widgets' },
+    object_attributes: {
+      iid: 12,
+      title: 'Add the widget',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12',
+      state: 'opened',
+      action: 'open',
+      source_branch: 'feat/widget',
+      target_branch: 'main',
+      created_at: '2026-02-01T00:00:00Z',
+      updated_at: '2026-02-02T00:00:00Z',
+      ...overrides,
+    },
+  };
+}
+
+function mrNoteDelivery(
+  overrides: Record<string, unknown> = {},
+  user: { username: string } = { username: 'commenter' },
+) {
+  return {
+    object_kind: 'note',
+    user,
+    project: { id: 42, path_with_namespace: 'acme/widgets' },
+    object_attributes: {
+      id: 950,
+      note: 'One nit.',
+      noteable_type: 'MergeRequest',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12#note_950',
+      created_at: '2026-02-03T00:00:00Z',
+      ...overrides,
+    },
+    merge_request: {
+      iid: 12,
+      title: 'Add the widget',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12',
+      state: 'opened',
+      source_branch: 'feat/widget',
+      target_branch: 'main',
+    },
+  };
+}
+
 function parse(body: unknown): ParsedGitlabWebhook {
   const parsed = parseGitlabWebhook(body);
   if (!parsed) throw new Error('fixture is not a dispatchable delivery');
@@ -95,6 +142,8 @@ async function harness(
     input: { name: 'Widgets', repositoryId: null },
   });
 
+  // The default boards come along because a merge request materializes onto
+  // the built-in review board.
   const boards = createBoardRegistry({ boards: [triageless] });
   const configVersion = 'test-config';
   const rules = new GitlabRules({
@@ -484,5 +533,140 @@ describe('rule resolution', () => {
 
   it('rejects a GitHub event name to catch a copy-pasted rule map', () => {
     expect(() => resolveGitlabRules({ pullRequestOpened: vi.fn() } as never)).toThrow(/Unknown GitLab rule event/);
+  });
+});
+
+describe('merge requests on the review board', () => {
+  it('materializes a review card from a new merge request', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await expect(h.deliver(mrDelivery())).resolves.toEqual({ status: 'committed' });
+
+    const [card] = await h.cards();
+    expect(card).toMatchObject({
+      title: 'acme/widgets!12: Add the widget',
+      stages: ['intake'],
+      externalSource: { integrationId: 'gitlab', type: 'merge-request', externalId: '42!12' },
+    });
+    // The review board reads the branches from metadata to build its checkout hint.
+    expect(card?.metadata).toMatchObject({ iid: 12, headBranch: 'feat/widget', baseBranch: 'main', merged: false });
+  });
+
+  it('does not confuse a merge request with an issue that shares its iid', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(issueDelivery({ iid: 12 }));
+    await h.deliver(mrDelivery({ iid: 12 }));
+
+    const cards = await h.cards();
+    expect(cards).toHaveLength(2);
+    // Same `42!12` ref on both; only the type separates them. Collapsing them
+    // would drive an issue card with merge-request events.
+    expect(cards.map(card => card.externalSource?.type).sort()).toEqual(['issue', 'merge-request']);
+  });
+
+  it('holds a human-authored merge request in intake instead of auto-starting it', async () => {
+    const h = await harness({ connectedAs: async () => 'factory-bot' });
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+
+    const [card] = await h.cards();
+    // The payload carries no write-access signal, so anything but Factory's own
+    // MR waits to be picked up rather than starting an autonomous session.
+    expect(card?.metadata).toMatchObject({ autoStartCandidate: false, factoryAuthored: false });
+  });
+
+  it('marks a merge request Factory opened as its own', async () => {
+    const h = await harness({ connectedAs: async () => 'factory-bot' });
+    await h.bind('42', {});
+    await h.deliver(mrDelivery({}, 42) && { ...mrDelivery(), user: { username: 'factory-bot' } });
+
+    const [card] = await h.cards();
+    expect(card?.metadata).toMatchObject({ autoStartCandidate: true, factoryAuthored: true });
+  });
+
+  it('moves the review card to done when the merge request merges', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await expect(h.deliver(mrDelivery({ action: 'merge', state: 'merged' }))).resolves.toEqual({
+      status: 'committed',
+    });
+
+    const [card] = await h.cards();
+    expect(card?.stages).toEqual(['done']);
+  });
+
+  it('cancels the review card when the merge request closes unmerged', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'close', state: 'closed' }));
+
+    const [card] = await h.cards();
+    // Abandoned work is canceled, not completed.
+    expect(card?.stages).toEqual(['canceled']);
+  });
+
+  it('re-reviews a merged-then-updated card only when the head actually moved', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'merge', state: 'merged' }));
+    expect((await h.cards())[0]?.stages).toEqual(['done']);
+
+    // A retitle is not new code to review.
+    await h.deliver(mrDelivery({ action: 'update', title: 'Add the widget, better' }));
+    expect((await h.cards())[0]?.stages).toEqual(['done']);
+  });
+
+  it('pulls a finished card back into review when a push moves the head', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'merge', state: 'merged' }));
+
+    await h.deliver(mrDelivery({ action: 'update', oldrev: 'abc123', updated_at: '2026-02-05T00:00:00Z' }));
+    expect((await h.cards())[0]?.stages).toEqual(['review']);
+  });
+
+  it('leaves a merged card alone on a redelivery of the same merge', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'merge', state: 'merged' }));
+    await expect(h.deliver(mrDelivery({ action: 'merge', state: 'merged' }))).resolves.toEqual({
+      status: 'replayed',
+    });
+
+    expect((await h.cards())[0]?.stages).toEqual(['done']);
+  });
+
+  it('does not resurrect a canceled card with a later note', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'close', state: 'closed' }));
+    await h.deliver(mrNoteDelivery());
+
+    expect((await h.cards())[0]?.stages).toEqual(['canceled']);
+  });
+
+  it('ignores a merge request note Factory wrote itself', async () => {
+    const h = await harness({ connectedAs: async () => 'factory-bot' });
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+
+    const before = await h.workItems.listDeferredDecisions({ orgId: ORG, limit: 50 });
+    await h.deliver(mrNoteDelivery({}, { username: 'factory-bot' }));
+    const after = await h.workItems.listDeferredDecisions({ orgId: ORG, limit: 50 });
+    // Factory's own review note coming back would have it answering itself.
+    expect(after.length).toBe(before.length);
+  });
+
+  it('ignores a merge request for a project nothing is bound to', async () => {
+    const h = await harness();
+    await expect(h.deliver(mrDelivery())).resolves.toEqual({ status: 'ignored' });
+    expect(await h.cards()).toHaveLength(0);
   });
 });

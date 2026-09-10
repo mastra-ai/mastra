@@ -10,6 +10,7 @@ describe('workItemSource', () => {
     expect(workItemSource({ integrationId: 'github', type: 'pull-request', externalId: '42' })).toBe('github-pr');
     expect(workItemSource({ integrationId: 'linear', type: 'issue', externalId: 'ENG-42' })).toBe('linear-issue');
     expect(workItemSource({ integrationId: 'gitlab', type: 'issue', externalId: '42!7' })).toBe('gitlab-issue');
+    expect(workItemSource({ integrationId: 'gitlab', type: 'merge-request', externalId: '42!12' })).toBe('gitlab-mr');
   });
 
   it('treats a provider without its own identity as a plain work item', () => {
@@ -23,6 +24,7 @@ describe('factoryRuleSourceForWorkItem', () => {
     ['github-pr', 'pullRequest'],
     ['linear-issue', 'linearIssue'],
     ['gitlab-issue', 'gitlabIssue'],
+    ['gitlab-mr', 'gitlabMergeRequest'],
     ['manual', 'manual'],
   ] as const)('reports %s as the %s rule family', (source, expected) => {
     expect(factoryRuleSourceForWorkItem(source satisfies WorkItemSource)).toBe(expected);

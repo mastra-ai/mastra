@@ -179,3 +179,142 @@ describe('parsed shape', () => {
     expect(parseGitlabWebhook(issueDelivery({ labels: ['bug', 'p1'] }))?.issue.labels).toEqual(['bug', 'p1']);
   });
 });
+
+function mrDelivery(overrides: Record<string, unknown> = {}) {
+  return {
+    object_kind: 'merge_request',
+    user: { username: 'contributor' },
+    project,
+    labels: [{ title: 'feature' }],
+    object_attributes: {
+      iid: 12,
+      title: 'Add the widget',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12',
+      state: 'opened',
+      action: 'open',
+      source_branch: 'feat/widget',
+      target_branch: 'main',
+      created_at: '2026-02-01T00:00:00Z',
+      updated_at: '2026-02-02T00:00:00Z',
+      reviewers: [{ username: 'reviewer' }],
+      ...overrides,
+    },
+  };
+}
+
+function mrNoteDelivery(overrides: Record<string, unknown> = {}) {
+  return {
+    object_kind: 'note',
+    user: { username: 'commenter' },
+    project,
+    object_attributes: {
+      id: 950,
+      note: 'One nit.',
+      noteable_type: 'MergeRequest',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12#note_950',
+      created_at: '2026-02-03T00:00:00Z',
+      ...overrides,
+    },
+    merge_request: {
+      iid: 12,
+      title: 'Add the widget',
+      url: 'https://gitlab.com/acme/widgets/-/merge_requests/12',
+      state: 'opened',
+      source_branch: 'feat/widget',
+      target_branch: 'main',
+      updated_at: '2026-02-02T00:00:00Z',
+    },
+  };
+}
+
+describe('merge request deliveries', () => {
+  it.each([
+    ['open', 'mergeRequestOpened'],
+    ['reopen', 'mergeRequestOpened'],
+    ['update', 'mergeRequestUpdated'],
+    ['merge', 'mergeRequestMerged'],
+    ['close', 'mergeRequestClosed'],
+  ])('maps merge request action %s onto %s', (action, event) => {
+    expect(parseGitlabWebhook(mrDelivery({ action }))?.event).toBe(event);
+  });
+
+  it('ignores approval actions rather than acting on a verdict it did not run', () => {
+    for (const action of ['approved', 'unapproved', 'approval', 'unapproval']) {
+      expect(parseGitlabWebhook(mrDelivery({ action }))).toBeNull();
+    }
+  });
+
+  it('reads a merged state as a merge even when the action is absent', () => {
+    const parsed = parseGitlabWebhook(mrDelivery({ action: undefined, state: 'merged' }));
+    expect(parsed?.event).toBe('mergeRequestMerged');
+    expect(parsed?.mergeRequest?.merged).toBe(true);
+  });
+
+  it('carries the branches, ref, and labels the review board reads', () => {
+    const parsed = parseGitlabWebhook(mrDelivery());
+    expect(parsed?.mergeRequest).toMatchObject({
+      iid: 12,
+      ref: '42!12',
+      headBranch: 'feat/widget',
+      baseBranch: 'main',
+      state: 'open',
+      merged: false,
+      draft: false,
+      author: 'contributor',
+      labels: ['feature'],
+      reviewers: ['reviewer'],
+    });
+    // An MR delivery describes no issue; leaving one behind would let an issue
+    // rule fire on a merge request.
+    expect(parsed?.issue).toBeUndefined();
+  });
+
+  it('treats a locked merge request as still open', () => {
+    // `locked` is a transient state while GitLab performs the merge.
+    expect(parseGitlabWebhook(mrDelivery({ state: 'locked' }))?.mergeRequest?.state).toBe('open');
+  });
+
+  it('reports a draft under either of GitLab\u2019s two field names', () => {
+    expect(parseGitlabWebhook(mrDelivery({ draft: true }))?.mergeRequest?.draft).toBe(true);
+    expect(parseGitlabWebhook(mrDelivery({ work_in_progress: true }))?.mergeRequest?.draft).toBe(true);
+    expect(parseGitlabWebhook(mrDelivery())?.mergeRequest?.draft).toBe(false);
+  });
+
+  it('marks only a delivery that moved the head as a push', () => {
+    // GitLab collapses a push, a retitle, and a label change into one `update`.
+    expect(parseGitlabWebhook(mrDelivery({ action: 'update', oldrev: 'abc123' }))?.mergeRequest?.headChanged).toBe(true);
+    expect(parseGitlabWebhook(mrDelivery({ action: 'update' }))?.mergeRequest?.headChanged).toBe(false);
+  });
+
+  it('routes a note by what it is attached to', () => {
+    const onMr = parseGitlabWebhook(mrNoteDelivery());
+    expect(onMr?.event).toBe('mergeRequestNoteCreated');
+    expect(onMr?.mergeRequestNote).toMatchObject({ id: 950, body: 'One nit.', author: 'commenter' });
+    expect(onMr?.mergeRequest?.iid).toBe(12);
+    expect(onMr?.issue).toBeUndefined();
+    expect(onMr?.issueNote).toBeUndefined();
+  });
+
+  it('drops a merge request delivery with no branches to review', () => {
+    expect(parseGitlabWebhook(mrDelivery({ source_branch: undefined }))).toBeNull();
+    expect(parseGitlabWebhook(mrDelivery({ target_branch: undefined }))).toBeNull();
+  });
+
+  it('separates a merge request from an issue sharing its iid', () => {
+    // Both are `42!12` by ref; only the delivery shape tells them apart.
+    const mr = parseGitlabWebhook(mrDelivery({ iid: 12 }));
+    const issue = parseGitlabWebhook(issueDelivery({ iid: 12 }));
+    expect(mr?.deliveryId).not.toBe(issue?.deliveryId);
+    expect(mr?.mergeRequest?.ref).toBe(issue?.issue?.ref);
+  });
+
+  it('keeps distinct merge request actions from colliding in one second', () => {
+    const updated = parseGitlabWebhook(mrDelivery({ action: 'update' }));
+    const merged = parseGitlabWebhook(mrDelivery({ action: 'merge', state: 'merged' }));
+    expect(updated?.deliveryId).not.toBe(merged?.deliveryId);
+  });
+
+  it('collapses a redelivery of the same change onto one id', () => {
+    expect(parseGitlabWebhook(mrDelivery())?.deliveryId).toBe(parseGitlabWebhook(mrDelivery())?.deliveryId);
+  });
+});

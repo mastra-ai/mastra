@@ -5,7 +5,14 @@ import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.
  * and the route response derive from this, so adding a provider cannot leave a
  * hand-maintained copy behind that silently drops it.
  */
-export const WORK_ITEM_SOURCES = ['github-issue', 'github-pr', 'linear-issue', 'gitlab-issue', 'manual'] as const;
+export const WORK_ITEM_SOURCES = [
+  'github-issue',
+  'github-pr',
+  'linear-issue',
+  'gitlab-issue',
+  'gitlab-mr',
+  'manual',
+] as const;
 export type WorkItemSource = (typeof WORK_ITEM_SOURCES)[number];
 
 export function isWorkItemSource(value: unknown): value is WorkItemSource {
@@ -35,7 +42,9 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  if (source.integrationId === 'gitlab') return 'gitlab-issue';
+  if (source.integrationId === 'gitlab') {
+    return source.type === 'merge-request' ? 'gitlab-mr' : 'gitlab-issue';
+  }
   // Only GitHub, Linear, and GitLab carry a provider identity; anything else (a
   // Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
@@ -126,7 +135,14 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
-export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'gitlabIssue', 'manual'] as const;
+export const FACTORY_RULE_SOURCES = [
+  'issue',
+  'pullRequest',
+  'linearIssue',
+  'gitlabIssue',
+  'gitlabMergeRequest',
+  'manual',
+] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
@@ -155,7 +171,17 @@ export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
  * issues and their notes only — merge-request events arrive under their own
  * family.
  */
-export const FACTORY_GITLAB_EVENTS = ['issueOpened', 'issueEdited', 'issueClosed', 'issueNoteCreated'] as const;
+export const FACTORY_GITLAB_EVENTS = [
+  'issueOpened',
+  'issueEdited',
+  'issueClosed',
+  'issueNoteCreated',
+  'mergeRequestOpened',
+  'mergeRequestUpdated',
+  'mergeRequestMerged',
+  'mergeRequestClosed',
+  'mergeRequestNoteCreated',
+] as const;
 export type FactoryGitlabEventName = (typeof FACTORY_GITLAB_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
@@ -330,7 +356,8 @@ export interface FactoryGitlabRuleContext extends FactoryRuleContextBase {
   /** GitLab's delivery identity: `object_kind` plus the issue's `updated_at`. */
   deliveryId: string;
   project: { id: number; pathWithNamespace: string };
-  issue: {
+  /** Present on every `issue*` delivery. Absent on merge-request deliveries. */
+  issue?: {
     /** Project-scoped issue number — what GitLab shows and its API paths take. */
     iid: number;
     /** `${projectId}!${iid}`, the ref the intake capability round-trips. */
@@ -344,6 +371,51 @@ export interface FactoryGitlabRuleContext extends FactoryRuleContextBase {
     labels?: readonly string[];
     createdAt?: string;
     updatedAt?: string;
+  };
+  /**
+   * Present on every `mergeRequest*` delivery. Mutually exclusive with `issue`:
+   * a delivery describes one or the other, never both.
+   */
+  mergeRequest?: {
+    /** Project-scoped MR number — what GitLab shows and its API paths take. */
+    iid: number;
+    /** `${projectId}!${iid}`, matching the issue ref grammar. */
+    ref: string;
+    title: string;
+    url: string;
+    /** GitLab's four states, collapsed the way the version-control capability collapses them. */
+    state: 'open' | 'closed';
+    merged: boolean;
+    draft: boolean;
+    headBranch: string;
+    baseBranch: string;
+    author: string | null;
+    assignees?: readonly string[];
+    reviewers?: readonly string[];
+    labels?: readonly string[];
+    createdAt?: string;
+    updatedAt?: string;
+    /**
+     * True when this delivery moved the MR head — GitLab collapses every change
+     * into one `update` action, and its `oldrev` field is the only thing that
+     * distinguishes a push from a title edit or a label change.
+     */
+    headChanged: boolean;
+    /**
+     * Factory opens merge requests through the connected account, so its own MR
+     * comes back as a delivery. `false` when authorship cannot be resolved.
+     */
+    factoryAuthored: boolean;
+  };
+  /** Present on `mergeRequestNoteCreated`: the note that triggered the delivery. */
+  mergeRequestNote?: {
+    id: number;
+    body: string;
+    url?: string;
+    author?: string;
+    createdAt?: string;
+    /** Same self-authorship guard as `issueNote`. */
+    factoryAuthored: boolean;
   };
   /** Present on `issueNoteCreated`: the note that triggered the delivery. */
   issueNote?: {
@@ -496,6 +568,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'linearIssue';
     case 'gitlab-issue':
       return 'gitlabIssue';
+    case 'gitlab-mr':
+      return 'gitlabMergeRequest';
     case 'manual':
       return 'manual';
   }

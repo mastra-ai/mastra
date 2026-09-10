@@ -25,6 +25,24 @@ describe('boardForWorkItem', () => {
     ).toBe('review');
     expect(boardForWorkItem({ board: null, externalSource: null })).toBe('work');
   });
+
+  it('infers Review for a legacy merge-request row too', () => {
+    // A proposed change belongs in review whichever provider named it;
+    // inferring Work would strand a GitLab card on a board with no reviewer.
+    expect(
+      boardForWorkItem({
+        board: null,
+        externalSource: { integrationId: 'gitlab', type: 'merge-request', externalId: '42!12' },
+      }),
+    ).toBe('review');
+    // A GitLab issue is still work to be done.
+    expect(
+      boardForWorkItem({
+        board: null,
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: '42!7' },
+      }),
+    ).toBe('work');
+  });
 });
 
 describe('resolvePhaseSemantics', () => {

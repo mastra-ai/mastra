@@ -83,7 +83,21 @@ export class GitlabRules {
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
       });
-      const relatedItem = items.find(item => item.externalSource?.externalId === input.parsed.issue.ref);
+      // Issues and merge requests share the `${projectId}!${iid}` ref grammar
+      // and are numbered separately, so the type has to match too — otherwise
+      // issue !7 and merge request !7 would resolve to each other's card.
+      const subject = input.parsed.mergeRequest ?? input.parsed.issue;
+      const subjectType = input.parsed.mergeRequest ? 'merge-request' : 'issue';
+      if (!subject) {
+        statuses.push('ignored');
+        continue;
+      }
+      const relatedItem = items.find(
+        item =>
+          item.externalSource?.externalId === subject.ref &&
+          item.externalSource?.integrationId === 'gitlab' &&
+          item.externalSource?.type === subjectType,
+      );
       statuses.push(await this.#commit(binding.orgId, binding, relatedItem, input.parsed));
     }
 
@@ -110,6 +124,9 @@ export class GitlabRules {
     const factoryAuthored = Boolean(
       factoryAccount && parsed.issueNote?.author && parsed.issueNote.author === factoryAccount,
     );
+    const mergeRequestNoteAuthored = Boolean(
+      factoryAccount && parsed.mergeRequestNote?.author && parsed.mergeRequestNote.author === factoryAccount,
+    );
     const boundBoard = binding.board ? this.options.boards.get(binding.board) : undefined;
 
     const context: FactoryGitlabRuleContext = {
@@ -123,7 +140,7 @@ export class GitlabRules {
         ? {
             item: {
               id: relatedItem.id,
-              source: 'gitlab-issue',
+              source: parsed.mergeRequest ? 'gitlab-mr' : 'gitlab-issue',
               sourceKey: relatedItem.externalSource?.externalId ?? null,
               parentWorkItemId: relatedItem.parentWorkItemId,
               title: relatedItem.title,
@@ -140,8 +157,21 @@ export class GitlabRules {
       event: parsed.event,
       deliveryId: parsed.deliveryId,
       project: parsed.project,
-      issue: parsed.issue,
+      ...(parsed.issue ? { issue: parsed.issue } : {}),
+      ...(parsed.mergeRequest
+        ? {
+            mergeRequest: {
+              ...parsed.mergeRequest,
+              // Factory opens merge requests through the connected account, so
+              // its own MR arrives as a delivery like any other.
+              factoryAuthored: Boolean(factoryAccount && parsed.mergeRequest.author === factoryAccount),
+            },
+          }
+        : {}),
       ...(parsed.issueNote ? { issueNote: { ...parsed.issueNote, factoryAuthored } } : {}),
+      ...(parsed.mergeRequestNote
+        ? { mergeRequestNote: { ...parsed.mergeRequestNote, factoryAuthored: mergeRequestNoteAuthored } }
+        : {}),
     };
 
     const rule = this.options.gitlabRules[context.event];

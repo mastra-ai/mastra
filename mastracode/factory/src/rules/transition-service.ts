@@ -321,7 +321,9 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    // A card filed before boards were assigned explicitly infers its board from
+    // its family, and a merge request infers the same board a pull request does.
+    const legacyBoard = source === 'pullRequest' || source === 'gitlabMergeRequest' ? 'review' : 'work';
     if (item.board === null && !this.#boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -339,7 +341,11 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
+    // The review board holds proposed changes; the work board holds work to be
+    // done. Which provider named the change is irrelevant — a GitLab merge
+    // request is a pull request by another name.
+    const isProposedChange = source === 'pullRequest' || source === 'gitlabMergeRequest';
+    if ((itemBoard === 'review' && !isProposedChange) || (itemBoard === 'work' && isProposedChange)) {
       return this.#commitRejection(
         request,
         transitionId,
