@@ -1540,6 +1540,23 @@ export class DurableAgent<
   }
 
   /**
+   * Raw stored config lives on the wrapped agent for the same reason as the
+   * mutators above: durable preparation and tracing read
+   * `resolvedVersionId` from the wrapped agent's rawConfig, and the editor
+   * stamps it on the outer fork via `__setRawConfig` after
+   * `applyStoredOverrides`. Without this delegation the stamp lands on the
+   * (unread) DurableAgent-level field and version metadata silently
+   * disappears from spans and suspend snapshots.
+   */
+  override toRawConfig(): Record<string, unknown> | undefined {
+    return this.#wrappedAgent.toRawConfig();
+  }
+
+  override __setRawConfig(rawConfig: Record<string, unknown>): void {
+    this.#wrappedAgent.__setRawConfig(rawConfig);
+  }
+
+  /**
    * Create a per-request clone for applying stored editor overrides.
    *
    * The base `Agent.__fork()` builds a bare `new Agent(...)`, which for a
@@ -2124,6 +2141,45 @@ export class DurableAgent<
           text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
           details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
         });
+      }
+
+      // A run that suspended while executing a stored version must resume on
+      // *that* version. Cold rehydration rebuilds tools/model/instructions
+      // from whatever `this` currently resolves to — which, for status
+      // selectors, hot-switches to the latest publish mid-flight. Re-resolve
+      // to the pinned id and delegate. An explicit exact version at the call
+      // site is an operator escape hatch and wins over the pin, and forks
+      // already produced by `resolveVersionedAgent` are left alone (they are
+      // either this very delegation or an explicit server-side resolution).
+      const pinnedVersionId = workflowInput.agentVersionId;
+      if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
+        const callSiteSelector = options?.versions?.agents?.[this.id];
+        const hasExplicitVersion = !!callSiteSelector && 'versionId' in callSiteSelector;
+        const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
+        if (!hasExplicitVersion && pinnedVersionId !== currentVersionId) {
+          try {
+            const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+              versionId: pinnedVersionId,
+            });
+            if (resolved !== (this as unknown as Agent)) {
+              return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(
+                runId,
+                resumeData,
+                options,
+              );
+            }
+          } catch (versionError) {
+            // The pinned version may have been deleted while the run sat
+            // suspended — resume on the current definition rather than
+            // failing at the approver (mirrors Agent#execute's fallback).
+            this.logger.warn('Failed to resolve pinned agent version for durable resume, using current definition', {
+              agentId: this.id,
+              runId,
+              pinnedVersionId,
+              error: versionError,
+            });
+          }
+        }
       }
 
       const messageListMemoryInfo = (

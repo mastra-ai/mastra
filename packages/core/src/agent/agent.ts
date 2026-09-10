@@ -3567,6 +3567,17 @@ export class Agent<
   }
 
   /**
+   * Whether this agent is a stored-version fork produced by
+   * `Mastra.resolveVersionedAgent()`. Subclasses that implement their own
+   * resume paths (e.g. DurableAgent) use this to skip re-pinning a version
+   * that the caller already resolved explicitly.
+   * @internal
+   */
+  __isStoredVersionApplied(): boolean {
+    return this.#storedVersionApplied;
+  }
+
+  /**
    * Extract plain text lines from a single message's parts array.
    * Modeled after observational memory's formatObserverMessage — switches on
    * part type, emits role-prefixed text, and drops all metadata.

@@ -254,6 +254,15 @@ export interface DurableAgenticWorkflowInput {
   agentId: string;
   /** Agent name for logging/tracing */
   agentName?: string;
+  /**
+   * Exact stored version id the run resolved to at start time. A run that
+   * suspends while executing a stored version must resume on *that* version —
+   * a status selector would re-resolve to whatever is published at resume
+   * time and silently change instructions/tools underneath a human approver.
+   * `DurableAgent.resume()` reads this on cold rehydration to pin the
+   * version. Absent for purely code-defined agents.
+   */
+  agentVersionId?: string;
   /** Serialized MessageList state */
   messageListState: SerializedMessageListState;
   /** Tool metadata (without execute functions) */

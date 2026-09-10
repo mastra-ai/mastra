@@ -630,6 +630,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId,
     agentId: publicAgentId,
     agentName: publicAgentName,
+    // Pin the exact stored version this run resolved to (if any) so a resume
+    // after a newer publish still re-resolves to the started version.
+    agentVersionId: resolvedVersionId,
     messageList,
     tools,
     model,
