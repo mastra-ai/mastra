@@ -48,6 +48,40 @@ function publishStepEvent(
 }
 
 /**
+ * Builds the display name for a control-flow container span. When the graph
+ * entry carries an authored `id`, it is used so observability tools can
+ * identify the specific operation (e.g. `parallel: 'check-document'`).
+ * Otherwise the generic structural name is used as a fallback.
+ */
+function getControlFlowSpanName(entry: { id?: string }, fallbackName: string): string {
+  const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+  return id ? `${fallbackName.split(':')[0]}: '${id}'` : fallbackName;
+}
+
+/**
+ * Exposes the authored entry identity and metadata on container span
+ * attributes so processors and exporters can identify the operation without
+ * relying on structural matching. Only includes fields that are present.
+ */
+function getControlFlowIdentityAttributes(entry: {
+  id?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}): Record<string, any> {
+  const attributes: Record<string, any> = {};
+  if (typeof entry.id === 'string' && entry.id.trim()) {
+    attributes.entryId = entry.id;
+  }
+  if (typeof entry.description === 'string' && entry.description.trim()) {
+    attributes.entryDescription = entry.description;
+  }
+  if (entry.metadata && typeof entry.metadata === 'object') {
+    attributes.entryMetadata = entry.metadata;
+  }
+  return attributes;
+}
+
+/**
  * Runs one child of a parallel/conditional block by dispatching on its step type
  * to the matching engine execute method - the same per-type dispatch the engine
  * uses for top-level entries.
@@ -75,6 +109,9 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'parallel';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     steps: SingleStepEntry[];
   };
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -133,11 +170,12 @@ export async function executeParallel(
     operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_PARALLEL,
-      name: `parallel: '${steps.length} branches'`,
+      name: getControlFlowSpanName(entry, `parallel: '${steps.length} branches'`),
       input: engine.getStepOutput(stepResults, prevStep),
       attributes: {
         branchCount: steps.length,
         parallelSteps: steps.map(s => getSingleStepEntryId(s)),
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -279,6 +317,9 @@ export interface ExecuteConditionalParams extends ObservabilityContext {
   serializedStepGraph: SerializedStepFlowEntry[];
   entry: {
     type: 'conditional';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     steps: SingleStepEntry[];
     conditions: ConditionFunction<any, any, any, any, any, DefaultEngineType>[];
   };
@@ -337,10 +378,11 @@ export async function executeConditional(
     operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_CONDITIONAL,
-      name: `conditional: '${entry.conditions.length} conditions'`,
+      name: getControlFlowSpanName(entry, `conditional: '${entry.conditions.length} conditions'`),
       input: prevOutput,
       attributes: {
         conditionCount: entry.conditions.length,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -603,6 +645,9 @@ export interface ExecuteLoopParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'loop';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     step: SingleStepEntry;
     condition: LoopConditionFunction<any, any, any, any, any, DefaultEngineType>;
     loopType: 'dowhile' | 'dountil';
@@ -665,10 +710,11 @@ export async function executeLoop(
     operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
-      name: `loop: '${entry.loopType}'`,
+      name: getControlFlowSpanName(entry, `loop: '${entry.loopType}'`),
       input: prevOutput,
       attributes: {
         loopType: entry.loopType,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -872,6 +918,9 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'foreach';
+    id?: string;
+    description?: string;
+    metadata?: Record<string, any>;
     step: SingleStepEntry;
     opts: ForeachOptions;
   };
@@ -949,11 +998,12 @@ export async function executeForeach(
     operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_LOOP,
-      name: `loop: 'foreach'`,
+      name: getControlFlowSpanName(entry, `loop: 'foreach'`),
       input: prevOutput,
       attributes: {
         loopType: 'foreach',
         concurrency,
+        ...getControlFlowIdentityAttributes(entry),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },

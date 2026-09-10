@@ -622,6 +622,12 @@ export interface WorkflowConditionalAttributes extends AIBaseAttributes {
   truthyIndexes?: number[];
   /** Which steps will be executed */
   selectedSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -642,6 +648,12 @@ export interface WorkflowParallelAttributes extends AIBaseAttributes {
   branchCount: number;
   /** Step IDs being executed in parallel */
   parallelSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -656,6 +668,12 @@ export interface WorkflowLoopAttributes extends AIBaseAttributes {
   totalIterations?: number;
   /** Number of steps to run concurrently in foreach loop */
   concurrency?: number;
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**

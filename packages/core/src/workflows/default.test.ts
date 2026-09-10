@@ -5,7 +5,7 @@ import { RequestContext } from '../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import { createObservabilityContext } from '../observability';
+import { createObservabilityContext, SpanType } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
@@ -1850,5 +1850,222 @@ describe('DefaultExecutionEngine — requestContext serialization gating', () =>
     for (const call of spy.mock.results) {
       expect(call.value).toMatchObject({ userId: 'user-123' });
     }
+  });
+});
+
+describe('DefaultExecutionEngine control-flow span identity', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+  let childSpanSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: { validateInputs: true, shouldPersistSnapshot: () => false },
+    });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+    childSpanSpy = vi.spyOn(engine, 'createChildSpan');
+  });
+
+  function baseExecutionContext(workflowId: string, runId: string) {
+    return {
+      workflowId,
+      runId,
+      executionPath: [0],
+      stepExecutionPath: [],
+      suspendedPaths: {} as Record<string, number[]>,
+      retryConfig: { attempts: 0, delay: 0 },
+      activeStepsPath: {},
+      resumeLabels: {},
+      state: {},
+    };
+  }
+
+  function containerSpanOptions(type: SpanType) {
+    const call = childSpanSpy.mock.calls.find(([params]: any[]) => params?.options?.type === type);
+    return call?.[0]?.options as { name: string; attributes?: Record<string, any> } | undefined;
+  }
+
+  const passthroughStep = {
+    id: 'branch-step',
+    inputSchema: z.any(),
+    outputSchema: z.any(),
+    execute: async () => ({ ok: true }),
+  };
+
+  it('names the parallel container span from the entry id and attaches identity attributes', async () => {
+    const workflowId = 'span-parallel';
+    const runId = randomUUID();
+
+    await engine.executeParallel({
+      workflowId,
+      runId,
+      entry: {
+        type: 'parallel',
+        id: 'check-document',
+        description: 'run checks in parallel',
+        metadata: { team: 'docs' },
+        steps: [{ type: 'step', step: passthroughStep as unknown as Step }],
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_PARALLEL);
+    expect(options?.name).toBe("parallel: 'check-document'");
+    expect(options?.attributes).toMatchObject({
+      entryId: 'check-document',
+      entryDescription: 'run checks in parallel',
+      entryMetadata: { team: 'docs' },
+    });
+  });
+
+  it('falls back to the structural parallel name when no entry id is present', async () => {
+    const workflowId = 'span-parallel-fallback';
+    const runId = randomUUID();
+
+    await engine.executeParallel({
+      workflowId,
+      runId,
+      entry: {
+        type: 'parallel',
+        steps: [{ type: 'step', step: passthroughStep as unknown as Step }],
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_PARALLEL);
+    expect(options?.name).toBe("parallel: '1 branches'");
+    expect(options?.attributes).not.toHaveProperty('entryId');
+  });
+
+  it('names the conditional container span from the entry id and attaches identity attributes', async () => {
+    const workflowId = 'span-conditional';
+    const runId = randomUUID();
+
+    await engine.executeConditional({
+      workflowId,
+      runId,
+      entry: {
+        type: 'conditional',
+        id: 'route-request',
+        metadata: { kind: 'router' },
+        steps: [{ type: 'step', step: passthroughStep as unknown as Step }],
+        conditions: [async () => true],
+      } as any,
+      prevOutput: null,
+      serializedStepGraph: [],
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_CONDITIONAL);
+    expect(options?.name).toBe("conditional: 'route-request'");
+    expect(options?.attributes).toMatchObject({
+      entryId: 'route-request',
+      entryMetadata: { kind: 'router' },
+    });
+  });
+
+  it('names the loop container span from the entry id and attaches identity attributes', async () => {
+    const workflowId = 'span-loop';
+    const runId = randomUUID();
+    const step = {
+      id: 'loop-step',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: { iteration: number } }) => ({
+        iteration: (inputData?.iteration ?? 0) + 1,
+      }),
+    };
+
+    await engine.executeLoop({
+      workflowId,
+      runId,
+      entry: {
+        type: 'loop',
+        id: 'retry-until-ready',
+        description: 'poll until ready',
+        step: { type: 'step', step: step as unknown as Step },
+        condition: async ({ inputData }: { inputData: { iteration: number } }) => inputData.iteration >= 1,
+        loopType: 'dountil',
+      } as any,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: { iteration: 0 },
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_LOOP);
+    expect(options?.name).toBe("loop: 'retry-until-ready'");
+    expect(options?.attributes).toMatchObject({
+      entryId: 'retry-until-ready',
+      entryDescription: 'poll until ready',
+    });
+  });
+
+  it('names the foreach container span from the entry id and attaches identity attributes', async () => {
+    const workflowId = 'span-foreach';
+    const runId = randomUUID();
+    const step = {
+      id: 'foreach-step',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => inputData * 2,
+    };
+
+    await engine.executeForeach({
+      workflowId,
+      runId,
+      entry: {
+        type: 'foreach',
+        id: 'process-items',
+        metadata: { batch: true },
+        step: { type: 'step', step: step as unknown as Step },
+        opts: { concurrency: 2 },
+      } as any,
+      prevStep: { type: 'step', step } as any,
+      prevOutput: [1, 2],
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_LOOP);
+    expect(options?.name).toBe("loop: 'process-items'");
+    expect(options?.attributes).toMatchObject({
+      entryId: 'process-items',
+      entryMetadata: { batch: true },
+    });
   });
 });
