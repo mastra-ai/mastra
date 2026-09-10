@@ -10,15 +10,27 @@ import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
-async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
+async function seedFactoryWithRepository(options?: {
+  defaultModelId?: string;
+  workModelId?: string | null;
+  reviewModelId?: string | null;
+}) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
-  if (options?.defaultModelId) {
+  if (
+    options?.defaultModelId !== undefined ||
+    options?.workModelId !== undefined ||
+    options?.reviewModelId !== undefined
+  ) {
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: options.defaultModelId },
+      input: {
+        ...(options.defaultModelId !== undefined ? { defaultModelId: options.defaultModelId } : {}),
+        ...(options.workModelId !== undefined ? { workModelId: options.workModelId } : {}),
+        ...(options.reviewModelId !== undefined ? { reviewModelId: options.reviewModelId } : {}),
+      },
     });
   }
   const installation = await sourceControl.installations.upsert({
@@ -103,6 +115,64 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: undefined }));
+  });
+
+  it('starts a work-board run on the work model override', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository({
+      defaultModelId: 'anthropic/claude-opus-5',
+      workModelId: 'anthropic/claude-fable-5',
+      reviewModelId: 'openai/gpt-5',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id, ['triage'], { role: 'triage', board: 'work' }),
+    );
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'anthropic/claude-fable-5' }));
+  });
+
+  it('starts a review-board run on the review model override', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository({
+      defaultModelId: 'anthropic/claude-opus-5',
+      workModelId: 'anthropic/claude-fable-5',
+      reviewModelId: 'openai/gpt-5',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id, ['review'], { role: 'review', board: 'review' }),
+    );
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'openai/gpt-5' }));
+  });
+
+  it('starts a custom-board run on the factory default even when overrides are set', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository({
+      defaultModelId: 'anthropic/claude-opus-5',
+      workModelId: 'anthropic/claude-fable-5',
+      reviewModelId: 'openai/gpt-5',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const custom = createBoardRegistry({ boards: [createTestBoard()] });
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      custom,
+      bindingInput(project.id, ['shipping'], { role: 'release', board: 'release' }),
+    );
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'anthropic/claude-opus-5' }));
   });
 
   it('creates the source-control session the coordinator requires', async () => {

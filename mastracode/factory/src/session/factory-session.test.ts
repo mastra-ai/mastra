@@ -5,8 +5,10 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
+  modelIdForFactoryBoard,
   resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
+  resolveFactorySessionModelId,
   resolveFactorySourceRepository,
 } from './factory-session.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
@@ -278,6 +280,73 @@ describe('resolveFactoryDefaultModelId', () => {
     await expect(resolveFactoryDefaultModelId(undefined, 'project-1')).resolves.toBeUndefined();
     await expect(resolveFactoryDefaultModelId(seeded.projects, undefined)).resolves.toBeUndefined();
     await expect(resolveFactoryDefaultModelId(seeded.projects, 'missing-project')).resolves.toBeUndefined();
+  });
+});
+
+describe('modelIdForFactoryBoard', () => {
+  const project = {
+    defaultModelId: 'anthropic/claude-opus-5',
+    workModelId: 'anthropic/claude-fable-5',
+    reviewModelId: 'openai/gpt-5',
+  };
+
+  it('uses the work override on the work board and the review override on the review board', () => {
+    expect(modelIdForFactoryBoard(project, 'work')).toBe('anthropic/claude-fable-5');
+    expect(modelIdForFactoryBoard(project, 'review')).toBe('openai/gpt-5');
+  });
+
+  it('falls back to the factory default when an override is null', () => {
+    expect(modelIdForFactoryBoard({ ...project, workModelId: null, reviewModelId: null }, 'work')).toBe(
+      'anthropic/claude-opus-5',
+    );
+    expect(modelIdForFactoryBoard({ ...project, workModelId: null, reviewModelId: null }, 'review')).toBe(
+      'anthropic/claude-opus-5',
+    );
+  });
+
+  it('uses the factory default for any other board', () => {
+    expect(modelIdForFactoryBoard(project, 'release')).toBe('anthropic/claude-opus-5');
+    expect(modelIdForFactoryBoard(project, 'custom-bot')).toBe('anthropic/claude-opus-5');
+    expect(modelIdForFactoryBoard(project, undefined)).toBe('anthropic/claude-opus-5');
+  });
+
+  it('returns undefined when the project or the chosen id is missing', () => {
+    expect(modelIdForFactoryBoard(undefined, 'work')).toBeUndefined();
+    expect(
+      modelIdForFactoryBoard({ defaultModelId: null, workModelId: null, reviewModelId: null }, 'work'),
+    ).toBeUndefined();
+  });
+});
+
+describe('resolveFactorySessionModelId', () => {
+  it('loads the project and resolves by board', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: {
+        defaultModelId: 'anthropic/claude-opus-5',
+        workModelId: 'anthropic/claude-fable-5',
+        reviewModelId: 'openai/gpt-5',
+      },
+    });
+
+    await expect(resolveFactorySessionModelId(seeded.projects, project.id, 'work')).resolves.toBe(
+      'anthropic/claude-fable-5',
+    );
+    await expect(resolveFactorySessionModelId(seeded.projects, project.id, 'review')).resolves.toBe('openai/gpt-5');
+    await expect(resolveFactorySessionModelId(seeded.projects, project.id, 'release')).resolves.toBe(
+      'anthropic/claude-opus-5',
+    );
+    await expect(resolveFactorySessionModelId(seeded.projects, project.id)).resolves.toBe('anthropic/claude-opus-5');
+  });
+
+  it('returns undefined without a projects domain or a project id', async () => {
+    const seeded = await createFactoryStorageForTests();
+    await expect(resolveFactorySessionModelId(undefined, 'project-1', 'work')).resolves.toBeUndefined();
+    await expect(resolveFactorySessionModelId(seeded.projects, undefined, 'work')).resolves.toBeUndefined();
+    await expect(resolveFactorySessionModelId(seeded.projects, 'missing-project', 'work')).resolves.toBeUndefined();
   });
 });
 

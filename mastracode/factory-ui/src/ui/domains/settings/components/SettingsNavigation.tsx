@@ -63,7 +63,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints',
+          'models thinking level factory default work review session model packs api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',

@@ -26,6 +26,7 @@ import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
+import { FactoryBoardModelsSection } from './FactoryBoardModelsSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
@@ -236,10 +237,11 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
       <SettingsSubsection
         scope="factory"
         title="Factory defaults"
-        description="Applied to Factory runs (triage, board work items) and channel sessions."
+        description="Applied to Factory runs and channel sessions. Work and Review boards can override the default."
       >
         <SettingsCard>
           <FactoryDefaultModelSection models={models} />
+          <FactoryBoardModelsSection models={models} />
         </SettingsCard>
       </SettingsSubsection>
       <SettingsSubsection

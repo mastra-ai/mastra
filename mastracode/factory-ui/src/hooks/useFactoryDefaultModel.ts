@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchFactoryProject, updateFactoryDefaultModel } from '../ui/domains/workspaces/services/github';
+import { fetchFactoryProject, updateFactoryBoardModel, updateFactoryDefaultModel } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -25,6 +25,18 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
   return useMutation({
     mutationFn: (defaultModelId: string | null) =>
       updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
+    onSuccess: project => {
+      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    },
+  });
+}
+
+export function useSetFactoryBoardModelMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ field, modelId }: { field: 'workModelId' | 'reviewModelId'; modelId: string | null }) =>
+      updateFactoryBoardModel(baseUrl, factoryProjectId!, field, modelId),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
     },

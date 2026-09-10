@@ -72,6 +72,8 @@ export const updateProjectBodySchema = z
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
+    workModelId: nullableTrimmed(200).optional(),
+    reviewModelId: nullableTrimmed(200).optional(),
     slackWorkItemsEnabled: z.boolean().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),

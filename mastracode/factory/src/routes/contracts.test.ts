@@ -85,6 +85,17 @@ describe('Factory route contracts', () => {
       defaultModelId: null,
       autoRunEnabled: true,
     });
+    expect(updateProjectBodySchema.parse({ workModelId: '  ', reviewModelId: ' openai/gpt-5 ' })).toEqual({
+      workModelId: null,
+      reviewModelId: 'openai/gpt-5',
+    });
+    expect(updateProjectBodySchema.parse({ workModelId: null, reviewModelId: null })).toEqual({
+      workModelId: null,
+      reviewModelId: null,
+    });
+    expect(updateProjectBodySchema.parse({ defaultModelId: 'anthropic/claude-opus-5' })).toEqual({
+      defaultModelId: 'anthropic/claude-opus-5',
+    });
     expect(createWorkItemBodySchema.parse({ title: ' Card ', stages: ['intake'], ignored: true })).toEqual({
       title: 'Card',
       stages: ['intake'],

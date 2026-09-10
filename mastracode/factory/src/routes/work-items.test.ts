@@ -857,6 +857,104 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     expect(auditRecorded).toEqual([]);
   });
 
+  it('starts a work-board item on the work model override', async () => {
+    await seed.projects.update({
+      orgId: 'org1',
+      id: PROJECT_ID,
+      input: {
+        defaultModelId: 'anthropic/claude-opus-5',
+        workModelId: 'anthropic/claude-fable-5',
+        reviewModelId: 'openai/gpt-5',
+      },
+    });
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(startBody(workItem.id)),
+    });
+
+    expect(res.status).toBe(202);
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'anthropic/claude-fable-5' }));
+  });
+
+  it('starts a review-board item on the review model override', async () => {
+    await seed.projects.update({
+      orgId: 'org1',
+      id: PROJECT_ID,
+      input: {
+        defaultModelId: 'anthropic/claude-opus-5',
+        workModelId: 'anthropic/claude-fable-5',
+        reviewModelId: 'openai/gpt-5',
+      },
+    });
+    const created = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        board: 'review',
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: '99',
+          url: 'https://github.com/acme/app/pull/99',
+        },
+      }),
+    );
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/pr-99',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...startBody(workItem.id),
+        workItem: {
+          ...startBody(workItem.id).workItem,
+          role: 'review',
+          input: {
+            title: 'Review PR',
+            board: 'review',
+            stages: ['intake'],
+            externalSource: {
+              integrationId: 'github',
+              type: 'pull-request',
+              externalId: '99',
+            },
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: 'openai/gpt-5' }));
+  });
+
   it('starts the run under the caller, whatever actor the body claims', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();

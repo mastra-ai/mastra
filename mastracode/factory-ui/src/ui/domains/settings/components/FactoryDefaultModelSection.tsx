@@ -31,8 +31,8 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
       description={
         <>
           <span>
-            Factory runs (triage, board work items) start on this model and use the Factory observational-memory
-            settings below — your personal defaults don&apos;t apply to them.
+            Factory runs start on this model unless a Work or Review override is set. Channel sessions and new chats
+            without a personal pack use it. Your personal defaults don&apos;t apply to Factory runs.
           </span>
           {error && (
             <Txt as="span" variant="ui-xs" className="text-notice-destructive-fg">

@@ -6,12 +6,45 @@ import type { AgentController } from '@mastra/core/agent-controller';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { applyStoredMemorySettings } from './memory-settings-hydration.js';
 import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
+
+/**
+ * Model a Factory board run should start on. Work and Review may override the
+ * project default; every other board (release, custom, unset) uses the default.
+ * Null overrides fall through. Missing project or missing ids yield undefined.
+ */
+export function modelIdForFactoryBoard(
+  project: Pick<FactoryProject, 'defaultModelId' | 'workModelId' | 'reviewModelId'> | null | undefined,
+  board: string | undefined,
+): string | undefined {
+  if (!project) return undefined;
+  const override = board === 'work' ? project.workModelId : board === 'review' ? project.reviewModelId : null;
+  return override ?? project.defaultModelId ?? undefined;
+}
+
+/**
+ * Load the project and resolve the start model for `board`. Best-effort: a
+ * missing project or an uninitialized storage domain means "no model", never a
+ * failed run. Omit `board` to get the Factory default.
+ */
+export async function resolveFactorySessionModelId(
+  projects: FactoryProjectsStorage | undefined,
+  factoryProjectId: string | undefined,
+  board?: string,
+): Promise<string | undefined> {
+  if (!projects || !factoryProjectId) return undefined;
+  try {
+    const project = await projects.getById({ id: factoryProjectId });
+    return modelIdForFactoryBoard(project, board);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Read the factory project's default model. Best-effort: a missing project or an
@@ -21,13 +54,7 @@ export async function resolveFactoryDefaultModelId(
   projects: FactoryProjectsStorage | undefined,
   factoryProjectId: string | undefined,
 ): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
-  try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
-  }
+  return resolveFactorySessionModelId(projects, factoryProjectId);
 }
 
 export interface EnsureFactorySourceSessionArgs {

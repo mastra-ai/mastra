@@ -4,6 +4,9 @@ import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 
+/** Sentinel combobox value for "follow the Factory default". Never persisted. */
+export const FACTORY_DEFAULT_MODEL_VALUE = '__factory_default__';
+
 /**
  * Searchable model picker shared by the settings model surfaces (Factory
  * default model, pack editors). The catalog is large (every provider's
@@ -19,6 +22,7 @@ export function ModelCombobox({
   placeholder,
   disabled,
   className,
+  clearOptionLabel,
 }: {
   models: AvailableModelOption[];
   value: string;
@@ -26,13 +30,19 @@ export function ModelCombobox({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** When set, prepend an option that yields `FACTORY_DEFAULT_MODEL_VALUE`. */
+  clearOptionLabel?: string;
 }) {
   const options = useMemo(() => {
     const catalog: ComboboxOption[] = models.map(m => ({ label: m.id, value: m.id, description: m.provider }));
     const known = new Set(catalog.map(o => o.value));
-    const orphan: ComboboxOption[] = value && !known.has(value) ? [{ label: value, value }] : [];
-    return [...orphan, ...catalog];
-  }, [models, value]);
+    const orphan: ComboboxOption[] =
+      value && value !== FACTORY_DEFAULT_MODEL_VALUE && !known.has(value) ? [{ label: value, value }] : [];
+    const clear: ComboboxOption[] = clearOptionLabel
+      ? [{ label: clearOptionLabel, value: FACTORY_DEFAULT_MODEL_VALUE }]
+      : [];
+    return [...clear, ...orphan, ...catalog];
+  }, [models, value, clearOptionLabel]);
 
   return (
     <Combobox

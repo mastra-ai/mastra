@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { boardForWorkItem, createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
@@ -23,6 +23,7 @@ import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
 import { isWorkItemSource } from '../rules/types.js';
+import { resolveFactorySessionModelId } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -622,8 +623,18 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
-          input.defaultModelId = resolved.defaultModelId ?? undefined;
           await workItems.ensureReady();
+          const stored = await workItems.get({ orgId: resolved.orgId, id: input.workItem.id });
+          input.defaultModelId = await resolveFactorySessionModelId(
+            this.deps.projects,
+            resolved.factoryProjectId,
+            boardForWorkItem(
+              stored ?? {
+                board: input.workItem.input.board,
+                externalSource: input.workItem.input.externalSource ?? null,
+              },
+            ),
+          );
           let prepared: FactoryStartPreparedResult;
           try {
             prepared = await startCoordinator.prepare(input);

@@ -20,7 +20,7 @@ import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
-  resolveFactoryDefaultModelId,
+  resolveFactorySessionModelId,
   resolveFactoryProjectForSession,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
@@ -233,7 +233,8 @@ export async function prepareFactoryRuleBinding(
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
     // unknown board or phase yields no destination rather than a guessed one.
-    const board = boards.get(boardForWorkItem(input.item));
+    const boardId = boardForWorkItem(input.item);
+    const board = boards.get(boardId);
     const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
     const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
     const destinationStage =
@@ -273,7 +274,7 @@ export async function prepareFactoryRuleBinding(
       userId: preparedSession.userId,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
-      defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
+      defaultModelId: await resolveFactorySessionModelId(projects, input.record.factoryProjectId, boardId),
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,

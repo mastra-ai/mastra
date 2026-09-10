@@ -9,6 +9,10 @@ export interface FactoryProject {
   description: string | null;
   /** Default model for sessions/runs started under this Factory (null = harness default). */
   defaultModelId: string | null;
+  /** Optional override for Work-board sessions. Null = use `defaultModelId`. */
+  workModelId: string | null;
+  /** Optional override for Review-board sessions. Null = use `defaultModelId`. */
+  reviewModelId: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled: boolean;
   /** Whether rules may start agent runs on their own; off, a run waits for approval on its card. */
@@ -29,6 +33,8 @@ export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
   defaultModelId?: string | null;
+  workModelId?: string | null;
+  reviewModelId?: string | null;
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
@@ -43,6 +49,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     name: { type: 'text' },
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
+    work_model_id: { type: 'text', nullable: true },
+    review_model_id: { type: 'text', nullable: true },
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
@@ -59,6 +67,8 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   name: string;
   description: string | null;
   default_model_id: string | null;
+  work_model_id: string | null;
+  review_model_id: string | null;
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
@@ -74,6 +84,8 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     name: row.name,
     description: row.description,
     defaultModelId: row.default_model_id,
+    workModelId: row.work_model_id,
+    reviewModelId: row.review_model_id,
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
@@ -115,6 +127,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       name: input.name,
       description: input.description ?? null,
       default_model_id: input.defaultModelId ?? null,
+      work_model_id: null,
+      review_model_id: null,
       slack_work_items_enabled: false,
       auto_run_enabled: false,
       auto_approve_plans: false,
@@ -165,6 +179,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.defaultModelId !== undefined ? { default_model_id: input.defaultModelId } : {}),
+      ...(input.workModelId !== undefined ? { work_model_id: input.workModelId } : {}),
+      ...(input.reviewModelId !== undefined ? { review_model_id: input.reviewModelId } : {}),
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
       ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),

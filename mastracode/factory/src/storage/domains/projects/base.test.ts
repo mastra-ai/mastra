@@ -47,4 +47,50 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });
     expect(await seed.projects.get({ orgId: 'org-1', id: first.id })).toBeNull();
   });
+
+  it('round-trips work and review model overrides and clears them to null', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mastra', defaultModelId: 'anthropic/claude-opus-5' },
+    });
+
+    expect(project).toMatchObject({
+      defaultModelId: 'anthropic/claude-opus-5',
+      workModelId: null,
+      reviewModelId: null,
+    });
+
+    const updated = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: {
+        workModelId: 'anthropic/claude-fable-5',
+        reviewModelId: 'openai/gpt-5',
+      },
+    });
+    expect(updated).toMatchObject({
+      defaultModelId: 'anthropic/claude-opus-5',
+      workModelId: 'anthropic/claude-fable-5',
+      reviewModelId: 'openai/gpt-5',
+    });
+
+    const nameOnly = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { name: 'Mastra Factory' },
+    });
+    expect(nameOnly).toMatchObject({
+      workModelId: 'anthropic/claude-fable-5',
+      reviewModelId: 'openai/gpt-5',
+    });
+
+    const cleared = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { workModelId: null, reviewModelId: null },
+    });
+    expect(cleared).toMatchObject({ workModelId: null, reviewModelId: null });
+  });
 });

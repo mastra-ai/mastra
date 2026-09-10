@@ -199,6 +199,10 @@ export interface FactoryProjectPayload {
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
+  /** Optional override for Work-board sessions. Null = use `defaultModelId`. */
+  workModelId?: string | null;
+  /** Optional override for Review-board sessions. Null = use `defaultModelId`. */
+  reviewModelId?: string | null;
   /** Whether new Slack sessions create Work-board items for this Factory. */
   slackWorkItemsEnabled?: boolean;
   /** Whether Factory rules may start agent runs without someone asking for them. */
@@ -328,6 +332,25 @@ export async function updateFactoryDefaultModel(
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
     'Failed to update Factory default model',
+  );
+  return project;
+}
+
+export async function updateFactoryBoardModel(
+  baseUrl: string,
+  factoryProjectId: string,
+  field: 'workModelId' | 'reviewModelId',
+  modelId: string | null,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ [field]: modelId }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory session model',
   );
   return project;
 }
