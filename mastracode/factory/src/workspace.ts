@@ -430,7 +430,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
           existingRegistration.ghToken = freshToken;
         };
-        target.setEnv?.(env => ({ ...env, GH_TOKEN: existingRegistration.ghToken }));
+        // Install through inject (not optional-chained setEnv) so a provider
+        // that cannot accept the credential fails the reconnect here instead of
+        // deferring the failure to a later token refresh.
+        existingRegistration.inject(existingRegistration.ghToken);
         publishStartSideEffects();
         return;
       }
