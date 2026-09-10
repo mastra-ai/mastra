@@ -3,6 +3,7 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -11,7 +12,6 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChatRunning } from '../chat/chat-context';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';

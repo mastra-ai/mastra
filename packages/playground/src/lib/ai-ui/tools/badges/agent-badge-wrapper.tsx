@@ -1,7 +1,7 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
-import { LoadingBadge } from './loading-badge';
 import { resolveToChildMessages } from './resolve-child-messages';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useAgentMessages } from '@/hooks/use-agent-messages';

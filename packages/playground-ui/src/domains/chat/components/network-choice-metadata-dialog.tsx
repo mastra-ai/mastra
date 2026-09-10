@@ -1,5 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Share2 } from 'lucide-react';
+import { useState } from 'react';
+
+import { Button } from '../../../ds/components/Button';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
 import {
   Dialog,
   DialogContent,
@@ -7,10 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogBody,
-} from '@mastra/playground-ui/components/Dialog';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Share2 } from 'lucide-react';
-import { useState } from 'react';
+} from '../../../ds/components/Dialog';
+import { Txt } from '../../../ds/components/Txt';
 
 interface NetworkChoiceMetadataProps {
   selectionReason: string;
@@ -41,13 +42,13 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Txt className="text-neutral3">Selection Reason</Txt>
-            <div className="text-neutral6 text-ui-md">{selectionReason}</div>
+            <div className="text-ui-md text-neutral6">{selectionReason}</div>
           </div>
 
           {inputSlot && (
             <div className="space-y-2">
               <Txt className="text-neutral3">Input</Txt>
-              <div className="text-neutral6 text-ui-md">{inputSlot}</div>
+              <div className="text-ui-md text-neutral6">{inputSlot}</div>
             </div>
           )}
         </DialogBody>
