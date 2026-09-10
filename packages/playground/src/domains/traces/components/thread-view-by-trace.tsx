@@ -131,16 +131,15 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
     if (!spanId) setHighlight(null);
   };
 
+  // Only fades the other spans in the timeline; opening a span's detail panel stays a separate,
+  // deliberate click so highlighting does not hijack the side panel.
   const highlightSpans = (traceId: string, spanIds: string[]) => {
-    const lastSpanId = spanIds.at(-1);
-    if (!lastSpanId) {
+    if (spanIds.length === 0) {
       setHighlight(null);
       return;
     }
     setHighlight({ traceId, spanIds });
-    // Open the detail panel on the last highlighted span: the first is always the root, the
-    // last is the deepest step behind the message. The timeline scrolls the selected row into view.
-    selectSpan(traceId, lastSpanId);
+    setTraceExpanded(traceId, true);
   };
 
   return (

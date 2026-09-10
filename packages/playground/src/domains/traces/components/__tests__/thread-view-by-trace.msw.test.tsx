@@ -299,7 +299,7 @@ describe('ThreadViewByTrace', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
-    it("the tool call's highlight action fades the other spans of that trace and opens the tool span", async () => {
+    it("the tool call's highlight action fades the other spans of that trace without opening a span", async () => {
       installHandlers();
       const { queryClient } = renderView();
 
@@ -316,12 +316,11 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30');
       // ...and the other trace's tree is untouched.
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
-      // The detail panel opens on the last highlighted span (the deepest step, not the root),
-      // and the timeline scrolls that row into view.
-      expect(await screen.findByRole('button', { name: /close/i })).not.toBeNull();
-      expect(spanLabel('Recipe lookup').className).toContain('bg-surface4');
+      // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
+      // so opening a span remains the user's own click.
+      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
       expect(spanLabel('Chef agent run').className).not.toContain('bg-surface4');
-      expect(scrollIntoView).toHaveBeenCalled();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -367,6 +366,8 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(userAction);
       expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
 
+      // Highlighting does not open the panel, so open a span by hand and then close it.
+      fireEvent.click(within(spanLabel('Recipe lookup')).getByRole('button', { name: 'Recipe lookup' }));
       fireEvent.click(await screen.findByRole('button', { name: /close/i }));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
