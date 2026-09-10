@@ -138,7 +138,7 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
           !Array.isArray(propSchema) &&
           Object.keys(propSchema).length === 0
         ) {
-          return [key, { type: ['string', 'number', 'boolean', 'null'] as JSONSchema7['type'] }];
+          return [key, propSchema]; //override will handle it
         }
 
         // Recursively fix nested schemas
@@ -171,6 +171,49 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
 }
 
 /**
+ * Widen a previously-optional property schema so it accepts null.
+ *
+ * OpenAI strict mode requires every property to appear in `required`, so we express
+ * optionality by allowing null. The widening depends on the shape of the property:
+ *
+ *   - `const`: can't be widened in place (the const pins the value), so wrap in
+ *     `anyOf: [originalSchema, {type: 'null'}]`.
+ *   - `anyOf` / `oneOf`: push `{type: 'null'}` as another variant.
+ *   - scalar `type` (string or array): widen the type to include `'null'`. If the
+ *     schema also has an `enum`, append `null` to it so null satisfies both
+ *     constraints.
+ */
+function widenOptionalForNull(prop: any): any {
+  if ('const' in prop) {
+    return { anyOf: [prop, { type: 'null' }] };
+  }
+
+  if (prop.anyOf) {
+    const hasNull = prop.anyOf.some((v: any) => v && v.type === 'null');
+    return hasNull ? prop : { ...prop, anyOf: [...prop.anyOf, { type: 'null' }] };
+  }
+
+  if (prop.oneOf) {
+    const hasNull = prop.oneOf.some((v: any) => v && v.type === 'null');
+    return hasNull ? prop : { ...prop, oneOf: [...prop.oneOf, { type: 'null' }] };
+  }
+
+  let widened: any = prop;
+
+  if (widened.type && !Array.isArray(widened.type) && widened.type !== 'null') {
+    widened = { ...widened, type: [widened.type, 'null'] };
+  } else if (Array.isArray(widened.type) && !widened.type.includes('null')) {
+    widened = { ...widened, type: [...widened.type, 'null'] };
+  }
+
+  if (widened.enum && Array.isArray(widened.enum) && !widened.enum.includes(null)) {
+    widened = { ...widened, enum: [...widened.enum, null] };
+  }
+
+  return widened;
+}
+
+/**
  * Recursively ensures all properties in an object schema are included in the `required` array.
  * OpenAI's strict structured output mode requires every key in `properties` to also appear in `required`.
  *
@@ -185,9 +228,19 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
   const result = { ...schema };
 
   if (result.type === 'object' && result.properties) {
+    const existingRequired = result.required ?? [];
     result.required = Object.keys(result.properties);
+
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+      Object.entries(result.properties).map(([key, value]) => {
+        const prop = ensureAllPropertiesRequired(value as JSONSchema7) as any;
+
+        if (!existingRequired.includes(key)) {
+          return [key, widenOptionalForNull(prop)];
+        }
+
+        return [key, prop];
+      }),
     );
   }
 
@@ -316,16 +369,42 @@ export function zodToJsonSchema(
         if (def && (def.typeName === 'ZodObject' || def.type === 'object')) {
           ctx.jsonSchema.additionalProperties = false;
         }
+
+        // handle optional fields at source — emit [T, "null"] instead of {}
+        if (def && (def.type === 'optional' || def.typeName === 'ZodOptional')) {
+          const innerDef = def.innerType?._zod?.def || def.innerType?._def;
+          if (innerDef) {
+            const description = ctx.zodSchema.description;
+            const typeMap: Record<string, string> = {
+              string: 'string',
+              ZodString: 'string',
+              number: 'number',
+              ZodNumber: 'number',
+              boolean: 'boolean',
+              ZodBoolean: 'boolean',
+              integer: 'integer',
+              ZodBigInt: 'integer',
+            };
+            const innerType = typeMap[innerDef.type] || typeMap[innerDef.typeName];
+            if (innerType) {
+              ctx.jsonSchema.type = [innerType, 'null'];
+              if (description) ctx.jsonSchema.description = description;
+            }
+          }
+        }
       },
     }) as JSONSchema7;
 
-    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
-    return fixAnyOfNullable(jsonSchema);
+    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility + ensure all properties in required
+    return ensureAllPropertiesRequired(fixAnyOfNullable(jsonSchema));
   } else {
     // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    const jsonSchema = zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,
     }) as JSONSchema7;
+
+    // Same post-processing as v4: fix anyOf patterns + ensure all properties in required
+    return ensureAllPropertiesRequired(fixAnyOfNullable(jsonSchema));
   }
 }
