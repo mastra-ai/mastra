@@ -56,8 +56,27 @@ function isInstance(
 const RECORDED_TRACE_LOOKUP_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 2000];
 
 /**
- * Top-level observability entrypoint. Manages a registry of ObservabilityInstance
- * configurations and provides instance selection via config selectors.
+ * Manages observability instances and selects their configurations for Mastra operations.
+ * Configure instances and exporters to collect and export telemetry.
+ *
+ * @example
+ * `yourObservabilityConfig` defines your observability instances and exporters.
+ * ```typescript
+ * import { Mastra } from '@mastra/core/mastra';
+ * import { Observability } from '@mastra/observability';
+ *
+ * const mastra = new Mastra({
+ *   observability: new Observability(yourObservabilityConfig),
+ * });
+ * ```
+ *
+ * @see For related observability documentation bundled in `@mastra/core`, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * observability reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Observability documentation](https://mastra.ai/docs/studio/observability)
+ * if packaged docs are unavailable.
  */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();

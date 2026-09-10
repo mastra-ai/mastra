@@ -35,6 +35,24 @@ import type {
 } from './types';
 import { validateChunkParams } from './validation';
 
+/**
+ * Prepares documents for retrieval with chunking and optional metadata extraction.
+ *
+ * @example
+ * ```typescript
+ * import { MDocument } from '@mastra/rag';
+ *
+ * const document = MDocument.fromText('Text to prepare for retrieval.');
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/rag/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [RAG documentation](https://mastra.ai/reference/rag/overview)
+ * if packaged docs are unavailable.
+ */
 export class MDocument {
   private chunks: Chunk[];
   private type: string; // e.g., 'text', 'html', 'markdown', 'json'
