@@ -51,16 +51,29 @@ const looksLikeText = (file: File): Promise<boolean> =>
   new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => {
-      const text = typeof reader.result === 'string' ? reader.result : '';
-      resolve(
-        Array.from(text).every(character => {
-          const code = character.charCodeAt(0);
-          return code >= 32 || code === 9 || code === 10 || code === 12 || code === 13;
-        }),
-      );
+      if (!(reader.result instanceof ArrayBuffer)) {
+        resolve(false);
+        return;
+      }
+      try {
+        const bytes = new Uint8Array(reader.result);
+        let encoding = 'utf-8';
+        if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
+        if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
+        // A bounded probe can end mid-character; only flush the decoder at EOF.
+        const text = new TextDecoder(encoding, { fatal: true }).decode(bytes, { stream: file.size > bytes.length });
+        resolve(
+          Array.from(text).every(character => {
+            const code = character.charCodeAt(0);
+            return code >= 32 || code === 9 || code === 10 || code === 12 || code === 13;
+          }),
+        );
+      } catch {
+        resolve(false);
+      }
     };
     reader.onerror = () => resolve(false);
-    reader.readAsText(file.slice(0, 8192));
+    reader.readAsArrayBuffer(file.slice(0, 8192));
   });
 
 const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<CoreUserMessage> => {

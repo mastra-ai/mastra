@@ -80,6 +80,47 @@ describe('composer attachments', () => {
     );
   });
 
+  describe('when an unknown file contains malformed encoded text', () => {
+    it.each([
+      [0xff, 0xfe, 0xfd],
+      [0xc3, 0x28],
+      [0xe2, 0x82],
+    ])('rejects invalid bytes %j', async (...bytes) => {
+      const { ref } = renderProvider();
+      let rejected;
+      await act(async () => {
+        rejected = await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
+      });
+      expect(rejected).toEqual(['unknown.bin']);
+      expect(ref.current!.attachments).toEqual([]);
+    });
+  });
+
+  describe('when valid Unicode text crosses the probe boundary', () => {
+    it.each(['é', '€', '😀'])('preserves a split %s character', async character => {
+      const { ref } = renderProvider();
+      const text = 'a'.repeat(8191) + character + '\n';
+      await act(async () => {
+        await ref.current!.addFiles([new File([text], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: `<attachment name="source.unknown">${text}</attachment>` },
+      ]);
+    });
+  });
+
+  describe('when an unknown text file contains a literal replacement character', () => {
+    it('accepts its valid UTF-8 encoding', async () => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([new File(['literal �'], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="source.unknown">literal �</attachment>' },
+      ]);
+    });
+  });
+
   describe('when a local workbook name contains URL punctuation', () => {
     it.each(['leads#2026.xlsx', 'leads.csv#2026.xlsx', 'leads.csv?2026.xls'])(
       'rejects %s rather than reading its bytes as text',
