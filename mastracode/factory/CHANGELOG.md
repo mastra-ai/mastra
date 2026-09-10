@@ -1,5 +1,81 @@
 # @mastra/factory
 
+## 0.14.0-alpha.3
+
+### Patch Changes
+
+- The audit trail now records every stage move, run start and run end, whoever caused it. Before, only moves and starts made from the browser left a row: a rule, an agent tool, a GitHub event or the supervisor moving a card was invisible, and no run ever recorded that it ended. ([#23247](https://github.com/mastra-ai/mastra/pull/23247))
+
+  What lands in the trail now:
+
+  - `factory.work_item.stage_moved` and `factory.work_item.transition_rejected` for every accepted or rejected transition (deduplicated by transition identity), under the real actor: the person, `agent:<binding>` (also when the dispatcher carries an agent's approval), `github:<login>`, or actor type `system` for a rule. A re-entry onto the stage a card already holds is recorded with `reenter: true`.
+  - `factory.run.started` for every kickoff that reaches an agent, including the ones the rule dispatcher starts on its own. Opening a card only prepares its session; confirmed dispatcher delivery records the kickoff, including when it reuses a live session. Concurrent retries share one local event and one mirror export.
+  - `factory.run.ended`, a new action, once per kickoff: the first turn that ends without suspending closes the run with its `reason`, `kickoffId`, `bindingId`, `role`, `startedBy` and `agentName`. Shared-thread role handoffs retain each kickoff, and `startedBy` identifies the approver rather than the session credential owner
+  - `factory.agent.pr_opened`, a new action, when an agent's `gh pr create` prints the pull request it opened; the row targets that pull request by URL, and a preview, a browser hand-off or a failed create records nothing
+  - supervisor tool writes now go through the audit domain, so they reach the WorkOS mirror like every other row
+  - transition rows a person causes from the board carry that request's `location` and `userAgent`, so the WorkOS mirror stops exporting them as `unknown`
+
+  Filing a session onto a role is audited as `factory.work_item.updated` with `fields: ['sessions']`, no longer as a run start.
+
+  The list route filters by namespace instead of by action list: `GET /audit?namespaces=run,agent`. A `namespaces=` naming no known namespace is a 400, never an unfiltered page. The actions each namespace holds live in one registry on the server, `AUDIT_ACTIONS` in `storage/domains/audit/actions`, and `record`/`emit` only accept actions from it. The same module reads an action back (`parseAuditAction`, `isAuditAction`), so a client derives its categories and labels from the registry instead of copying it.
+
+  Two more modules under `storage/domains/audit` carry what a client needs without pulling storage code: `actors` (`AUDIT_ACTOR_TYPES`, `isAuditActorType`, `isHumanActorId`, the one place that knows which actor ids are the factory itself) and `wire` (`WireAuditEvent`, `WireAuditPage`, `toWireAuditEvent`). The list route now returns `WireAuditPage`: `orgId`, `factoryProjectId`, `projectRepositoryId` and the request `context` no longer leave the server.
+
+  ```ts
+  const { events } = await audit.list({ orgId, factoryProjectId, actions: ['factory.run.ended'] });
+  // events[0].metadata → { reason: 'complete', bindingId, role, startedBy, agentName, sessionId, threadId }
+  ```
+
+- The audit log's Load older events control now follows the board's Intake rule: coming into view loads one page of older events, and a page that adds nothing to scroll past waits for a click. With a time range selected, older events load on scroll as well, one page at a time, instead of only by click. ([#23249](https://github.com/mastra-ai/mastra/pull/23249))
+
+- Factory-generated commits now use the Mastra Platform bot as the commit co-author. ([#23495](https://github.com/mastra-ai/mastra/pull/23495))
+
+- Fixed the board's Intake column pulling every open pull request or issue of the repository on its own, behind a spinner, whenever a filter, cards already on the board, or drafts left the loaded pages with little to show. ([#23249](https://github.com/mastra-ai/mastra/pull/23249))
+
+  Reaching the end of the column now loads one page. A page that adds nothing to scroll past leaves the end where it is, so the next page waits for a scroll or the Load more button instead of loading by itself. The Activity, Attention, and Rules lists follow the same rule.
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`5e52cac`](https://github.com/mastra-ai/mastra/commit/5e52cacb34a7935478b04dffeae251866c9454d3), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb)]:
+  - @mastra/core@1.66.0-alpha.3
+  - @mastra/code-sdk@1.7.1-alpha.3
+
+## 0.14.0-alpha.2
+
+### Minor Changes
+
+- Added incident.io Intake integrations for direct API keys and Mastra Platform connections. ([#23327](https://github.com/mastra-ai/mastra/pull/23327))
+
+  **Intake**
+
+  - Import incidents and follow-ups onto any installed board, including custom boards.
+  - Include status, severity, ownership, labels, descriptions, and incident metadata on imported items.
+  - Refresh imported items when provider state changes.
+
+  **API client**
+
+  - Added typed read access to actions, incident updates, alerts, escalations, catalog data, teams, schedules, and policy findings.
+
+  ```typescript
+  import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
+
+  const integration = new IncidentioIntegration({ apiKey: process.env.INCIDENT_IO_API_KEY });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/code-sdk@1.7.1-alpha.2
+
+## 0.13.1-alpha.1
+
+### Patch Changes
+
+- Fixed the `mastracode/web` dev commands so the Factory API always starts on the checked-out code. `dev:ui` now runs the same `prebuild` step as `build` before starting the API, so `@mastra/server`, the `mastra` CLI, `@mastra/hono`, `@mastra/deployer`, `@mastra/platform-workspace`, `@mastra/redis-streams` and `@mastra/e2b` are rebuilt instead of served from a previous build. Switching to a branch that touches one of them no longer needs a root build by hand. ([#23426](https://github.com/mastra-ai/mastra/pull/23426))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/code-sdk@1.7.1-alpha.1
+
 ## 0.13.1-alpha.0
 
 ### Patch Changes

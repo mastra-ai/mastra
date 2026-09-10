@@ -3,6 +3,62 @@ import { describe, expect, test } from 'vitest';
 import { createTestMessage, createTrajectoryTestRun } from '../../utils';
 import { createTrajectoryAccuracyScorerCode, createTrajectoryScorerCode } from './index';
 
+describe('trajectory budget measurement failures', () => {
+  test.each(['defaults', 'item', 'nested'] as const)(
+    'rejects incomplete budget evidence from %s without a score',
+    async source => {
+      for (const budget of [{ maxTotalTokens: 10 }, { maxTotalDurationMs: 10 }]) {
+        const trajectory: Trajectory = { steps: [{ stepType: 'model_generation', name: 'model' }] };
+        const defaults: TrajectoryExpectation =
+          source === 'defaults' ? budget : source === 'nested' ? { steps: [{ name: 'agent', children: budget }] } : {};
+        const scorer = createTrajectoryScorerCode({ defaults });
+        const run = createTrajectoryTestRun({
+          trajectory:
+            source === 'nested'
+              ? { steps: [{ stepType: 'agent_run', name: 'agent', children: trajectory.steps }] }
+              : trajectory,
+        });
+        if (source === 'item') run.expectedTrajectory = budget;
+        const error = await scorer.run(run).then(
+          () => undefined,
+          error => error,
+        );
+        expect(error).toMatchObject({ failedStep: 'preprocess', completedSteps: [] });
+        expect(error).not.toHaveProperty('result.score');
+      }
+    },
+  );
+
+  test('honors an item override that removes the token budget', async () => {
+    const scorer = createTrajectoryScorerCode({ defaults: { maxTotalTokens: 10 } });
+    const run = createTrajectoryTestRun({ trajectory: { steps: [{ stepType: 'tool_call', name: 'search' }] } });
+    run.expectedTrajectory = { maxTotalTokens: undefined, maxSteps: 1 };
+    expect((await scorer.run(run)).score).toBe(1);
+  });
+
+  test('uses a matched parent duration for nested duration budgets', async () => {
+    const scorer = createTrajectoryScorerCode({
+      defaults: { steps: [{ name: 'agent', children: { maxTotalDurationMs: 10 } }] },
+    });
+    const result = await scorer.run(
+      createTrajectoryTestRun({
+        trajectory: {
+          steps: [
+            {
+              stepType: 'agent_run',
+              name: 'agent',
+              durationMs: 5,
+              children: [{ stepType: 'tool_call', name: 'search' }],
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.score).toBe(1);
+    expect(result.preprocessStepResult?.nested?.[0]?.efficiency?.totalDurationMs).toBe(5);
+  });
+});
+
 describe('createTrajectoryAccuracyScorerCode', () => {
   /**
    * Helper to build a Trajectory from step names.

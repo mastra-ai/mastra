@@ -1,6 +1,6 @@
 'use client';
 
-import type { DatasetItem, DatasetRecord } from '@mastra/client-js';
+import type { DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -32,11 +32,9 @@ export function AddItemsToDatasetDialog({
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
 
-  // Extract datasets array from response
-  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
+  const datasets = data?.datasets ?? [];
 
-  // Filter out the current dataset from the list
-  const availableDatasets = datasets.filter((d: DatasetRecord) => d.id !== currentDatasetId);
+  const availableDatasets = datasets.filter(dataset => dataset.id !== currentDatasetId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +48,6 @@ export function AddItemsToDatasetDialog({
     setProgress(0);
 
     try {
-      // Add items to selected dataset
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await addItem.mutateAsync({
@@ -62,10 +59,9 @@ export function AddItemsToDatasetDialog({
         setProgress(i + 1);
       }
 
-      const targetDataset = datasets.find((d: DatasetRecord) => d.id === selectedDatasetId);
+      const targetDataset = datasets.find(dataset => dataset.id === selectedDatasetId);
       toast.success(`Added ${items.length} item${items.length !== 1 ? 's' : ''} to "${targetDataset?.name}"`);
 
-      // Reset form
       setSelectedDatasetId('');
       setIsAdding(false);
       setProgress(0);
@@ -80,7 +76,7 @@ export function AddItemsToDatasetDialog({
   };
 
   const handleCancel = () => {
-    if (isAdding) return; // Prevent cancel during operation
+    if (isAdding) return;
     setSelectedDatasetId('');
     onOpenChange(false);
   };

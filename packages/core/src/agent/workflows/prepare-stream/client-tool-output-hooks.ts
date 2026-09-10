@@ -52,7 +52,7 @@ function unwrapToolOutput(value: unknown): { skip: true } | { skip: false; outpu
     'value' in value &&
     Object.keys(value).length === 2;
   if (isV5Wrapper && (value.type === 'error-text' || value.type === 'error-json')) return { skip: true };
-  return { skip: false, output: isV5Wrapper ? (value as Record<string, unknown>).value : value };
+  return { skip: false, output: isV5Wrapper ? value.value : value };
 }
 
 function getToolResult(part: unknown): ToolResult | undefined {
@@ -181,7 +181,7 @@ export async function applyClientToolModelOutput({
       if (
         mastraMetadata &&
         typeof mastraMetadata === 'object' &&
-        ('modelOutput' in mastraMetadata || (mastraMetadata as Record<string, unknown>).modelOutputComputed)
+        ('modelOutput' in mastraMetadata || mastraMetadata.modelOutputComputed)
       ) {
         continue;
       }

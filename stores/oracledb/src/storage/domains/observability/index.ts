@@ -6,6 +6,7 @@ import type {
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   CreateSpanArgs,
   GetEntityNamesArgs,
   GetEntityNamesResponse,
@@ -136,6 +137,10 @@ export class ObservabilityOracle extends ObservabilityStorage {
 
   async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     return scoresOps.batchCreateScores(this.db, this.schemaName, args);
+  }
+
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    return scoresOps.deleteScores(this.db, this.schemaName, args);
   }
 
   async getScoreById(scoreId: string): Promise<ScoreRecord | null> {

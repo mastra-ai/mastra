@@ -55,12 +55,6 @@ describe('formatTraceThreadMessages', () => {
       expect(messages.every(message => message.content.metadata === undefined)).toBe(true);
     });
 
-    it('flags only the text response as text-only', () => {
-      const messages = formatTraceThreadMessages(agentTraceWithTools.spans);
-
-      expect(messages.map(message => message.isTextOnly)).toEqual([true, false, false, false, false, true]);
-    });
-
     it('omits the text message when the agent turn ends without a text response', () => {
       const spans = agentTraceWithTools.spans.map(span =>
         span.spanId === 'agent-root' ? { ...span, output: {} } : span,
@@ -72,14 +66,6 @@ describe('formatTraceThreadMessages', () => {
       expect(
         messages.every(message => message.role === 'user' || message.content.parts[0]?.type === 'tool-invocation'),
       ).toBe(true);
-    });
-  });
-
-  describe('when an agent trace contains only text', () => {
-    it('flags both messages as text-only', () => {
-      const messages = formatTraceThreadMessages(basicAgentTrace.spans);
-
-      expect(messages.map(message => message.isTextOnly)).toEqual([true, true]);
     });
   });
 

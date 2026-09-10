@@ -1,5 +1,15 @@
 # create-mastra
 
+## 1.28.1-alpha.3
+
+### Patch Changes
+
+- Updated the README's pnpm command to explicitly run the latest create-mastra release. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 1.28.1-alpha.2
+
+## 1.28.1-alpha.1
+
 ## 1.28.1-alpha.0
 
 ## 1.28.0

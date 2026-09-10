@@ -8,7 +8,7 @@ import type { AuditEventPage } from '../ui/domains/factory/services/audit';
 export function useAuditEvents(
   factoryProjectId: string | undefined,
   group: string,
-  actions: string[] | undefined,
+  namespaces: string[] | undefined,
   limit?: number,
   actorIds: string[] = [],
 ) {
@@ -17,7 +17,7 @@ export function useAuditEvents(
   const initialPageParam: string | undefined = undefined;
   const queryFn = factoryProjectId
     ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-        fetchAuditEvents(baseUrl, factoryProjectId, { actions, actorIds, before: pageParam, limit, signal })
+        fetchAuditEvents(baseUrl, factoryProjectId, { namespaces, actorIds, before: pageParam, limit, signal })
     : skipToken;
   return useInfiniteQuery({
     queryKey: queryKeys.factoryAudit(factoryProjectId, group, actorKey),

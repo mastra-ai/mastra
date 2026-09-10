@@ -13,6 +13,7 @@ import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
+import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -66,7 +67,7 @@ export function getMastraVersion(projectDir: string): string | null {
     return null;
   }
 }
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string, workersManifestOverride?: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -82,7 +83,12 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    const ignore = ['node_modules/**'];
+    if (workersManifestOverride !== undefined) ignore.push('workers.json');
+    archive.glob('**', { cwd: outputDir, ignore, dot: true }, { prefix: 'output' });
+    if (workersManifestOverride !== undefined) {
+      archive.append(workersManifestOverride, { name: 'output/workers.json' });
+    }
     void archive.finalize();
   });
 }
@@ -557,6 +563,19 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
+  // Legacy pipeline: never ship a worker manifest. Only the unified
+  // `mastra deploy` flow may trigger worker-service provisioning, so
+  // overwrite `.mastra/output/workers.json` with `null` inside the archive.
+  // The app still runs its BackgroundTaskWorker in-process (mode: 'full'
+  // default), so background tasks execute — just co-located with the API
+  // replica.
+  const workersGuard = await resolveLegacyWorkersManifestOverride(join(targetDir, '.mastra', 'output'));
+  if (workersGuard.status === 'stripped') {
+    p.log.info(
+      'Background workers run in-process on studio deploys — use `mastra deploy` for a dedicated worker service.',
+    );
+  }
+
   // If the user didn't pass --env-file and no ambient .env* file exists,
   // skip the local env-var upload entirely and let the platform use the
   // env vars stored on the project. The server-side deploy handler merges
@@ -596,7 +615,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   t = performance.now();
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, workersGuard.manifestOverride);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;

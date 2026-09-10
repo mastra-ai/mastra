@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 let closeHandler: (() => void) | undefined;
+let archiveInstance:
+  | {
+      glob: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -102,14 +108,17 @@ vi.mock('@clack/prompts', () => ({
 
 vi.mock('archiver', () => ({
   ZipArchive: vi.fn(function () {
-    return {
+    const archive = {
       on: vi.fn(),
       pipe: vi.fn(),
       glob: vi.fn(),
+      append: vi.fn(),
       finalize: vi.fn(async () => {
         closeHandler?.();
       }),
     };
+    archiveInstance = archive;
+    return archive;
   }),
 }));
 
@@ -857,5 +866,37 @@ describe('resolveProject (studio)', () => {
     await expect(deployAction(undefined, { yes: true })).rejects.not.toThrow(/Pass --project/);
 
     expect(prompts.select).not.toHaveBeenCalled();
+  });
+});
+
+// ─── legacy workers-manifest strip ──────────────────────────────────────
+// Studio deploys must never ship a worker manifest — only the unified
+// `mastra deploy` flow may trigger worker-service provisioning. The strip
+// decision lives in `utils/workers-manifest-guard.ts` (tested there); these
+// tests cover the archive-side override mechanics.
+
+describe('worker manifest archive override', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: 'output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: 'output/workers.json' });
+  });
+
+  it('leaves the archive untouched when no override is given', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith('**', expect.objectContaining({ ignore: ['node_modules/**'] }), {
+      prefix: 'output',
+    });
+    expect(archiveInstance?.append).not.toHaveBeenCalled();
   });
 });

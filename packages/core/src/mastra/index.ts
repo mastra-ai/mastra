@@ -656,6 +656,23 @@ export interface MastraRecoveryConfig {
   durableAgents?: 'auto' | 'off';
 }
 
+export interface WorkersConfigSection {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+export interface WorkersConfig {
+  version: 1;
+  orchestration: WorkersConfigSection;
+  scheduler: WorkersConfigSection;
+  backgroundTasks: WorkersConfigSection;
+  custom: string[];
+}
+
+function serializableWorkerConfig<T extends object>(config: T | undefined): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(config ?? {})) as Record<string, unknown>;
+}
+
 /**
  * The central orchestrator for Mastra applications, managing agents, workflows, storage, logging, observability, and more.
  *
@@ -1003,6 +1020,27 @@ export class Mastra<
 
   getWorker<T extends MastraWorker>(name: string): T | undefined {
     return this.#workers.find(w => w.name === name) as T | undefined;
+  }
+
+  /** Returns a serializable snapshot of this instance's active worker configuration. */
+  getWorkerConfig(): WorkersConfig {
+    const runningWorkerNames = new Set(this.#workers.filter(worker => worker.isRunning).map(worker => worker.name));
+
+    return {
+      version: 1,
+      orchestration: { enabled: runningWorkerNames.has('orchestration') },
+      scheduler: {
+        ...serializableWorkerConfig(this.#schedulerConfig),
+        enabled: runningWorkerNames.has('scheduler'),
+      },
+      backgroundTasks: {
+        ...serializableWorkerConfig(this.#backgroundTaskConfig),
+        enabled: runningWorkerNames.has('backgroundTasks'),
+      },
+      custom: [...runningWorkerNames]
+        .filter(name => !['orchestration', 'scheduler', 'backgroundTasks'].includes(name))
+        .sort(),
+    };
   }
 
   get backgroundTaskManager() {

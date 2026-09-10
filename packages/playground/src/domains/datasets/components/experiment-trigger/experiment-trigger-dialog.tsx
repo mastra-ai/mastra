@@ -127,7 +127,8 @@ export function ExperimentTriggerDialog({
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
   const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
+  // `null` means the user has not made an explicit choice yet, so the dataset defaults apply.
+  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
@@ -135,6 +136,9 @@ export function ExperimentTriggerDialog({
   const { data: dataset } = useDataset(datasetId);
   const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
+  const datasetDefaultScorers = dataset?.scorerIds ?? [];
+  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
@@ -149,6 +153,7 @@ export function ExperimentTriggerDialog({
   const handleDatasetChange = (nextDatasetId: string) => {
     setDatasetId(nextDatasetId);
     setVersion(null);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
   };
 
@@ -159,7 +164,7 @@ export function ExperimentTriggerDialog({
     setVersion(initialDatasetVersion ?? null);
     setTargetType(initialTargetType ?? '');
     setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? []);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
     setRequestContextRaw('');
   };
@@ -204,7 +209,7 @@ export function ExperimentTriggerDialog({
         description: description.trim() || undefined,
         targetType,
         targetId,
-        scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
+        scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
         version: version ?? undefined,
         requestContext,
       });
@@ -316,13 +321,17 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={3} done={selectedScorers.length > 0} isLast>
+            <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
-                selectedScorers={selectedScorers}
+                selectedScorers={effectiveScorers}
                 setSelectedScorers={setSelectedScorers}
                 disabled={isRunning}
                 container={contentRef}
-                helperText="Scores are computed after each item runs."
+                helperText={
+                  usesDatasetDefaults
+                    ? "Pre-filled from the dataset's default scorers."
+                    : 'Scores are computed after each item runs.'
+                }
               />
             </PipelineStep>
           </ol>
@@ -361,7 +370,7 @@ export function ExperimentTriggerDialog({
                   Ready
                 </Badge>
                 <span className="text-ui-xs text-neutral3">
-                  {itemCount ?? 0} items · {targetType} · {selectedScorers.length} scorers
+                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>
             ) : (

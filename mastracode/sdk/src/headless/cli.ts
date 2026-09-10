@@ -153,7 +153,10 @@ Examples:
  * Headless CLI entry point: parse arguments, read stdin, initialize MastraCode,
  * run via `runMC`, render output, and exit with the mapped code.
  */
-export async function runMCCli(predrainedInput?: string | null): Promise<never> {
+export async function runMCCli(
+  predrainedInput?: string | null,
+  options?: { coAuthor?: { name?: string; email?: string } },
+): Promise<never> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHeadlessUsage();
     process.exit(0);
@@ -199,7 +202,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
-    boot = await createMastraCode({ settingsPath: args.settings });
+    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
     const { controller, session, mcpManager, effectiveDefaults } = boot;
 
     if (mcpManager?.hasServers()) {

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,6 +24,106 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'thread-1';
+
+// jsdom has no layout, so react-resizable-panels never resizes anything and
+// `collapse()`/`expand()` are silently ignored. Replace Group/Panel with a
+// deterministic stand-in that keeps sizes in React state, fires `onResize`,
+// and reports the layout to the Group so the real `useDefaultLayout` still
+// persists it. Everything else (usePanelRef, useDefaultLayout) is the real lib.
+vi.mock('react-resizable-panels', async () => {
+  const actual = await vi.importActual<typeof import('react-resizable-panels')>('react-resizable-panels');
+
+  type PanelSize = { inPixels: number; asPercentage: number };
+  type Handle = {
+    collapse: () => void;
+    expand: () => void;
+    resize: (size: string | number) => void;
+    getSize: () => PanelSize;
+    isCollapsed: () => boolean;
+  };
+
+  const LayoutContext = createContext<{ report: (id: string, size: number) => void }>({ report: () => {} });
+  const toNumber = (size: string | number | undefined, fallback: number) =>
+    size === undefined ? fallback : typeof size === 'number' ? size : Number.parseFloat(size);
+
+  const Group = ({
+    className,
+    children,
+    onLayoutChange,
+  }: {
+    className?: string;
+    children: ReactNode;
+    onLayoutChange?: (layout: Record<string, number>) => void;
+  }) => {
+    const [layout, setLayout] = useState<Record<string, number>>({});
+    const report = (id: string, size: number) =>
+      setLayout(prev => (prev[id] === size ? prev : { ...prev, [id]: size }));
+
+    useEffect(() => {
+      if (Object.keys(layout).length > 0) onLayoutChange?.(layout);
+    }, [layout, onLayoutChange]);
+
+    return (
+      <LayoutContext.Provider value={{ report }}>
+        <div data-testid="panel-group" className={className}>
+          {children}
+        </div>
+      </LayoutContext.Provider>
+    );
+  };
+
+  const Panel = ({
+    id,
+    className,
+    children,
+    panelRef,
+    defaultSize,
+    collapsedSize,
+    onResize,
+    style,
+  }: {
+    id?: string;
+    className?: string;
+    children?: ReactNode;
+    panelRef?: Ref<Handle>;
+    defaultSize?: string | number;
+    collapsedSize?: number;
+    onResize?: (size: PanelSize, prev: PanelSize | undefined, id: string) => void;
+    style?: React.CSSProperties;
+  }) => {
+    const { report } = useContext(LayoutContext);
+    const expandedSize = toNumber(defaultSize, 300);
+    const [size, setSize] = useState(expandedSize);
+
+    useImperativeHandle(panelRef, () => ({
+      collapse: () => setSize(collapsedSize ?? 0),
+      expand: () => setSize(expandedSize),
+      resize: next => setSize(toNumber(next, expandedSize)),
+      getSize: () => ({ inPixels: size, asPercentage: size }),
+      isCollapsed: () => size <= (collapsedSize ?? 0),
+    }));
+
+    useEffect(() => {
+      onResize?.({ inPixels: size, asPercentage: size }, undefined, id ?? '');
+      if (id) report(id, size);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to size changes
+    }, [size]);
+
+    return (
+      <section data-testid={`panel-${id}`} className={className} style={style}>
+        {children}
+      </section>
+    );
+  };
+
+  const Separator = () => <div data-testid="panel-separator" />;
+
+  return { ...actual, Group, Panel, Separator };
+});
+
+// CollapsiblePanel keeps its content mounted but marks the wrapper `hidden` once
+// collapsed, so "gone" means an ancestor carries the hidden attribute.
+const isHiddenFromUser = (element: HTMLElement) => element.closest('[hidden]') !== null;
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -180,6 +282,81 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+  });
+
+  it('lets the user hide the threads panel and bring it back from the page edge', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    // Given the thread list is visible next to the chat
+    await screen.findByText('Sushi ideas');
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+
+    // When I hide the threads panel
+    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+
+    // Then the list is gone and only the restore affordance remains
+    await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(true));
+    expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
+
+    // And the collapsed state is remembered for this agent
+    await waitFor(() => {
+      const layout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${AGENT_ID}`);
+      expect(layout).not.toBeNull();
+      expect(JSON.parse(layout!)['left-slot']).toBe(0);
+    });
+
+    // When I expand it again from the page edge
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand panel' }));
+
+    // Then the thread list is back
+    await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+  });
+
+  it('does not carry a hidden threads panel over to another agent', async () => {
+    installHandlers();
+    const OTHER_AGENT_ID = 'sommelier-agent';
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${OTHER_AGENT_ID}`, () =>
+        HttpResponse.json({ ...agentResponse, id: OTHER_AGENT_ID, name: 'Sommelier Agent' }),
+      ),
+      http.get(`${BASE_URL}/api/memory/threads`, ({ request }) => {
+        const agentId = new URL(request.url).searchParams.get('agentId');
+        if (agentId === OTHER_AGENT_ID) {
+          return HttpResponse.json({
+            threads: [
+              {
+                id: 'wine-1',
+                resourceId: OTHER_AGENT_ID,
+                title: 'Wine pairing',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          });
+        }
+        return HttpResponse.json(threadsResponse);
+      }),
+    );
+    const router = renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    // Given I hid the threads panel for the first agent
+    await screen.findByText('Sushi ideas');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+    await screen.findByRole('button', { name: 'Expand panel' });
+
+    // When I switch to another agent without leaving the page
+    await act(() => router.navigate(`/agents/${OTHER_AGENT_ID}/threads/new`));
+
+    // Then its threads panel is visible and its own layout is not marked collapsed
+    const otherThread = await screen.findByText('Wine pairing');
+    await waitFor(() => expect(isHiddenFromUser(otherThread)).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    const otherLayout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${OTHER_AGENT_ID}`);
+    expect(otherLayout === null || JSON.parse(otherLayout)['left-slot'] !== 0).toBe(true);
   });
 
   describe('when the thread list is still loading', () => {

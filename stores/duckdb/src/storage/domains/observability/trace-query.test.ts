@@ -91,6 +91,63 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.sql).toContain(
+      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+    );
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `$.${JSON.stringify(key)}`,
+      `$.${JSON.stringify(key)}`,
+      value,
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      'assistant',
+      'tool',
+      '$."parentMessageId"',
+      '$."parentMessageId"',
+      101,
+    ]);
+  });
+
+  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+    const key = ` latency'ms `;
+    const path = `$.${JSON.stringify(key)}`;
+    const trusted = plan({
+      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
+    });
+    const ordered = {
+      ...trusted,
+      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
+    } as TrustedTraceQueryPlan;
+
+    const compiled = compileDuckDBTraceQuery(ordered);
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
   it('selects the latest logical root before applying completion and time filters', () => {
     const compiled = compileDuckDBTraceQuery(plan());
 
@@ -136,6 +193,54 @@ describe('DuckDB advanced trace query', () => {
     expect(spanOnly.sql).not.toContain('score_events');
 
     expect(repeatedSpans.sql.match(/current_spans AS/g)).toHaveLength(1);
+  });
+
+  it('compiles feedback relations against the existing string value representation', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.sql).toContain('s.traceId IS NOT NULL');
+    expect(compiled.sql).toContain('s.traceId = r.traceId');
+    expect(compiled.sql).toContain('TRY_CAST(s.value AS DOUBLE) IS NOT NULL AND TRY_CAST(s.value AS DOUBLE) < ?');
+    expect(compiled.sql).toContain('s.value IS NOT NULL AND s.value IN (?, ?)');
+    expect(compiled.sql).toContain('s.value IS NOT NULL');
+    expect(compiled.sql).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compileDuckDBTraceQuery(plan()).sql;
+    const feedbackOnly = compileDuckDBTraceQuery(
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).sql;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
   it('uses total null semantics for negative predicates', () => {
