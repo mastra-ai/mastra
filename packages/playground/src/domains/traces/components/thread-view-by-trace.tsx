@@ -84,6 +84,13 @@ interface LoadedThreadViewByTraceProps {
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
+// The anchor row starts expanded so the reader lands on the trace they came from. A lone trace also
+// starts expanded: with nothing else on the page to stay proportional with, clamping only hides spans.
+function initiallyExpandedTraceIds(traces: LightSpanRecord[], anchorTraceId: string | null): string[] {
+  if (anchorTraceId) return [anchorTraceId];
+  return traces.length === 1 ? [traces[0].traceId] : [];
+}
+
 /** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
 function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
@@ -115,12 +122,8 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
   // Rows whose timeline is shown in full rather than clamped to the messages column. Selecting a
   // span expands its row and it stays expanded until the reader collapses it with "Show less".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(
-    () => new Set(anchorTraceId ? [anchorTraceId] : []),
+    () => new Set(initiallyExpandedTraceIds(traces, anchorTraceId)),
   );
-  // A lone trace has nothing else on the page to stay proportional with, so clamping it would only
-  // hide spans. Derived on every render (not seeded) so the row clamps again once a second trace
-  // arrives, e.g. the next turn of a live conversation.
-  const isLoneTrace = traces.length === 1;
 
   const setTraceExpanded = (traceId: string, expanded: boolean) => {
     setExpandedTraceIds(current => {
@@ -183,8 +186,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
               revealSpanId={highlight?.traceId === trace.traceId ? highlight.spanIds.at(-1) : undefined}
               isCurrent={currentTraceId === trace.traceId}
-              isExpanded={isLoneTrace || expandedTraceIds.has(trace.traceId)}
-              collapsible={!isLoneTrace}
+              isExpanded={expandedTraceIds.has(trace.traceId)}
               isAnchor={anchorTraceId === trace.traceId}
               onExpandedChange={expanded => setTraceExpanded(trace.traceId, expanded)}
               onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
@@ -215,8 +217,6 @@ interface TraceThreadRowProps {
   revealSpanId?: string;
   isCurrent: boolean;
   isExpanded: boolean;
-  /** Whether "Show less" is offered; false for a lone trace, which is always shown in full. */
-  collapsible: boolean;
   /** The oldest trace; its timeline column gets the rounded top edge of the list. */
   isFirst: boolean;
   /** The newest trace; its timeline column gets the rounded bottom edge. Can be the same row as `isFirst`. */
@@ -240,7 +240,6 @@ function TraceThreadRow({
   revealSpanId,
   isCurrent,
   isExpanded,
-  collapsible,
   isFirst,
   isLast,
   isAnchor,
@@ -359,7 +358,7 @@ function TraceThreadRow({
             )}
           </div>
           {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
-          {collapsible && overflows && !isClamped && !isActive && (
+          {overflows && !isClamped && !isActive && (
             <div className="flex justify-center py-2">
               <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
                 Show less
