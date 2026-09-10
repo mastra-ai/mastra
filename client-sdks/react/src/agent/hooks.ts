@@ -1103,7 +1103,7 @@ export const useChat = ({
     void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
       console.error('[useChat] Failed to abort thread subscription', error);
     });
-    closeThreadSubscription();
+    // Stop execution, not observation: independently queued turns can still start.
     const cancelledRunId = _currentRunId.current;
     if (cancelledRunId) finishedRuns.current.add(cancelledRunId);
     setMessages(prev =>
@@ -1120,10 +1120,12 @@ export const useChat = ({
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
-    _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
-    _activeContinuation.current = {};
+    if (!threadSubscription) {
+      _onChunk.current = undefined;
+      _activeContinuation.current = {};
+    }
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {

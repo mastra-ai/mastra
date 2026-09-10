@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
@@ -175,6 +175,7 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
 afterEach(() => {
   delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('Thread', () => {
@@ -219,6 +220,47 @@ describe('Thread', () => {
       fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
       fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
     };
+    it('keeps observing queued turns after stopping the active run', async () => {
+      const matchMedia = window.matchMedia;
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        ...matchMedia(query),
+        matches: query === '(prefers-reduced-motion: reduce)',
+      }));
+      let abortRequests = 0;
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
+          abortRequests++;
+          return HttpResponse.json(abortedThread);
+        }),
+      );
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await screen.findByText('Queued');
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+      await waitFor(() => expect(abortRequests).toBe(1));
+      expect(screen.getByText('Queued')).toBeTruthy();
+      await act(async () => {
+        emit({ type: 'abort', runId: 'first', from: 'AGENT', payload: {} });
+        emit({ type: 'start', runId: 'queued-2', from: 'AGENT', payload: { messageId: 'answer-second' } });
+        emit({ type: 'text-start', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second' } });
+        emit({
+          type: 'text-delta',
+          runId: 'queued-2',
+          from: 'AGENT',
+          payload: { id: 'text-second', text: 'Answer SECOND' },
+        });
+        emit({ type: 'text-end', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second' } });
+      });
+      await waitFor(() => expect(screen.queryByText('Queued')).toBeNull());
+      expect(screen.getByText('SECOND', { selector: 'p' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Cancel', exact: true })).toBeTruthy();
+      await act(async () => emit({ type: 'finish', runId: 'queued-2', from: 'AGENT', payload: {} }));
+      await screen.findByText('Answer SECOND');
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel', exact: true })).toBeNull());
+    });
     it('keeps each streamed answer with its turn while later messages wait', async () => {
       const { rerender } = renderThread([]);
       await screen.findByRole('button', { name: 'Send', exact: true });
