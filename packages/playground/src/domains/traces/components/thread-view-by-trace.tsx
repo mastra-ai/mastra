@@ -155,7 +155,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
       )}
     >
       <div ref={listRef} className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
-        <div className="relative min-h-full py-4">
+        <div className="relative min-h-full pb-4">
           {/* Same rail as the chat page: one stop per turn, pinned mid-height while the page scrolls. */}
           <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
             <ThreadRail
@@ -387,7 +387,7 @@ function ThreadSpanPanel({ traceId, spanId, onSpanSelect }: ThreadSpanPanelProps
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceData?.spans, spanId, onSpanSelect);
 
   return (
-    <div className="min-h-0 min-w-0 py-4 pr-4">
+    <div className="min-h-0 min-w-0 pr-4 pb-4">
       <SpanDataPanelView
         className="h-full"
         traceId={traceId}
