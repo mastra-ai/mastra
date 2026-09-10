@@ -73,7 +73,15 @@ const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment })
   if (attachment.kind === 'text') {
     return (
       <ButtonsGroup spacing="close" className="shrink-0">
-        <ComposerTxtAttachment file={attachment.file} />
+        {attachment.isUrl ? (
+          <FileChipEntry
+            contentType={attachment.contentType}
+            name={attachment.name}
+            url={isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
+          />
+        ) : (
+          <ComposerTxtAttachment file={attachment.file} />
+        )}
         <Button
           variant="outline"
           size="icon-sm"

@@ -647,6 +647,29 @@ describe('Thread', () => {
     });
   });
 
+  describe('when a text attachment is added by URL', () => {
+    it('links to the original URL instead of offering an empty file preview', async () => {
+      const url = 'https://files.example.com/leads.csv';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, () => new HttpResponse(null, { headers: { 'content-type': 'text/csv' } })),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      const input = await screen.findByLabelText('Public URL');
+      fireEvent.change(input, { target: { value: url } });
+      const form = input.closest<HTMLFormElement>('form');
+      if (!form) throw new Error('Attachment form is missing');
+      fireEvent.submit(form);
+      const attachments = await screen.findByTestId('composer-attachments');
+      const link = await within(attachments).findByRole('link');
+      expect(link.getAttribute('href')).toBe(url);
+      expect(within(attachments).queryByRole('button', { name: `Preview ${url}` })).toBeNull();
+    });
+  });
+
   it('attaches a URL from the popover without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(
