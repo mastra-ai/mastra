@@ -11,6 +11,7 @@ import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
@@ -136,6 +137,32 @@ export async function updateFeedbackReviewStatus(
     });
   }
   return rowToFeedbackRecord(row);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const values: unknown[] = [...args.feedbackIds];
+  const placeholders = args.feedbackIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"feedbackId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

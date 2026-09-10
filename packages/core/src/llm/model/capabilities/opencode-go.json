@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-flash",
     "deepseek-v4-flash-vision-exp",
     "glm-5.3-flash",
     "gpt-5.6-luna",
@@ -24,6 +25,7 @@
     "qwen3.8-max"
   ],
   "temperature": [
+    "deepseek-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
@@ -58,6 +60,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "deepseek-flash",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",

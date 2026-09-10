@@ -7,7 +7,7 @@ description: "Browse GreenPT model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/greenpt.svg" alt="GreenPT logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GreenPT
 
-Access 37 GreenPT models through Mastra's model router. Authentication is handled automatically using the `GREENPT_API_KEY` environment variable.
+Access 39 GreenPT models through Mastra's model router. Authentication is handled automatically using the `GREENPT_API_KEY` environment variable.
 
 Learn more in the [GreenPT documentation](https://docs.greenpt.ai).
 
@@ -212,6 +212,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.254,
     "outputCost": 5.016
+  },
+  {
+    "model": "greenpt/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.27754,
+    "outputCost": 5.11016
+  },
+  {
+    "model": "greenpt/glm-5.3-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.127754,
+    "outputCost": 0.511016
   },
   {
     "model": "greenpt/gpt-oss-120b",

@@ -7,6 +7,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { useLinkComponent } from '@/lib/framework';
 
 /**
@@ -157,9 +158,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 {hasStatusColumn && (
                   <DataList.Cell className="flex items-center" data-testid={`result-status-${result.id}`}>
                     {result.status ? (
-                      <Badge size="xs" variant={statusBadgeVariant(result.status)}>
-                        {result.status}
-                      </Badge>
+                      <ReviewStatusBadge status={result.status} />
                     ) : (
                       <span className="text-neutral2">—</span>
                     )}
@@ -273,12 +272,6 @@ function errorMessage(error: unknown): string {
     return error.message || 'Error';
   }
   return typeof error === 'string' && error ? error : 'Error';
-}
-
-function statusBadgeVariant(status: NonNullable<DatasetExperimentResult['status']>) {
-  if (status === 'needs-review') return 'orange';
-  if (status === 'complete') return 'green';
-  return 'neutral';
 }
 
 /** Format unknown value for display */

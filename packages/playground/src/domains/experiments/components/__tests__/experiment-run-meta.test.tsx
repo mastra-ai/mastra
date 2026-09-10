@@ -3,7 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ExperimentMetrics } from '../../hooks/use-experiment-metrics';
-import { ExperimentMetaBar, type ExperimentMetaBarProps } from '../experiment-meta-bar';
+import { ExperimentRunMeta, type ExperimentRunMetaProps } from '../experiment-run-meta';
 import { experiments } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -46,10 +46,10 @@ const runningExperiment: DatasetExperiment = {
   completedAt: null,
 };
 
-const renderBar = (experiment: DatasetExperiment, metrics?: ExperimentMetaBarProps['metrics']) =>
+const renderBar = (experiment: DatasetExperiment, metrics?: ExperimentRunMetaProps['metrics']) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ExperimentMetaBar experiment={experiment} metrics={metrics} />
+      <ExperimentRunMeta experiment={experiment} metrics={metrics} />
     </TestLinkProvider>,
   );
 
@@ -69,7 +69,7 @@ const nullMetrics: ExperimentMetrics = {
   agentRuns: null,
 };
 
-describe('ExperimentMetaBar', () => {
+describe('ExperimentRunMeta', () => {
   afterEach(cleanup);
 
   beforeEach(() => {
@@ -91,14 +91,14 @@ describe('ExperimentMetaBar', () => {
   });
 
   describe('for a completed experiment with a dataset and scorers', () => {
-    it('shows the four cell labels and no dataset cell', async () => {
+    it('shows the four row labels and no dataset row', async () => {
       const { queryClient } = renderBar(completedExperiment);
 
       expect(await screen.findByText('Avg score')).toBeDefined();
       expect(screen.getByText('Items')).toBeDefined();
       expect(screen.getByText('Started')).toBeDefined();
       expect(screen.getByText('Duration')).toBeDefined();
-      // The dataset now lives in the page title, not in the meta bar.
+      // The dataset lives in the pipeline, not in the run meta.
       expect(screen.queryByText('Dataset')).toBeNull();
 
       await waitForMutationsIdle(queryClient);

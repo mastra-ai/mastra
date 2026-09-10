@@ -8,7 +8,9 @@ Read the [documentation](https://factory.mastra.ai/) or [watch the Mastra Factor
 
 ## Start the Factory Server
 
-New projects use Mastra platform for authentication, storage, and sandboxes by default. Before connecting a model provider, check for `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. If it's missing, generate a key once for this project:
+Using Mastra platform services is optional. The installer configures them for authentication, storage, and sandboxes by default, but you can replace each service independently or run the server without a platform connection. Pass `--no-platform` to `npm create factory` to skip platform provisioning.
+
+Before connecting a model provider, check for `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. If it's missing, generate a key once for this project:
 
 ```bash
 openssl rand -base64 32
@@ -22,9 +24,9 @@ From the Factory project directory, start the server:
 npm run dev
 ```
 
-Open the local URL printed by the server, then sign in through Mastra platform. One server serves both the Factory UI and API. After login you'll see an onboarding wizard, select the repository agents should change. Use **Manage GitHub connection** to grant the GitHub App access if the repository is missing. Optionally add Linear. Connect a model provider using an API key or a supported subscription, then choose the Factory model.
+With the default setup, open the local URL printed by the server and sign in through Mastra platform. One server serves both the Factory UI and API. After login you'll see an onboarding wizard, select the repository agents should change. Use **Manage GitHub connection** to grant the GitHub App access if the repository is missing. Optionally add Linear. Connect a model provider using an API key or a supported subscription, then choose the Factory model.
 
-If you skipped platform setup during installation, follow [Get started](https://factory.mastra.ai/) to complete configuration.
+If you skipped platform setup during installation, follow [Get started](https://factory.mastra.ai/) to configure alternative authentication, storage, and sandbox providers.
 
 ## Run your first issue
 

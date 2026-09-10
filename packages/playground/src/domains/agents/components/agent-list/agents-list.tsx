@@ -65,7 +65,12 @@ export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
 
         return (
           <EntityList.RowWrapper key={agent.id}>
-            <EntityList.RowLink colEnd={3} to={paths.agentLink(agent.id)} LinkComponent={Link} {...getRowProps(index)}>
+            <EntityList.RowLink
+              colEnd={3}
+              to={paths.agentNewThreadLink(agent.id)}
+              LinkComponent={Link}
+              {...getRowProps(index)}
+            >
               <EntityList.Cell className="text-neutral4 min-w-0 overflow-visible text-left">
                 <span
                   title={agent.name}

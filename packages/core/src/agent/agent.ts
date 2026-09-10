@@ -179,6 +179,7 @@ import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, cl
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -7018,38 +7019,6 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
-  #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
-    if (!suspendedToolInfo?.toolName && !suspendedToolInfo?.toolCallId) {
-      return resumeData;
-    }
-
-    const resumeInput: Record<string, unknown> =
-      resumeData && typeof resumeData === 'object' && !Array.isArray(resumeData)
-        ? { ...(resumeData as Record<string, unknown>) }
-        : { resumeData };
-
-    const hasConflictingToolName =
-      suspendedToolInfo.toolName &&
-      resumeInput.toolName !== undefined &&
-      resumeInput.toolName !== suspendedToolInfo.toolName;
-    const hasConflictingToolCallId =
-      suspendedToolInfo.toolCallId &&
-      resumeInput.toolCallId !== undefined &&
-      resumeInput.toolCallId !== suspendedToolInfo.toolCallId;
-    const spanInput: Record<string, unknown> =
-      hasConflictingToolName || hasConflictingToolCallId ? { resumeData: resumeInput } : { ...resumeInput };
-
-    if (suspendedToolInfo.toolName) {
-      spanInput.toolName = suspendedToolInfo.toolName;
-    }
-
-    if (suspendedToolInfo.toolCallId) {
-      spanInput.toolCallId = suspendedToolInfo.toolCallId;
-    }
-
-    return spanInput;
-  }
-
   #getAgentExecutionResourceId({
     requestContext,
     memory,
@@ -7405,9 +7374,7 @@ export class Agent<
         ? persistedTracingContext.spanId
         : undefined;
 
-    const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
-      : options.messages;
+    const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
 
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,

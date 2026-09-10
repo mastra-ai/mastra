@@ -1,5 +1,55 @@
 # @mastra/factory
 
+## 0.14.0-alpha.2
+
+### Minor Changes
+
+- Added incident.io Intake integrations for direct API keys and Mastra Platform connections. ([#23327](https://github.com/mastra-ai/mastra/pull/23327))
+
+  **Intake**
+
+  - Import incidents and follow-ups onto any installed board, including custom boards.
+  - Include status, severity, ownership, labels, descriptions, and incident metadata on imported items.
+  - Refresh imported items when provider state changes.
+
+  **API client**
+
+  - Added typed read access to actions, incident updates, alerts, escalations, catalog data, teams, schedules, and policy findings.
+
+  ```typescript
+  import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
+
+  const integration = new IncidentioIntegration({ apiKey: process.env.INCIDENT_IO_API_KEY });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/code-sdk@1.7.1-alpha.2
+
+## 0.13.1-alpha.1
+
+### Patch Changes
+
+- Fixed the `mastracode/web` dev commands so the Factory API always starts on the checked-out code. `dev:ui` now runs the same `prebuild` step as `build` before starting the API, so `@mastra/server`, the `mastra` CLI, `@mastra/hono`, `@mastra/deployer`, `@mastra/platform-workspace`, `@mastra/redis-streams` and `@mastra/e2b` are rebuilt instead of served from a previous build. Switching to a branch that touches one of them no longer needs a root build by hand. ([#23426](https://github.com/mastra-ai/mastra/pull/23426))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/code-sdk@1.7.1-alpha.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- Added a compile-time check that every built-in Factory stage has an explicit review-board visibility setting. ([#23204](https://github.com/mastra-ai/mastra/pull/23204))
+
+- The Provider access section keeps the Org-wide scope visible for members who cannot manage org-wide credentials. It renders greyed out with a tooltip saying why, instead of disappearing and leaving only a Personal badge with no explanation. ([#23421](https://github.com/mastra-ai/mastra/pull/23421))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c), [`0665591`](https://github.com/mastra-ai/mastra/commit/0665591362ea8f9300b43920b0e810389b8e5438)]:
+  - @mastra/core@1.66.0-alpha.0
+  - @mastra/code-sdk@1.7.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes
