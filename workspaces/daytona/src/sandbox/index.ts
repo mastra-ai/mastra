@@ -945,13 +945,22 @@ export class DaytonaSandbox extends MastraSandbox {
         `${LOG_PREFIX} Error mounting "${filesystem.provider}" (${filesystem.id}) at "${mountPath}":`,
         error,
       );
+      if (config.type === 's3') {
+        // The daemon may have mounted successfully before its readiness check failed.
+        // Detach it before retrying, otherwise the missing marker makes it look unmanaged.
+        try {
+          await this.unmount(mountPath);
+        } catch (cleanupError) {
+          this.logger.warn(`${LOG_PREFIX} Could not unmount failed S3 mount at ${mountPath}:`, cleanupError);
+        }
+      }
+      // unmount() removes the registry entry; retain the original failure for callers.
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
-
-      // Clean up the directory we created since mount failed
-      await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
-        timeout: MOUNT_COMMAND_TIMEOUT_MS,
-      });
-      this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
+      if (config.type !== 's3') {
+        await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
+          timeout: MOUNT_COMMAND_TIMEOUT_MS,
+        });
+      }
       return { success: false, mountPath, error: errorToString(error) };
     }
 
@@ -986,8 +995,9 @@ export class DaytonaSandbox extends MastraSandbox {
       sandbox,
       `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
         `sudo umount -l ${quotedPath} 2>/dev/null; ` +
-        // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
-        `mountpoint -q ${quotedPath} 2>/dev/null && ` +
+        // Dead FUSE mounts can make mountpoint fail with ENOTCONN. Read the kernel table
+        // instead so the existing move-aside fallback also handles disconnected mounts.
+        `grep -Fq -- ${shellQuote(` ${mountPath.replace(/\/+$/, '') || '/'} `)} /proc/mounts && ` +
         `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );

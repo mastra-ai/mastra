@@ -188,6 +188,39 @@ const workspace = new Workspace({
 
 When the workspace starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
 
+#### Temporary S3 credentials
+
+Pass all three credential values to `S3Filesystem` when using temporary credentials. Daytona forwards the session token to s3fs:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: process.env.S3_REGION ?? 'us-east-1',
+      endpoint: process.env.S3_ENDPOINT,
+      prefix: 'resource-123/thread-456/',
+      accessKeyId: process.env.SCOPED_S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.SCOPED_S3_SECRET_ACCESS_KEY!,
+      sessionToken: process.env.SCOPED_S3_SESSION_TOKEN!,
+    }),
+  },
+  sandbox: new DaytonaSandbox({ language: 'python', ephemeral: true }),
+})
+```
+
+Before starting the workspace, obtain credentials from your storage provider that authorize only the intended prefix. Credential issuance is provider-specific; Mastra doesn't mint or restrict credentials. A `prefix` selects a directory but doesn't enforce authorization. Authenticate each request, authorize its resource and thread, and use separate sandboxes for separate security scopes.
+
+Temporary credentials are loaded when the mount starts and aren't automatically refreshed. Host-side credential provider functions don't refresh the mount. Keep runs within the credential lifetime and create a new sandbox with fresh credentials for later runs. Reconnecting to a sandbox doesn't renew its credentials.
+
+Credentials are uploaded into owner-only files inside private directories. After launching s3fs, Daytona removes the temporary-credential staging file and directory. The daemon retains the credentials in its environment, which sandbox code running as the same user or root can still read. Never supply broader credentials than the sandbox needs. Mounts using long-lived credentials retain their password files until sandbox deletion. Failed attempts clean up their credential files; cleanup failures produce a warning.
+
+Prefixed filesystems require permission to list their prefix during initialization. With s3fs, a prefixed mount may also require a zero-byte object at the exact `<prefix>/` key. Provision that directory marker before mounting. After launching s3fs, Daytona checks the mounted directory's metadata without listing its contents, with a 15-second timeout and forced termination after another 5 seconds. A failed check reports a mount failure. Cleanup attempts to unmount the failed mount, moving a stuck mount aside if necessary to free the original path for retry. Moved stale mounts may remain until sandbox deletion. This startup check doesn't guarantee read or write access to individual files or ongoing daemon health; verify a read and write through the mounted path.
+
 #### Via `sandbox.mount()`
 
 Mount manually at any point after the sandbox has started:

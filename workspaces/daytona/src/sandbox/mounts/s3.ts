@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
@@ -26,6 +26,8 @@ export interface DaytonaS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /** Session token for temporary credentials. Not automatically refreshed after mounting. */
+  sessionToken?: string;
   /**
    * Optional prefix (subdirectory) to mount instead of the entire bucket.
    * Uses s3fs `bucket:/prefix` syntax. Leading/trailing slashes are normalized.
@@ -56,6 +58,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     throw new Error('Both accessKeyId and secretAccessKey must be provided together.');
   }
   const hasCredentials = hasAccessKey && hasSecretKey;
+  if (config.sessionToken && !hasCredentials) {
+    throw new Error('sessionToken requires accessKeyId and secretAccessKey.');
+  }
 
   if (!hasCredentials && config.endpoint) {
     throw new Error(
@@ -120,9 +125,9 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     );
   }
 
-  // Use a mount-specific credentials path to avoid races with concurrent mounts
-  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
-  const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
+  // A fresh private directory protects uploaded secrets even if the SDK replaces the file.
+  const credentialsDirectory = `/tmp/.mastra-s3-${randomUUID()}`;
+  const credentialsPath = `${credentialsDirectory}/credentials`;
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
   // These are no-ops if already configured.
@@ -131,58 +136,102 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
       `sudo bash -c 'grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null || echo "user_allow_other" >> /etc/fuse.conf' 2>/dev/null || true`,
   );
 
-  if (hasCredentials) {
-    await run(`sudo rm -f ${shellQuote(credentialsPath)}`, 30_000);
-    await writeFile(credentialsPath, `${config.accessKeyId}:${config.secretAccessKey}`);
-    await run(`chmod 600 ${shellQuote(credentialsPath)}`, 30_000);
-  }
+  let credentialsCreated = false;
+  let mounted = false;
+  try {
+    if (config.accessKeyId && config.secretAccessKey) {
+      const prepared = await run(`mkdir -m 700 ${shellQuote(credentialsDirectory)}`, 30_000);
+      if (prepared.exitCode !== 0) {
+        throw new Error('Failed to create private S3 credentials directory');
+      }
+      credentialsCreated = true;
+      // s3fs's colon-delimited password format cannot carry a session token.
+      // Source a mount-specific environment file instead, keeping secrets out of commands and logs.
+      const credentials = config.sessionToken
+        ? [
+            `export AWS_ACCESS_KEY_ID=${shellQuote(config.accessKeyId)}`,
+            `export AWS_SECRET_ACCESS_KEY=${shellQuote(config.secretAccessKey)}`,
+            `export AWS_SESSION_TOKEN=${shellQuote(config.sessionToken)}`,
+          ].join('\n')
+        : `${config.accessKeyId}:${config.secretAccessKey}`;
+      await writeFile(credentialsPath, credentials);
+      const protectedFile = await run(`chmod 600 ${shellQuote(credentialsPath)}`, 30_000);
+      if (protectedFile.exitCode !== 0) {
+        throw new Error('Failed to restrict S3 credentials file permissions');
+      }
+    }
 
-  const mountOptions: string[] = [];
+    const mountOptions: string[] = [];
 
-  if (hasCredentials) {
-    mountOptions.push(`passwd_file=${credentialsPath}`);
-  } else {
-    mountOptions.push('public_bucket=1');
-    logger.debug(`${LOG_PREFIX} No credentials provided, mounting as public bucket (read-only)`);
-  }
+    if (hasCredentials) {
+      mountOptions.push(config.sessionToken ? 'use_session_token' : `passwd_file=${credentialsPath}`);
+    } else {
+      mountOptions.push('public_bucket=1');
+      logger.debug(`${LOG_PREFIX} No credentials provided, mounting as public bucket (read-only)`);
+    }
 
-  // allow_other: let other users (e.g. root for rmdir) access the mount.
-  // Requires user_allow_other in /etc/fuse.conf for non-root mounts.
-  mountOptions.push('allow_other');
+    // allow_other: let other users (e.g. root for rmdir) access the mount.
+    // Requires user_allow_other in /etc/fuse.conf for non-root mounts.
+    mountOptions.push('allow_other');
 
-  if (validUidGid) {
-    mountOptions.push(`uid=${uid}`, `gid=${gid}`);
-  }
+    if (validUidGid) {
+      mountOptions.push(`uid=${uid}`, `gid=${gid}`);
+    }
 
-  if (config.endpoint) {
-    const endpoint = config.endpoint.replace(/\/$/, '');
-    mountOptions.push(`url=${shellQuote(endpoint)}`, 'use_path_request_style', 'sigv4', 'nomultipart');
-  }
+    if (config.endpoint) {
+      const endpoint = config.endpoint.replace(/\/$/, '');
+      mountOptions.push(`url=${shellQuote(endpoint)}`, 'use_path_request_style', 'sigv4', 'nomultipart');
+    }
 
-  if (config.readOnly) {
-    mountOptions.push('ro');
-    logger.debug(`${LOG_PREFIX} Mounting as read-only`);
-  }
+    if (config.readOnly) {
+      mountOptions.push('ro');
+      logger.debug(`${LOG_PREFIX} Mounting as read-only`);
+    }
 
-  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
-  let bucketArg = config.bucket;
-  if (config.prefix) {
-    const normalizedPrefix = validatePrefix(config.prefix);
-    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
-  }
+    // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
+    let bucketArg = config.bucket;
+    if (config.prefix) {
+      const normalizedPrefix = validatePrefix(config.prefix);
+      bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+    }
 
-  // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
-  // in the container's user namespace — allowing fusermount -u to unmount it later.
-  const mountCmd = `s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
-  logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
+    // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
+    // in the container's user namespace — allowing fusermount -u to unmount it later.
+    const credentialEnv = config.sessionToken ? `. ${shellQuote(credentialsPath)} && ` : '';
+    const mountCmd = `${credentialEnv}s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
+    logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
-  const result = await run(mountCmd, 60_000);
-  logger.debug(`${LOG_PREFIX} s3fs result:`, {
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
+    const result = await run(mountCmd, 60_000);
+    logger.debug(`${LOG_PREFIX} s3fs result:`, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
+    }
+    // Check FUSE access without enumerating a potentially large remote directory.
+    // The daemon parent can exit successfully before a disconnected mount is detected.
+    const probe = await run(`timeout -k 5s 15s stat -L -- ${quotedMountPath} > /dev/null`, 30_000);
+    if (probe.exitCode !== 0) {
+      throw new Error(`S3 mount is not readable (exit ${probe.exitCode}): ${probe.stderr || probe.stdout}`);
+    }
+    mounted = true;
+  } finally {
+    // Exported credentials live in the daemon environment; it never sources this staging file again.
+    // Keep ordinary password files available to s3fs for the mount lifetime.
+    if (credentialsCreated && (config.sessionToken || !mounted)) {
+      try {
+        const cleanup = await run(
+          `rm -f ${shellQuote(credentialsPath)} && rmdir ${shellQuote(credentialsDirectory)}`,
+          30_000,
+        );
+        if (cleanup.exitCode !== 0) {
+          logger.warn(`${LOG_PREFIX} Failed to remove S3 credentials`);
+        }
+      } catch {
+        logger.warn(`${LOG_PREFIX} Failed to remove S3 credentials`);
+      }
+    }
   }
 }

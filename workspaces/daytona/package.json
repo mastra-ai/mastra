@@ -24,7 +24,7 @@
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
-    "test": "vitest run ./src/**/*.integration.test.ts",
+    "test": "vitest run .integration.test.ts",
     "test:cloud": "pnpm test",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."

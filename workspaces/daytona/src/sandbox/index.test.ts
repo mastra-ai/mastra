@@ -20,6 +20,7 @@ import {
   createWorkspaceTools,
   supportsComputer,
 } from '@mastra/core/workspace';
+import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -841,6 +842,65 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Mount Configuration', () => {
+    it('recovers a disconnected S3 mount even when mountpoint cannot inspect it, then retries the same path', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      let attached = false;
+      let probeFails = true;
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.startsWith('mountpoint -q ') && command.includes('echo "mounted"')) {
+          return { exitCode: 0, result: attached && !probeFails ? 'mounted' : 'not mounted' };
+        }
+        if (command.startsWith('s3fs ')) attached = true;
+        if (command.startsWith('timeout -k ') && probeFails) {
+          return { exitCode: 124, result: 'probe timed out' };
+        }
+        // Ordinary unmount attempts fail on this dead FUSE connection. The kernel-table
+        // check must reach the move-aside fallback despite mountpoint returning false.
+        if (
+          command.includes("grep -Fq -- ' /data/retry ' /proc/mounts") &&
+          command.includes('sudo mount --move /data/retry')
+        )
+          attached = false;
+        return { exitCode: 0, result: command === 'id -u && id -g' ? '1000\n1000' : '' };
+      });
+      const filesystem = new S3Filesystem({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      });
+
+      const first = await sandbox.mount(filesystem, '/data/retry');
+      expect(first.success).toBe(false);
+      expect(first.error).toContain('probe timed out');
+      expect(sandbox.mounts.get('/data/retry')).toMatchObject({ state: 'error', error: first.error });
+      expect(attached).toBe(false);
+      expect(mockSandbox.process.executeCommand.mock.calls.some(([command]) => command.includes('pkill'))).toBe(false);
+
+      probeFails = false;
+      expect(await sandbox.mount(filesystem, '/data/retry')).toEqual({ success: true, mountPath: '/data/retry' });
+      expect(attached).toBe(true);
+    });
+
+    it('preserves the S3 probe error if unmount cleanup throws', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.startsWith('timeout -k ')) return { exitCode: 124, result: 'probe timed out' };
+        if (command.includes('sudo fusermount -u ')) throw new Error('cleanup unavailable');
+        return { exitCode: 0, result: command === 'id -u && id -g' ? '1000\n1000' : '' };
+      });
+      const filesystem = new S3Filesystem({ bucket: 'test-bucket', region: 'us-east-1' });
+      const result = await sandbox.mount(filesystem, '/data/cleanup-failure');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('probe timed out');
+      expect(
+        mockSandbox.process.executeCommand.mock.calls.some(([command]) => command.includes('sudo fusermount -u ')),
+      ).toBe(true);
+      expect(sandbox.mounts.get('/data/cleanup-failure')).toMatchObject({ state: 'error', error: result.error });
+    });
+
     it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
       mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
         if (command.includes('mountpoint -q') && command.includes('echo "mounted"')) {
