@@ -86,7 +86,7 @@ export class KnowledgeProposalLifecycle {
         id: node.id,
         expectedVersion: node.version,
         scopeIds: originalScopeIds,
-        approvalCapability: input.mutation.scopeIds ? 'manageAccess' : 'edit',
+        approvalCapability: input.mutation.scopeIds || input.mutation.isScope === true ? 'manageAccess' : 'edit',
       },
     ];
     if (input.mutation.scopeIds) {
