@@ -270,8 +270,9 @@ describe('Subconscious remind thread ownership', () => {
       await runScenario(undefined, completionGate);
       await runScenario(PROJECT);
     } finally {
+      // Only unblock the stalled sidekick here. Draining is afterEach's job: awaiting the
+      // drain inside this finally would replace a failed assertion with the drain's error.
       release();
-      await Promise.all(pendingWakeOutputs);
     }
   });
 });
