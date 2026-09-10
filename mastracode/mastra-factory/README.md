@@ -33,7 +33,7 @@ pnpm create factory@latest
 
 The interactive setup asks where to create the project and helps configure your Mastra Factory project.
 
-By default, the setup wizard provisions Mastra platform resources during setup, enabling you to fully run Mastra Factory on platform or locally with cloud-backed capabilities. If you prefer to [self-host](<>) Mastra Factory, run the setup with the `--no-platform` flag.
+By default, the setup wizard provisions Mastra platform resources during setup, enabling you to fully run Mastra Factory on platform or locally with cloud-backed capabilities. If you prefer to [self-host](https://factory.mastra.ai/deployment#self-host) Mastra Factory, run the setup with the `--no-platform` flag.
 
 ```bash
 npx create-factory@latest -- --no-platform
