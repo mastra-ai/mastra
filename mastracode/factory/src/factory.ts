@@ -83,6 +83,7 @@ import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { observeSessionRunEnd } from './session/run-audit.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -621,6 +622,7 @@ export class MastraFactory {
           configVersion,
           boards: this.#boards,
           storage: workItemsStorage,
+          audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -842,7 +844,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
-                          audit: auditStorage,
+                          audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
                             ? {
@@ -948,6 +950,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                audit: auditDomain,
                 boards: this.#boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
@@ -1053,6 +1056,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
+      observeSessionRunEnd(session, { audit: auditDomain });
     });
 
     // Supervisor sessions carry their project in the resourceId; re-stamp

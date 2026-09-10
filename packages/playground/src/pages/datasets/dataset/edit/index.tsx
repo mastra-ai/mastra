@@ -78,6 +78,7 @@ function EditDatasetPage() {
                 inputSchema: dataset.inputSchema,
                 groundTruthSchema: dataset.groundTruthSchema,
                 requestContextSchema: dataset.requestContextSchema,
+                scorerIds: dataset.scorerIds,
               }}
               onSuccess={goToDataset}
               onCancel={goToDataset}
