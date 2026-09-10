@@ -1,5 +1,57 @@
 # @mastra/server
 
+## 1.66.0-alpha.2
+
+### Patch Changes
+
+- Added DELETE /api/observability/feedback and DELETE /api/observability/scores routes for deleting feedback and score records by id, gated behind the observability-signal-deletion core feature and the observability:delete permission. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  await fetch(`${baseUrl}/api/observability/feedback`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedbackIds: ['feedback-1'] }),
+  });
+
+  await fetch(`${baseUrl}/api/observability/scores`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scoreIds: ['score-1'], organizationId: 'org-1' }),
+  });
+  ```
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+
+## 1.66.0-alpha.1
+
+### Minor Changes
+
+- Added advanced trace-query support for richer same-span filters while keeping lightweight responses unchanged. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'exists', path: 'model' } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added a `tags` filter to `dataset.listExperimentResults()` and `GET /api/datasets/:datasetId/experiments/:experimentId/results`. Only results that carry every listed tag are returned; results with extra tags still match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results } = await dataset.listExperimentResults({
+    experimentId: 'exp-id',
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  Over HTTP, pass repeated query params: `?tags=regression&tags=p0`.
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+
 ## 1.66.0-alpha.0
 
 ### Patch Changes

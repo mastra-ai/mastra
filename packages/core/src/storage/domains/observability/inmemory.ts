@@ -25,6 +25,7 @@ import type {
 import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   FeedbackFilter,
   GetFeedbackAggregateArgs,
@@ -61,6 +62,7 @@ import { listMetricsArgsSchema } from './metrics';
 import { listScoresArgsSchema } from './scores';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
@@ -213,6 +215,39 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     records.push(record);
     cursorIds.set(record, this.allocateObservabilityCursorId());
+  }
+
+  /**
+   * Deletes records whose id field is in `ids`, honoring optional tenant scope.
+   * Removes deleted records from the cursor-id map so delta polling no longer
+   * references them.
+   */
+  private deleteByIdField<T extends Record<string, unknown>>(
+    records: T[],
+    cursorIds: Map<T, number>,
+    ids: string[],
+    idField: keyof T,
+    scope: { organizationId?: string; resourceId?: string },
+  ): void {
+    if (ids.length === 0) {
+      return;
+    }
+    const idSet = new Set(ids);
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i]!;
+      const id = record[idField];
+      if (typeof id !== 'string' || !idSet.has(id)) {
+        continue;
+      }
+      if (scope.organizationId !== undefined && record.organizationId !== scope.organizationId) {
+        continue;
+      }
+      if (scope.resourceId !== undefined && record.resourceId !== scope.resourceId) {
+        continue;
+      }
+      cursorIds.delete(record);
+      records.splice(i, 1);
+    }
   }
 
   private encodeDeltaCursor(cursorId?: number | null): string {
@@ -1867,6 +1902,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    this.deleteByIdField(this.db.scoreRecords, this.db.scoreCursorIds, args.scoreIds, 'scoreId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
+  }
+
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
 
@@ -2225,6 +2267,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
+  }
+
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    this.deleteByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, args.feedbackIds, 'feedbackId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
   }
 
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {

@@ -1,5 +1,27 @@
 # mastracode
 
+## 0.39.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/pg@1.24.0-alpha.2
+  - @mastra/duckdb@1.8.0-alpha.1
+  - @mastra/code-sdk@1.7.1-alpha.2
+
+## 0.39.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4fbbdf1`](https://github.com/mastra-ai/mastra/commit/4fbbdf1ba4ee8a900aedceb6cda657369bab06ae), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/pg@1.24.0-alpha.1
+  - @mastra/duckdb@1.8.0-alpha.0
+  - @mastra/memory@1.29.0-alpha.1
+  - @mastra/libsql@1.22.5-alpha.1
+  - @mastra/code-sdk@1.7.1-alpha.1
+
 ## 0.39.1-alpha.0
 
 ### Patch Changes

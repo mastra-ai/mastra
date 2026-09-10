@@ -1,5 +1,67 @@
 # @mastra/core
 
+## 1.66.0-alpha.2
+
+### Minor Changes
+
+- Added deleteFeedback() and deleteScores() to observability storage. Both accept a batch of ids and optional organizationId / resourceId tenant scope, are idempotent, and are implemented by the in-memory store. Storage adapters that don't implement them throw a not-implemented error. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  await observability.deleteFeedback({ feedbackIds: ['feedback-1'] });
+  await observability.deleteScores({ scoreIds: ['score-1'], organizationId: 'org-1' });
+  ```
+
+### Patch Changes
+
+- Fixed a terminal provider error leaving an unresolved provider-executed tool call in the final message list. When a model stream ends with an error before a provider-executed tool (e.g. Anthropic web_search) returns its result, the abandoned tool call is now reconciled to an `output-error` state instead of remaining a dangling pending `call`. This preserves the original error, keeps successful tool results and surrounding text intact, and prevents observational memory from being deferred forever by an orphaned call. ([#23356](https://github.com/mastra-ai/mastra/pull/23356))
+
+## 1.66.0-alpha.1
+
+### Minor Changes
+
+- Added trace filters for span names, model providers, timing, outcomes, identity, and version lineage. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+  });
+  ```
+
+- Added portable top-level string metadata predicates to advanced trace queries. Invalid metadata keys and values are rejected consistently, and valid predicates work inside recursive Boolean expressions. ([#23027](https://github.com/mastra-ai/mastra/pull/23027))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+  });
+  ```
+
+- Added richer `scores.some` and `scores.none` predicates for scorer versions, sources, timestamps, span anchoring, and version lineage. ([#22956](https://github.com/mastra-ai/mastra/pull/22956))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { scores: { some: { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: '2.1.0' } } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added a `tags` filter to `dataset.listExperimentResults()` and `GET /api/datasets/:datasetId/experiments/:experimentId/results`. Only results that carry every listed tag are returned; results with extra tags still match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results } = await dataset.listExperimentResults({
+    experimentId: 'exp-id',
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  Over HTTP, pass repeated query params: `?tags=regression&tags=p0`.
+
 ## 1.66.0-alpha.0
 
 ### Minor Changes

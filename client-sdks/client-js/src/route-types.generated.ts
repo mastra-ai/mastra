@@ -119,7 +119,7 @@ type Shared_Auxiliary_606 =
       arg: Shared_Auxiliary_606;
     };
 
-type Shared_Auxiliary_1139 =
+type Shared_Auxiliary_1143 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +164,19 @@ type Shared_Auxiliary_1139 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1139[];
+      args: Shared_Auxiliary_1143[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1139;
+      arg: Shared_Auxiliary_1143;
     };
 
-type Shared_Auxiliary_1279 = {
+type Shared_Auxiliary_1283 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1279[] | undefined;
+  children?: Shared_Auxiliary_1283[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2609,7 +2609,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1139[];
+  predicates: Shared_Auxiliary_1143[];
 };
 
 type Shared_Type_112 = {
@@ -2632,7 +2632,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1139;
+  predicate: Shared_Auxiliary_1143;
 };
 
 type Shared_Type_113 =
@@ -2986,7 +2986,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1279[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9655,6 +9655,39 @@ export interface PostObservabilityScores_RouteContract {
 }
 
 // ============================================================================
+// Route: DELETE /observability/scores
+// ============================================================================
+export type DeleteObservabilityScores_Body = {
+  /** IDs of the score events to delete (maximum 1000) */
+  scoreIds: string[];
+  /** Restrict deletion to scores in this organization */
+  organizationId?: string | undefined;
+  /** Restrict deletion to scores for this resource */
+  resourceId?: string | undefined;
+};
+
+export type DeleteObservabilityScores_Response = PostAuthRefresh_Response;
+
+export type DeleteObservabilityScores_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteObservabilityScores_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityScores_Body
+        ? { body?: DeleteObservabilityScores_Body }
+        : { body: DeleteObservabilityScores_Body })
+>;
+
+export interface DeleteObservabilityScores_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: DeleteObservabilityScores_Body;
+  request: DeleteObservabilityScores_Request;
+  response: DeleteObservabilityScores_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /observability/scores/:scoreId
 // ============================================================================
 export type GetObservabilityScoresScoreId_PathParams = {
@@ -10088,6 +10121,39 @@ export interface PostObservabilityFeedback_RouteContract {
   body: PostObservabilityFeedback_Body;
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /observability/feedback
+// ============================================================================
+export type DeleteObservabilityFeedback_Body = {
+  /** IDs of the feedback events to delete (maximum 1000) */
+  feedbackIds: string[];
+  /** Restrict deletion to feedback in this organization */
+  organizationId?: string | undefined;
+  /** Restrict deletion to feedback for this resource */
+  resourceId?: string | undefined;
+};
+
+export type DeleteObservabilityFeedback_Response = PostAuthRefresh_Response;
+
+export type DeleteObservabilityFeedback_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteObservabilityFeedback_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityFeedback_Body
+        ? { body?: DeleteObservabilityFeedback_Body }
+        : { body: DeleteObservabilityFeedback_Body })
+>;
+
+export interface DeleteObservabilityFeedback_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: DeleteObservabilityFeedback_Body;
+  request: DeleteObservabilityFeedback_Request;
+  response: DeleteObservabilityFeedback_Response;
   responseType: 'json';
 }
 
@@ -16812,7 +16878,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1279[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16870,7 +16936,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1279[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1283[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22301,6 +22367,7 @@ export interface RouteTypes {
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
   'POST /observability/scores': PostObservabilityScores_RouteContract;
+  'DELETE /observability/scores': DeleteObservabilityScores_RouteContract;
   'GET /observability/scores/:scoreId': GetObservabilityScoresScoreId_RouteContract;
   'POST /observability/scores/aggregate': PostObservabilityScoresAggregate_RouteContract;
   'POST /observability/scores/breakdown': PostObservabilityScoresBreakdown_RouteContract;
@@ -22308,6 +22375,7 @@ export interface RouteTypes {
   'POST /observability/scores/percentiles': PostObservabilityScoresPercentiles_RouteContract;
   'GET /observability/feedback': GetObservabilityFeedback_RouteContract;
   'POST /observability/feedback': PostObservabilityFeedback_RouteContract;
+  'DELETE /observability/feedback': DeleteObservabilityFeedback_RouteContract;
   'PATCH /observability/feedback/:feedbackId/review-status': PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;
   'POST /observability/feedback/aggregate': PostObservabilityFeedbackAggregate_RouteContract;
   'POST /observability/feedback/breakdown': PostObservabilityFeedbackBreakdown_RouteContract;
@@ -23155,6 +23223,7 @@ export interface Client {
     GET: GetObservabilityDiscoveryTags_RouteContract;
   };
   '/observability/feedback': {
+    DELETE: DeleteObservabilityFeedback_RouteContract;
     GET: GetObservabilityFeedback_RouteContract;
     POST: PostObservabilityFeedback_RouteContract;
   };
@@ -23192,6 +23261,7 @@ export interface Client {
     POST: PostObservabilityMetricsTimeseries_RouteContract;
   };
   '/observability/scores': {
+    DELETE: DeleteObservabilityScores_RouteContract;
     GET: GetObservabilityScores_RouteContract;
     POST: PostObservabilityScores_RouteContract;
   };

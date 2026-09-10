@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 258 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 259 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -1618,6 +1618,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
+    "model": "edenai/nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 979000,
+    "maxOutput": 384000,
+    "inputCost": 1.32,
+    "outputCost": 3.96
+  },
+  {
     "model": "edenai/nebius/meta-llama/Llama-3.3-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -2190,8 +2202,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.176,
-    "outputCost": 0.528
+    "inputCost": 0.352,
+    "outputCost": 1.056
   },
   {
     "model": "edenai/qwen/deepseek-v4-pro-0813",
@@ -2202,8 +2214,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.5808,
-    "outputCost": 1.7424
+    "inputCost": 1.122,
+    "outputCost": 3.366
   },
   {
     "model": "edenai/qwen/qwen-max",

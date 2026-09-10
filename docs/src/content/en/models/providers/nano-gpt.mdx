@@ -7,7 +7,7 @@ description: "Browse NanoGPT model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/nano-gpt.svg" alt="NanoGPT logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NanoGPT
 
-Access 589 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
+Access 591 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
 
 Learn more in the [NanoGPT documentation](https://docs.nano-gpt.com).
 
@@ -2854,6 +2854,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.22
   },
   {
+    "model": "nano-gpt/inclusionai/ling-3.0-flash-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
     "model": "nano-gpt/inclusionai/ling-3.0-flash:thinking",
     "imageInput": false,
     "audioInput": false,
@@ -2876,6 +2888,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.493,
     "outputCost": 0.493
+  },
+  {
+    "model": "nano-gpt/k2-horizon-7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.2
   },
   {
     "model": "nano-gpt/kimi-k2-instruct-fast",

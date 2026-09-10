@@ -1,6 +1,8 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { X } from 'lucide-react';
+import { useContext, useEffect, useRef } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
+import { TabListContext } from './tabs-context';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -10,17 +12,55 @@ export type TabProps = {
   onClick?: () => void;
   onClose?: () => void;
   disabled?: boolean;
+  attention?: boolean;
   disabledTooltip?: React.ReactNode;
   className?: string;
 };
 
-export const Tab = ({ children, value, onClick, onClose, disabled, disabledTooltip, className }: TabProps) => {
+export const Tab = ({
+  children,
+  value,
+  onClick,
+  onClose,
+  disabled,
+  disabledTooltip,
+  attention = false,
+  className,
+}: TabProps) => {
+  const list = useContext(TabListContext);
+  const ref = useRef<HTMLButtonElement>(null);
+  const register = list?.register;
+  const unregister = list?.unregister;
+  const overflowed = list?.hiddenValues.has(value) ?? false;
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !register) return;
+    const measure = () =>
+      register({
+        value,
+        label: children,
+        disabled: disabled ?? false,
+        width: element.getBoundingClientRect().width,
+        element,
+        onClick,
+      });
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    measure();
+    return () => observer.disconnect();
+  }, [register, value, children, disabled, onClick]);
+  useEffect(() => () => unregister?.(value), [unregister, value]);
   const tab = (
     <BaseTabs.Tab
+      ref={ref}
+      data-overflowed={overflowed || undefined}
+      aria-hidden={overflowed || undefined}
       value={value}
-      disabled={disabled}
+      disabled={disabled || overflowed}
+      data-slot="tab"
       className={cn(
         'text-ui-md font-normal text-neutral3',
+        attention && 'relative',
         'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,
         focusRing.visible,
@@ -29,22 +69,17 @@ export const Tab = ({ children, value, onClick, onClose, disabled, disabledToolt
         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
         'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
         'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
-        // Line variant legacy fallback — active state drawn by <Tabs.Indicator> in TabList
-        'group-data-[variant=line]/tabs-list:px-5 group-data-[variant=line]/tabs-list:py-2',
-        'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
-        // Pill variant
-        'group-data-[variant=pill]/tabs-list:relative group-data-[variant=pill]/tabs-list:z-10',
-        'group-data-[variant=pill]/tabs-list:px-3 group-data-[variant=pill]/tabs-list:py-1',
-        'group-data-[variant=pill]/tabs-list:rounded-full',
-        // Pill-ghost variant (pill without list background)
-        'group-data-[variant=pill-ghost]/tabs-list:relative group-data-[variant=pill-ghost]/tabs-list:z-10',
-        'group-data-[variant=pill-ghost]/tabs-list:px-3 group-data-[variant=pill-ghost]/tabs-list:py-1',
-        'group-data-[variant=pill-ghost]/tabs-list:rounded-full',
         className,
       )}
       onClick={onClick}
     >
       {children}
+      {attention && (
+        <>
+          <span aria-hidden="true" data-slot="tab-attention" />
+          <span className="sr-only"> Needs attention</span>
+        </>
+      )}
       {onClose && (
         <button
           type="button"

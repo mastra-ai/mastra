@@ -1,5 +1,58 @@
 # @mastra/playground-ui
 
+## 53.1.0-alpha.2
+
+### Minor Changes
+
+- Adds `appearance="contained"` to display tabs with a frame around the content panel. Choose `frame="stroke"` for an outlined frame or `frame="inset"` for a filled frame. Tabs that do not fit the available width move into a `+N` dropdown. ([#23441](https://github.com/mastra-ai/mastra/pull/23441))
+
+  Set `attention` on a tab to show a line along its bottom edge. The line pulses briefly, then stays visible until you clear the prop. Users who prefer reduced motion see a static line.
+
+  ```tsx
+  <Tabs defaultTab="overview" appearance="contained" frame="inset">
+    <TabList>
+      <Tab value="overview">Overview</Tab>
+      <Tab value="activity">Activity</Tab>
+    </TabList>
+    <TabContent value="overview">Overview content</TabContent>
+    <TabContent value="activity">Activity content</TabContent>
+  </Tabs>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/client-js@1.44.1-alpha.2
+  - @mastra/react@1.4.12-alpha.2
+
+## 53.1.0-alpha.1
+
+### Minor Changes
+
+- Added SettingsLayout header options for pages that need more context or manage their own content layout. Use `titleAccessory` for content beside the title, `description` for supporting text, and `variant="header"` when the page already provides its content container. Existing layouts remain unchanged when these props are omitted. ([#23424](https://github.com/mastra-ai/mastra/pull/23424))
+
+  ```tsx
+  <SettingsLayout
+    title="Deployment"
+    titleAccessory={<Badge size="sm">Studio</Badge>}
+    description="Jan 1, 2025 07:00:00"
+    variant="header"
+  >
+    <DeploymentDetails />
+  </SettingsLayout>
+  ```
+
+### Patch Changes
+
+- Added spacing between the "New Chat" button and the thread list in `ThreadList`. ([#23438](https://github.com/mastra-ai/mastra/pull/23438))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4fbbdf1`](https://github.com/mastra-ai/mastra/commit/4fbbdf1ba4ee8a900aedceb6cda657369bab06ae), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/memory@1.29.0-alpha.1
+  - @mastra/client-js@1.44.1-alpha.1
+  - @mastra/react@1.4.12-alpha.1
+
 ## 53.0.1-alpha.0
 
 ### Patch Changes

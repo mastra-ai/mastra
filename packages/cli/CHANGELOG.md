@@ -1,5 +1,29 @@
 # mastra
 
+## 1.28.1-alpha.2
+
+### Patch Changes
+
+- Added `mastra api` commands for deleting observability feedback and scores, including optional organization and resource filters. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```bash
+  mastra api feedback delete '{"feedbackIds":["feedback-1"],"organizationId":"org-1"}'
+  ```
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/deployer@1.66.0-alpha.2
+
+## 1.28.1-alpha.1
+
+### Patch Changes
+
+- Moved the Studio agent chat page under the agent tabs. Opening a thread at `/agents/:agentId/threads/:threadId` now keeps the Studio sidebar and the agent tab bar visible, with a new **Chat** tab selected, and shows the thread list in a resizable side panel. Rows in the agents table now open a new chat for the agent instead of its overview page. ([#23438](https://github.com/mastra-ai/mastra/pull/23438))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/deployer@1.66.0-alpha.1
+
 ## 1.28.1-alpha.0
 
 ### Patch Changes
