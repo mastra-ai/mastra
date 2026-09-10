@@ -11,6 +11,10 @@ let archiveInstance:
     }
   | undefined;
 
+vi.mock('../../utils/detect-project-type.js', () => ({
+  detectProjectType: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
