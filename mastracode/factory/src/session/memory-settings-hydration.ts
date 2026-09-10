@@ -144,7 +144,17 @@ export async function hydrateSessionMemorySettings(
     const fallbackOmModelId = provider
       ? resolveProviderOMDefault(provider, project.defaultModelId ?? undefined).modelId
       : undefined;
-    await applyStoredMemorySettings(session, settings, fallbackOmModelId);
+    await applyStoredMemorySettings(
+      session,
+      factoryProjectId && settings && !fallbackOmModelId
+        ? {
+            ...settings,
+            observerModelId: settings?.observerModelId ?? session.om.observer.modelId() ?? null,
+            reflectorModelId: settings?.reflectorModelId ?? session.om.reflector.modelId() ?? null,
+          }
+        : settings,
+      fallbackOmModelId,
+    );
   } catch (error) {
     console.warn('[Factory memory-settings hydration] Unable to apply stored memory settings.', error);
     // A failed lookup is an unresolved org, not an absent one — unless the seed

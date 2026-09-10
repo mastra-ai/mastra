@@ -316,6 +316,51 @@ describe('hydrateSessionMemorySettings', () => {
     });
   });
 
+  it('preserves current models for threshold-only settings when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: null,
+        reflectorModelId: null,
+        observationThreshold: 12_000,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({
+      observationThreshold: 12_000,
+      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
+    });
+  });
+
+  it('applies an explicit role model without replacing the unset role when the project has no default model', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      projectDefaultModelId: null,
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: null,
+      }),
+    });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+  });
+
   it('uses an explicit project role model and the project provider fallback for the unset role', async () => {
     const session = createSession(
       { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
