@@ -525,18 +525,19 @@ export class MastraAuthStudio
     if (!sessionCookie) return false;
 
     try {
-      const me = await this.fetchMe(sessionCookie);
-      const role =
-        me?.organizationId === organizationId
-          ? me.role
-          : await this.fetchOrganizationRole(sessionCookie, organizationId);
-      return isAdminRole(role);
+      return isAdminRole(await this.fetchOrganizationRole(sessionCookie, organizationId));
     } catch {
       return false;
     }
   }
 
   private async fetchOrganizationRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
+    const me = await this.fetchMe(sessionCookie);
+    if (me?.organizationId === organizationId) return me.role;
+    return this.fetchMembershipRole(sessionCookie, organizationId);
+  }
+
+  private async fetchMembershipRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
     const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
       headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
       signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
@@ -548,12 +549,15 @@ export class MastraAuthStudio
     return data.organizations?.find(o => o.id === organizationId)?.role ?? undefined;
   }
 
-  // The cookie's role and permissions belong to the org the cookie is on, not to the pinned one.
   private async asPinnedOrganizationMember(user: StudioUser, sessionCookie: string): Promise<StudioUser> {
-    const pinned = this.organizationId;
-    if (!pinned || user.organizationId === pinned || !user.memberOrgIds?.includes(pinned)) return user;
-    const role = await this.fetchOrganizationRole(sessionCookie, pinned);
-    return { ...user, organizationId: pinned, role, permissions: undefined };
+    const pinnedOrganizationId = this.organizationId;
+    if (!pinnedOrganizationId) return user;
+    const sessionAlreadyOnPinnedOrganization = user.organizationId === pinnedOrganizationId;
+    const memberOfPinnedOrganization = user.memberOrgIds?.includes(pinnedOrganizationId) ?? false;
+    if (sessionAlreadyOnPinnedOrganization || !memberOfPinnedOrganization) return user;
+    const roleInPinnedOrganization = await this.fetchMembershipRole(sessionCookie, pinnedOrganizationId);
+    // Role and permissions came with the session's org; RBAC re-derives permissions from the role.
+    return { ...user, organizationId: pinnedOrganizationId, role: roleInPinnedOrganization, permissions: undefined };
   }
 
   // ---------------------------------------------------------------------------
@@ -675,19 +679,17 @@ export class MastraAuthStudio
       // methods (invoked with only a userId) can act on the user's behalf.
       this.rememberUserSession(data.user.id, sessionCookie);
 
-      const user = await this.asPinnedOrganizationMember(
-        {
-          id: data.user.id,
-          email: data.user.email,
-          name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
-          avatarUrl: data.user.profilePictureUrl,
-          organizationId: data.organizationId,
-          role: data.role,
-          permissions: data.permissions,
-          memberOrgIds: data.memberOrgIds,
-        },
-        sessionCookie,
-      );
+      const sessionUser: StudioUser = {
+        id: data.user.id,
+        email: data.user.email,
+        name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
+        avatarUrl: data.user.profilePictureUrl,
+        organizationId: data.organizationId,
+        role: data.role,
+        permissions: data.permissions,
+        memberOrgIds: data.memberOrgIds,
+      };
+      const user = await this.asPinnedOrganizationMember(sessionUser, sessionCookie);
       // Don't pin brand-new users in the no-org state: org bootstrap runs on
       // the next request, which must re-read /auth/me to see the new org.
       if (user.organizationId) this.cacheVerification(cacheKey, user);
@@ -711,11 +713,10 @@ export class MastraAuthStudio
     if (cached) return cached;
 
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (this.organizationId) headers['x-organization-id'] = this.organizationId;
       const res = await fetch(`${this.sharedApiUrl}/auth/verify`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(this.organizationId ? { 'x-organization-id': this.organizationId } : {}),
-        },
+        headers,
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 
