@@ -1,10 +1,11 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Memory } from '../../..';
+import { Memory, Subconscious } from '../../..';
 import { createReminderAgent } from '../subconscious/remind-agent';
 
 import {
@@ -38,6 +39,37 @@ function checkMessage(eventId = 'subconscious:remind:abc:event'): MastraDBMessag
       },
     },
   } as unknown as MastraDBMessage;
+}
+
+// Mirrors the observer stub the curation-entry tests use: the real observer pipeline runs,
+// only the model's completion is deterministic.
+function createObserverModel(observations: string) {
+  const text = `<observations>\n${observations}\n</observations>\n<current-task>Continue the migration work.</current-task>`;
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: [],
+      content: [{ type: 'text' as const, text }],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'response-metadata' as const, id: 'observer-1', modelId: 'mock-observer', timestamp: new Date() },
+        { type: 'text-start' as const, id: 'text-1' },
+        { type: 'text-delta' as const, id: 'text-1', delta: text },
+        { type: 'text-end' as const, id: 'text-1' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  } as never);
 }
 
 function args(overrides: Partial<ComputeStateSignalArgs> = {}): ComputeStateSignalArgs {
@@ -821,6 +853,97 @@ describe('Subconscious reminder parent-context state lane', () => {
         expect(snapshot!.mode).toBe('snapshot');
         expect(snapshot!.contents).not.toContain('[knowledge activity]');
       });
+    });
+  });
+
+  // Every other test in this file injects `readParentObservations`, and so does the
+  // proof demo. That leaves the six lines of wiring in `buildInputProcessors` — resolve
+  // the parent's OM engine, read the record by parent thread and resource, hand over
+  // `activeObservations` — exercised by nothing. A wrong thread id or a changed record
+  // shape would keep every one of those tests green while the lane silently carried
+  // nothing in production. This test closes that seam with a real parent Memory whose
+  // observations were committed by the real observer, and no injected reader anywhere.
+  describe('the real parent-record read', () => {
+    it('carries observations a real parent Memory actually committed', async () => {
+      const observation = 'The datastore migration is blocked on the counters rewrite.';
+      const parentMemory = new Memory({
+        storage: new InMemoryStore(),
+        vector: {} as never,
+        embedder: {} as never,
+        options: {
+          observationalMemory: {
+            model: createObserverModel(observation),
+            observation: { messageTokens: 1, bufferTokens: false },
+            experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+          },
+        },
+      });
+
+      const messageStore = (await parentMemory.storage.getStore('memory'))!;
+      const now = new Date();
+      await messageStore.saveMessages({
+        messages: [
+          {
+            id: 'alpha-user',
+            threadId: 'alpha',
+            resourceId: 'resource-1',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Migration status? '.repeat(20) }] },
+            createdAt: now,
+          },
+          {
+            id: 'alpha-assistant',
+            threadId: 'alpha',
+            resourceId: 'resource-1',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Understood. '.repeat(20) }] },
+            createdAt: new Date(now.getTime() + 1),
+          },
+        ] as never,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'acme');
+      const engine = (await parentMemory.omEngine)!;
+      await engine.observe({ threadId: 'alpha', resourceId: 'resource-1', requestContext });
+
+      // Fixture sanity: the record is real and holds the text, so a failure below is the
+      // wiring's fault rather than an observation that never got committed.
+      const record = await engine.getRecord('alpha', 'resource-1');
+      expect(record?.activeObservations).toContain('counters rewrite');
+
+      const prompts: string[] = [];
+      const model = new MockLanguageModelV2({
+        doGenerate: async options => {
+          prompts.push(JSON.stringify(options.prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content: [{ type: 'text', text: '<no-reminder />' }],
+          };
+        },
+      });
+
+      const agent = createReminderAgent({
+        model,
+        memory: new Memory({ storage: new InMemoryStore() }),
+        scope: ['resource:user-42'],
+        threadId: 'subconscious:parent:remind',
+        resourceId: 'resource-1',
+        parentThreadId: 'alpha',
+        parentMemory,
+        fallbackSendSignal: vi.fn(),
+      });
+
+      await agent.generate([checkMessage()], {
+        memory: { thread: 'subconscious:parent:remind', resource: 'resource-1' },
+        maxSteps: 1,
+      });
+
+      expect(prompts[0]).toContain('said about the candidates in play, as of check');
+      expect(prompts[0]).toContain('counters rewrite');
     });
   });
 });
