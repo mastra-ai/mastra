@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { CANDIDATE_CONTEXT_MAX_CHARACTERS, projectCandidateContext } from '../subconscious/candidate-context';
+import {
+  CANDIDATE_CONTEXT_MAX_CHARACTERS,
+  projectCandidateContext,
+  projectCandidateEntries,
+  renderCandidateProjection,
+} from '../subconscious/candidate-context';
 
 const source = (id: string, text: string) => ({ type: 'record' as const, id, text });
 
@@ -135,5 +140,61 @@ describe('candidate context projection', () => {
     // shares no distinctive term with the candidate, yet is still forwarded
     expect(result).toContain('quarterly billing cadence');
     expect(result).toContain('before standup');
+  });
+});
+
+describe('candidate context entries', () => {
+  const sources = [
+    source('k-invoice', 'invoice pipeline billing cadence'),
+    source('k-kitchen', 'kitchen renovation countertop'),
+  ];
+
+  it('reports the passthrough regime, with no per-candidate identity to key on, while under the budget', () => {
+    const projection = projectCandidateEntries({
+      activeObservations: 'Jamie moved the invoice pipeline to a quarterly billing cadence.',
+      sources,
+    });
+
+    expect(projection.regime).toBe('passthrough');
+    expect(projection).not.toHaveProperty('entries');
+  });
+
+  it('gives every candidate exactly one entry once the projection filters, unmatched candidates included', () => {
+    const projection = projectCandidateEntries({
+      activeObservations: overBudget('Jamie switched the invoice pipeline to quarterly billing.'),
+      sources,
+    });
+
+    expect(projection.regime).toBe('filtered');
+    if (projection.regime !== 'filtered') throw new Error('expected the filtered regime');
+
+    expect(projection.entries.map(entry => entry.id)).toEqual(['k-invoice', 'k-kitchen']);
+    expect(projection.entries[0]!.excerpt).toContain('quarterly billing');
+    // the unmatched candidate keeps its own entry, and its excerpt stays a wording-overlap caveat
+    expect(projection.entries[1]!.excerpt).toContain('no accumulated observation references it by wording');
+    expect(projection.entries[1]!.excerpt).toContain('is not evidence about what the parent still holds');
+  });
+
+  it('switches regime at the budget boundary, not near it', () => {
+    const atBudget = 'x'.repeat(CANDIDATE_CONTEXT_MAX_CHARACTERS);
+    const overByOne = 'x'.repeat(CANDIDATE_CONTEXT_MAX_CHARACTERS + 1);
+
+    expect(projectCandidateEntries({ activeObservations: atBudget, sources }).regime).toBe('passthrough');
+    expect(projectCandidateEntries({ activeObservations: overByOne, sources }).regime).toBe('filtered');
+  });
+
+  it('renders byte-identically to the projection callers already ship, in both regimes', () => {
+    for (const activeObservations of [
+      '',
+      'Jamie moved the invoice pipeline to a quarterly billing cadence.',
+      overBudget('Jamie switched the invoice pipeline to quarterly billing.'),
+      Array.from(
+        { length: 5_000 },
+        (_, index) => `Observation ${index} about the invoice pipeline and its billing cadence.`,
+      ).join('\n'),
+    ]) {
+      const input = { activeObservations, sources };
+      expect(renderCandidateProjection(projectCandidateEntries(input))).toBe(projectCandidateContext(input));
+    }
   });
 });

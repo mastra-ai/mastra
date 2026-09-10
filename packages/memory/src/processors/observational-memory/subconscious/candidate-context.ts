@@ -58,20 +58,34 @@ function sharedTermCount(observationTerms: Set<string>, candidateTerms: Set<stri
 
 export type CandidateContextSource = { id: string; text?: string; title?: string; recordId?: string };
 
-export function projectCandidateContext({
+/** One candidate's slice of the projection. The excerpt is the candidate's rendered section verbatim. */
+export type CandidateContextEntry = { id: string; excerpt: string };
+
+/**
+ * Two regimes, kept explicit so callers can tell them apart.
+ *
+ * `passthrough` has no per-candidate identity at all — the whole accumulated memory is forwarded as
+ * one block — so anything keyed by candidate (deltas, per-candidate markers) has nothing to key on.
+ * `filtered` gives every candidate exactly one entry, including candidates nothing matched.
+ */
+export type CandidateContextProjection =
+  | { regime: 'passthrough'; text: string }
+  | { regime: 'filtered'; entries: CandidateContextEntry[] };
+
+export function projectCandidateEntries({
   activeObservations,
   sources,
 }: {
   activeObservations: string;
   sources: CandidateContextSource[];
-}): string {
+}): CandidateContextProjection {
   const observations = activeObservations
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean);
 
   if (observations.length === 0) {
-    return 'No accumulated observations were available for this check.';
+    return { regime: 'passthrough', text: 'No accumulated observations were available for this check.' };
   }
 
   // Below the budget the projection buys nothing: forwarding everything costs no more than the
@@ -80,11 +94,14 @@ export function projectCandidateContext({
   // filtering once the accumulated memory is the size problem the filtering exists to solve.
   const whole = observations.join('\n');
   if (whole.length <= CANDIDATE_CONTEXT_MAX_CHARACTERS) {
-    return `All accumulated observations already visible to the parent agent:\n${whole}`;
+    return {
+      regime: 'passthrough',
+      text: `All accumulated observations already visible to the parent agent:\n${whole}`,
+    };
   }
 
   const indexed = observations.map(line => ({ line, terms: extractDistinctiveTerms(line) }));
-  const sections: string[] = [];
+  const entries: CandidateContextEntry[] = [];
 
   for (const source of sources) {
     const candidateTerms = extractDistinctiveTerms([source.text, source.title].filter(Boolean).join(' '));
@@ -93,9 +110,10 @@ export function projectCandidateContext({
       : [];
 
     if (matches.length === 0) {
-      sections.push(
-        `Candidate ${source.id}: no accumulated observation references it by wording. This reports a missing wording overlap only, and is not evidence about what the parent still holds.`,
-      );
+      entries.push({
+        id: source.id,
+        excerpt: `Candidate ${source.id}: no accumulated observation references it by wording. This reports a missing wording overlap only, and is not evidence about what the parent still holds.`,
+      });
       continue;
     }
 
@@ -104,10 +122,27 @@ export function projectCandidateContext({
     if (matches.length > shown.length) {
       lines.push(`[omitted ${matches.length - shown.length} further matching observations]`);
     }
-    sections.push(`Candidate ${source.id}: accumulated observations that mention it:\n${lines.join('\n')}`);
+    entries.push({
+      id: source.id,
+      excerpt: `Candidate ${source.id}: accumulated observations that mention it:\n${lines.join('\n')}`,
+    });
   }
 
-  const projected = sections.join('\n\n');
+  return { regime: 'filtered', entries };
+}
+
+export function projectCandidateContext(input: {
+  activeObservations: string;
+  sources: CandidateContextSource[];
+}): string {
+  return renderCandidateProjection(projectCandidateEntries(input));
+}
+
+/** Renders a projection back to the block the passive-check prompt and the state lane both carry. */
+export function renderCandidateProjection(projection: CandidateContextProjection): string {
+  if (projection.regime === 'passthrough') return projection.text;
+
+  const projected = projection.entries.map(entry => entry.excerpt).join('\n\n');
   if (projected.length <= CANDIDATE_CONTEXT_MAX_CHARACTERS) return projected;
 
   const marker = '\n[omitted to fit the candidate context budget]';
