@@ -168,6 +168,13 @@ export const credentialSchema = z.discriminatedUnion('type', [
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
 
+export const connectionContextSchema = z.object({
+  connection_config: z.record(z.string(), z.unknown()).nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+});
+
+export type ConnectionContext = z.infer<typeof connectionContextSchema>;
+
 // —— endpoint functions ——
 
 export async function listProjectConnections(client: ResolvedClient, projectId: string): Promise<ProjectConnection[]> {
@@ -185,6 +192,21 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
     );
   }
   return parsed.data.connections;
+}
+
+export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/context`);
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
+  }
+  const parsed = connectionContextSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected context shape for connection ${connectionId}.`,
+    );
+  }
+  return parsed.data;
 }
 
 export async function getCredential(client: ResolvedClient, connectionId: string): Promise<ConnectionCredential> {

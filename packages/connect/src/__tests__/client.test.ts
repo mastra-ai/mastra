@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
+import { getConnectionContext, getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 const TOKEN = 'fake-test-token';
@@ -160,6 +160,31 @@ describe('listProjectConnections', () => {
       expect((error as Error).message).not.toContain(TOKEN);
       expect((error as Error).message).toContain('[REDACTED]');
     }
+  });
+});
+
+describe('getConnectionContext', () => {
+  it('returns connection config and metadata without credentials', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connection_config: { projectUrl: 'https://project.supabase.co' },
+        metadata: { region: 'us-east-1' },
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(getConnectionContext(client, 'c_1')).resolves.toEqual({
+      connection_config: { projectUrl: 'https://project.supabase.co' },
+      metadata: { region: 'us-east-1' },
+    });
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/c_1/context');
+  });
+
+  it('throws platform_error on malformed context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ credentials: { apiKey: 'secret' } }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(getConnectionContext(client, 'c_1')).rejects.toMatchObject({ code: 'platform_error' });
   });
 });
 
