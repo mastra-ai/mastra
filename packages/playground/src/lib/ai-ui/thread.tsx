@@ -30,10 +30,10 @@ import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
+import { ConnectedChatMessages } from './chat/connected-chat-messages';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
-import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -187,11 +187,11 @@ export const Thread = ({
                               messageId={message.id}
                               scrollAnchor={threadRailAnchorIds.has(message.id)}
                             >
-                              <MessageRow
-                                message={message}
+                              <ConnectedChatMessages
+                                messages={[message]}
                                 hasModelList={hasModelList}
-                                isSpeaking={isSpeaking}
-                                onReadAloud={readAloud}
+                                speakingMessageId={isSpeaking ? message.id : undefined}
+                                onReadAloud={(_message, text) => readAloud(text)}
                                 onStopSpeaking={stopSpeaking}
                               />
                             </MessageScrollerItem>

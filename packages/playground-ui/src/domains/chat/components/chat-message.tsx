@@ -1,0 +1,372 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { MessageFactory } from '@mastra/react';
+import type { MessageRenderers } from '@mastra/react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, DatabaseIcon, StopCircleIcon } from 'lucide-react';
+import { memo, useMemo } from 'react';
+import { useRevealedParts } from '../../../ds/components/ai/message-reveal';
+import { ToolCallGroup } from '../../../ds/components/ai/tool-call';
+import { Arriving } from '../../../ds/components/Arrival';
+import { Button } from '../../../ds/components/Button';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { cn } from '../../../utils/cn';
+
+import { AssistantTextPartRenderer } from '../messages/renderers/assistant-text-part-renderer';
+import { DataPartRenderer } from '../messages/renderers/data-part-renderer';
+import { messageStatusRenderers } from '../messages/renderers/message-status-renderers';
+import { messageTextKind } from '../messages/renderers/message-text-kind';
+import { ReasoningPartRenderer } from '../messages/renderers/reasoning-part-renderer';
+import { readToolPart } from '../messages/renderers/tool-part';
+import type { ToolPart } from '../messages/renderers/tool-part';
+import { UserFilePartRenderer } from '../messages/renderers/user-file-part-renderer';
+import { UserTextPartRenderer } from '../messages/renderers/user-text-part-renderer';
+import { getSignalType, isRecord, isSignalData, isUserSignalType, toReactiveSignalData } from '../messages/signal-data';
+
+import type { ChatToolContext } from './chat-tool-context';
+import { ProviderLogo } from './provider-logo';
+import type { DataMessagePart } from './tool-card';
+import { ToolCard } from './tool-card';
+import type { ToolCardContext } from './tool-card-kind';
+import { badgeStatus } from './tool-card-kind';
+import { collectToolGroups } from './tool-groups';
+export interface ChatMessageProps extends ChatToolContext {
+  message: MastraDBMessage;
+  hasModelList?: boolean;
+  isSpeaking?: boolean;
+  onReadAloud?: (text: string) => void;
+  onStopSpeaking?: () => void;
+  onSaveToDataset?: (text: string) => void;
+  className?: string;
+}
+
+type MessagePart = MastraDBMessage['content']['parts'][number];
+
+/** Read an optional field off a loosely-typed message part or nested value. */
+const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
+
+/**
+ * Normalize the stored message role for display. A `signal`+`type:'user'` row
+ * renders as a user message; a non-user (reactive) `signal` row is folded onto
+ * an assistant message as a `data-signal` badge (see `toReactiveSignalMessage`);
+ * messages without a displayable role are dropped.
+ */
+const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
+  if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
+  if (message.role === 'signal') return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
+  return null;
+};
+
+/**
+ * Convert a persisted reactive (non-user) `signal` row into an assistant message
+ * carrying a single `data-signal` part, so the existing `SignalBadge` renderer
+ * shows it on read-back. Restores 1.41.0 behavior lost in the chat renderer
+ * rewrite (PR #17774). Returns `null` when the signal payload is not a shape the
+ * `SignalBadge` can render, so the row is dropped instead of leaving an empty
+ * assistant bubble.
+ */
+const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const data = toReactiveSignalData(message);
+  if (!isSignalData(data)) return null;
+  const parts: MastraDBMessage['content']['parts'] = [{ type: 'data-signal', data }];
+  return {
+    ...message,
+    role: 'assistant',
+    content: { ...message.content, parts },
+  };
+};
+
+const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const displayRole = getMessageDisplayRole(message);
+  if (displayRole === null) return null;
+  if (message.role === 'signal' && displayRole === 'assistant') return toReactiveSignalMessage(message);
+  if (displayRole === message.role) return message;
+  return { ...message, role: displayRole };
+};
+
+const NO_PARTS: MessagePart[] = [];
+
+const isStreaming = (parts: MessagePart[]): boolean => parts.some(part => readField(part, 'state') === 'streaming');
+
+/** A notice (tripwire, error, completion check) is a status, so it is handed over whole rather than paced. */
+const isProse = (parts: MessagePart[], metadata: Record<string, unknown> | undefined): boolean =>
+  parts.every(part => {
+    if (part.type !== 'text') return true;
+    const text = readField(part, 'text');
+    return typeof text !== 'string' || messageTextKind(text, metadata) === 'prose';
+  });
+
+const getMessageMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined =>
+  isRecord(message.content.metadata) ? message.content.metadata : undefined;
+
+/**
+ * Collect `data-*` parts from the message so badges (file-tree, sandbox) can read
+ * live streaming metadata without reaching into assistant-ui state.
+ */
+const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
+  message.content.parts
+    .filter(
+      (part): part is Extract<MessagePart, { type: string }> =>
+        typeof part.type === 'string' && part.type.startsWith('data-'),
+    )
+    .map(part => ({
+      type: part.type,
+      name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
+      data: isRecord(readField(part, 'data')) ? (readField(part, 'data') as Record<string, unknown>) : undefined,
+    }));
+
+const getTextFromParts = (message: MastraDBMessage): string =>
+  message.content.parts
+    .filter(
+      (part): part is Extract<MessagePart, { type: 'text'; text: string }> =>
+        part.type === 'text' && typeof readField(part, 'text') === 'string',
+    )
+    .map(part => part.text)
+    .join('\n');
+
+/**
+ * Whether an assistant message has user-visible prose worth showing the action
+ * bar for. Tool calls, reasoning, and completion-check text do not count.
+ */
+const hasVisibleAssistantText = (message: MastraDBMessage, metadata: Record<string, unknown> | undefined): boolean =>
+  message.content.parts.some(part => {
+    if (part.type !== 'text') return false;
+    const text = readField(part, 'text');
+    if (typeof text !== 'string' || text.trim().length === 0) return false;
+    if (readField(metadata, 'completionResult') || readField(metadata, 'isTaskCompleteResult')) return false;
+    return true;
+  });
+
+const getModelMetadata = (metadata: Record<string, unknown> | undefined) => {
+  const custom = readField(metadata, 'custom');
+  const modelMetadata = readField(custom, 'modelMetadata');
+  const modelId = readField(modelMetadata, 'modelId');
+  const modelProvider = readField(modelMetadata, 'modelProvider');
+  if (typeof modelId !== 'string' || typeof modelProvider !== 'string') return undefined;
+  return { modelId, modelProvider };
+};
+
+/**
+ * Read part-level optimistic `pending` status, stamped onto user text parts.
+ */
+const isPendingMessage = (message: MastraDBMessage): boolean => {
+  if (message.content.metadata?.status === 'pending') return true;
+  return message.content.parts.some(part => readField(readField(part, 'metadata'), 'status') === 'pending');
+};
+
+const CopyButton = ({ text }: { text: string }) => {
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
+
+  return (
+    <Button variant="ghost" size="icon-xs" tooltip="Copy" aria-label="Copy" onClick={() => copyToClipboard(text)}>
+      {isCopied ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  );
+};
+
+const AssistantActionBar = ({
+  text,
+  modelMetadata,
+  isSpeaking,
+  onReadAloud,
+  onStopSpeaking,
+}: {
+  text: string;
+  modelMetadata?: { modelId: string; modelProvider: string };
+  isSpeaking?: boolean;
+  onReadAloud?: (text: string) => void;
+  onStopSpeaking?: () => void;
+}) => (
+  <div className="relative flex items-center gap-1 transition-all">
+    {modelMetadata && (
+      <div className="text-icon5 text-ui-xs leading-ui-xs flex items-center gap-1 pr-2">
+        <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
+        <span>
+          {modelMetadata.modelProvider}/{modelMetadata.modelId}
+        </span>
+      </div>
+    )}
+    {((isSpeaking && onStopSpeaking) || (!isSpeaking && onReadAloud)) &&
+      (isSpeaking ? (
+        <Button variant="ghost" size="icon-xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
+          <StopCircleIcon />
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          tooltip="Read aloud"
+          aria-label="Read aloud"
+          onClick={() => onReadAloud?.(text)}
+        >
+          <AudioLinesIcon />
+        </Button>
+      ))}
+    <CopyButton text={text} />
+  </div>
+);
+
+// Memoized: a stream chunk hands the thread a new array while every settled message in it is the same object.
+export const ChatMessage = memo(function ChatMessage({
+  message,
+  hasModelList,
+  isSpeaking,
+  onReadAloud,
+  onStopSpeaking,
+  onSaveToDataset,
+  isRunning,
+  mcpAppTools,
+  className,
+  ...toolContextProps
+}: ChatMessageProps) {
+  const dbMessage = toDisplayMessage(message);
+  const metadata = getMessageMetadata(message);
+  const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
+  const dataParts = useMemo(() => getDataParts(message), [message]);
+
+  // One clock for the whole message, so a tool row waits behind the sentence written before it.
+  const parts = dbMessage?.content.parts ?? NO_PARTS;
+  const revealed = useRevealedParts(parts, isStreaming(parts));
+  const shownParts = isProse(parts, metadata) ? revealed : parts;
+  const revealing = shownParts !== parts;
+
+  const toolContext = useMemo<ToolCardContext>(() => ({ metadata, mcpAppTools }), [metadata, mcpAppTools]);
+  const toolGroups = useMemo(() => collectToolGroups(shownParts, toolContext), [shownParts, toolContext]);
+
+  const sharedRenderers = useMemo<MessageRenderers>(() => {
+    const renderTool = (part: ToolPart) => {
+      const fields = readToolPart(part);
+      const group = toolGroups.byFirstKey.get(fields.toolCallId);
+      if (group) {
+        const members = group.map(readToolPart);
+        return (
+          <>
+            <Arriving>
+              <ToolCallGroup
+                steps={members.map(member => ({
+                  toolName: member.toolName,
+                  args: member.input,
+                  status: badgeStatus(member.state, isRunning),
+                }))}
+              >
+                {members.map(member => (
+                  <ToolCard
+                    key={member.toolCallId}
+                    {...member}
+                    metadata={metadata}
+                    dataParts={dataParts}
+                    {...toolContextProps}
+                    isRunning={isRunning}
+                    mcpAppTools={mcpAppTools}
+                  />
+                ))}
+              </ToolCallGroup>
+            </Arriving>
+          </>
+        );
+      }
+      if (toolGroups.memberKeys.has(fields.toolCallId)) return null;
+      return (
+        <>
+          <Arriving>
+            <ToolCard
+              {...fields}
+              metadata={metadata}
+              dataParts={dataParts}
+              {...toolContextProps}
+              isRunning={isRunning}
+              mcpAppTools={mcpAppTools}
+            />
+          </Arriving>
+        </>
+      );
+    };
+    return {
+      Reasoning: part => <ReasoningPartRenderer part={part} />,
+      Data: part => (
+        <Arriving>
+          <DataPartRenderer part={part} />
+        </Arriving>
+      ),
+      ToolInvocation: renderTool,
+      DynamicTool: renderTool,
+    };
+  }, [metadata, dataParts, toolContextProps, toolGroups, isRunning, mcpAppTools]);
+
+  const userRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
+      File: part => <UserFilePartRenderer part={part} />,
+    }),
+    [sharedRenderers, metadata],
+  );
+
+  const assistantRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} revealing={revealing} />,
+    }),
+    [sharedRenderers, metadata, revealing],
+  );
+
+  if (dbMessage === null) return null;
+
+  // Same object once caught up, so the factory keeps the part it is filling in mounted.
+  const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
+  const displayRole = dbMessage.role;
+
+  if (displayRole === 'user') {
+    const isPending = isPendingMessage(message);
+
+    return (
+      <div
+        className={cn('group flex w-full flex-col items-end pt-2 pb-4', className)}
+
+        data-message-id={message.id}
+        data-message-pending={isPending ? 'true' : undefined}
+      >
+        {onSaveToDataset && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="opacity-0 transition-opacity group-hover:opacity-100"
+            tooltip="Save to dataset"
+            onClick={() => onSaveToDataset(getTextFromParts(message))}
+          >
+            <DatabaseIcon className="size-3" />
+          </Button>
+        )}
+        <div
+          className={cn(
+            'max-w-[max(366px,70%)] rounded-xl bg-surface3 px-4 py-2 text-ui-lg leading-ui-lg break-words text-neutral6',
+            isPending && 'animate-pulse opacity-60',
+          )}
+        >
+          <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
+        </div>
+      </div>
+    );
+  }
+
+  const showActionBar = hasVisibleAssistantText(message, metadata);
+
+  return (
+    <div className={cn('group max-w-full', className)} data-message-id={message.id}>
+      <div className="text-ui-lg leading-ui-lg text-neutral6 pt-2">
+        <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+      </div>
+      {showActionBar && (
+        <div className="flex h-6 items-center gap-2 pt-4">
+          {showActionBar && (
+            <AssistantActionBar
+              text={getTextFromParts(message)}
+              modelMetadata={modelMetadata}
+              isSpeaking={isSpeaking}
+              onReadAloud={onReadAloud}
+              onStopSpeaking={onStopSpeaking}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+});

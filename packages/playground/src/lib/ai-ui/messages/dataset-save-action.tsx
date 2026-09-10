@@ -22,7 +22,7 @@ import { useDatasetSaveContext } from '../context/dataset-save-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
-function DatasetSaveDialog({
+export function DatasetSaveDialog({
   open,
   onOpenChange,
   input,

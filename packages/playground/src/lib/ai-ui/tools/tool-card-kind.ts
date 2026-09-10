@@ -1,7 +1,7 @@
 import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 
-import { getCodeModeCall } from './badges/code-mode-badge';
+import { getCodeModeCall } from '@mastra/playground-ui/domains/chat';
 import { SUBMIT_PLAN_TOOL_ID } from '@/domains/agents/hooks/use-agent-plan';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import type {
