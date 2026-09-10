@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CANDIDATE_CONTEXT_MAX_CHARACTERS,
-  projectCandidateContext,
   projectCandidateEntries,
   renderCandidateProjection,
 } from '../subconscious/candidate-context';
+
+/** The composition the passive-check prompt and the state lane both ship. */
+const project = (input: { activeObservations: string; sources: ReturnType<typeof source>[] }) =>
+  renderCandidateProjection(projectCandidateEntries(input));
 
 const source = (id: string, text: string) => ({ type: 'record' as const, id, text });
 
@@ -28,7 +31,7 @@ describe('candidate context projection', () => {
       'Tyler prefers reviews posted before standup.',
     );
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-invoice', 'invoice pipeline billing cadence')],
     });
@@ -41,7 +44,7 @@ describe('candidate context projection', () => {
   });
 
   it('says plainly when nothing accumulated references a candidate, without claiming it was forgotten', () => {
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations: overBudget('The kitchen renovation is blocked on the countertop supplier.'),
       sources: [source('k-invoice', 'invoice pipeline billing cadence')],
     });
@@ -58,7 +61,7 @@ describe('candidate context projection', () => {
       'The kitchen renovation is blocked on the countertop supplier.',
     );
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-invoice', 'invoice pipeline billing'), source('k-kitchen', 'kitchen renovation countertop')],
     });
@@ -78,7 +81,7 @@ describe('candidate context projection', () => {
       (_, index) => `Observation ${index} about the invoice pipeline and its billing cadence.`,
     ).join('\n');
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-invoice', 'invoice pipeline billing cadence')],
     });
@@ -93,7 +96,7 @@ describe('candidate context projection', () => {
       ...Array.from({ length: 500 }, (_, index) => `Unrelated observation ${index} about gardening schedules.`),
     ].join('\n');
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-invoice', 'invoice pipeline billing')],
     });
@@ -104,7 +107,7 @@ describe('candidate context projection', () => {
   it('treats a candidate with no distinctive terms as unmatched rather than matching everything', () => {
     const activeObservations = overBudget('Jamie switched the invoice pipeline to quarterly billing.');
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-vague', 'the that with what')],
     });
@@ -114,7 +117,7 @@ describe('candidate context projection', () => {
   });
 
   it('returns an explicit empty-state when there are no accumulated observations at all', () => {
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations: '',
       sources: [source('k-invoice', 'invoice pipeline billing')],
     });
@@ -131,7 +134,7 @@ describe('candidate context projection', () => {
       'Tyler prefers reviews posted before standup.',
     ].join('\n');
 
-    const result = projectCandidateContext({
+    const result = project({
       activeObservations,
       sources: [source('k-cash', 'cash collection rhythm changed')],
     });
@@ -181,20 +184,5 @@ describe('candidate context entries', () => {
 
     expect(projectCandidateEntries({ activeObservations: atBudget, sources }).regime).toBe('passthrough');
     expect(projectCandidateEntries({ activeObservations: overByOne, sources }).regime).toBe('filtered');
-  });
-
-  it('renders byte-identically to the projection callers already ship, in both regimes', () => {
-    for (const activeObservations of [
-      '',
-      'Jamie moved the invoice pipeline to a quarterly billing cadence.',
-      overBudget('Jamie switched the invoice pipeline to quarterly billing.'),
-      Array.from(
-        { length: 5_000 },
-        (_, index) => `Observation ${index} about the invoice pipeline and its billing cadence.`,
-      ).join('\n'),
-    ]) {
-      const input = { activeObservations, sources };
-      expect(renderCandidateProjection(projectCandidateEntries(input))).toBe(projectCandidateContext(input));
-    }
   });
 });

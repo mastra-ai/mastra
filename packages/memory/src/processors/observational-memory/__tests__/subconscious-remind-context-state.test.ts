@@ -7,7 +7,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { Memory } from '../../..';
 import { createReminderAgent } from '../subconscious/remind-agent';
 
-import { REMIND_CONTEXT_STATE_ID, RemindContextStateProcessor } from '../subconscious/remind-context-state';
+import {
+  REMIND_CONTEXT_STATE_ID,
+  RemindContextStateProcessor,
+  latestCheck,
+} from '../subconscious/remind-context-state';
 import { REMIND_MESSAGE_METADATA_KEY } from '../subconscious/remind-protocol';
 
 const sources = [{ id: 'source-1', text: 'The datastore migration is blocked on the counters rewrite.' }];
@@ -158,7 +162,7 @@ describe('Subconscious reminder parent-context state lane', () => {
       maxSteps: 1,
     });
 
-    expect(prompts[0]).toContain('currently say about the candidates');
+    expect(prompts[0]).toContain('said about the candidates in play, as of check');
     expect(prompts[0]).toContain('counters rewrite');
   });
 
@@ -308,7 +312,9 @@ describe('Subconscious reminder parent-context state lane', () => {
       // rather than inside it.
       expect(prompts[0]).toContain('landed in staging');
       expect(prompts[0]).toContain('since Tuesday');
-      const laneSection = prompts[0]!.slice(prompts[0]!.indexOf('currently say about the candidates'));
+      const laneHeaderIndex = prompts[0]!.indexOf('said about the candidates in play, as of check');
+      expect(laneHeaderIndex).toBeGreaterThan(-1);
+      const laneSection = prompts[0]!.slice(laneHeaderIndex);
       expect(laneSection).not.toContain('landed in staging');
     });
   });
@@ -449,6 +455,49 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(second!.contents).not.toContain('is among this check');
     });
 
+    it('stamps the snapshot header too, because superseded snapshots are never retracted', async () => {
+      const snapshot = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+
+      // `resolveStateSignalHistory` folds from the last snapshot and leaves the
+      // earlier ones in the transcript, so a present-tense header on a superseded
+      // block reads as a current claim about state it no longer describes.
+      expect(snapshot.contents).toContain('as of check');
+      expect(snapshot.contents).not.toContain('currently say');
+    });
+
+    it('emits nothing when the newest check is unreadable, rather than answering with an older one', async () => {
+      const readable = checkMessage('check-1');
+      const unreadable = {
+        ...checkMessage('check-2'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Passive reminder check check-2\n\nScoped source candidates:' }],
+        },
+      } as unknown as MastraDBMessage;
+
+      const found = latestCheck([readable, unreadable]);
+
+      // Falling through to `check-1` would let the lane report `source-2` as having
+      // left a candidate set the newer check never actually published — stamped with
+      // the wrong check id, in a line nothing retracts.
+      expect(found).toBeUndefined();
+    });
+
+    it('falls back to a snapshot when a filtered base shrinks into the passthrough regime', async () => {
+      const filtered = await firstSnapshot(bigObservations({ first: firstFact, second: secondFact }));
+      const processor = new RemindContextStateProcessor({
+        readParentObservations: async () => 'The datastore migration is blocked on the counters rewrite.',
+      });
+
+      const second = await processor.computeStateSignal(secondArgs(filtered));
+
+      // The other direction of the regime boundary: a passthrough projection has
+      // no per-candidate ops to express, so a delta here could only be an orphan.
+      expect((filtered.value as { regime: string }).regime).toBe('filtered');
+      expect(second!.mode).toBe('snapshot');
+      expect((second!.value as { regime: string }).regime).toBe('passthrough');
+    });
+
     it('splits the regimes at the byte the constant names, not near it', async () => {
       const line = (index: number) => `Bookkeeping note ${String(index).padStart(4, '0')} about nothing at all.`;
       const build = (length: number) => {
@@ -494,6 +543,31 @@ describe('Subconscious reminder parent-context state lane', () => {
       // Both lines describe their own check, so the earlier one is still true
       // sitting next to the later one.
       expect(dropOut!.contents).not.toContain('check-three');
+
+      // Stamps existing is weaker than every claim carrying one. Any line that
+      // names a candidate must be tied to the check it describes, otherwise a
+      // later check can contradict it and leave a present-tense claim standing.
+      // Stamps existing is weaker than every verdict carrying one. Any line that
+      // renders one of the op clauses must be tied to the check it describes,
+      // otherwise a later check can contradict it and leave a present-tense
+      // claim standing in the transcript with nothing to retract it.
+      const verdictClauses = [
+        'had no lexical overlap',
+        'is among this check',
+        'was not among this check',
+        'accumulated observations matching it changed',
+        'read the same as before',
+      ];
+      for (const contents of [dropOut!.contents, comeBack!.contents]) {
+        const verdictLines = String(contents)
+          .split('\n')
+          .map(entry => entry.trim())
+          .filter(entry => verdictClauses.some(clause => entry.includes(clause)));
+        expect(verdictLines.length).toBeGreaterThan(0);
+        for (const verdict of verdictLines) {
+          expect(verdict.startsWith('as of check ')).toBe(true);
+        }
+      }
     });
 
     it('reports a candidate that stopped matching as a wording fact, never as a loss', async () => {
@@ -537,6 +611,28 @@ describe('Subconscious reminder parent-context state lane', () => {
       await expect(failing.computeStateSignal(secondArgs(snapshot))).resolves.toBeUndefined();
     });
 
+    it('never stores a snapshot entry the rendered block did not carry', async () => {
+      // An over-budget filtered snapshot has to drop whole entries. If the stored
+      // value kept them anyway, the next check would diff against text the model
+      // was never shown and suppress a real update.
+      const many = Array.from({ length: 40 }, (_, index) => ({
+        id: `source-${index}`,
+        text: `candidate ${index} datastore migration counters rewrite`,
+      }));
+      const observationLines = many
+        .map((_, index) => `${'padding '.repeat(30)}candidate ${index} datastore migration counters rewrite details`)
+        .join('\n');
+
+      const snapshot = await new RemindContextStateProcessor({
+        readParentObservations: async () => observationLines,
+      }).computeStateSignal(args({ messages: [checkWith('check-one', many)] }));
+
+      const stored = (snapshot as { value: { entries: { id: string; excerpt: string }[] } }).value.entries;
+      expect(stored.length).toBeGreaterThan(0);
+      expect(stored.length).toBeLessThan(many.length);
+      for (const entry of stored) expect(snapshot!.contents).toContain(entry.excerpt);
+    });
+
     it('tells the model how to fold deltas onto the snapshot', async () => {
       const processor = new RemindContextStateProcessor({ readParentObservations: async () => 'anything' });
 
@@ -576,7 +672,7 @@ describe('Subconscious reminder parent-context state lane', () => {
         expect(snapshot!.contents).not.toContain('[knowledge activity] candidate source-2');
       });
 
-      it('treats a new marker as a change even when the excerpt is identical', async () => {
+      it('reports a new marker as activity, not as an observation change that did not happen', async () => {
         const snapshot = await laneWith([]).computeStateSignal(
           args({ messages: [checkWith('check-one', candidates)] }),
         );
@@ -585,10 +681,36 @@ describe('Subconscious reminder parent-context state lane', () => {
         const ops = (delta as { delta: { ops: { op: string; entry?: { id: string } }[] } }).delta.ops;
 
         expect(ops).toEqual([
-          expect.objectContaining({ op: 'changed', entry: expect.objectContaining({ id: 'source-1' }) }),
+          expect.objectContaining({ op: 'node-activity', entry: expect.objectContaining({ id: 'source-1' }) }),
         ]);
         expect(delta!.contents).toContain('activity event evt-1');
+        expect(delta!.contents).toContain('read the same as before');
+        expect(delta!.contents).not.toContain('the accumulated observations matching it changed');
         expect(delta!.contents).not.toContain('had no lexical overlap');
+      });
+
+      it('says nothing when a marker falls off the bounded page', async () => {
+        const snapshot = await laneWith([event()]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        // The page moved; the node did not. A line claiming otherwise would sit
+        // in the transcript uncontradicted.
+        const delta = await laneWith([]).computeStateSignal(secondArgs(snapshot!));
+
+        expect(delta).toBeUndefined();
+      });
+
+      it('still shows the marker on a candidate that stopped matching in the same check', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        const drifted = `${'filler observation line about unrelated topics\n'.repeat(120)}nothing here shares wording with the first candidate`;
+        const delta = await laneWith([event()], drifted).computeStateSignal(secondArgs(snapshot!));
+
+        expect(delta!.contents).toContain('had no lexical overlap');
+        expect(delta!.contents).toContain('activity event evt-1');
       });
 
       it('does not re-fire while the same event sits in the page', async () => {

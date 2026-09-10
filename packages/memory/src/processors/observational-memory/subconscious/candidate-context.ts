@@ -140,13 +140,6 @@ export function projectCandidateEntries({
   return { regime: 'filtered', entries };
 }
 
-export function projectCandidateContext(input: {
-  activeObservations: string;
-  sources: CandidateContextSource[];
-}): string {
-  return renderCandidateProjection(projectCandidateEntries(input));
-}
-
 /** Renders a projection back to the block the passive-check prompt and the state lane both carry. */
 export function renderCandidateProjection(projection: CandidateContextProjection): string {
   if (projection.regime === 'passthrough') return projection.text;
