@@ -761,7 +761,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
             updatedAt: now,
           };
         } catch (error) {
-          if (!tx.closed) await tx.rollback();
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
           throw error;
         }
       });
@@ -842,7 +846,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
           });
           await tx.commit();
         } catch (error) {
-          if (!tx.closed) await tx.rollback();
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
           throw error;
         }
       });
@@ -1392,7 +1400,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
           for (const statement of statements) await tx.execute(statement);
           await tx.commit();
         } catch (error) {
-          if (!tx.closed) await tx.rollback();
+          if (!tx.closed) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+          }
           throw error;
         }
       });
