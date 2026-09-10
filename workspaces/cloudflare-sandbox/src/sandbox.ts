@@ -46,16 +46,28 @@ export interface CloudflareSandboxOptions extends Omit<MastraSandboxOptions, 'pr
 }
 
 /**
+ * Absolute path to the shell used to interpret bare command strings. Absolute so it
+ * resolves even when a custom PATH excludes the standard system directories.
+ */
+const SHELL_PATH = '/bin/bash';
+
+/**
  * Builds the argv array sent to the bridge. The bridge applies ANSI-C quoting to
  * every element, so no local escaping is needed. Environment variables are applied
  * with `env`, which keeps each assignment a separate argv element.
+ *
+ * When no separate arguments are supplied (the shape the built-in Workspace
+ * `execute_command` tool uses), `command` is a shell command string — pipes,
+ * chaining, quoting, redirection — so it is run through a non-login shell rather
+ * than treated as a single executable name. When explicit arguments are given,
+ * each element stays a literal argv token.
  */
 function buildArgv(command: string, args: string[] | undefined, env: Record<string, string>): string[] {
   const assignments = Object.entries(env).map(([key, value]) => {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
     return `${key}=${value}`;
   });
-  const invocation = [command, ...(args ?? [])];
+  const invocation = args && args.length > 0 ? [command, ...args] : [SHELL_PATH, '-c', command];
   return assignments.length ? ['env', ...assignments, ...invocation] : invocation;
 }
 

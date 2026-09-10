@@ -1,3 +1,4 @@
+import { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
@@ -10,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
-import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { attachmentMessages } from './fixtures/attachment-messages';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -55,6 +57,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
@@ -566,6 +569,104 @@ describe('Thread', () => {
       });
 
       expect(captured).toHaveLength(0);
+    });
+  });
+
+  describe('when multiple text files are uploaded and sent', () => {
+    it('sends their complete text and restores distinct named previews after a fresh history fetch', async () => {
+      let sentTexts: string[] = [];
+      server.use(
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          const body = await captureBody(request);
+          const messages = Array.isArray(body.messages) ? body.messages : [];
+          sentTexts = messages.flatMap(message => {
+            if (!isRecord(message)) return [];
+            if (typeof message.content === 'string') return [message.content];
+            if (!Array.isArray(message.content)) return [];
+            return message.content.flatMap(part =>
+              isRecord(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [],
+            );
+          });
+          return sseResponse();
+        }),
+        http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
+          HttpResponse.json(attachmentMessages(sentTexts)),
+        ),
+        ...baseHandlers(),
+      );
+      const csv = 'name,note\r\nZoë,"hello\nworld"\r\n';
+      const notes = 'Keep <attachment>literal</attachment> text.';
+      const files = [
+        new File([csv], 'leads.csv'),
+        new File([notes], 'settings.ini'),
+        new File(['discard'], 'discard.txt'),
+      ];
+      // JSDOM lacks Blob.text(); FileReader still reads the actual file bytes for sending.
+      Object.defineProperty(files[0], 'text', { value: async () => csv });
+      Object.defineProperty(files[1], 'text', { value: async () => notes });
+      Object.defineProperty(files[2], 'text', { value: async () => 'discard' });
+      const mounted = renderThread([]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error('File picker input is missing');
+      fireEvent.change(input, { target: { files } });
+      await screen.findByRole('button', { name: 'Preview settings.ini' });
+      const discarded = await screen.findByRole('button', { name: 'Preview discard.txt' });
+      const chip = discarded.closest<HTMLElement>('[role="group"]');
+      if (!chip) throw new Error('Attachment actions are not grouped');
+      fireEvent.click(within(chip).getByRole('button', { name: 'Remove file' }));
+      expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
+      await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
+      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() =>
+        expect(sentTexts).toEqual([
+          'Read both files',
+          `<attachment name="leads.csv">${csv}</attachment>`,
+          `<attachment name="settings.ini">${notes}</attachment>`,
+        ]),
+      );
+      await waitFor(() => expect(screen.queryByTestId('composer-attachments')).toBeNull());
+      expect(screen.getByRole('button', { name: 'Preview leads.csv' })).toBeTruthy();
+      mounted.unmount();
+      const client = new MastraClient({ baseUrl: BASE_URL });
+      const restored = await client.getMemoryThread({ threadId: 'thread-1', agentId: 'agent-1' }).listMessages();
+      expect(restored.messages[0]?.content.parts).toEqual(sentTexts.map(text => ({ type: 'text', text })));
+      renderThread(restored.messages);
+      expect(await screen.findByText('Read both files')).toBeTruthy();
+      for (const [name, text] of [
+        ['leads.csv', csv],
+        ['settings.ini', notes],
+      ]) {
+        fireEvent.click(await screen.findByRole('button', { name: `Preview ${name}` }));
+        const dialog = screen.getByRole('dialog', { name });
+        expect(within(dialog).getByText(text, { normalizer: value => value }).textContent).toBe(text);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      }
+    });
+  });
+
+  describe('when a text attachment is added by URL', () => {
+    it('links to the original URL instead of offering an empty file preview', async () => {
+      const url = 'https://files.example.com/leads.csv';
+      server.use(
+        ...baseHandlers(),
+        http.head(url, () => new HttpResponse(null, { headers: { 'content-type': 'text/csv' } })),
+      );
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      const input = await screen.findByLabelText('Public URL');
+      fireEvent.change(input, { target: { value: url } });
+      const form = input.closest<HTMLFormElement>('form');
+      if (!form) throw new Error('Attachment form is missing');
+      fireEvent.submit(form);
+      const attachments = await screen.findByTestId('composer-attachments');
+      const link = await within(attachments).findByRole('link');
+      expect(link.getAttribute('href')).toBe(url);
+      expect(within(attachments).queryByRole('button', { name: `Preview ${url}` })).toBeNull();
     });
   });
 
