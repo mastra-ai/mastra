@@ -222,7 +222,156 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
  */
 export function prepareJsonSchemaForOpenAIStrictMode(schema: JSONSchema7): JSONSchema7 {
   const withRequired = ensureAllPropertiesRequired(schema);
-  return ensureAdditionalPropertiesFalse(withRequired);
+  const withoutAdditional = ensureAdditionalPropertiesFalse(withRequired);
+  return stripUnsupportedStrictModeKeywords(withoutAdditional);
+}
+
+// Keywords OpenAI Structured Outputs strict mode rejects and that carry no natural-language
+// intent worth preserving. They are removed silently.
+// @see https://platform.openai.com/docs/guides/structured-outputs#supported-schemas
+const STRICT_MODE_DROPPED_KEYWORDS = [
+  'contains',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'patternProperties',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+] as const;
+
+/**
+ * Merge constraint phrases into a schema node's description.
+ * Mirrors SchemaCompatLayer.mergeParameterDescription phrasing so the strict-mode
+ * output path degrades identically to the tool path.
+ */
+function appendConstraintsToDescription(description: string | undefined, constraints: string[]): string | undefined {
+  if (constraints.length === 0) {
+    return description;
+  }
+  const suffix = constraints.join(', ');
+  return description ? `${description} (${suffix})` : suffix;
+}
+
+/**
+ * Recursively remove JSON Schema validation keywords that OpenAI strict mode rejects.
+ * Constraints with useful intent (length/number/pattern/format/uniqueness bounds) are folded
+ * into the node's `description` — matching how the tool-path SchemaCompatLayer degrades them
+ * in schema-compatibility.ts — while purely structural unsupported keywords are dropped.
+ */
+function stripUnsupportedStrictModeKeywords(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema } as JSONSchema7 & Record<string, unknown>;
+  const constraints: string[] = [];
+
+  // Array bounds
+  const { minItems, maxItems } = result;
+  if (minItems !== undefined && maxItems !== undefined && minItems === maxItems) {
+    constraints.push(`exact length ${minItems}`);
+  } else {
+    if (minItems !== undefined) {
+      constraints.push(`minimum length ${minItems}`);
+    }
+    if (maxItems !== undefined) {
+      constraints.push(`maximum length ${maxItems}`);
+    }
+  }
+  delete result.minItems;
+  delete result.maxItems;
+
+  if (result.uniqueItems === true) {
+    constraints.push('all items must be unique');
+  }
+  delete result.uniqueItems;
+
+  // String bounds
+  if (result.minLength !== undefined) {
+    constraints.push(`minimum length ${result.minLength}`);
+    delete result.minLength;
+  }
+  if (result.maxLength !== undefined) {
+    constraints.push(`maximum length ${result.maxLength}`);
+    delete result.maxLength;
+  }
+  if (result.format !== undefined) {
+    constraints.push(`a valid ${result.format}`);
+    delete result.format;
+  }
+  if (result.pattern !== undefined) {
+    constraints.push(`input must match this regex ${result.pattern}`);
+    delete result.pattern;
+  }
+
+  // Number bounds
+  if (result.minimum !== undefined) {
+    if (result.minimum !== Number.MIN_SAFE_INTEGER) {
+      constraints.push(`greater than or equal to ${result.minimum}`);
+    }
+    delete result.minimum;
+  }
+  if (result.maximum !== undefined) {
+    if (result.maximum !== Number.MAX_SAFE_INTEGER) {
+      constraints.push(`lower than or equal to ${result.maximum}`);
+    }
+    delete result.maximum;
+  }
+  if (result.exclusiveMinimum !== undefined) {
+    constraints.push(`greater than ${result.exclusiveMinimum}`);
+    delete result.exclusiveMinimum;
+  }
+  if (result.exclusiveMaximum !== undefined) {
+    constraints.push(`lower than ${result.exclusiveMaximum}`);
+    delete result.exclusiveMaximum;
+  }
+  if (result.multipleOf !== undefined) {
+    constraints.push(`multiple of ${result.multipleOf}`);
+    delete result.multipleOf;
+  }
+
+  // Structural unsupported keywords with no useful natural-language mapping
+  for (const keyword of STRICT_MODE_DROPPED_KEYWORDS) {
+    delete result[keyword];
+  }
+
+  if (constraints.length) {
+    result.description = appendConstraintsToDescription(result.description, constraints);
+  }
+
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [
+        key,
+        stripUnsupportedStrictModeKeywords(value as JSONSchema7),
+      ]),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => stripUnsupportedStrictModeKeywords(item as JSONSchema7));
+    } else if (typeof result.items === 'object') {
+      result.items = stripUnsupportedStrictModeKeywords(result.items as JSONSchema7);
+    }
+  }
+
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = stripUnsupportedStrictModeKeywords(result.additionalProperties as JSONSchema7);
+  }
+
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+  }
+
+  return result;
 }
 
 function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {

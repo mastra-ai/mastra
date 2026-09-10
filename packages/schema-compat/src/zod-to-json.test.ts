@@ -1,6 +1,7 @@
+import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { zodToJsonSchema, ensureAllPropertiesRequired } from './zod-to-json';
+import { zodToJsonSchema, ensureAllPropertiesRequired, prepareJsonSchemaForOpenAIStrictMode } from './zod-to-json';
 
 /**
  * Shared test suite for zodToJsonSchema that runs with both Zod v3 and v4.
@@ -735,5 +736,200 @@ describe('ensureAllPropertiesRequired', () => {
 
       expect(additionalData.type).toBe('string');
     });
+  });
+});
+
+// =============================================================================
+// prepareJsonSchemaForOpenAIStrictMode — strict-mode keyword stripping
+// =============================================================================
+
+describe('prepareJsonSchemaForOpenAIStrictMode', () => {
+  const UNSUPPORTED_KEYWORDS = [
+    'uniqueItems',
+    'minItems',
+    'maxItems',
+    'minLength',
+    'maxLength',
+    'pattern',
+    'format',
+    'minimum',
+    'maximum',
+    'exclusiveMinimum',
+    'exclusiveMaximum',
+    'multipleOf',
+    'contains',
+    'minContains',
+    'maxContains',
+    'minProperties',
+    'maxProperties',
+    'patternProperties',
+    'unevaluatedItems',
+    'unevaluatedProperties',
+  ];
+
+  function collectLeakedKeywords(schema: any, path = '$'): string[] {
+    const leaked: string[] = [];
+    if (!schema || typeof schema !== 'object') return leaked;
+    for (const key of Object.keys(schema)) {
+      if (UNSUPPORTED_KEYWORDS.includes(key)) {
+        leaked.push(`${path}.${key}`);
+      }
+      leaked.push(...collectLeakedKeywords(schema[key], `${path}.${key}`));
+    }
+    return leaked;
+  }
+
+  it('strips all strict-mode-unsupported keywords from the reproduction schema', () => {
+    const schema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        offered: {
+          type: 'array',
+          items: { type: 'string' },
+          uniqueItems: true,
+          minItems: 1,
+          maxItems: 5,
+        },
+        name: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 80,
+          pattern: '^[A-Z]',
+        },
+        qty: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 999,
+        },
+      },
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    // required + additionalProperties still enforced
+    expect(out.additionalProperties).toBe(false);
+    expect(out.required).toEqual(expect.arrayContaining(['offered', 'name', 'qty']));
+  });
+
+  it('folds array/uniqueness constraints into the description', () => {
+    const schema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        offered: {
+          type: 'array',
+          items: { type: 'string' },
+          uniqueItems: true,
+          minItems: 2,
+          maxItems: 5,
+        },
+      },
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    const offered = (out.properties as any).offered;
+    expect(offered.description).toContain('minimum length 2');
+    expect(offered.description).toContain('maximum length 5');
+    expect(offered.description).toContain('all items must be unique');
+  });
+
+  it('uses "exact length" when minItems equals maxItems', () => {
+    const schema: JSONSchema7 = {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 3,
+      maxItems: 3,
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(out.description).toContain('exact length 3');
+  });
+
+  it('folds string and number constraints into the description', () => {
+    const schema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[A-Z]' },
+        qty: { type: 'integer', minimum: 1, maximum: 999, multipleOf: 2 },
+      },
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    const name = (out.properties as any).name;
+    const qty = (out.properties as any).qty;
+    expect(name.description).toContain('minimum length 1');
+    expect(name.description).toContain('maximum length 80');
+    expect(name.description).toContain('input must match this regex ^[A-Z]');
+    expect(qty.description).toContain('greater than or equal to 1');
+    expect(qty.description).toContain('lower than or equal to 999');
+    expect(qty.description).toContain('multiple of 2');
+  });
+
+  it('preserves an existing description while appending constraints', () => {
+    const schema: JSONSchema7 = {
+      type: 'string',
+      description: 'The user name',
+      minLength: 1,
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(out.description).toContain('The user name');
+    expect(out.description).toContain('minimum length 1');
+  });
+
+  it('strips keywords nested in items, anyOf, oneOf, allOf and nested properties', () => {
+    const schema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        list: {
+          type: 'array',
+          items: { type: 'string', minLength: 2 },
+        },
+        choice: {
+          anyOf: [
+            { type: 'string', pattern: 'x' },
+            { type: 'number', minimum: 0 },
+          ],
+        },
+        combo: {
+          oneOf: [{ type: 'string', maxLength: 4 }],
+        },
+        merged: {
+          allOf: [{ type: 'object', properties: { inner: { type: 'string', minLength: 1 } } }],
+        },
+        nested: {
+          type: 'object',
+          properties: {
+            deep: { type: 'string', maxLength: 10 },
+          },
+        },
+      },
+    };
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+  });
+
+  it('drops object-level and contains/unevaluated keywords with no description mapping', () => {
+    const schema = {
+      type: 'object',
+      minProperties: 1,
+      maxProperties: 5,
+      patternProperties: { '^x': { type: 'string' } },
+      unevaluatedProperties: false,
+      properties: {
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          contains: { type: 'string' },
+          minContains: 1,
+          maxContains: 3,
+          unevaluatedItems: false,
+        },
+      },
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
   });
 });
