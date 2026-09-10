@@ -226,6 +226,25 @@ async function filterAppliedMigrations(
   });
 }
 
+async function readRetentionCreateQueries(
+  client: ClickHouseClient,
+  tables: readonly string[],
+): Promise<Map<string, string>> {
+  const result = await client.query({
+    query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
+  return new Map(rows.map(row => [row.name, row.create_table_query ?? '']));
+}
+
+function retentionEntryMatches(createQuery: string | undefined, entry: RetentionEntry): boolean {
+  if (!createQuery) return false;
+  const current = parseTtlExpression(createQuery);
+  return current?.column === entry.column && current.days === entry.days;
+}
+
 /**
  * Returns retention entries whose `MODIFY TTL` would actually change the
  * table's TTL. Falls back to running every entry if introspection fails.
@@ -236,28 +255,14 @@ async function filterAppliedRetention(
 ): Promise<readonly RetentionEntry[]> {
   if (entries.length === 0) return entries;
 
-  const tables = [...new Set(entries.map(e => e.table))];
-
   let createQueries: Map<string, string>;
   try {
-    const result = await client.query({
-      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables },
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
-    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+    createQueries = await readRetentionCreateQueries(client, [...new Set(entries.map(entry => entry.table))]);
   } catch {
     return entries;
   }
 
-  return entries.filter(e => {
-    const createQuery = createQueries.get(e.table);
-    if (!createQuery) return true;
-    const current = parseTtlExpression(createQuery);
-    if (!current) return true;
-    return current.column !== e.column || current.days !== e.days;
-  });
+  return entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
 }
 
 /**
@@ -271,7 +276,19 @@ export async function applyClickHouseRetention(args: {
 }): Promise<readonly RetentionEntry[]> {
   const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention));
   for (const entry of pending) {
-    await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
+    try {
+      await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
+    } catch (error) {
+      try {
+        const createQueries = await readRetentionCreateQueries(args.client, [entry.table]);
+        if (retentionEntryMatches(createQueries.get(entry.table), entry)) {
+          continue;
+        }
+      } catch {
+        // Preserve the ALTER error when the reconciliation check also fails.
+      }
+      throw error;
+    }
   }
   return pending;
 }
