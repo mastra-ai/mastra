@@ -31,7 +31,7 @@ export function runPrune({
     domain,
     targets,
     options,
-    cutoffFor: target => cutoffFor(target.policy),
+    cutoffFor: (target, now) => cutoffFor(target.policy, now),
     deleteBatch: (target, cutoff, limit) =>
       db.pruneBatch({ tableName: target.table, column: target.column, cutoff, limit }),
   });
