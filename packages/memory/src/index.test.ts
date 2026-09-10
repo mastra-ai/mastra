@@ -2519,29 +2519,29 @@ describe('Memory', () => {
     });
 
     const legacyIds = ['legacy-metadata', 'legacy-system-metadata', 'legacy-markup'];
-    const exclusionCases: { excludeSignals: AgentSignalType[] | undefined; hidden: string[] }[] = [
-      { excludeSignals: undefined, hidden: [] },
-      { excludeSignals: [], hidden: [] },
-      { excludeSignals: ['reactive'], hidden: ['reactive'] },
-      { excludeSignals: ['system-reminder'], hidden: ['system-reminder', ...legacyIds] },
-      { excludeSignals: ['reactive', 'system-reminder'], hidden: ['reactive', 'system-reminder', ...legacyIds] },
-      { excludeSignals: ['user'], hidden: ['user'] },
-      { excludeSignals: ['user-message'], hidden: ['user-message', 'encoded-legacy-user'] },
-      { excludeSignals: ['state', 'notification'], hidden: ['state', 'notification', 'encoded-precedence'] },
+    const exclusionCases: { hideSignals: AgentSignalType[] | undefined; hidden: string[] }[] = [
+      { hideSignals: undefined, hidden: [] },
+      { hideSignals: [], hidden: [] },
+      { hideSignals: ['reactive'], hidden: ['reactive'] },
+      { hideSignals: ['system-reminder'], hidden: ['system-reminder', ...legacyIds] },
+      { hideSignals: ['reactive', 'system-reminder'], hidden: ['reactive', 'system-reminder', ...legacyIds] },
+      { hideSignals: ['user'], hidden: ['user'] },
+      { hideSignals: ['user-message'], hidden: ['user-message', 'encoded-legacy-user'] },
+      { hideSignals: ['state', 'notification'], hidden: ['state', 'notification', 'encoded-precedence'] },
       {
-        excludeSignals: signalTypes,
+        hideSignals: signalTypes,
         hidden: [...signalTypes, ...legacyIds, 'encoded-precedence', 'encoded-legacy-user'],
       },
     ];
     describe.each([undefined, false, true])('includeSystemReminders=%s', includeSystemReminders => {
       it.each(exclusionCases)(
-        'matches explicit stored types with exclusions $excludeSignals',
-        async ({ excludeSignals, hidden }) => {
+        'matches explicit stored types with exclusions $hideSignals',
+        async ({ hideSignals, hidden }) => {
           const rawStore = await memory.storage.getStore('memory');
           const before = await rawStore!.listMessages({ ...target, perPage: false });
-          const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, excludeSignals });
+          const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, hideSignals });
           const hiddenIds =
-            excludeSignals === undefined && !includeSystemReminders
+            hideSignals === undefined && !includeSystemReminders
               ? ['reactive', 'system-reminder', ...legacyIds, 'encoded-precedence']
               : hidden;
           expect(result.messages.map(message => message.id)).toEqual(
@@ -2552,7 +2552,7 @@ describe('Memory', () => {
             filterSystemReminderMessages(
               new MessageList().add(before.messages, 'memory').get.all.db(),
               includeSystemReminders,
-              excludeSignals,
+              hideSignals,
             ),
           );
           expect(await rawStore!.listMessages({ ...target, perPage: false })).toEqual(before);
@@ -2575,7 +2575,7 @@ describe('Memory', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
       try {
-        for (const excludeSignals of [[], signalTypes]) {
+        for (const hideSignals of [[], signalTypes]) {
           const isolated = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
           await isolated.createThread(target);
           const saved = signalTypes.map((type, i) =>
@@ -2586,8 +2586,8 @@ describe('Memory', () => {
           await isolated.saveMessages({ messages: saved });
           const store = await isolated.storage.getStore('memory');
           const before = await store!.listMessages({ ...target, perPage: false });
-          const recalled = await isolated.recall({ ...target, perPage: false, excludeSignals });
-          expect(recalled.messages).toHaveLength(excludeSignals.length ? 0 : 6);
+          const recalled = await isolated.recall({ ...target, perPage: false, hideSignals });
+          expect(recalled.messages).toHaveLength(hideSignals.length ? 0 : 6);
           expect(await store!.listMessages({ ...target, perPage: false })).toEqual(before);
           const agent = new Agent({
             id: 'recall-proof',
@@ -2613,8 +2613,8 @@ describe('Memory', () => {
     it('filters after pagination without refilling pages or changing totals', async () => {
       for (const orderBy of [undefined, { field: 'createdAt' as const, direction: 'ASC' as const }]) {
         for (const page of [0, 1, 2, 3]) {
-          const unfiltered = await memory.recall({ ...target, perPage: 4, page, orderBy, excludeSignals: [] });
-          const filtered = await memory.recall({ ...target, perPage: 4, page, orderBy, excludeSignals: signalTypes });
+          const unfiltered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: [] });
+          const filtered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: signalTypes });
           expect(filtered).toEqual({
             ...unfiltered,
             messages: filterSystemReminderMessages(unfiltered.messages, undefined, signalTypes),
@@ -2626,15 +2626,15 @@ describe('Memory', () => {
         perPage: 4,
         page: 0,
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        excludeSignals: signalTypes,
+        hideSignals: signalTypes,
       });
       expect(emptyPage).toMatchObject({ messages: [], total: messages.length, hasMore: true, page: 0, perPage: 4 });
-      const noTotal = await memory.recall({ ...target, perPage: 4, includeTotal: false, excludeSignals: [] });
+      const noTotal = await memory.recall({ ...target, perPage: 4, includeTotal: false, hideSignals: [] });
       const filteredNoTotal = await memory.recall({
         ...target,
         perPage: 4,
         includeTotal: false,
-        excludeSignals: signalTypes,
+        hideSignals: signalTypes,
       });
       expect(filteredNoTotal).toEqual({
         ...noTotal,

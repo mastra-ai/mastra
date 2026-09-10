@@ -1432,7 +1432,7 @@ describe('MastraModelOutput', () => {
         messageId: 'msg-1',
         options: {
           runId,
-          excludeSignals: ['system-reminder'],
+          hideSignals: ['system-reminder'],
           experimentalTransform: () =>
             new TransformStream({
               transform(chunk, controller) {
@@ -1482,7 +1482,7 @@ describe('MastraModelOutput', () => {
         stream: createChunkStream([reminder, terminal]),
         messageList: new MessageList(),
         messageId: 'msg-1',
-        options: { runId: 'terminal-run', excludeSignals: ['reactive', 'user', 'state', 'notification'] },
+        options: { runId: 'terminal-run', hideSignals: ['reactive', 'user', 'state', 'notification'] },
       });
       const chunks = [];
       for await (const chunk of output.fullStream) chunks.push(chunk);
@@ -1497,7 +1497,7 @@ describe('MastraModelOutput', () => {
         stream: createChunkStream([reminder]),
         messageList: new MessageList(),
         messageId: 'msg-1',
-        options: { runId: 'all-excluded', excludeSignals: ['reactive'] },
+        options: { runId: 'all-excluded', hideSignals: ['reactive'] },
       });
       const cancelled = output.fullStream;
       const caller = output.fullStream.getReader();

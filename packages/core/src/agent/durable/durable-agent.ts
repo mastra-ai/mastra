@@ -1995,7 +1995,7 @@ export class DurableAgent<
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
-      excludeSignals: options?.excludeSignals,
+      hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
@@ -2362,7 +2362,7 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: resolvedOptions.onChunk,
       experimentalTransform: resolvedOptions.experimentalTransform,
-      excludeSignals: resolvedOptions.excludeSignals,
+      hideSignals: resolvedOptions.hideSignals,
       onStepFinish: resolvedOptions.onStepFinish,
       onFinish: resolvedOptions.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2831,7 +2831,7 @@ export class DurableAgent<
   // @ts-expect-error - Intentionally different signature for durable execution
   async generate(
     messages: MessageListInput,
-    options?: Omit<DurableAgentStreamOptions<TOutput>, 'excludeSignals'>,
+    options?: Omit<DurableAgentStreamOptions<TOutput>, 'hideSignals'>,
   ): Promise<FullOutput<TOutput>> {
     options = await this.#resolveExecutionOptions(options);
 
@@ -3048,7 +3048,7 @@ export class DurableAgent<
   async resumeGenerate(
     runId: string,
     resumeData: unknown,
-    options?: Omit<NonNullable<Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]>, 'excludeSignals'>,
+    options?: Omit<NonNullable<Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]>, 'hideSignals'>,
   ): Promise<FullOutput<TOutput>> {
     const result = await this.resume(runId, resumeData, {
       ...(options ?? {}),

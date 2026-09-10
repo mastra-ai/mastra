@@ -168,7 +168,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
 
         const { fullStream, cleanup } = await durableAgent.stream('Hello', {
           maxSteps: 3,
-          excludeSignals: excluded ? [type] : undefined,
+          hideSignals: excluded ? [type] : undefined,
         });
 
         const chunks: any[] = [];
@@ -229,7 +229,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
 
         const { fullStream, cleanup } = await durableAgent.stream('Hello', {
           maxSteps: 3,
-          excludeSignals: excluded ? [type] : undefined,
+          hideSignals: excluded ? [type] : undefined,
         });
 
         const chunks: any[] = [];
@@ -299,7 +299,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
 
       const { fullStream, cleanup } = await durableAgent.stream('Hello', {
         maxSteps: 5,
-        excludeSignals: excluded ? [type] : undefined,
+        hideSignals: excluded ? [type] : undefined,
       });
 
       const chunks: any[] = [];
@@ -379,7 +379,7 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
 
         const { fullStream, cleanup } = await durableAgent.stream('Hello', {
           maxSteps: 5,
-          excludeSignals: excluded ? [type] : undefined,
+          hideSignals: excluded ? [type] : undefined,
         });
 
         const chunks: any[] = [];

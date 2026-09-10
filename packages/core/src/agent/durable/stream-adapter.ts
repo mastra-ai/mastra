@@ -185,7 +185,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     requestContext,
     tracingContext,
     experimentalTransform,
-    excludeSignals,
+    hideSignals,
     messageList: externalMessageList,
   } = options;
 
@@ -642,7 +642,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       requestContext,
       tracingContext,
       experimentalTransform,
-      excludeSignals,
+      hideSignals,
     },
   });
 

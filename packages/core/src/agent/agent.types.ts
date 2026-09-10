@@ -831,7 +831,7 @@ export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<
 /** Caller-local visibility for modern streaming APIs. */
 export type AgentStreamSignalOptions = {
   /** Signal chunks to omit from this caller's stream. Defaults to none; model context and storage are unchanged. */
-  excludeSignals?: AgentSignalType[];
+  hideSignals?: AgentSignalType[];
 };
 
 /** @internal Includes stream-only options for propagation through the execution pipeline. */

@@ -2593,7 +2593,7 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                if (!isSignalChunkExcluded(partWithRunId, options.excludeSignals)) {
+                if (!isSignalChunkExcluded(partWithRunId, options.hideSignals)) {
                   yield partWithRunId;
                 }
                 if (done) break;

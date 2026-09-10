@@ -147,10 +147,10 @@ export class MockMemory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
-      /** @deprecated Use excludeSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
       /** Filter returned messages by exact stored signal type. Takes precedence over includeSystemReminders. */
-      excludeSignals?: AgentSignalType[];
+      hideSignals?: AgentSignalType[];
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -166,7 +166,7 @@ export class MockMemory extends MastraMemory {
       threadConfig: _threadConfig,
       vectorSearchString: _vectorSearchString,
       includeSystemReminders,
-      excludeSignals,
+      hideSignals,
       ...listMessagesArgs
     } = args;
     const result = await memoryStorage.listMessages(listMessagesArgs);
@@ -176,7 +176,7 @@ export class MockMemory extends MastraMemory {
       messages: filterSystemReminderMessages(
         result.messages.filter(message => message.role !== 'system'),
         includeSystemReminders,
-        excludeSignals,
+        hideSignals,
       ),
     };
   }

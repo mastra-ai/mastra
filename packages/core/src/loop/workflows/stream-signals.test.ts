@@ -48,7 +48,7 @@ describe.each(['initial', 'pre-run', 'drain-step', 'loop-predicate'] as const)(
       });
       const output = await agent.stream(producer === 'initial' ? [signal.toDBMessage()] : 'hello', {
         maxSteps: 3,
-        excludeSignals: excluded ? [type] : [],
+        hideSignals: excluded ? [type] : [],
       });
       const chunks = [];
       for await (const chunk of output.fullStream) chunks.push(chunk);

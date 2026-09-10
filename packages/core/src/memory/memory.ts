@@ -485,10 +485,10 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
-      /** @deprecated Use excludeSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
       /** Filter returned messages by exact stored signal type. Takes precedence over includeSystemReminders. */
-      excludeSignals?: AgentSignalType[];
+      hideSignals?: AgentSignalType[];
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{

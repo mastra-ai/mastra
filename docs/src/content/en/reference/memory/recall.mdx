@@ -69,7 +69,7 @@ const { messages } = await memory.recall({
     isOptional: true,
   },
   {
-    name: 'excludeSignals',
+    name: 'hideSignals',
     type: "('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder')[]",
     description:
       'Signal types to omit from returned messages. Matches exact stored types and takes precedence over includeSystemReminders, including an empty list. Does not change storage or model context.',
@@ -79,7 +79,7 @@ const { messages } = await memory.recall({
     name: 'includeSystemReminders',
     type: 'boolean',
     description:
-      'Deprecated. Use excludeSignals: [] to include all signals, or excludeSignals: ["reactive", "system-reminder"] to hide reminders. When excludeSignals is omitted, true includes all signals; false or omitted preserves reminder-hidden history.',
+      'Deprecated. Use hideSignals: [] to include all signals, or hideSignals: ["reactive", "system-reminder"] to hide reminders. When hideSignals is omitted, true includes all signals; false or omitted preserves reminder-hidden history.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -140,28 +140,28 @@ const { messages } = await memory.recall({
 
 ## Signal visibility
 
-`excludeSignals` filters messages returned by this call, not the underlying storage or later model requests. Ordinary messages remain available. This option isn't a security boundary and doesn't change signal delivery or persistence policies such as `ifActive`, `ifIdle`, or `transient`.
+`hideSignals` filters messages returned by this call, not the underlying storage or later model requests. Ordinary messages remain available. This option isn't a security boundary and doesn't change signal delivery or persistence policies such as `ifActive`, `ifIdle`, or `transient`.
 
 ### Defaults and precedence
 
-| `excludeSignals` | `includeSystemReminders` | Returned signals |
+| `hideSignals` | `includeSystemReminders` | Returned signals |
 | - | - | - |
 | Omitted | Omitted or `false` | Existing reminder-hidden history |
 | Omitted | `true` | All signals |
 | `[]` | Any value | All signals |
 | Nonempty list | Any value | All except matching types |
 
-Unlike [agent streams](/reference/streaming/agents/stream), recall continues to hide reminders by default for compatibility. The deprecated `includeSystemReminders` flag only applies when `excludeSignals` is omitted.
+Unlike [agent streams](/reference/streaming/agents/stream), recall continues to hide reminders by default for compatibility. The deprecated `includeSystemReminders` flag only applies when `hideSignals` is omitted.
 
 ```typescript
 const all = await memory.recall({
   threadId: 'thread-123',
-  excludeSignals: [],
+  hideSignals: [],
 })
 
 const withoutReminders = await memory.recall({
   threadId: 'thread-123',
-  excludeSignals: ['reactive', 'system-reminder'],
+  hideSignals: ['reactive', 'system-reminder'],
 })
 ```
 
@@ -177,7 +177,7 @@ If no recognized encoded type exists, a message classified by the existing legac
 
 Filtering happens after the storage query and pagination. A page can contain fewer than `perPage` messages, or none, without changing `total`, `hasMore`, or page offsets. Totals still describe the underlying query, not the filtered messages.
 
-The option applies to in-process `memory.recall()` calls. HTTP and client-js contracts don't expose `excludeSignals` in this release.
+The option applies to in-process `memory.recall()` calls. HTTP and client-js contracts don't expose `hideSignals` in this release.
 
 ## Metadata filtering
 

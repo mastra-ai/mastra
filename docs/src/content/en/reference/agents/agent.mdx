@@ -734,7 +734,7 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
             description: 'Thread ID to subscribe to.',
           },
           {
-            name: 'excludeSignals',
+            name: 'hideSignals',
             type: 'AgentSignalType[]',
             isOptional: true,
             defaultValue: '[]',
@@ -754,11 +754,11 @@ By default, subscriptions include every signal type, including reactive reminder
 const visible = await agent.subscribeToThread({ threadId: 'thread-abc' })
 const filtered = await agent.subscribeToThread({
   threadId: 'thread-abc',
-  excludeSignals: ['reactive', 'system-reminder'],
+  hideSignals: ['reactive', 'system-reminder'],
 })
 ```
 
-`excludeSignals` accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
+`hideSignals` accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
 
 Exclusions don't change model context, storage, shared broadcasts, or another caller's output. They aren't a security boundary and don't replace `ifActive`/`ifIdle` delivery policies or `transient` persistence behavior. This option is supported by the in-process core API, not HTTP or client-js subscription requests. See [stream signal visibility](/reference/streaming/agents/stream#signal-visibility) for transform ordering and the distinction from recall's exact stored-type matching and reminder-hidden history default.
 

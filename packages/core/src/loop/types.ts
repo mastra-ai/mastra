@@ -212,7 +212,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   includeRawChunks?: boolean;
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** @internal Forwarded only to the caller-facing output. */
-  excludeSignals?: AgentSignalType[];
+  hideSignals?: AgentSignalType[];
   modelSettings?: MastraModelSettings;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;

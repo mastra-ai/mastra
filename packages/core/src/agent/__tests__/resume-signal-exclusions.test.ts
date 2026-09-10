@@ -86,7 +86,7 @@ describe.each([false, true])('resume signals (durable: %s)', durable => {
         {
           runId: initial.runId,
           toolCallId: 'approval',
-          excludeSignals: excluded ? ['system-reminder'] : [],
+          hideSignals: excluded ? ['system-reminder'] : [],
         },
       );
       const parts = [];

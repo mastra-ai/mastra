@@ -1135,7 +1135,7 @@ describe('Agent signals', () => {
       const subscribe = (excluded: boolean) =>
         follower.subscribeToThread(
           agent,
-          { ...identity, excludeSignals: excluded ? ['system-reminder', 'user-message', 'state', 'notification'] : [] },
+          { ...identity, hideSignals: excluded ? ['system-reminder', 'user-message', 'state', 'notification'] : [] },
           pubsub,
         );
       const subscriptions = await Promise.all([subscribe(false), subscribe(true)]);
@@ -3912,7 +3912,7 @@ describe('Agent signals', () => {
         memory,
       });
       const subscription = await agent.subscribeToThread(target);
-      const excluding = await agent.subscribeToThread({ ...target, excludeSignals: ['system-reminder'] });
+      const excluding = await agent.subscribeToThread({ ...target, hideSignals: ['system-reminder'] });
       const includedIterator = subscription.stream[Symbol.asyncIterator]();
       const excludedIterator = excluding.stream[Symbol.asyncIterator]();
       const includedRun = readNextRunWithParts(includedIterator);
@@ -3986,14 +3986,14 @@ describe('Agent signals', () => {
       const subscription = await agent.subscribeToThread(target);
       const allExcluded = await agent.subscribeToThread({
         ...target,
-        excludeSignals: ['reactive', 'state', 'notification', 'user'],
+        hideSignals: ['reactive', 'state', 'notification', 'user'],
       });
       const includedRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
       const excludedRun = readNextRunWithParts(allExcluded.stream[Symbol.asyncIterator]());
       try {
         const output = await agent.stream('hello', {
           memory: { thread: target.threadId, resource: target.resourceId },
-          excludeSignals: exclusions ? [...exclusions] : undefined,
+          hideSignals: exclusions ? [...exclusions] : undefined,
           onChunk,
           experimentalTransform: () =>
             new TransformStream({

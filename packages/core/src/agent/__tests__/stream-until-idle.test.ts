@@ -166,7 +166,7 @@ describe('Agent.streamUntilIdle', () => {
 
       const outer = await agent.streamUntilIdle('hi', {
         memory: { thread: 'thread-2', resource: 'user-1' },
-        excludeSignals: excluded ? ['system-reminder'] : [],
+        hideSignals: excluded ? ['system-reminder'] : [],
       });
 
       // Mark a task as running so the outer knows to wait for it.

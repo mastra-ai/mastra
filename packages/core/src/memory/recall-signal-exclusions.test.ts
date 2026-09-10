@@ -43,24 +43,24 @@ describe('MockMemory recall exclusions', () => {
       await memory.saveMessages({ messages });
       const store = await memory.storage.getStore('memory');
       const before = await store!.listMessages({ ...target, perPage: false });
-      for (const excludeSignals of [undefined, [], ['reactive'], ['system-reminder'], types] satisfies (
+      for (const hideSignals of [undefined, [], ['reactive'], ['system-reminder'], types] satisfies (
         | AgentSignalType[]
         | undefined
       )[]) {
-        const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, excludeSignals });
+        const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, hideSignals });
         const hidden =
-          excludeSignals === undefined
+          hideSignals === undefined
             ? includeSystemReminders
               ? []
               : ['reactive', 'system-reminder', 'legacy']
-            : [...excludeSignals, ...(excludeSignals.includes('system-reminder') ? ['legacy'] : [])];
+            : [...hideSignals, ...(hideSignals.includes('system-reminder') ? ['legacy'] : [])];
         expect(result.messages.map(message => message.id)).toEqual(
           messages.filter(message => !hidden.includes(message.id)).map(message => message.id),
         );
         expect(result).toMatchObject({ total: 8, page: 0, perPage: false, hasMore: false });
       }
       expect(await store!.listMessages({ ...target, perPage: false })).toEqual(before);
-      const page = await memory.recall({ ...target, perPage: 2, page: 0, excludeSignals: types });
+      const page = await memory.recall({ ...target, perPage: 2, page: 0, hideSignals: types });
       expect(page).toMatchObject({ messages: [], total: 8, page: 0, perPage: 2, hasMore: true });
     },
   );

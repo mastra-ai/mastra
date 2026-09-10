@@ -43,7 +43,7 @@ const stream = await agent.stream('message for agent')
         type: 'AgentExecutionOptions<Output, Format>',
         parameters: [
           {
-            name: 'excludeSignals',
+            name: 'hideSignals',
             type: 'AgentSignalType[]',
             isOptional: true,
             defaultValue: '[]',
@@ -946,11 +946,11 @@ const stream = await agent.stream('message for agent')
 
 ## Signal visibility
 
-Signals, including reactive reminders, appear in `fullStream` by default. Set `excludeSignals` to omit selected signal chunks from your stream:
+Signals, including reactive reminders, appear in `fullStream` by default. Set `hideSignals` to omit selected signal chunks from your stream:
 
 ```ts
 const stream = await agent.stream('Review the latest changes', {
-  excludeSignals: ['reactive', 'system-reminder'],
+  hideSignals: ['reactive', 'system-reminder'],
 })
 
 for await (const chunk of stream.fullStream) {

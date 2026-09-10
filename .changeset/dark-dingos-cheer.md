@@ -2,19 +2,19 @@
 '@mastra/core': minor
 ---
 
-Restored reactive and system-reminder signals in live streams by default. Added caller-local `excludeSignals` to modern agent streams, resume/until-idle streams, and thread subscriptions. Exclusions leave model context, persistence, transforms, and other subscribers unchanged.
+Restored reactive and system-reminder signals in live streams by default. Added caller-local `hideSignals` to modern agent streams, resume/until-idle streams, and thread subscriptions. Exclusions leave model context, persistence, transforms, and other subscribers unchanged.
 
 ```ts
 // Before: reminders were hidden from every live consumer.
 const output = await agent.stream('Continue');
 // Now: reminders are visible by default; opt out for this caller only.
 const filtered = await agent.stream('Continue', {
-  excludeSignals: ['reactive', 'system-reminder'],
+  hideSignals: ['reactive', 'system-reminder'],
 });
 const subscription = await agent.subscribeToThread({
   threadId: 'thread-1',
   resourceId: 'user-1',
-  excludeSignals: ['reactive'],
+  hideSignals: ['reactive'],
 });
 ```
 

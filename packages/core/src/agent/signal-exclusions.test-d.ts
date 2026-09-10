@@ -7,7 +7,7 @@ declare const agent: Agent;
 declare const durable: DurableAgent;
 const target = { threadId: 'thread', resourceId: 'resource' };
 const options: AgentStreamSignalOptions = {
-  excludeSignals: ['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder'],
+  hideSignals: ['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder'],
 };
 
 describe('signal exclusions API ownership', () => {
@@ -22,24 +22,31 @@ describe('signal exclusions API ownership', () => {
     void durable.resume('run', {}, options);
     void durable.subscribeToThread({ ...target, ...options });
 
+    // @ts-expect-error the unshipped spelling is not a compatibility alias
+    void agent.stream('hello', { excludeSignals: ['reactive'] });
+    // @ts-expect-error the unshipped spelling is not a compatibility alias
+    void agent.subscribeToThread({ ...target, excludeSignals: ['reactive'] });
+    // @ts-expect-error durable streams use the same public spelling
+    void durable.stream('hello', { excludeSignals: ['reactive'] });
+
     // @ts-expect-error exclusions are not generation options
-    void agent.generate('hello', { excludeSignals: ['reactive'] });
+    void agent.generate('hello', { hideSignals: ['reactive'] });
     // @ts-expect-error exclusions are not generation options
-    void agent.resumeGenerate({}, { excludeSignals: ['reactive'] });
+    void agent.resumeGenerate({}, { hideSignals: ['reactive'] });
     // @ts-expect-error abort accepts identity only
-    void agent.abortThreadStream({ ...target, excludeSignals: ['reactive'] });
+    void agent.abortThreadStream({ ...target, hideSignals: ['reactive'] });
     // @ts-expect-error lookup accepts identity only
-    void agent.getActiveThreadRunId({ ...target, excludeSignals: ['reactive'] });
+    void agent.getActiveThreadRunId({ ...target, hideSignals: ['reactive'] });
     // @ts-expect-error durable generation does not expose exclusions
-    void durable.generate('hello', { excludeSignals: ['reactive'] });
+    void durable.generate('hello', { hideSignals: ['reactive'] });
     // @ts-expect-error durable resume generation does not expose exclusions
-    void durable.resumeGenerate('run', {}, { excludeSignals: ['reactive'] });
+    void durable.resumeGenerate('run', {}, { hideSignals: ['reactive'] });
     // @ts-expect-error durable abort accepts identity only
-    void durable.abortThreadStream({ ...target, excludeSignals: ['reactive'] });
+    void durable.abortThreadStream({ ...target, hideSignals: ['reactive'] });
     // @ts-expect-error invalid signal literal
-    void agent.stream('hello', { excludeSignals: ['unknown'] });
+    void agent.stream('hello', { hideSignals: ['unknown'] });
     // @ts-expect-error exclusions must not leak to shared execution options
-    const base: AgentExecutionOptionsBase = { excludeSignals: ['reactive'] };
+    const base: AgentExecutionOptionsBase = { hideSignals: ['reactive'] };
     void base;
   });
 });

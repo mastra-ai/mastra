@@ -272,12 +272,12 @@ function getRecallSignalType(message: MastraDBMessage): RecallSignalType | undef
 function filterSystemReminderMessages(
   messages: MastraDBMessage[],
   includeSystemReminders?: boolean,
-  excludeSignals?: RecallSignalType[],
+  hideSignals?: RecallSignalType[],
 ): MastraDBMessage[] {
-  if (excludeSignals !== undefined) {
+  if (hideSignals !== undefined) {
     return messages.filter(message => {
       const type = getRecallSignalType(message);
-      return type === undefined || !excludeSignals.includes(type);
+      return type === undefined || !hideSignals.includes(type);
     });
   }
 
@@ -613,10 +613,10 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
-      /** @deprecated Use excludeSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
       /** Filter returned messages by exact stored signal type. Takes precedence over includeSystemReminders. */
-      excludeSignals?: RecallSignalType[];
+      hideSignals?: RecallSignalType[];
       threadId: string;
       observabilityContext?: Partial<ObservabilityContext>;
     },
@@ -637,7 +637,7 @@ export class Memory extends MastraMemory {
       threadConfig,
       vectorSearchString,
       includeSystemReminders,
-      excludeSignals,
+      hideSignals,
       filter,
       includeTotal,
     } = args;
@@ -809,7 +809,7 @@ export class Memory extends MastraMemory {
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, excludeSignals);
+      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
 
       const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
