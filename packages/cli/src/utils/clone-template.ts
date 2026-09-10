@@ -10,7 +10,8 @@ import type { Template } from './template-utils';
 
 const INTERRUPT_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
-function startSpinner(text: string, signal?: AbortSignal) {
+function startSpinner(text: string, signal?: AbortSignal, silent = false) {
+  if (silent) return undefined;
   if (!signal) return yoctoSpinner({ text }).start();
 
   const existingListeners = new Map(
@@ -36,13 +37,14 @@ export interface CloneTemplateOptions {
   targetDir?: string;
   branch?: string;
   signal?: AbortSignal;
+  silent?: boolean;
 }
 
 export async function cloneTemplate(options: CloneTemplateOptions): Promise<string> {
-  const { template, projectName, targetDir, branch, signal } = options;
+  const { template, projectName, targetDir, branch, signal, silent = false } = options;
   const projectPath = targetDir ? path.resolve(targetDir, projectName) : path.resolve(projectName);
 
-  const spinner = startSpinner(`Cloning template "${template.title}"...`, signal);
+  const spinner = startSpinner(`Cloning template "${template.title}"...`, signal, silent);
   let ownsProjectPath = false;
 
   try {
@@ -158,8 +160,9 @@ export async function installDependencies(
   packageManager?: PackageManager,
   timeout?: number,
   signal?: AbortSignal,
+  silent = false,
 ): Promise<void> {
-  const spinner = startSpinner('Installing dependencies...', signal);
+  const spinner = startSpinner('Installing dependencies...', signal, silent);
 
   try {
     // Use provided package manager or detect from environment/globally
