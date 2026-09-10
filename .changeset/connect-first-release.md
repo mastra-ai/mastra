@@ -18,7 +18,7 @@ const agent = new Agent({
 });
 ```
 
-`connect()` returns a live resolver compatible with an agent's dynamic `tools` argument. It discovers matching project connections, merges tools from generated providers shipped with the installed package version into one flat record, and refreshes its cached snapshot without requiring a server restart.
+`connect()` returns a live resolver compatible with an agent's dynamic `tools` argument. It discovers matching project connections, merges tools from generated providers shipped with the installed package version into one flat record, and refreshes its cached snapshot without requiring a server restart. Its resolver type remains compatible across linked or locally built packages that resolve a different `@mastra/core` installation.
 
 Use the `integrations` option to allowlist providers, restrict tool names, or select a connection when a project has more than one. Per-provider resolution failures, including ambiguous connections and connections that need reauthentication, are warned and skipped so one provider doesn't disable the other tools. Call `invalidate()` or `refresh()` to control the resolver cache manually.
 

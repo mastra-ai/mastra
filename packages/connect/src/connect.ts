@@ -1,5 +1,3 @@
-import type { ToolsInput } from '@mastra/core/agent';
-
 import type { ConnectClientOptions, ProjectConnection } from './client.js';
 import { listProjectConnections, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
@@ -25,6 +23,10 @@ export interface ConnectOptions {
   ttlMs?: number;
 }
 
+// Keep the public resolver type structural so linked/local package builds do not
+// bind consumers to the exact @mastra/core type instance used to build Connect.
+type ResolvedConnectTools = Record<string, { id: string }>;
+
 /**
  * Live tool resolver returned by `connect()`. Pass it straight to an agent's
  * dynamic `tools` argument: Mastra calls it per generate/stream, so project
@@ -33,11 +35,11 @@ export interface ConnectOptions {
  * current flat tool record.
  */
 export interface ConnectTools {
-  (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<ToolsInput>;
+  (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<ResolvedConnectTools>;
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
   /** Fetches tools from the platform now and updates the cache. Rejects if the platform fetch fails. */
-  refresh(): Promise<ToolsInput>;
+  refresh(): Promise<ResolvedConnectTools>;
 }
 
 interface NormalizedRequest {
@@ -81,12 +83,12 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   const requests = buildRequests(options.integrations);
 
   const warnedMissing = new Set<string>();
-  let cache: { snapshot: ToolsInput; fetchedAt: number } | undefined;
-  let inflight: Promise<ToolsInput> | undefined;
+  let cache: { snapshot: ResolvedConnectTools; fetchedAt: number } | undefined;
+  let inflight: Promise<ResolvedConnectTools> | undefined;
   let lastFailureAt: number | undefined;
 
   /** Fetches a fresh snapshot, deduplicating concurrent calls. Rejects on failure. */
-  const refresh = (): Promise<ToolsInput> => {
+  const refresh = (): Promise<ResolvedConnectTools> => {
     if (!inflight) {
       inflight = (async () => {
         try {
@@ -106,7 +108,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
     return inflight;
   };
 
-  const resolve = async (): Promise<ToolsInput> => {
+  const resolve = async (): Promise<ResolvedConnectTools> => {
     if (cache && Date.now() - cache.fetchedAt < ttlMs) {
       return cache.snapshot;
     }
@@ -167,10 +169,10 @@ function mapTools(
   requests: NormalizedRequest[],
   options: ConnectOptions,
   warnedMissing: Set<string>,
-): ToolsInput {
+): ResolvedConnectTools {
   const byIntegrationId = groupByIntegrationId(connections);
 
-  const result: ToolsInput = {};
+  const result: ResolvedConnectTools = {};
   for (const request of requests) {
     const integrationId = request.registration.integrationId;
     try {
