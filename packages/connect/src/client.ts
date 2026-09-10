@@ -232,6 +232,7 @@ export interface ProxyRequestOptions {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
+  baseUrlOverride?: string;
   body?: unknown;
 }
 
@@ -284,6 +285,9 @@ export async function proxyRequest(
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
   const headers: Record<string, string> = { ...options.headers };
+  if (options.baseUrlOverride !== undefined) {
+    headers['base-url-override'] = options.baseUrlOverride;
+  }
   const init: RequestInit = { method: options.method, headers };
   if (options.body !== undefined) {
     headers['content-type'] = 'application/json';

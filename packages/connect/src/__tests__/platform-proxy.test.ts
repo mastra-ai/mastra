@@ -45,7 +45,7 @@ describe('createPlatformProxy request context binding', () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 
-  it('does not forward template baseUrlOverride values to the platform proxy request', async () => {
+  it('forwards template baseUrlOverride values to the platform proxy request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const proxy = createPlatformProxy({
       connectionId: 'conn-1',
@@ -55,7 +55,7 @@ describe('createPlatformProxy request context binding', () => {
     await proxy.get({ endpoint: '/items', baseUrlOverride: 'https://caller-controlled.example' });
 
     expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/conn-1/proxy/items');
-    expect(JSON.stringify(fetchMock.mock.calls[0]![1])).not.toContain('caller-controlled.example');
+    expect(fetchMock.mock.calls[0]![1].headers['base-url-override']).toBe('https://caller-controlled.example');
   });
 
   it('fetches connection context once per bound execution and returns metadata', async () => {
