@@ -22,6 +22,20 @@ export interface DurableStreamUntilIdleDeps {
   bgManager: BackgroundTaskManager | undefined;
 }
 
+function cleanupAfterStreamFinished(inner: DurableAgentStreamResult<unknown>): void {
+  // Closing the outer idle loop does not mean the inner durable run has
+  // delivered its terminal event yet. Keep its subscription and registry alive
+  // until the native output finishes, including on failure. Disposing them on
+  // the abort signal strands the thread runtime's completion watcher and sends
+  // the next user message to the stopped run.
+  void inner.output
+    ._waitUntilFinished()
+    .then(inner.cleanup, inner.cleanup)
+    .catch(() => {
+      // Cleanup remains best-effort, as it is for the other inner streams.
+    });
+}
+
 /**
  * Run `DurableAgent.streamUntilIdle` (or `DurableAgent.stream({ untilIdle })`).
  * Initial turn invokes `agent.stream(messages, ...)`; continuations triggered
@@ -82,7 +96,7 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
     },
     {
       onInnerResult: (inner: any) => {
-        if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
+        if (typeof inner.cleanup === 'function') innerCleanups.push(() => cleanupAfterStreamFinished(inner));
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
       },
       onForceClose: () => {
@@ -156,7 +170,7 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
     },
     {
       onInnerResult: (inner: any) => {
-        if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
+        if (typeof inner.cleanup === 'function') innerCleanups.push(() => cleanupAfterStreamFinished(inner));
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
       },
       onForceClose: () => {
