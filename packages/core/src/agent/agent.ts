@@ -1031,8 +1031,11 @@ export class Agent<
    * each processor's `processLLMRequest` method.
    * @internal — used by `DurableAgent` preparation to populate the registry.
    */
-  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
-    return this.listResolvedLLMRequestProcessors(requestContext);
+  async __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**
@@ -1950,8 +1953,11 @@ export class Agent<
   /**
    * Returns the input processors for this agent, resolving function-based processors if necessary.
    */
-  public async listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
-    return this.listResolvedInputProcessors(requestContext);
+  public async listInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedInputProcessors(requestContext, configuredProcessorOverrides);
   }
 
   /**
@@ -6194,6 +6200,7 @@ export class Agent<
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
     backgroundTaskEnabled?: boolean;
+    inputProcessors?: InputProcessorOrWorkflow[];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6230,6 +6237,7 @@ export class Agent<
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
       backgroundTaskEnabled: options.backgroundTaskEnabled,
+      inputProcessors: mergedOptions.inputProcessors,
     });
   }
 
