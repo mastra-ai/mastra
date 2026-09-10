@@ -2964,12 +2964,42 @@ Notes:
   public async updateThreadResourceId({
     threadId,
     resourceId,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.updateThreadResourceId({ threadId, resourceId });
+    const thread = await memoryStore.updateThreadResourceId({ threadId, resourceId });
+
+    // Migrate semantic-recall message vectors so resource-scoped retrieval keeps
+    // surfacing the thread's messages under the new resourceId. The storage
+    // transfer already updated each message row's resource_id, so re-embedding
+    // the fetched messages rewrites the vector metadata with the new owner.
+    const config = this.getMergedThreadConfig(memoryConfig);
+    if (this.vector && this.embedder && config.semanticRecall) {
+      try {
+        const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+        const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
+        await Promise.all(
+          messageIndexes.map(async indexName => {
+            await this.vector!.deleteVectors({ indexName, filter: { thread_id: threadId } });
+          }),
+        );
+        if (messages.length > 0) {
+          await this.embedClonedMessages(messages, config);
+        }
+      } catch (error) {
+        this.logger.warn('Failed to migrate semantic-recall vectors during thread transfer', {
+          threadId,
+          resourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return thread;
   }
 
   /**

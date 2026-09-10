@@ -9,6 +9,7 @@ import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
   agentIdQuerySchema,
+  optionalAgentIdQuerySchema,
   getMemoryStatusQuerySchema,
   getMemoryConfigQuerySchema,
   listThreadsQuerySchema,
@@ -1670,7 +1671,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
   path: '/memory/threads/:threadId/transfer',
   responseType: 'json',
   pathParamSchema: threadIdPathParams,
-  queryParamSchema: agentIdQuerySchema,
+  queryParamSchema: optionalAgentIdQuerySchema,
   bodySchema: transferThreadBodySchema,
   responseSchema: transferThreadResponseSchema,
   summary: 'Transfer thread ownership',
@@ -1688,6 +1689,19 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       if (scopeId) {
         throw new HTTPException(403, {
           message: 'Thread transfer requires a privileged (non-resource-scoped) context',
+        });
+      }
+
+      // Without a resource scope we can only authorize the transfer through FGA. If
+      // `server.auth` is configured but there is no FGA provider to authorize the
+      // caller, an unscoped request would otherwise be treated as privileged, which
+      // would let any authenticated caller reassign ownership. Reject that state
+      // rather than granting an implicit privilege.
+      const server = mastra.getServer?.();
+      if (server?.auth && !server?.fga) {
+        throw new HTTPException(403, {
+          message:
+            'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',
         });
       }
 

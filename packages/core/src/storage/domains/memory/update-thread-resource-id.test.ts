@@ -82,4 +82,18 @@ describe('MemoryStorage.updateThreadResourceId', () => {
       /not found/,
     );
   });
+
+  it('reverts the thread to its original owner when the message update fails', async () => {
+    const failure = new Error('updateMessages failed');
+    store.updateMessages = async () => {
+      throw failure;
+    };
+
+    await expect(store.updateThreadResourceId({ threadId: 'thread-a', resourceId: 'resource-b' })).rejects.toThrow(
+      failure,
+    );
+
+    const reread = await store.getThreadById({ threadId: 'thread-a' });
+    expect(reread!.resourceId).toBe('resource-a');
+  });
 });

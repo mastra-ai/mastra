@@ -225,12 +225,23 @@ export abstract class MemoryStorage extends StorageDomain {
       },
     });
 
-    const { messages } = await this.listMessages({ threadId, perPage: false });
-    const messagesToMove = messages.filter(message => message.resourceId !== resourceId);
-    if (messagesToMove.length > 0) {
-      await this.updateMessages({
-        messages: messagesToMove.map(message => ({ id: message.id, resourceId })),
+    // The base class has no cross-table transaction primitive, so move the messages after
+    // the thread and compensate on failure: if the message update fails we revert the thread
+    // to its original owner rather than leave the thread under the new resource while its
+    // history still points at the old one (thread ownership is what gates access).
+    try {
+      const { messages } = await this.listMessages({ threadId, perPage: false });
+      const messagesToMove = messages.filter(message => message.resourceId !== resourceId);
+      if (messagesToMove.length > 0) {
+        await this.updateMessages({
+          messages: messagesToMove.map(message => ({ id: message.id, resourceId })),
+        });
+      }
+    } catch (error) {
+      await this.saveThread({
+        thread: { ...thread, createdAt: thread.createdAt, updatedAt: thread.updatedAt },
       });
+      throw error;
     }
 
     return updatedThread;

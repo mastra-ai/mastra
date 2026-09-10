@@ -996,7 +996,13 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param args - The thread to reassign and the resource that should own it.
    * @returns Promise resolving to the updated thread
    */
-  abstract updateThreadResourceId(args: { threadId: string; resourceId: string }): Promise<StorageThreadType>;
+  updateThreadResourceId(_args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    throw new Error('Thread resource transfer is not supported by this memory implementation.');
+  }
 
   /**
    * Get serializable configuration for this memory instance

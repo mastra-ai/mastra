@@ -2534,7 +2534,7 @@ describe('Memory Handlers', () => {
             threadId: 'scoped-thread',
             resourceId: 'user-b',
           }),
-        ).rejects.toThrow(HTTPException);
+        ).rejects.toMatchObject({ status: 403 });
       });
 
       it('returns 404 when the thread does not exist', async () => {
@@ -2551,7 +2551,7 @@ describe('Memory Handlers', () => {
             threadId: 'missing-thread',
             resourceId: 'user-b',
           }),
-        ).rejects.toThrow(HTTPException);
+        ).rejects.toMatchObject({ status: 404 });
       });
     });
 
