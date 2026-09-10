@@ -122,6 +122,8 @@ export type SerializableScorersConfig = Record<string, SerializableScorerEntry>;
  * Serializable subset of _internal (StreamInternal) that flows through workflow state
  */
 export interface SerializableDurableState {
+  /** Terminal provider failure retained for the final native memory pass. */
+  terminalError?: string;
   /** Memory configuration options */
   memoryConfig?: MemoryConfig;
   /** Thread identifier for memory persistence */
