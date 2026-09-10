@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
@@ -80,11 +80,15 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
       direction,
       collapsible,
       collapsedSize,
+      collapsed,
+      onCollapsedChange,
       ...props
     }: {
       direction: 'left' | 'right';
       collapsible?: boolean;
       collapsedSize?: number;
+      collapsed?: boolean;
+      onCollapsedChange?: (collapsed: boolean) => void;
       [key: string]: unknown;
     }) => (
       <aside
@@ -92,8 +96,10 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
         data-direction={direction}
         data-collapsible={collapsible}
         data-collapsed-size={collapsedSize}
+        data-collapsed={collapsed}
         className={props.className as string}
       >
+        <button type="button" data-testid="collapsible-report-collapsed" onClick={() => onCollapsedChange?.(true)} />
         <Panel {...(props as Parameters<typeof Panel>[0])} />
       </aside>
     ),
@@ -154,17 +160,24 @@ describe('resizable service layouts', () => {
     expect(screen.queryByTestId('panel-right-slot')).toBeNull();
   });
 
-  it('drives the left slot through the panelRef supplied by the parent', () => {
-    const leftPanelRef = { current: null as null | { resize: (size: string) => void } };
+  it('lets the parent control whether the left slot is collapsed', () => {
+    const onLeftCollapsedChange = vi.fn();
 
     render(
-      <AgentLayout agentId="chef-agent" leftPanelRef={leftPanelRef} leftSlot={<div>threads</div>}>
+      <AgentLayout
+        agentId="chef-agent"
+        leftCollapsed
+        onLeftCollapsedChange={onLeftCollapsedChange}
+        leftSlot={<div>threads</div>}
+      >
         <div>chat</div>
       </AgentLayout>,
     );
 
-    leftPanelRef.current?.resize('0px');
-    expect(resizeLeftPanel).toHaveBeenCalledWith('0px');
+    expect(screen.getByTestId('collapsible-left-slot').getAttribute('data-collapsed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('collapsible-report-collapsed'));
+    expect(onLeftCollapsedChange).toHaveBeenCalledWith(true);
   });
 
   it('expands the single left slot to 50% when observational memory opens and restores it on close', async () => {

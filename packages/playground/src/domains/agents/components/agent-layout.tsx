@@ -4,7 +4,6 @@ import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useMemoryTimeline } from '../context/memory-timeline-context';
@@ -13,8 +12,9 @@ export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
-  /** Handle to the left panel so the parent can collapse/expand it (e.g. "Hide threads panel"). */
-  leftPanelRef?: RefObject<PanelImperativeHandle | null>;
+  /** Controlled collapsed state of the left panel (e.g. "Hide threads panel"). */
+  leftCollapsed?: boolean;
+  onLeftCollapsedChange?: (collapsed: boolean) => void;
   rightSlot?: React.ReactNode;
   /** Accessible label for the mobile drawer that hosts the left slot */
   leftDrawerLabel?: string;
@@ -29,7 +29,8 @@ export const AgentLayout = ({
   agentId,
   children,
   leftSlot,
-  leftPanelRef: externalLeftPanelRef,
+  leftCollapsed,
+  onLeftCollapsedChange,
   rightSlot,
   leftDrawerLabel = 'Open left panel',
   rightDrawerLabel = 'Open right panel',
@@ -37,8 +38,7 @@ export const AgentLayout = ({
 }: AgentLayoutProps) => {
   const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
-  const internalLeftPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const leftPanelRef = externalLeftPanelRef ?? internalLeftPanelRef;
+  const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const wasMemoryTimelineOpen = useRef(false);
   const sizeBeforeMemoryDetail = useRef<string | null>(null);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
@@ -64,7 +64,7 @@ export const AgentLayout = ({
       leftPanel.resize(sizeBeforeMemoryDetail.current ?? MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE);
       sizeBeforeMemoryDetail.current = null;
     }
-  }, [isMemoryTimelineOpen, leftPanelRef]);
+  }, [isMemoryTimelineOpen]);
 
   // Resizable side panels are a desktop paradigm; below the breakpoint the
   // side slots move into edge drawers and the main content takes the full width.
@@ -99,6 +99,8 @@ export const AgentLayout = ({
             id="left-slot"
             direction="left"
             panelRef={leftPanelRef}
+            collapsed={leftCollapsed}
+            onCollapsedChange={onLeftCollapsedChange}
             collapsible
             collapsedSize={0}
             minSize={256}
