@@ -7,6 +7,8 @@ import remend from 'remend';
 
 import { rehypeArriving } from './arriving';
 import { splitBlocks } from './blocks';
+import { MarkdownTable } from './markdown-table';
+import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
@@ -21,6 +23,8 @@ export interface MarkdownRendererProps {
   externalLinkTarget?: MarkdownExternalLinkTarget;
   /** The text is a prefix of one still being written: close the markers the stream has not reached. */
   streaming?: boolean;
+  /** Opt in to table copy/download controls; disabled while this text is streaming. */
+  tableActions?: boolean;
 }
 
 /**
@@ -47,11 +51,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   className,
   externalLinkTarget = 'tab',
   streaming = false,
+  tableActions = false,
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
   const blocks = useMemo(() => splitBlocks(shown), [shown]);
   const last = blocks.length - 1;
-  const components = externalLinkTarget === 'window' ? WINDOW_COMPONENTS : COMPONENTS;
+  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
 
   const spans = wordSpans(blocks);
   const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
@@ -72,6 +77,8 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           content={index === last ? mended : block}
           settledWords={settledWords(spans[index])}
           components={components}
+          streaming={streaming}
+          tableActions={tableActions}
         />
       ))}
     </div>
@@ -83,10 +90,14 @@ const MarkdownBlock = memo(function MarkdownBlock({
   components,
   content,
   settledWords,
+  streaming,
+  tableActions,
 }: {
   components: Components;
   content: string;
   settledWords?: number;
+  streaming: boolean;
+  tableActions: boolean;
 }) {
   const rehypePlugins = useMemo(
     () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
@@ -94,7 +105,11 @@ const MarkdownBlock = memo(function MarkdownBlock({
   );
 
   return (
-    <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
+    <Markdown
+      remarkPlugins={tableActions && !streaming ? COPYABLE_REMARK_PLUGINS : REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
       {content}
     </Markdown>
   );
@@ -209,6 +224,7 @@ function markdownLink(externalLinkTarget: MarkdownExternalLinkTarget): NonNullab
 }
 
 const REMARK_PLUGINS = [remarkGfm];
+const COPYABLE_REMARK_PLUGINS = [remarkGfm, remarkTableMarkdown];
 
 // Links stay text until their URL lands: remend's placeholder href would render
 // a live anchor to nowhere. No math is rendered here, so pairing `$$` would only
@@ -226,4 +242,10 @@ const COMPONENTS: Components = {
 const WINDOW_COMPONENTS: Components = {
   ...COMPONENTS,
   a: markdownLink('window'),
+};
+
+const DEFAULT_COMPONENTS = { tab: COMPONENTS, window: WINDOW_COMPONENTS };
+const TABLE_COMPONENTS = {
+  tab: { ...COMPONENTS, table: MarkdownTable },
+  window: { ...WINDOW_COMPONENTS, table: MarkdownTable },
 };

@@ -15,6 +15,7 @@ export interface MessageTextProps {
   metadata: MessageMetadata | undefined;
   externalLinkTarget?: MarkdownExternalLinkTarget;
   streaming?: boolean;
+  tableActions?: boolean;
 }
 
 /**
@@ -22,7 +23,7 @@ export interface MessageTextProps {
  * error/completion handling previously in `ErrorAwareText` (which read part
  * metadata).
  */
-export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: MessageTextProps) => {
+export const MessageText = ({ text, metadata, externalLinkTarget, streaming, tableActions }: MessageTextProps) => {
   const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
 
   switch (messageTextKind(text, metadata)) {
@@ -64,7 +65,11 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
 
     default:
       return (
-        <MarkdownRenderer externalLinkTarget={externalLinkTarget} streaming={Boolean(streaming)}>
+        <MarkdownRenderer
+          externalLinkTarget={externalLinkTarget}
+          streaming={Boolean(streaming)}
+          tableActions={tableActions}
+        >
           {text}
         </MarkdownRenderer>
       );

@@ -15,5 +15,10 @@ export interface AssistantTextPartRendererProps {
  * applies markdown plus the legacy error/completion-check handling.
  */
 export const AssistantTextPartRenderer = ({ part, metadata, revealing }: AssistantTextPartRendererProps) => (
-  <MessageText text={part.text ?? ''} metadata={metadata} streaming={part.state === 'streaming' || revealing} />
+  <MessageText
+    text={part.text ?? ''}
+    metadata={metadata}
+    streaming={part.state === 'streaming' || revealing}
+    tableActions
+  />
 );
