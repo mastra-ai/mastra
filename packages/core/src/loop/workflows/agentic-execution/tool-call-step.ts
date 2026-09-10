@@ -1157,12 +1157,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   flush: async () => {
                     const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
                     const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                    if (sqm && tid) {
-                      await sqm.flushMessages(
-                        messageList,
-                        tid,
-                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
-                      );
+                    const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+                    // readOnly runs must not persist the patched background result
+                    // to memory — mirrors the durable engine's readOnly flush guard.
+                    if (sqm && tid && !mcfg?.readOnly) {
+                      await sqm.flushMessages(messageList, tid, mcfg);
                     }
                   },
                 });

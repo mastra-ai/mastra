@@ -248,6 +248,85 @@ describe('createToolCallStep background task resume with falsy payload', () => {
   });
 });
 
+describe('createToolCallStep background task result readOnly flush guard', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  const runBackgroundResult = async (memoryConfig?: { readOnly?: boolean }) => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [], aiV5: { model: () => [] } },
+      },
+      updateToolInvocation: vi.fn(() => true),
+      updateMessageMetadataByToolCallId: vi.fn(() => true),
+    } as unknown as MessageList;
+
+    const backgroundTaskManager = {
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+      resume: vi.fn(),
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        await context.onResult?.({
+          taskId: 'task-1',
+          toolCallId: 'call-1',
+          toolName: 'background-tool',
+          runId: 'current-run',
+          status: 'completed',
+          result: { ok: true },
+          startedAt: new Date(0),
+          completedAt: new Date(0),
+        });
+        return { task: { id: 'task-1' }, fallbackToSync: false };
+      }),
+      cancel: vi.fn(),
+      waitForNextTask: vi.fn(),
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() } } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+        ...(memoryConfig ? { memoryConfig } : {}),
+      },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'call-1', toolName: 'background-tool', args: { query: 'customers' } },
+      }),
+    );
+
+    return flushMessages;
+  };
+
+  it('flushes the patched background result to memory on a writable run', async () => {
+    const flushMessages = await runBackgroundResult();
+
+    expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it('does not flush the background result to memory when memory is read-only', async () => {
+    // Mirrors the durable engine's readOnly flush guard (R1): a readOnly run
+    // must not have its transcript persisted just because a background tool
+    // completed and patched its placeholder result into the message list.
+    const flushMessages = await runBackgroundResult({ readOnly: true });
+
+    expect(flushMessages).not.toHaveBeenCalled();
+  });
+});
+
 describe('createToolCallStep background task stream replay', () => {
   afterEach(() => {
     vi.clearAllMocks();
