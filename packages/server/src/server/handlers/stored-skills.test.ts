@@ -11,6 +11,7 @@ import {
   CREATE_STORED_SKILL_ROUTE,
   UPDATE_STORED_SKILL_ROUTE,
   DELETE_STORED_SKILL_ROUTE,
+  PUBLISH_STORED_SKILL_ROUTE,
 } from './stored-skills';
 
 // =============================================================================
@@ -37,6 +38,8 @@ interface MockSkillsStore {
   listResolved: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
+  getVersion: ReturnType<typeof vi.fn>;
+  getLatestVersion: ReturnType<typeof vi.fn>;
 }
 
 function createMockSkillsStore(skillsData: Map<string, MockStoredSkill> = new Map()): MockSkillsStore {
@@ -100,6 +103,18 @@ function createMockSkillsStore(skillsData: Map<string, MockStoredSkill> = new Ma
     delete: vi.fn().mockImplementation(async (id: string) => {
       return skillsData.delete(id);
     }),
+    getVersion: vi.fn().mockResolvedValue(null),
+    getLatestVersion: vi.fn().mockResolvedValue(null),
+  };
+}
+
+interface MockBlobStore {
+  putMany: ReturnType<typeof vi.fn>;
+}
+
+function createMockBlobStore(): MockBlobStore {
+  return {
+    putMany: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -107,11 +122,14 @@ interface MockStorage {
   getStore: ReturnType<typeof vi.fn>;
 }
 
-function createMockStorage(skillsStore?: MockSkillsStore): MockStorage {
+function createMockStorage(skillsStore?: MockSkillsStore, blobStore?: MockBlobStore): MockStorage {
   return {
     getStore: vi.fn().mockImplementation(async (storeName: string) => {
       if (storeName === 'skills' && skillsStore) {
         return skillsStore;
+      }
+      if (storeName === 'blobs' && blobStore) {
+        return blobStore;
       }
       return null;
     }),
@@ -154,13 +172,15 @@ function createAuthenticatedContext(mastra: MockMastra, userId: string, permissi
 describe('Stored Skills Handlers', () => {
   let mockSkillsData: Map<string, MockStoredSkill>;
   let mockSkillsStore: MockSkillsStore;
+  let mockBlobStore: MockBlobStore;
   let mockStorage: MockStorage;
   let mockMastra: MockMastra;
 
   beforeEach(() => {
     mockSkillsData = new Map();
     mockSkillsStore = createMockSkillsStore(mockSkillsData);
-    mockStorage = createMockStorage(mockSkillsStore);
+    mockBlobStore = createMockBlobStore();
+    mockStorage = createMockStorage(mockSkillsStore, mockBlobStore);
     mockMastra = createMockMastra({ storage: mockStorage });
   });
 
@@ -748,6 +768,131 @@ describe('Stored Skills Handlers', () => {
       });
 
       expect(result).toMatchObject({ success: true });
+    });
+  });
+
+  describe('PUBLISH_STORED_SKILL_ROUTE', () => {
+    const skillMd = `---
+name: builder-skill
+description: A builder-authored skill
+---
+# Builder Skill
+
+Do builder things.`;
+
+    const versionFiles = [
+      { name: 'SKILL.md', type: 'file' as const, content: skillMd },
+      {
+        name: 'references',
+        type: 'folder' as const,
+        children: [{ name: 'notes.md', type: 'file' as const, content: '# Notes' }],
+      },
+    ];
+
+    beforeEach(() => {
+      mockSkillsData.set('builder-skill', {
+        id: 'builder-skill',
+        name: 'Builder Skill',
+        description: 'A builder-authored skill',
+        instructions: '# Builder Skill\n\nDo builder things.',
+        authorId: 'user-a',
+        visibility: 'private',
+        status: 'draft',
+      });
+
+      mockSkillsStore.getLatestVersion.mockResolvedValue({
+        id: 'version-1',
+        skillId: 'builder-skill',
+        files: versionFiles,
+      });
+      mockSkillsStore.getVersion.mockImplementation(async (id: string) => {
+        if (id === 'version-1') {
+          return { id: 'version-1', skillId: 'builder-skill', files: versionFiles };
+        }
+        return null;
+      });
+      mockSkillsStore.update.mockImplementation(async (updates: Record<string, unknown> & { id: string }) => {
+        const existing = mockSkillsData.get(updates.id);
+        if (!existing) return null;
+        const updated = { ...existing, ...updates };
+        mockSkillsData.set(updates.id, updated as MockStoredSkill);
+        if (updates.tree) {
+          mockSkillsStore.getLatestVersion.mockResolvedValue({
+            id: 'version-2',
+            skillId: updates.id,
+            files: versionFiles,
+            tree: updates.tree,
+          });
+        }
+        return updated;
+      });
+    });
+
+    it('should publish from a stored files snapshot when skillPath is omitted', async () => {
+      const result = await PUBLISH_STORED_SKILL_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        storedSkillId: 'builder-skill',
+      });
+
+      expect(mockBlobStore.putMany).toHaveBeenCalled();
+      expect(mockSkillsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'builder-skill',
+          status: 'published',
+          tree: expect.objectContaining({
+            entries: expect.objectContaining({
+              'SKILL.md': expect.any(Object),
+              'references/notes.md': expect.any(Object),
+            }),
+          }),
+        }),
+      );
+      expect(result).toMatchObject({
+        id: 'builder-skill',
+        status: 'published',
+      });
+    });
+
+    it('should publish a specific version when versionId is provided', async () => {
+      await PUBLISH_STORED_SKILL_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user-a'),
+        storedSkillId: 'builder-skill',
+        versionId: 'version-1',
+      });
+
+      expect(mockSkillsStore.getVersion).toHaveBeenCalledWith('version-1');
+      expect(mockBlobStore.putMany).toHaveBeenCalled();
+    });
+
+    it('should reject when the selected version has no files snapshot', async () => {
+      mockSkillsStore.getLatestVersion.mockResolvedValue({
+        id: 'version-empty',
+        skillId: 'builder-skill',
+        files: [],
+      });
+
+      await expect(
+        PUBLISH_STORED_SKILL_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-a'),
+          storedSkillId: 'builder-skill',
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should reject when versionId does not belong to the skill', async () => {
+      mockSkillsStore.getVersion.mockResolvedValue({
+        id: 'other-version',
+        skillId: 'other-skill',
+        files: versionFiles,
+      });
+
+      await expect(
+        PUBLISH_STORED_SKILL_ROUTE.handler({
+          ...createAuthenticatedContext(mockMastra, 'user-a'),
+          storedSkillId: 'builder-skill',
+          versionId: 'other-version',
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 });

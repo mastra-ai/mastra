@@ -251,18 +251,44 @@ export function parseSkillSnapshotFromFiles(files: SkillSnapshotFile[]): Omit<St
 }
 
 /**
- * Collect a skill from a SkillSource for publishing.
- * Walks the skill directory, hashes all files, parses SKILL.md frontmatter,
- * and returns everything needed to create a new version.
- *
- * @param source - The SkillSource to read from (live filesystem or any other source)
- * @param skillPath - Path to the skill directory (containing SKILL.md)
+ * Flatten a nested `StorageSkillFileNode` tree into walked file entries.
+ * Binary files are detected by MIME type; their `content` is expected to be
+ * base64-encoded (matching the round-trip from filesystem publish).
+ * Text files are treated as UTF-8 strings — content is never guessed as binary.
  */
-export async function collectSkillForPublish(source: SkillSource, skillPath: string): Promise<SkillPublishResult> {
-  // 1. Walk the skill directory recursively, reading all files
-  const files = await walkSkillDirectory(source, skillPath);
+function flattenSkillFileNodes(nodes: StorageSkillFileNode[], prefix = ''): WalkedFile[] {
+  const files: WalkedFile[] = [];
 
-  // 2. Build tree entries and blob entries, deduplicating blobs by hash
+  for (const node of nodes) {
+    if (node.type === 'folder') {
+      if (node.children?.length) {
+        const childPrefix = prefix ? `${prefix}/${node.name}` : node.name;
+        files.push(...flattenSkillFileNodes(node.children, childPrefix));
+      }
+      continue;
+    }
+
+    if (node.content === undefined) continue;
+
+    const path = prefix ? `${prefix}/${node.name}` : node.name;
+    const mimeType = detectMimeType(node.name);
+    const isBinary = isBinaryMimeType(mimeType);
+
+    if (isBinary) {
+      const buf = Buffer.from(node.content, 'base64');
+      files.push({ path, content: buf, isBinary: true });
+    } else {
+      files.push({ path, content: node.content, isBinary: false });
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Build tree, blobs, snapshot, and UI file nodes from walked files.
+ */
+function buildPublishResultFromWalkedFiles(files: WalkedFile[], skillPathForErrors?: string): SkillPublishResult {
   const treeEntries: Record<string, SkillVersionTreeEntry> = {};
   const blobMap = new Map<string, StorageBlobEntry>();
   const now = new Date();
@@ -272,7 +298,6 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
     const mimeType = detectMimeType(file.path);
 
     if (file.isBinary) {
-      // Binary file: store as base64-encoded string
       const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string);
       const size = buf.length;
       const base64Content = buf.toString('base64');
@@ -294,7 +319,6 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
         });
       }
     } else {
-      // Text file: store as UTF-8 string
       const content = file.content as string;
       const size = Buffer.byteLength(content, 'utf-8');
 
@@ -320,19 +344,41 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   const blobs = Array.from(blobMap.values());
   const fileNodes = buildSkillFileNodes(files);
 
-  // 3. Parse SKILL.md frontmatter and discover references/scripts/assets paths
   let snapshot: Omit<StorageSkillSnapshotType, 'tree'>;
   try {
     snapshot = parseSkillSnapshotFromFiles(files);
   } catch (err) {
-    // Surface the skill path to make the error easier to debug
-    if (err instanceof Error && err.message.includes('SKILL.md not found')) {
-      throw new Error(`SKILL.md not found in ${skillPath}`);
+    if (err instanceof Error && err.message.includes('SKILL.md not found') && skillPathForErrors) {
+      throw new Error(`SKILL.md not found in ${skillPathForErrors}`);
     }
     throw err;
   }
 
   return { snapshot, tree, blobs, files: fileNodes };
+}
+
+/**
+ * Collect a skill from a SkillSource for publishing.
+ * Walks the skill directory, hashes all files, parses SKILL.md frontmatter,
+ * and returns everything needed to create a new version.
+ *
+ * @param source - The SkillSource to read from (live filesystem or any other source)
+ * @param skillPath - Path to the skill directory (containing SKILL.md)
+ */
+export async function collectSkillForPublish(source: SkillSource, skillPath: string): Promise<SkillPublishResult> {
+  const files = await walkSkillDirectory(source, skillPath);
+  return buildPublishResultFromWalkedFiles(files, skillPath);
+}
+
+/**
+ * Collect a skill from a stored `files` snapshot for publishing.
+ * Converts the nested file tree into content-addressable blobs and a tree manifest.
+ *
+ * @param fileNodes - Nested file tree from a stored skill version snapshot
+ */
+export function collectSkillForPublishFromFiles(fileNodes: StorageSkillFileNode[]): SkillPublishResult {
+  const files = flattenSkillFileNodes(fileNodes);
+  return buildPublishResultFromWalkedFiles(files);
 }
 
 /**
@@ -349,7 +395,22 @@ export async function publishSkillFromSource(
   blobStore: BlobStore,
 ): Promise<SkillPublishResult> {
   const result = await collectSkillForPublish(source, skillPath);
-  // Store blobs in batch
+  await blobStore.putMany(result.blobs);
+  return result;
+}
+
+/**
+ * Publish a skill from a stored `files` snapshot.
+ * Hashes files into the blob store and returns the tree manifest and snapshot.
+ *
+ * @param fileNodes - Nested file tree from a stored skill version snapshot
+ * @param blobStore - Where to store file blobs
+ */
+export async function publishSkillFromFiles(
+  fileNodes: StorageSkillFileNode[],
+  blobStore: BlobStore,
+): Promise<SkillPublishResult> {
+  const result = collectSkillForPublishFromFiles(fileNodes);
   await blobStore.putMany(result.blobs);
   return result;
 }

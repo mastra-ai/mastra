@@ -5,9 +5,10 @@ import type {
   StorageListSkillsOutput,
   StorageResolvedSkillType,
   StorageListSkillsResolvedOutput,
+  StorageSkillFileNode,
 } from '@mastra/core/storage';
 import type { SkillSource } from '@mastra/core/workspace';
-import { publishSkillFromSource } from '@mastra/core/workspace';
+import { publishSkillFromFiles, publishSkillFromSource } from '@mastra/core/workspace';
 
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
@@ -129,6 +130,57 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
 
     // Invalidate any cached agents that reference this skill so they
     // re-hydrate with the updated version on next access.
+    this.editor.agent.invalidateAgentsReferencingSkill(skillId);
+
+    return resolved;
+  }
+
+  /**
+   * Publish a skill from a stored `files` snapshot.
+   * Hashes files into the blob store, creates a new tree-backed version,
+   * and sets activeVersionId.
+   */
+  async publishFromFiles(skillId: string, files: StorageSkillFileNode[]): Promise<StorageResolvedSkillType> {
+    this.ensureRegistered();
+
+    const storage = this.mastra?.getStorage();
+    if (!storage) throw new Error('Storage is not configured');
+
+    const skillStore = await storage.getStore('skills');
+    if (!skillStore) throw new Error('Skills storage domain is not available');
+
+    const blobStore = await this.editor.resolveBlobStore();
+    if (!blobStore)
+      throw new Error('No blob store is configured. Register one via new MastraEditor({ blobStores: [...] })');
+
+    const { snapshot, tree, files: publishedFiles } = await publishSkillFromFiles(files, blobStore);
+
+    const snapshotUpdate: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value !== undefined) snapshotUpdate[key] = value;
+    }
+
+    await skillStore.update({
+      id: skillId,
+      ...snapshotUpdate,
+      tree,
+      files: publishedFiles,
+      status: 'published',
+    });
+
+    const latestVersion = await skillStore.getLatestVersion(skillId);
+    if (!latestVersion) {
+      throw new Error(`Failed to retrieve version after publishing skill "${skillId}"`);
+    }
+    await skillStore.update({
+      id: skillId,
+      activeVersionId: latestVersion.id,
+    });
+
+    const resolved = await skillStore.getByIdResolved(skillId);
+    if (!resolved) throw new Error(`Failed to resolve skill ${skillId} after publish`);
+
+    this.clearCache(skillId);
     this.editor.agent.invalidateAgentsReferencingSkill(skillId);
 
     return resolved;
