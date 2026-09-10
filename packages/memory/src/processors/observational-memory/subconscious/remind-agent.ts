@@ -8,7 +8,7 @@ import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
 import { createKnowledgeTools } from './knowledge-tools';
-import { RemindContextStateProcessor } from './remind-context-state';
+import { REMIND_ACTIVITY_PAGE_SIZE, RemindContextStateProcessor } from './remind-context-state';
 import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindMessageMetadata } from './remind-protocol';
 import type { SubconsciousModel } from './types';
@@ -134,6 +134,8 @@ function createQuestionContextProcessor(replyTool: ToolAction<any, any, any>): I
 
 function buildInputProcessors(options: {
   additionalTools?: Record<string, ToolAction<any, any, any>>;
+  memory: Memory;
+  scope: KnowledgeScope;
   parentMemory?: Memory;
   parentThreadId: string;
   resourceId: string;
@@ -150,6 +152,16 @@ function buildInputProcessors(options: {
           if (!engine) return undefined;
           const record = await engine.getRecord(options.parentThreadId, options.resourceId);
           return record?.activeObservations ?? undefined;
+        },
+        // The newest bounded page of the same activity feed the parent-facing
+        // activity lane already reads. Scope filtering is the store's job, so
+        // the resolved scope is handed over rather than re-applied here. With no
+        // knowledge store configured the lane carries no markers, which is the
+        // honest outcome: nothing was observed, so nothing is claimed.
+        readRecentNodeActivity: async () => {
+          const store = await options.memory.storage.getStore('knowledge');
+          if (!store) return [];
+          return await store.listActivity({ scope: options.scope, limit: REMIND_ACTIVITY_PAGE_SIZE });
         },
       }),
     );

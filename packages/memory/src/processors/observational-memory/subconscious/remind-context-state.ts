@@ -63,18 +63,28 @@ export const REMIND_CONTEXT_SNAPSHOT_TAG = 'parent-context';
 export const REMIND_CONTEXT_DELTA_TAG = 'parent-context-update';
 
 const MEMO_KEY = '__subconsciousRemindContextRead';
+const ACTIVITY_MEMO_KEY = '__subconsciousRemindContextActivity';
 
 /**
- * The wording `candidate-context.ts` uses for a candidate nothing matched. The
- * lane derives `match` from it rather than reaching into the projection's
- * internals, so the two files stay independently testable; the projection's
- * no-match copy is a contract, asserted there by its own test.
+ * How many activity events to read per check. Mirrors the parent-facing activity
+ * lane's `recentUpdates` default so both consumers of the same feed pay the same
+ * bounded price. The limit is applied by the store *before* any candidate
+ * filtering, so a busy scope can push a candidate's event off this page — which
+ * is exactly why a missing marker is never rendered as a claim.
  */
-const NO_MATCH_MARKER = 'no accumulated observation references it by wording';
+export const REMIND_ACTIVITY_PAGE_SIZE = 10;
 
 export type RemindContextMatch = 'matched' | 'no-match';
 
-export type RemindContextEntry = { id: string; match: RemindContextMatch; excerpt: string };
+/** The activity event, if any, that last touched the node behind a candidate. */
+export type RemindContextMarker = { action: string; eventId: string };
+
+export type RemindContextEntry = {
+  id: string;
+  match: RemindContextMatch;
+  excerpt: string;
+  marker?: RemindContextMarker;
+};
 
 export type RemindContextOp =
   | { op: 'entered'; entry: RemindContextEntry }
@@ -82,9 +92,19 @@ export type RemindContextOp =
   | { op: 'no-longer-matched'; entry: RemindContextEntry }
   | { op: 'left-candidate-set'; id: string };
 
+/** The shape of an activity event this lane needs; a structural subset of `KnowledgeActivityEvent`. */
+export type RemindContextActivityEvent = { id: string; action: string; recordType: string; recordId: string };
+
 export interface RemindContextStateDeps {
   /** Reads the parent thread's committed active observations. Undefined when unavailable. */
   readParentObservations(): Promise<string | undefined>;
+  /**
+   * Reads the newest bounded page of knowledge activity for the sidekick's
+   * scope. Omitted when no knowledge store or scope is available, in which case
+   * the lane simply carries no markers. Never a forward watermark: `listActivity`
+   * pages backwards, so this reads the newest page and filters it.
+   */
+  readRecentNodeActivity?(): Promise<RemindContextActivityEvent[]>;
 }
 
 function messageText(message: MastraDBMessage): string {
@@ -137,12 +157,62 @@ export function latestCheck(messages: unknown): LatestCheck | undefined {
   return undefined;
 }
 
-function toEntries(entries: CandidateContextEntry[]): RemindContextEntry[] {
-  return entries.map(entry => ({
-    id: entry.id,
-    match: entry.excerpt.includes(NO_MATCH_MARKER) ? ('no-match' as const) : ('matched' as const),
-    excerpt: entry.excerpt,
-  }));
+/**
+ * The marker sentence appended to a candidate's excerpt.
+ *
+ * It states what was actually observed — this node id appears in the newest page
+ * of the store's activity feed under this event — and states both limits of that
+ * observation in the same breath, because the absence of a marker is not a claim:
+ * the page is bounded and applied before candidate filtering, and some record
+ * mutations are never recorded as activity events at all.
+ */
+function markerLine(id: string, marker: RemindContextMarker): string {
+  return `[knowledge activity] candidate ${id} — its knowledge node appears in the store's most recent activity page as ${marker.action} (activity event ${marker.eventId}). That page is bounded and some record writes are never recorded as events, so the absence of this line for another candidate says nothing about it either way.`;
+}
+
+/**
+ * Matches activity events to candidates and folds the result into the entries.
+ *
+ * A search hit's `id` is not always a node id — a record hit carries the record
+ * id in `id` and its parent node in `recordId` — so both are matched against the
+ * event's `recordId`. Only `node-updated` and `node-merged` are considered; a
+ * merge is reported from the event alone, naming no target, because the event
+ * carries none and reading the mutated node is a per-candidate read this lane
+ * does not make.
+ */
+function toEntries(
+  entries: CandidateContextEntry[],
+  sources: CandidateContextSource[],
+  events: RemindContextActivityEvent[],
+): RemindContextEntry[] {
+  const relevant = events.filter(
+    event => event.recordType === 'node' && (event.action === 'node-updated' || event.action === 'node-merged'),
+  );
+  const markers = new Map<string, RemindContextMarker>();
+  for (const source of sources) {
+    // Several events can name the same node in one page; the newest wins, so an
+    // older event left in the page cannot shadow a newer one and suppress a
+    // legitimate re-report on the next check.
+    let latest: RemindContextActivityEvent | undefined;
+    for (const event of relevant) {
+      if (event.recordId !== source.id && event.recordId !== source.recordId) continue;
+      if (!latest || event.id > latest.id) latest = event;
+    }
+    if (latest) markers.set(source.id, { action: latest.action, eventId: latest.id });
+  }
+
+  return entries.map(entry => {
+    const marker = markers.get(entry.id);
+    return {
+      id: entry.id,
+      match: entry.match,
+      // The marker rides inside the excerpt so it reaches the model through both
+      // the snapshot block and the delta line with no second rendering path, and
+      // so the existing diff and cache key cover it without new comparison logic.
+      excerpt: marker ? `${entry.excerpt}\n${markerLine(entry.id, marker)}` : entry.excerpt,
+      ...(marker ? { marker } : {}),
+    };
+  });
 }
 
 // Length-prefix each field so an excerpt containing the delimiters cannot shift
@@ -291,7 +361,7 @@ function renderOps(ops: RemindContextOp[], eventId: string): { contents: string;
 function renderSnapshotEntries(entries: RemindContextEntry[]): { block: string; kept: RemindContextEntry[] } {
   const full = renderCandidateProjection({
     regime: 'filtered',
-    entries: entries.map(entry => ({ id: entry.id, excerpt: entry.excerpt })),
+    entries: entries.map(entry => ({ id: entry.id, match: entry.match, excerpt: entry.excerpt })),
   });
   if (full.length <= CANDIDATE_CONTEXT_MAX_CHARACTERS) return { block: full, kept: entries };
 
@@ -348,6 +418,28 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
     return observations;
   }
 
+  // One activity read per turn, memoized exactly like the observation read:
+  // `computeStateSignal` runs on every model call, and the feed is a property of
+  // the check, not of the step.
+  private async readActivity(args: ComputeStateSignalArgs): Promise<RemindContextActivityEvent[]> {
+    if (!this.deps.readRecentNodeActivity) return [];
+    const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
+    const memo = args.state?.[ACTIVITY_MEMO_KEY] as
+      | { atStep: number; events: RemindContextActivityEvent[] }
+      | undefined;
+    if (memo && stepNumber > memo.atStep) return memo.events;
+    let events: RemindContextActivityEvent[] = [];
+    try {
+      events = await this.deps.readRecentNodeActivity();
+    } catch {
+      // A failed activity read costs markers, never evidence: the projection
+      // still ships, simply unmarked.
+      events = [];
+    }
+    if (args.state) args.state[ACTIVITY_MEMO_KEY] = { atStep: stepNumber, events };
+    return events;
+  }
+
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const check = latestCheck(args.messages);
     // No check in play means nothing to project. Emitting an empty snapshot here
@@ -380,7 +472,7 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
       };
     }
 
-    const entries = toEntries(projection.entries);
+    const entries = toEntries(projection.entries, sources, await this.readActivity(args));
     const prior = hasBase ? effectivePriorEntries(args) : undefined;
 
     // No usable base — first emission, an evicted base, or a passthrough base

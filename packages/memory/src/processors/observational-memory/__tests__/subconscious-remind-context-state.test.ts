@@ -162,6 +162,66 @@ describe('Subconscious reminder parent-context state lane', () => {
     expect(prompts[0]).toContain('counters rewrite');
   });
 
+  it('hands the resolved scope to the store rather than filtering the feed itself', async () => {
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doGenerate: async options => {
+        prompts.push(JSON.stringify(options.prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content: [{ type: 'text', text: '<no-reminder />' }],
+        };
+      },
+    });
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const listActivity = vi.fn(async () => [
+      {
+        id: 'evt-live',
+        action: 'node-updated',
+        recordType: 'node',
+        recordId: 'source-1',
+        scope: ['resource:resource-1'],
+      },
+    ]);
+    const realGetStore = memory.storage.getStore.bind(memory.storage);
+    vi.spyOn(memory.storage, 'getStore').mockImplementation((async (domain: string) =>
+      domain === 'knowledge' ? ({ listActivity } as never) : await realGetStore(domain as never)) as never);
+    // Markers only exist in the filtered regime, which starts above 4 KiB: the
+    // passthrough block has no per-candidate slot to hang a marker on.
+    const bulk = Array.from({ length: 200 }, (_, index) => `Unrelated bookkeeping note number ${index}.`).join('\n');
+    const parentMemory = {
+      omEngine: Promise.resolve({
+        getRecord: async () => ({
+          activeObservations: `The datastore migration is blocked on the counters rewrite.\n${bulk}`,
+        }),
+      }),
+    } as unknown as Memory;
+
+    const agent = createReminderAgent({
+      model,
+      memory,
+      scope: ['org:acme', 'resource:resource-1'],
+      threadId: 'subconscious:parent:remind',
+      resourceId: 'resource-1',
+      parentThreadId: 'parent',
+      parentMemory,
+      fallbackSendSignal: vi.fn(),
+    });
+
+    await agent.generate([checkMessage()], {
+      memory: { thread: 'subconscious:parent:remind', resource: 'resource-1' },
+      maxSteps: 1,
+    });
+
+    // Scope filtering belongs to the store, so the assertion is that the scope
+    // arrives intact — not that the lane drops out-of-scope events itself.
+    expect(listActivity).toHaveBeenCalledWith({ scope: ['org:acme', 'resource:resource-1'], limit: 10 });
+    expect(prompts[0]).toContain('activity event evt-live');
+  });
+
   it('reads the parent record once per turn, not once per step', async () => {
     const readParentObservations = vi.fn(async () => 'The datastore migration is blocked on the counters rewrite.');
     const processor = new RemindContextStateProcessor({ readParentObservations });
@@ -485,6 +545,160 @@ describe('Subconscious reminder parent-context state lane', () => {
       const instructions = (result as { systemMessages: { content: string }[] }).systemMessages.at(-1)!.content;
       expect(instructions).toContain('parent-context-update');
       expect(instructions).toContain('Fold each delta onto the latest snapshot');
+    });
+
+    /**
+     * The marker reuses the store's existing activity feed. It is advisory in
+     * both directions: the page is bounded and applied before candidate
+     * filtering, and some record writes are never recorded as events at all.
+     */
+    describe('node-update markers', () => {
+      const observations = () => bigObservations({ first: firstFact, second: secondFact });
+
+      function event(overrides: Partial<{ id: string; action: string; recordType: string; recordId: string }> = {}) {
+        return { id: 'evt-1', action: 'node-updated', recordType: 'node', recordId: 'source-1', ...overrides };
+      }
+
+      function laneWith(events: ReturnType<typeof event>[], obs = observations()) {
+        return new RemindContextStateProcessor({
+          readParentObservations: async () => obs,
+          readRecentNodeActivity: async () => events,
+        });
+      }
+
+      it('marks a candidate whose node appears in the newest activity page, and only that one', async () => {
+        const snapshot = await laneWith([event()]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        expect(snapshot!.contents).toContain('[knowledge activity] candidate source-1');
+        expect(snapshot!.contents).toContain('activity event evt-1');
+        expect(snapshot!.contents).not.toContain('[knowledge activity] candidate source-2');
+      });
+
+      it('treats a new marker as a change even when the excerpt is identical', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        const delta = await laneWith([event()]).computeStateSignal(secondArgs(snapshot!));
+        const ops = (delta as { delta: { ops: { op: string; entry?: { id: string } }[] } }).delta.ops;
+
+        expect(ops).toEqual([
+          expect.objectContaining({ op: 'changed', entry: expect.objectContaining({ id: 'source-1' }) }),
+        ]);
+        expect(delta!.contents).toContain('activity event evt-1');
+        expect(delta!.contents).not.toContain('had no lexical overlap');
+      });
+
+      it('does not re-fire while the same event sits in the page', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+        const marked = await laneWith([event()]).computeStateSignal(secondArgs(snapshot!));
+
+        const repeat = await laneWith([event()]).computeStateSignal(
+          args({
+            messages: [checkWith('check-three', candidates)],
+            contextWindow: { hasSnapshot: true },
+            lastSnapshot: base(snapshot!),
+            deltasSinceSnapshot: [base(marked!)],
+          } as Partial<ComputeStateSignalArgs>),
+        );
+
+        expect(repeat).toBeUndefined();
+      });
+
+      it('reports the newest event when several name the same node', async () => {
+        // Deliberately not in the store's descending order: an older event left
+        // in the page must not shadow a newer one and suppress the re-report.
+        const snapshot = await laneWith([event({ id: 'evt-2' }), event({ id: 'evt-9' })]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        expect(snapshot!.contents).toContain('activity event evt-9');
+        expect(snapshot!.contents).not.toContain('activity event evt-2');
+      });
+
+      it('marks a candidate matched through its parent record id', async () => {
+        const viaRecord = [{ ...candidates[0]!, id: 'record-7', recordId: 'node-7' }, candidates[1]!];
+        const snapshot = await laneWith([event({ recordId: 'node-7' })]).computeStateSignal(
+          args({ messages: [checkWith('check-one', viaRecord)] }),
+        );
+
+        expect(snapshot!.contents).toContain('[knowledge activity] candidate record-7');
+      });
+
+      it('reports a merge without naming a target node', async () => {
+        const snapshot = await laneWith([event({ action: 'node-merged' })]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        expect(snapshot!.contents).toContain('node-merged');
+        expect(snapshot!.contents).not.toContain('source-2 (activity');
+        expect(snapshot!.contents).not.toContain('merged into');
+      });
+
+      it('ignores record events and actions that are not node updates or merges', async () => {
+        const snapshot = await laneWith([
+          event({ action: 'record-created' }),
+          event({ id: 'evt-3', recordType: 'record' }),
+        ]).computeStateSignal(args({ messages: [checkWith('check-one', candidates)] }));
+
+        expect(snapshot!.contents).not.toContain('[knowledge activity]');
+      });
+
+      it('never turns a missing marker into a claim about the node', async () => {
+        const snapshot = await laneWith([event()]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+
+        expect(snapshot!.contents).toContain('That page is bounded');
+        expect(snapshot!.contents).toContain('never recorded as events');
+        for (const forbidden of ['unchanged', 'up to date', 'has not changed']) {
+          expect(snapshot!.contents).not.toContain(forbidden);
+        }
+      });
+
+      it('reads the activity feed once per turn, not once per step', async () => {
+        const readRecentNodeActivity = vi.fn(async () => [event()]);
+        const processor = new RemindContextStateProcessor({
+          readParentObservations: async () => observations(),
+          readRecentNodeActivity,
+        });
+        const state: Record<string, unknown> = {};
+
+        await processor.computeStateSignal(
+          args({
+            messages: [checkWith('check-one', candidates)],
+            state,
+            stepNumber: 0,
+          } as Partial<ComputeStateSignalArgs>),
+        );
+        await processor.computeStateSignal(
+          args({
+            messages: [checkWith('check-one', candidates)],
+            state,
+            stepNumber: 1,
+          } as Partial<ComputeStateSignalArgs>),
+        );
+
+        expect(readRecentNodeActivity).toHaveBeenCalledTimes(1);
+      });
+
+      it('still ships the projection when the activity read fails', async () => {
+        const processor = new RemindContextStateProcessor({
+          readParentObservations: async () => observations(),
+          readRecentNodeActivity: async () => {
+            throw new Error('knowledge store unavailable');
+          },
+        });
+
+        const snapshot = await processor.computeStateSignal(args({ messages: [checkWith('check-one', candidates)] }));
+
+        expect(snapshot!.mode).toBe('snapshot');
+        expect(snapshot!.contents).not.toContain('[knowledge activity]');
+      });
     });
   });
 });

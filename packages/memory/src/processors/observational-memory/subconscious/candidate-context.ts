@@ -58,8 +58,15 @@ function sharedTermCount(observationTerms: Set<string>, candidateTerms: Set<stri
 
 export type CandidateContextSource = { id: string; text?: string; title?: string; recordId?: string };
 
-/** One candidate's slice of the projection. The excerpt is the candidate's rendered section verbatim. */
-export type CandidateContextEntry = { id: string; excerpt: string };
+/**
+ * One candidate's slice of the projection. The excerpt is the candidate's rendered section verbatim.
+ *
+ * `match` is first class rather than something a reader infers from the excerpt's wording: the
+ * no-match copy is prose meant for a model, and deriving state by string-matching it would make that
+ * prose load-bearing in two places at once. `no-match` means no lexical overlap was found under the
+ * current matching rule — never that the parent stopped holding the fact.
+ */
+export type CandidateContextEntry = { id: string; match: 'matched' | 'no-match'; excerpt: string };
 
 /**
  * Two regimes, kept explicit so callers can tell them apart.
@@ -112,6 +119,7 @@ export function projectCandidateEntries({
     if (matches.length === 0) {
       entries.push({
         id: source.id,
+        match: 'no-match',
         excerpt: `Candidate ${source.id}: no accumulated observation references it by wording. This reports a missing wording overlap only, and is not evidence about what the parent still holds.`,
       });
       continue;
@@ -124,6 +132,7 @@ export function projectCandidateEntries({
     }
     entries.push({
       id: source.id,
+      match: 'matched',
       excerpt: `Candidate ${source.id}: accumulated observations that mention it:\n${lines.join('\n')}`,
     });
   }
