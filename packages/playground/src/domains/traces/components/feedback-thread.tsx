@@ -223,7 +223,7 @@ export function FeedbackThread({
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3">
+          <Txt variant="ui-md" className="text-neutral3 text-center">
             No feedback yet
           </Txt>
         ) : (
