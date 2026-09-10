@@ -197,7 +197,7 @@ export class ToolCallFilter implements Processor {
         if (part.type !== 'tool-result') continue;
         if (!excludedToolCallIds.has(part.toolCallId)) continue;
 
-        const text = this.modelOutputToText((part as ToolResultPart).output);
+        const text = this.modelOutputToText(part.output);
         if (text) {
           texts.set(part.toolCallId, `${part.toolName} result:\n${text}`);
         }

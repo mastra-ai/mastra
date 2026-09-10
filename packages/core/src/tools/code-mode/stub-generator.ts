@@ -16,7 +16,6 @@
 import type { JSONSchema7, JSONSchema7Definition, JSONSchema7TypeName } from 'json-schema';
 import type { ToolsInput } from '../../agent/types';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../schema';
-import type { StandardSchemaWithJSON } from '../../schema';
 import type { CodeModeConfig } from './types';
 
 /** A valid TypeScript identifier? (used to decide quoting of object keys). */
@@ -132,7 +131,7 @@ function literal(value: unknown): string {
 function schemaToTs(schema: unknown, io: 'input' | 'output'): string {
   if (!isStandardSchemaWithJSON(schema)) return 'unknown';
   try {
-    const json = standardSchemaToJSONSchema(schema as StandardSchemaWithJSON, { io });
+    const json = standardSchemaToJSONSchema(schema, { io });
     return jsonSchemaToTsString(json as JSONSchema7);
   } catch {
     return 'unknown';

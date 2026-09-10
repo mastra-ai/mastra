@@ -13,11 +13,11 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
     obj !== null &&
     typeof obj === 'object' &&
     'id' in obj &&
-    typeof (obj as Record<string, unknown>).id === 'string' &&
+    typeof obj.id === 'string' &&
     'inputSchema' in obj &&
     'outputSchema' in obj &&
     'execute' in obj &&
-    typeof (obj as Record<string, unknown>).execute === 'function' &&
+    typeof obj.execute === 'function' &&
     !('processInput' in obj) &&
     !('processInputStep' in obj) &&
     !('processOutputStream' in obj) &&

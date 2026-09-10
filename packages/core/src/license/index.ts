@@ -92,9 +92,7 @@ export class LicenseClient {
       const timer = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
       timer.unref?.();
       try {
-        const signal = options.signal
-          ? AbortSignal.any([options.signal as AbortSignal, controller.signal])
-          : controller.signal;
+        const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
         const response = await fetch(url, { ...options, signal });
         if (response.status === 429 || response.status >= 500) {
           if (i === retries - 1) return response;

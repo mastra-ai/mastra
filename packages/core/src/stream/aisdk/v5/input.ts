@@ -51,7 +51,7 @@ export class AISDKV5InputStream extends MastraModelInput {
       const rawChunk = chunk as StreamPart;
 
       // Clear ID map on new step so each step gets fresh UUIDs
-      if ((rawChunk as { type: string }).type === 'stream-start') {
+      if (rawChunk.type === 'stream-start') {
         idMap.clear();
       }
 
