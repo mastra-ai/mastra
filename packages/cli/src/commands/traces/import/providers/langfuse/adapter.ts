@@ -103,6 +103,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
       snapshotAt: context.snapshotAt,
       projectId: context.source.projectId,
       signal: context.signal,
+      onRetry: context.onRetry,
     };
 
     for await (const discovery of this.reader.discoverTraces(window)) {
@@ -124,6 +125,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
         traceId: discovery.traceId,
         projectId: context.source.projectId,
         signal: context.signal,
+        onRetry: context.onRetry,
       };
       const sourceTrace = await this.reader.readTrace(options);
       yield mapLangfuseSourceTrace(sourceTrace, {
@@ -225,6 +227,16 @@ function validateAndOrderTrace(
       if (observation.endTime && parseSourceTimestamp(observation.endTime) === null) {
         return {
           skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
+        };
+      }
+      if (startMs > snapshotMs) {
+        return {
+          skipped: createSkippedTrace(
+            sourceTrace.traceId,
+            normalizedObservations,
+            'completed_after_snapshot',
+            observation.id,
+          ),
         };
       }
       continue;

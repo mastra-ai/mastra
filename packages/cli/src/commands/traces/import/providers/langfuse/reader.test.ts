@@ -113,9 +113,12 @@ describe('LangfuseObservationsReader', () => {
       .mockResolvedValueOnce(Response.json({ data: [child], meta: { cursor: 'final-page' } }))
       .mockResolvedValueOnce(Response.json({ data: [grandchild], meta: { cursor: null } }));
     const onRetry = vi.fn();
+    const operationOnRetry = vi.fn();
     const reader = new LangfuseObservationsReader(clientOptions, { fetch, onRetry });
 
-    await expect(reader.readTrace({ traceId: 'trace-1', projectId: 'project-1' })).resolves.toEqual({
+    await expect(
+      reader.readTrace({ traceId: 'trace-1', projectId: 'project-1', onRetry: operationOnRetry }),
+    ).resolves.toEqual({
       traceId: 'trace-1',
       observations: [root, child, grandchild],
     });
@@ -124,6 +127,7 @@ describe('LangfuseObservationsReader', () => {
     expect(urls.map(url => url.searchParams.get('limit'))).toEqual(['1000', '1000', '500', '500']);
     expect(urls.map(url => url.searchParams.get('cursor'))).toEqual([null, 'next-page', 'next-page', 'final-page']);
     expect(onRetry).toHaveBeenCalledOnce();
+    expect(operationOnRetry).toHaveBeenCalledOnce();
   });
 
   it('fails when one observation exceeds the response limit', async () => {

@@ -22,12 +22,14 @@ export interface LangfuseReadWindow {
   snapshotAt: string;
   projectId: string;
   signal?: AbortSignal;
+  onRetry?: () => void;
 }
 
 export interface LangfuseTraceReadOptions {
   traceId: string;
   projectId: string;
   signal?: AbortSignal;
+  onRetry?: () => void;
 }
 
 /**
@@ -66,6 +68,7 @@ export class LangfuseObservationsReader {
       fromStartTime: window.cutoffAt,
       toStartTime: window.snapshotAt,
       signal: window.signal,
+      onRetry: window.onRetry,
     })) {
       for (const observation of page) {
         assertProject(observation, window.projectId);
@@ -95,6 +98,7 @@ export class LangfuseObservationsReader {
       limit: PAGE_SIZE,
       traceId: options.traceId,
       signal: options.signal,
+      onRetry: options.onRetry,
     })) {
       for (const observation of page) {
         assertProject(observation, options.projectId);
@@ -108,17 +112,20 @@ export class LangfuseObservationsReader {
     return { traceId: options.traceId, observations };
   }
 
-  private async *pages(query: Omit<LangfuseObservationQuery, 'cursor'>): AsyncGenerator<LangfuseObservation[]> {
+  private async *pages(
+    query: Omit<LangfuseObservationQuery, 'cursor'> & { onRetry?: () => void },
+  ): AsyncGenerator<LangfuseObservation[]> {
+    const { onRetry, ...observationQuery } = query;
     const seenCursors = new Set<string>();
-    let limit = query.limit;
+    let limit = observationQuery.limit;
     let cursor: string | undefined;
 
     do {
-      query.signal?.throwIfAborted();
+      observationQuery.signal?.throwIfAborted();
       let page: LangfuseObservationsPage;
       while (true) {
         try {
-          page = await this.client.getObservationsPage({ ...query, cursor, limit });
+          page = await this.client.getObservationsPage({ ...observationQuery, cursor, limit }, onRetry);
           break;
         } catch (error) {
           if (!(error instanceof LangfuseResponseTooLargeError) || limit === 1) throw error;
@@ -127,6 +134,7 @@ export class LangfuseObservationsReader {
           // of the requested limit, so the page can safely be retried smaller.
           limit = Math.max(1, Math.floor(limit / 2));
           this.onRetry?.();
+          if (onRetry !== this.onRetry) onRetry?.();
         }
       }
       yield page.data;

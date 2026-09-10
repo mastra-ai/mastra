@@ -86,7 +86,7 @@ export class LangfuseClient {
     return parseProject(value);
   }
 
-  async getObservationsPage(query: LangfuseObservationQuery): Promise<LangfuseObservationsPage> {
+  async getObservationsPage(query: LangfuseObservationQuery, onRetry?: () => void): Promise<LangfuseObservationsPage> {
     if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 1000) {
       throw new Error('Langfuse observation page size must be between 1 and 1000.');
     }
@@ -101,7 +101,7 @@ export class LangfuseClient {
     setQuery(url, 'expandMetadata', query.expandMetadata);
 
     try {
-      return parseObservationsPage(await this.requestJson(url, query.signal));
+      return parseObservationsPage(await this.requestJson(url, query.signal, onRetry));
     } catch (error) {
       if (error instanceof LangfuseReaderError && error.status === 404) {
         throw new LangfuseReaderError(
@@ -113,7 +113,7 @@ export class LangfuseClient {
     }
   }
 
-  private async requestJson(url: URL, signal?: AbortSignal): Promise<unknown> {
+  private async requestJson(url: URL, signal?: AbortSignal, onRetry?: () => void): Promise<unknown> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
@@ -131,7 +131,7 @@ export class LangfuseClient {
         if (signal?.aborted) throw signal.reason ?? error;
         lastError = error;
         if (attempt + 1 < this.maxAttempts) {
-          await this.waitBeforeRetry(backoffMilliseconds(attempt), signal);
+          await this.waitBeforeRetry(backoffMilliseconds(attempt), signal, onRetry);
           continue;
         }
         throw new LangfuseReaderError('Could not reach Langfuse after the retry limit was exhausted.', {
@@ -170,7 +170,7 @@ export class LangfuseClient {
               ? parseRetryAfter(response.headers.get('retry-after'), backoffMilliseconds(attempt))
               : backoffMilliseconds(attempt);
           await discardResponseBody(response);
-          await this.waitBeforeRetry(delay, signal);
+          await this.waitBeforeRetry(delay, signal, onRetry);
           continue;
         }
         await discardResponseBody(response);
@@ -189,8 +189,9 @@ export class LangfuseClient {
     throw new LangfuseReaderError('Langfuse request failed.', { retryable: true, cause: lastError });
   }
 
-  private async waitBeforeRetry(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  private async waitBeforeRetry(milliseconds: number, signal?: AbortSignal, onRetry?: () => void): Promise<void> {
     this.onRetry?.();
+    if (onRetry !== this.onRetry) onRetry?.();
     await this.sleep(milliseconds, signal);
   }
 }

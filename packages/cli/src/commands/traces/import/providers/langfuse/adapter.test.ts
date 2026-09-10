@@ -245,6 +245,31 @@ describe('mapLangfuseSourceTrace', () => {
     });
   });
 
+  it('skips the complete trace when an event occurs after the snapshot', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation(),
+        observation({
+          id: 'late-event',
+          parentObservationId: 'root',
+          type: 'EVENT',
+          startTime: '2026-09-01T12:05:00.000Z',
+          endTime: null,
+        }),
+      ]),
+      { importId: 'import-1', ...window },
+    );
+
+    expect(record).toMatchObject({
+      kind: 'skipped',
+      skipped: {
+        sourceTraceId: 'trace-1',
+        reason: 'completed_after_snapshot',
+        detail: 'late-event',
+      },
+    });
+  });
+
   it('turns Langfuse error observations into Mastra span errors', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'GENERATION', level: 'ERROR', statusMessage: 'provider failed' })]),
@@ -322,5 +347,36 @@ describe('LangfuseTraceImportProvider', () => {
         sourceSpanIds: ['orphan'],
       },
     });
+  });
+
+  it('reports Langfuse API retries through the shared read context', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(Response.json({ data: [observation()], meta: { cursor: null } }))
+      .mockResolvedValueOnce(Response.json({ data: [observation()], meta: { cursor: null } }));
+    const onRetry = vi.fn();
+    const provider = new LangfuseTraceImportProvider(clientOptions, {
+      fetch,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await collect(
+      provider.read({
+        importId: 'import-1',
+        source: {
+          provider: 'langfuse',
+          baseUrl: 'https://cloud.langfuse.com',
+          projectId: 'project-1',
+          mapperVersion: 'langfuse-api-v2@1',
+          idAlgorithmVersion: 'langfuse-sha256-v1',
+        },
+        onRetry,
+        ...window,
+      }),
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });
