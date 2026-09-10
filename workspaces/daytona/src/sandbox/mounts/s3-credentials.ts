@@ -48,7 +48,7 @@ for directory in ${shellQuote(s3CredentialsPrefix(mountPath))}*; do
 done
 exit "$result"`;
   try {
-    const result = await ctx.run(`sudo sh -c ${shellQuote(script)}`, 30_000);
+    const result = await ctx.run(`sh -c ${shellQuote(script)}`, 30_000);
     if (result.exitCode !== 0) {
       ctx.logger.warn(`${LOG_PREFIX} S3 credentials retained: daemon still active or cleanup could not be verified`);
     }

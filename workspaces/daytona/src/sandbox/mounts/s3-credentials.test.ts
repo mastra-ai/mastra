@@ -48,15 +48,10 @@ describe('S3 credential lifetime', () => {
     return {
       logger,
       run: vi.fn(async (cmd: string) => {
+        expect(cmd).toMatch(/^sh -c /);
         const result = spawnSync(
           'sh',
-          [
-            '-c',
-            cmd
-              .replace(/^sudo /, '')
-              .replaceAll('/proc/', `${root}/proc/`)
-              .replaceAll('sleep 0.25', ':'),
-          ],
+          ['-c', cmd.replaceAll('/proc/', `${root}/proc/`).replaceAll('sleep 0.25', ':')],
           { encoding: 'utf8' },
         );
         if (result.error) throw result.error;
