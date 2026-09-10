@@ -51,7 +51,13 @@ export interface LangfuseObservation {
   modelParameters?: unknown;
   usageDetails?: Record<string, number> | null;
   costDetails?: Record<string, number> | null;
+  inputCost?: number | null;
+  outputCost?: number | null;
   totalCost?: number | null;
+  inputPrice?: string | null;
+  outputPrice?: string | null;
+  totalPrice?: string | null;
+  usagePricingTierId?: string | null;
   usagePricingTierName?: string | null;
   promptId?: string | null;
   promptName?: string | null;
