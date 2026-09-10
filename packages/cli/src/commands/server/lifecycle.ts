@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
 import { resolveAuth, resolveProjectId } from './env.js';
 import { pauseServerProject, pollServerDeploy, restartServerProject } from './platform-api.js';
 
@@ -29,7 +30,7 @@ export async function serverRestartAction(opts: { config?: string; project?: str
     s.stop(`Restart queued: ${deployId}`);
 
     p.log.step('Streaming deploy logs...');
-    const collectedLogs: string[] = [];
+    const collectedLogs = createLogCollector();
     const finalStatus = await pollServerDeploy(deployId, token, orgId, undefined, { collectLogs: collectedLogs });
 
     if (finalStatus.status === 'running') {
@@ -40,7 +41,7 @@ export async function serverRestartAction(opts: { config?: string; project?: str
           finalStatus.status === 'failed'
             ? `Restart failed: ${finalStatus.error ?? 'unknown error'}`
             : `Restart ended with status: ${finalStatus.status}`,
-        collectedLogs,
+        collectedLogs: collectedLogs.entries(),
         dashboardUrl: deployDashboardUrl('server', { orgId, projectId, deployId }),
       });
       process.exit(1);

@@ -1,6 +1,7 @@
 import { createBarLogWriter } from '../../utils/clack-bar.js';
+import type { LogCollector } from '../../utils/deploy-log-format.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
-import { withPollingRetries } from '../../utils/polling.js';
+import { abortableDelay, withPollingRetries } from '../../utils/polling.js';
 import {
   authHeaders,
   createApiClient,
@@ -228,7 +229,7 @@ export interface PollDeployOptions {
   /** Print every log line instead of the rolling tail shown on a TTY. */
   showAllLogs?: boolean;
   /** Receives every raw log entry, so a failure excerpt can be printed later. */
-  collectLogs?: string[];
+  collectLogs?: LogCollector;
 }
 
 export async function pollServerDeploy(
@@ -443,22 +444,6 @@ export async function restartServerProject(token: string, orgId: string, project
   throw new Error(
     'Restart was accepted but no deploy ID could be resolved. Check the Mastra platform for deployment status.',
   );
-}
-
-/** Sleep that returns early when the signal aborts. */
-function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise(resolve => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 const SERVER_LOG_POLL_INTERVAL_MS = 2000;

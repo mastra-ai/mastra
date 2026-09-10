@@ -412,8 +412,36 @@ export interface DeployLogWriterOptions {
   /** Text placed before each line, e.g. the clack bar. */
   prefix?: string;
   /** Every raw entry written is also pushed here, for a failure excerpt later. */
-  collect?: string[];
+  collect?: LogCollector;
   stream?: DeployLogStream;
+}
+
+/** Sink for raw log entries; a plain array satisfies it. */
+export interface LogCollector {
+  push(...entries: string[]): void;
+}
+
+/** Entries kept by {@link createLogCollector} when nothing else bounds them. */
+export const DEFAULT_LOG_COLLECTOR_LIMIT = 2000;
+
+/**
+ * Keep the most recent raw entries, up to `limit`, for a failure excerpt.
+ * Older entries are dropped, which matches the excerpt's preference for the
+ * most recent errors, so memory stays bounded however long a deploy logs.
+ */
+export function createLogCollector(limit = DEFAULT_LOG_COLLECTOR_LIMIT): LogCollector & {
+  entries(): string[];
+} {
+  const kept: string[] = [];
+  return {
+    push(...entries: string[]) {
+      kept.push(...entries);
+      if (kept.length > limit) kept.splice(0, kept.length - limit);
+    },
+    entries() {
+      return kept.slice();
+    },
+  };
 }
 
 export interface DeployLogWriter {

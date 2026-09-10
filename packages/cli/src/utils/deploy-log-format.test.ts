@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createDeployLogWriter,
+  createLogCollector,
   sanitizeLogLine,
   splitLogEntries,
   advanceSgrState,
@@ -449,6 +450,24 @@ describe('createDeployLogWriter', () => {
     const { stream, chunks } = fakeStream();
     createDeployLogWriter({ stream }).write();
     expect(chunks).toHaveLength(0);
+  });
+});
+
+describe('createLogCollector', () => {
+  it('keeps only the most recent entries once the limit is reached', () => {
+    const collector = createLogCollector(3);
+    collector.push('a', 'b');
+    collector.push('c', 'd', 'e');
+    expect(collector.entries()).toEqual(['c', 'd', 'e']);
+    collector.push('f');
+    expect(collector.entries()).toEqual(['d', 'e', 'f']);
+  });
+
+  it('receives every raw entry the writer is given', () => {
+    const collector = createLogCollector();
+    const { stream } = fakeStream({ isTTY: false });
+    createDeployLogWriter({ stream, collect: collector }).write('one', 'two\nthree');
+    expect(collector.entries()).toEqual(['one', 'two\nthree']);
   });
 });
 

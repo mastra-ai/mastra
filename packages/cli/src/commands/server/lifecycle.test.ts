@@ -100,7 +100,7 @@ describe('serverRestartAction', () => {
       't',
       'o',
       undefined,
-      expect.objectContaining({ collectLogs: expect.any(Array) }),
+      expect.objectContaining({ collectLogs: expect.objectContaining({ push: expect.any(Function) }) }),
     );
     expect(mockOutro).toHaveBeenCalledWith('Restart complete! https://app.example');
   });

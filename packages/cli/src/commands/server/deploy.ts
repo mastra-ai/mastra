@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
@@ -583,7 +584,8 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const collectedLogs: string[] = [];
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
   const finalStatus = await pollServerDeploy(deployResult.id, token, orgId, undefined, {
     showAllLogs: opts.debug,
     collectLogs: collectedLogs,
@@ -597,7 +599,7 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
         finalStatus.status === 'failed'
           ? `Deploy failed: ${finalStatus.error}`
           : `Deploy ended with status: ${finalStatus.status}`,
-      collectedLogs,
+      collectedLogs: collectedLogs?.entries() ?? [],
       dashboardUrl: deployDashboardUrl('server', { orgId, projectId, deployId: deployResult.id }),
       showAllLogs: opts.debug,
     });
