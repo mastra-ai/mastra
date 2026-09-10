@@ -78,7 +78,7 @@ describe('IntegrationDialog badge and meta', () => {
   describe('when an item has a badge', () => {
     it('renders it next to the name', () => {
       renderDialog();
-      const button = screen.getByRole('button', { name: /^Sanity\s*MCP\s*OAuth$/ });
+      const button = screen.getByRole('button', { name: 'Sanity MCP OAuth' });
       expect(button.children[2]?.textContent).toBe('MCP');
     });
 
@@ -92,7 +92,7 @@ describe('IntegrationDialog badge and meta', () => {
   describe('when an item has meta text', () => {
     it('renders it muted on the right of the row', () => {
       renderDialog();
-      const button = screen.getByRole('button', { name: /^Notion\s*OAuth$/ });
+      const button = screen.getByRole('button', { name: 'Notion OAuth' });
       expect(button.lastElementChild?.textContent).toBe('OAuth');
       expect(button.lastElementChild?.className).toContain('ml-auto');
     });

@@ -164,14 +164,6 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
-    const abortSignal = res.locals.abortSignal;
-    const cancelStream = () => {
-      void reader.cancel(abortSignal.reason).catch(error => {
-        this.mastra.getLogger()?.error('Failed to cancel stream', { path: route.path, error });
-      });
-    };
-    abortSignal.addEventListener('abort', cancelStream, { once: true });
-    if (abortSignal.aborted) cancelStream();
 
     try {
       while (true) {
@@ -209,8 +201,6 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
-      abortSignal.removeEventListener('abort', cancelStream);
-      reader.releaseLock();
       res.end();
     }
   }
