@@ -1,0 +1,138 @@
+// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+
+export const createBatchInputSchema = z.object({
+  input_file_id: z.string().describe('The ID of the uploaded file used as batch input. Example: "file-abc123"'),
+  endpoint: z
+    .enum(['/v1/chat/completions', '/v1/embeddings', '/v1/completions'])
+    .describe('The OpenAI endpoint to call for each request in the batch.'),
+  completion_window: z
+    .literal('24h')
+    .describe('The time window for batch completion. Only "24h" is currently supported.'),
+  metadata: z.record(z.string(), z.string()).optional().describe('Optional key-value metadata to attach to the batch.'),
+});
+
+const BatchSchema = z.object({
+  id: z.string(),
+  object: z.string(),
+  endpoint: z.string(),
+  errors: z
+    .object({
+      object: z.string().optional(),
+      data: z
+        .array(
+          z
+            .object({
+              code: z.string().optional(),
+              message: z.string().optional(),
+              param: z.string().nullable().optional(),
+              line: z.number().nullable().optional(),
+            })
+            .loose(),
+        )
+        .optional(),
+    })
+    .loose()
+    .nullable()
+    .optional(),
+  input_file_id: z.string(),
+  completion_window: z.string(),
+  status: z.string(),
+  output_file_id: z.string().nullable().optional(),
+  error_file_id: z.string().nullable().optional(),
+  created_at: z.number(),
+  in_progress_at: z.number().nullable().optional(),
+  expires_at: z.number().nullable().optional(),
+  finalizing_at: z.number().nullable().optional(),
+  completed_at: z.number().nullable().optional(),
+  failed_at: z.number().nullable().optional(),
+  expired_at: z.number().nullable().optional(),
+  cancelling_at: z.number().nullable().optional(),
+  cancelled_at: z.number().nullable().optional(),
+  request_counts: z
+    .object({
+      total: z.number(),
+      completed: z.number(),
+      failed: z.number(),
+    })
+    .optional(),
+  metadata: z.record(z.string(), z.string()).nullable().optional(),
+});
+
+export const createBatchOutputSchema = z.object({
+  id: z.string(),
+  object: z.string(),
+  endpoint: z.string(),
+  input_file_id: z.string(),
+  completion_window: z.string(),
+  status: z.string(),
+  output_file_id: z.string().optional(),
+  error_file_id: z.string().optional(),
+  created_at: z.number(),
+  in_progress_at: z.number().optional(),
+  expires_at: z.number().optional(),
+  finalizing_at: z.number().optional(),
+  completed_at: z.number().optional(),
+  failed_at: z.number().optional(),
+  expired_at: z.number().optional(),
+  cancelling_at: z.number().optional(),
+  cancelled_at: z.number().optional(),
+  request_counts: z
+    .object({
+      total: z.number(),
+      completed: z.number(),
+      failed: z.number(),
+    })
+    .optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+
+export function createBatchTool(proxy: PlatformProxy) {
+  return createTool({
+    id: 'openai_create_batch',
+    description: 'Create a batch in OpenAI',
+    inputSchema: createBatchInputSchema,
+    outputSchema: createBatchOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof createBatchOutputSchema>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const response = await platformProxy.post({
+        // https://platform.openai.com/docs/api-reference/batches/create
+        endpoint: '/v1/batches',
+        data: {
+          input_file_id: input.input_file_id,
+          endpoint: input.endpoint,
+          completion_window: input.completion_window,
+          ...(input.metadata !== undefined && { metadata: input.metadata }),
+        },
+        retries: 1,
+      });
+
+      const batch = BatchSchema.parse(response.data);
+
+      return {
+        id: batch.id,
+        object: batch.object,
+        endpoint: batch.endpoint,
+        input_file_id: batch.input_file_id,
+        completion_window: batch.completion_window,
+        status: batch.status,
+        created_at: batch.created_at,
+        ...(batch.output_file_id != null && { output_file_id: batch.output_file_id }),
+        ...(batch.error_file_id != null && { error_file_id: batch.error_file_id }),
+        ...(batch.in_progress_at != null && { in_progress_at: batch.in_progress_at }),
+        ...(batch.expires_at != null && { expires_at: batch.expires_at }),
+        ...(batch.finalizing_at != null && { finalizing_at: batch.finalizing_at }),
+        ...(batch.completed_at != null && { completed_at: batch.completed_at }),
+        ...(batch.failed_at != null && { failed_at: batch.failed_at }),
+        ...(batch.expired_at != null && { expired_at: batch.expired_at }),
+        ...(batch.cancelling_at != null && { cancelling_at: batch.cancelling_at }),
+        ...(batch.cancelled_at != null && { cancelled_at: batch.cancelled_at }),
+        ...(batch.request_counts !== undefined && { request_counts: batch.request_counts }),
+        ...(batch.metadata != null && { metadata: batch.metadata }),
+      };
+    },
+  });
+}

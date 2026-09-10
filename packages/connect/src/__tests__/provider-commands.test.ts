@@ -26,6 +26,68 @@ const action = createAction({
 export default action;
 `;
 
+const proxyConfigurationTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+import type { ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Echo a value with a typed proxy request.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const config: ProxyConfiguration = { endpoint: '/echo', data: input };
+    const response = await nango.post(config);
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const unsupportedResponseTypeTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Fetch a binary value.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/binary', data: input, responseType: 'arraybuffer' });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
+const noProxyCallTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Return a local value.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (_nango, input): Promise<z.infer<typeof OutputSchema>> => input,
+});
+
+export default action;
+`;
+
 describe('maintainer provider commands', () => {
   let packageRoot: string;
   let templateSha: string;
@@ -43,6 +105,11 @@ describe('maintainer provider commands', () => {
       const actionDir = resolve(packageRoot, '.templates', 'integrations', providerId, 'actions');
       mkdirSync(actionDir, { recursive: true });
       writeFileSync(resolve(actionDir, 'echo.ts'), actionTemplate);
+      if (providerId === 'second-provider') {
+        writeFileSync(resolve(actionDir, 'proxy-configuration.ts'), proxyConfigurationTemplate);
+        writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
+        writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
+      }
     }
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
@@ -126,7 +193,43 @@ describe('maintainer provider commands', () => {
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (1 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (4 action templates)']);
+  });
+
+  it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
+    await addProvider({
+      providerId: 'second-provider',
+      localId: 'second-provider',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generatedTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/proxy-configuration.ts'),
+      'utf8',
+    );
+    expect(generatedTool).toMatch(/import type \{[\s\S]*PlatformProxy,[\s\S]*PlatformProxyRequest,[\s\S]*\} from/);
+    expect(generatedTool).toContain('const config: PlatformProxyRequest =');
+    expect(generatedTool).not.toContain('ProxyConfiguration');
+    expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
+    expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
+      false,
+    );
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
+    ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
+    expect(manifest.toolCount).toBe(2);
+    expect(manifest.skippedActions).toEqual([
+      {
+        action: 'unsupported-no-proxy',
+        reason: 'exec does not call the provider proxy',
+      },
+      {
+        action: 'unsupported-response-type',
+        reason: 'exec uses unsupported proxy options: responseType',
+      },
+    ]);
   });
 
   it('regenerates an unmodified installed provider after confirmation', async () => {

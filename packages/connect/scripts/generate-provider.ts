@@ -46,7 +46,9 @@ import { TEMPLATE_SHA } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_CONTEXT_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'ActionError', 'log']);
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
+const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'ActionError', 'log']);
+const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
@@ -155,6 +157,10 @@ function sanitizeVendoredSource(source: string): string {
   return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
 }
 
+function replaceProxyRequestType(source: string, usesProxyRequestType: boolean): string {
+  return usesProxyRequestType ? source.replace(/\bProxyConfiguration\b/g, 'PlatformProxyRequest') : source;
+}
+
 async function formatGeneratedFiles(directory: string): Promise<void> {
   const files = readdirSync(directory, { recursive: true })
     .filter((entry): entry is string => typeof entry === 'string' && entry.endsWith('.ts'))
@@ -218,6 +224,18 @@ function extractAction(
   if (unsupportedMethods.length > 0) {
     return { kind: 'skip', reason: `exec uses unsupported template SDK helpers: ${unsupportedMethods.join(', ')}` };
   }
+  const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
+    new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
+  );
+  if (!usesProviderProxy) {
+    return { kind: 'skip', reason: 'exec does not call the provider proxy' };
+  }
+  const unsupportedProxyOptions = UNSUPPORTED_PROXY_OPTIONS.filter(option =>
+    new RegExp(`\\b${option}\\s*:`).test(originalExecBody),
+  );
+  if (unsupportedProxyOptions.length > 0) {
+    return { kind: 'skip', reason: `exec uses unsupported proxy options: ${unsupportedProxyOptions.join(', ')}` };
+  }
 
   const actionName = toCamel(candidate.actionSlug);
   const inputSchemaName = `${actionName}InputSchema`;
@@ -229,9 +247,13 @@ function extractAction(
 
   // Rename template SDK bindings to their platform equivalents so the
   // generated module never references the upstream SDK by name.
-  const templateSdkImport = source.getImportDeclaration(TEMPLATE_SDK_MODULE);
-  const usesProxyRequestType = Boolean(templateSdkImport && usesNamedImport(templateSdkImport, 'ProxyConfiguration'));
-  if (templateSdkImport) {
+  const templateSdkImports = source
+    .getImportDeclarations()
+    .filter(declaration => declaration.getModuleSpecifierValue() === TEMPLATE_SDK_MODULE);
+  const usesProxyRequestType = templateSdkImports.some(declaration =>
+    usesNamedImport(declaration, 'ProxyConfiguration'),
+  );
+  for (const templateSdkImport of templateSdkImports) {
     for (const namedImport of templateSdkImport.getNamedImports()) {
       const nameNode = namedImport.getNameNode();
       if (namedImport.getName() === 'ProxyConfiguration' && Node.isIdentifier(nameNode)) {
@@ -249,14 +271,19 @@ function extractAction(
   }
 
   const renamedExecBodyNode = execInitializer.getBody();
-  const execBody = sanitizeVendoredSource(
-    Node.isBlock(renamedExecBodyNode) ? renamedExecBodyNode.getText() : `{ return ${renamedExecBodyNode.getText()}; }`,
+  const execBody = replaceProxyRequestType(
+    sanitizeVendoredSource(
+      Node.isBlock(renamedExecBodyNode)
+        ? renamedExecBodyNode.getText()
+        : `{ return ${renamedExecBodyNode.getText()}; }`,
+    ),
+    usesProxyRequestType,
   );
 
   const moduleStatements = source
     .getStatements()
     .filter(statement => shouldKeepStatement(statement, createActionCall))
-    .map(statement => sanitizeVendoredSource(statement.getText()));
+    .map(statement => replaceProxyRequestType(sanitizeVendoredSource(statement.getText()), usesProxyRequestType));
 
   return {
     kind: 'ok',
