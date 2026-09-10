@@ -348,12 +348,14 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
-    case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+    case 'tool_end': {
+      const ended = withTool(state, event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
       }));
+      return dropPromptsFor(ended, event.toolCallId);
+    }
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -490,15 +492,18 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       };
     }
 
-    // Canonical display-state snapshot — carries the status-line figures
-    // (OM msg/mem budgets and cumulative token usage).
+    // Canonical display-state snapshot: the status-line figures, and what the run has in flight.
     case 'display_state_changed': {
       const ds = event.displayState;
-      return {
-        ...state,
-        omProgress: ds.omProgress ?? state.omProgress,
-        usage: ds.tokenUsage ?? state.usage,
-      };
+      return seedFromDisplayState(
+        {
+          ...state,
+          omProgress: ds.omProgress ?? state.omProgress,
+          usage: ds.tokenUsage ?? state.usage,
+          followUpCount: ds.queuedFollowUps ?? state.followUpCount,
+        },
+        ds,
+      );
     }
 
     // Follow-up queue.
@@ -1256,6 +1261,80 @@ function toolPart(tool: ToolCall): MastraMessagePart {
 function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptState {
   if (state.entries.some(e => 'id' in e && e.id === prompt.id)) return state;
   return { ...state, entries: [...state.entries, prompt] };
+}
+
+/** A prompt answered elsewhere (another tab, the TUI) never gets a local resolve; its call ending is the signal. */
+function dropPromptsFor(state: TranscriptState, toolCallId: string): TranscriptState {
+  const entries = state.entries.filter(
+    e => !((e.kind === 'approval' || e.kind === 'suspension') && e.toolCallId === toolCallId),
+  );
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+type DisplayStateSnapshot = Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState'];
+
+/**
+ * What the run has in flight, for a subscriber that missed the events: running tools, parked
+ * prompts, running subagents. What is on screen wins, so a done tool never goes back to running.
+ */
+function seedFromDisplayState(state: TranscriptState, ds: DisplayStateSnapshot): TranscriptState {
+  let next = state;
+
+  for (const [toolCallId, tool] of Object.entries(ds.activeTools)) {
+    if (tool.status === 'completed' || tool.status === 'error') continue;
+    next = withTool(
+      next,
+      toolCallId,
+      t =>
+        t.status === 'running'
+          ? {
+              ...t,
+              toolName: tool.name,
+              args: t.args ?? tool.args,
+              result: t.result ?? tool.partialResult,
+              createdAt: t.createdAt ?? Date.now(),
+            }
+          : t,
+      { toolName: tool.name, args: tool.args },
+    );
+  }
+
+  if (ds.pendingApproval) {
+    const { toolCallId, toolName, args } = ds.pendingApproval;
+    next = pushPrompt(next, { kind: 'approval', id: `approval-${toolCallId}`, toolCallId, toolName, args });
+  }
+  for (const suspension of Object.values(ds.pendingSuspensions)) {
+    next = pushPrompt(next, {
+      kind: 'suspension',
+      id: `suspension-${suspension.toolCallId}`,
+      toolCallId: suspension.toolCallId,
+      toolName: suspension.toolName,
+      args: suspension.args,
+      suspendPayload: suspension.suspendPayload,
+    });
+  }
+
+  for (const [toolCallId, subagent] of Object.entries(ds.activeSubagents)) {
+    const id = `subagent-${toolCallId}`;
+    if (subagent.status !== 'running' || next.entries.some(e => e.kind === 'subagent' && e.id === id)) continue;
+    next = {
+      ...next,
+      entries: [
+        ...next.entries,
+        {
+          kind: 'subagent',
+          id,
+          toolCallId,
+          agentType: subagent.agentType,
+          task: subagent.task,
+          modelId: subagent.modelId ?? '',
+          done: false,
+        },
+      ],
+    };
+  }
+
+  return next;
 }
 
 function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {

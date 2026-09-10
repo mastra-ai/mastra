@@ -2744,7 +2744,8 @@ export class SessionBus {
   }
 
   subscribe(listener: AgentControllerEventListener): () => void {
-    for (const event of [...this.#lastWorkspaceEvents, ...this.#inFlightMessageEvents()]) {
+    const replay = [...this.#lastWorkspaceEvents, ...this.#inFlightMessageEvents(), ...this.#displayStateEvent()];
+    for (const event of replay) {
       this.#deliver(listener, event);
     }
     this.#listeners.push(listener);
@@ -2839,6 +2840,11 @@ export class SessionBus {
     const events: AgentControllerEvent[] = ended.map(message => ({ type: 'message_end', message }));
     if (streaming) events.push({ type: 'message_update', message: streaming });
     return events;
+  }
+
+  #displayStateEvent(): AgentControllerEvent[] {
+    const displayState = this.#displayState;
+    return displayState ? [{ type: 'display_state_changed', displayState: displayState.get() }] : [];
   }
 
   #dispatch(event: AgentControllerEvent): void {

@@ -637,18 +637,16 @@ describe('agent-controller routes', () => {
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
 
-      let received: unknown;
-      for (let i = 0; i < 10 && received === undefined; i++) {
+      // The subscribe-time snapshot carries no tool yet; wait for the one that does.
+      let wire: { displayState: { activeTools: Record<string, unknown> } } | undefined;
+      for (let i = 0; i < 10 && wire === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
-          received = value;
-        }
+        const frame = JSON.parse(JSON.stringify(value));
+        if (frame?.type === 'display_state_changed' && frame.displayState.activeTools['call-1']) wire = frame;
       }
       await reader.cancel();
 
-      expect(received).toBeDefined();
-      const wire = JSON.parse(JSON.stringify(received));
-      expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+      expect(wire?.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });
   });
 

@@ -122,7 +122,7 @@ function checkoutAgent(storage: InMemoryStore, checkout: Gate, toolStarted: Gate
 }
 
 describe('a browser stream opened while a real tool is executing', () => {
-  it('opens with the prompt and the step in flight, then streams the completion', async () => {
+  it('opens with the prompt, the step in flight and the display state, then streams the completion', async () => {
     const checkout = gate();
     const toolStarted = gate();
     const storage = new InMemoryStore();
@@ -145,7 +145,7 @@ describe('a browser stream opened while a real tool is executing', () => {
       await vi.waitFor(() => expect(session.displayState.get().activeTools.get('checkout-1')?.status).toBe('running'));
 
       reader = await openSessionStream(mastra);
-      const opening = await readUntil(reader, event => event.type === 'message_update');
+      const opening = await readUntil(reader, event => event.type === 'display_state_changed');
       expect(opening.filter(isMessageEvent)).toMatchObject([
         {
           type: 'message_end',
@@ -166,6 +166,10 @@ describe('a browser stream opened while a real tool is executing', () => {
           },
         },
       ]);
+      expect(opening.at(-1)).toMatchObject({
+        type: 'display_state_changed',
+        displayState: { isRunning: true, activeTools: { 'checkout-1': { status: 'running' } } },
+      });
 
       checkout.open();
       await run;
@@ -179,6 +183,12 @@ describe('a browser stream opened while a real tool is executing', () => {
       reader = await openSessionStream(mastra);
       const afterRun = await readFor(reader, 50);
       expect(afterRun.filter(isMessageEvent)).toEqual([]);
+      expect(afterRun).toContainEqual(
+        expect.objectContaining({
+          type: 'display_state_changed',
+          displayState: expect.objectContaining({ isRunning: false }),
+        }),
+      );
     } finally {
       checkout.open();
       await run;
