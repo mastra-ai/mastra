@@ -12,7 +12,6 @@ import type { DatasetTargetType } from './target-type-options';
 export interface CreateDatasetFormProps {
   onSuccess: (datasetId: string) => void;
   onCancel: () => void;
-  /** If provided, auto-attaches the dataset to this target on create */
   targetType?: DatasetTargetType;
   targetIds?: string[];
 }
@@ -46,7 +45,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     }
 
     try {
-      const result = (await createDataset.mutateAsync({
+      const result = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
@@ -55,7 +54,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         targetType,
         targetIds,
         scorerIds: scorerIds.length > 0 ? scorerIds : undefined,
-      })) as { id: string };
+      });
 
       toast.success('Dataset created successfully');
 

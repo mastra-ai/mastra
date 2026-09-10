@@ -233,6 +233,34 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('Co-Authored-By: mastra-platform[bot] ()');
   });
 
+  it.each([
+    [
+      { name: 'mastracode', email: undefined },
+      'Co-Authored-By: mastracode <284800079+mastra-platform[bot]@users.noreply.github.com>',
+    ],
+    [{ name: undefined, email: 'custom@example.test' }, 'Co-Authored-By: mastra-platform[bot] <custom@example.test>'],
+    [{ name: 'custom', email: 'custom@example.test' }, 'Co-Authored-By: custom <custom@example.test>'],
+  ])('uses configured co-author fields with defaults for omitted fields', (coAuthor, trailer) => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      coAuthorName: coAuthor.name,
+      coAuthorEmail: coAuthor.email,
+      state: { permissionRules: { tools: {} } },
+    });
+
+    expect(prompt).toContain(trailer);
+    expect(prompt).not.toContain('(openai/');
+  });
+
   it('includes common binary availability in environment details', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',

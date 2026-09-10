@@ -1585,6 +1585,173 @@ describe('Scorer Utils', () => {
   });
 
   describe('checkTrajectoryEfficiency', () => {
+    it.each([undefined, NaN, Infinity, -1])('rejects missing or invalid token counts: %s', count => {
+      for (const field of ['promptTokens', 'completionTokens'] as const) {
+        const trajectory: Trajectory = {
+          steps: [
+            { stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0, [field]: count },
+          ],
+        };
+        expect(() => checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toThrow(/token/i);
+      }
+    });
+
+    it.each([{ steps: [] }, { steps: [{ stepType: 'tool_call' as const, name: 'search' }] }])(
+      'rejects a token budget without model-generation evidence',
+      ({ steps }) => {
+        expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalTokens: 10 })).toThrow(/token/i);
+      },
+    );
+
+    it.each([undefined, NaN, Infinity, -1])('rejects missing or invalid duration: %s', duration => {
+      const steps: Trajectory['steps'] = [{ stepType: 'tool_call', name: 'search', durationMs: duration }];
+      expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalDurationMs: 10 })).toThrow(/duration/i);
+      if (duration !== undefined) {
+        expect(() =>
+          checkTrajectoryEfficiency(
+            { steps: [{ ...steps[0]!, durationMs: 0 }], totalDurationMs: duration },
+            { maxTotalDurationMs: 10 },
+          ),
+        ).toThrow(/duration/i);
+      }
+    });
+
+    it('rejects empty or partially measured duration fallback', () => {
+      for (const steps of [
+        [],
+        [
+          { stepType: 'tool_call' as const, name: 'a', durationMs: 0 },
+          { stepType: 'tool_call' as const, name: 'b' },
+        ],
+      ]) {
+        expect(() => checkTrajectoryEfficiency({ steps }, { maxTotalDurationMs: 10 })).toThrow(/duration/i);
+      }
+    });
+
+    it('preserves measured zeros and checks positive usage against a zero budget', () => {
+      const trajectory: Trajectory = {
+        steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }],
+        totalDurationMs: 0,
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 0, maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(checkTrajectoryEfficiency({ steps: [], totalDurationMs: 0 }, { maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(
+        checkTrajectoryEfficiency(
+          {
+            steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 1, completionTokens: 0 }],
+            totalDurationMs: 1,
+          },
+          { maxTotalTokens: 0, maxTotalDurationMs: 0, noRedundantCalls: false },
+        ).score,
+      ).toBe(0);
+    });
+
+    it('counts nested model generations once and rejects incomplete nested counts', () => {
+      const nested: Trajectory['steps'][number] = {
+        stepType: 'model_generation',
+        name: 'inner',
+        promptTokens: 20,
+        completionTokens: 30,
+      };
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'model_generation',
+            name: 'outer',
+            promptTokens: 2,
+            completionTokens: 3,
+            children: [
+              {
+                stepType: 'tool_call',
+                name: 'delegate',
+                children: [{ stepType: 'agent_run', name: 'agent', children: [nested] }],
+              },
+            ],
+          },
+        ],
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toMatchObject({
+        totalTokens: 55,
+        overTokenBudget: true,
+      });
+      nested.completionTokens = undefined;
+      expect(() => checkTrajectoryEfficiency(trajectory, { maxTotalTokens: 10 })).toThrow(/token/i);
+    });
+
+    it('uses top-level duration without adding nested durations', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run',
+            name: 'agent',
+            durationMs: 10,
+            children: [{ stepType: 'tool_call', name: 'search', durationMs: 8 }],
+          },
+          { stepType: 'tool_call', name: 'finish', durationMs: 2 },
+        ],
+      };
+      expect(checkTrajectoryEfficiency(trajectory, { maxTotalDurationMs: 12 }).totalDurationMs).toBe(12);
+      expect(
+        checkTrajectoryEfficiency({ ...trajectory, totalDurationMs: 5 }, { maxTotalDurationMs: 5 }).totalDurationMs,
+      ).toBe(5);
+    });
+
+    it('does not require measurements for unrelated checks', () => {
+      const unknown: Trajectory = { steps: [{ stepType: 'model_generation', name: 'model' }] };
+      expect(checkTrajectoryEfficiency(unknown, { maxSteps: 1 }).score).toBe(1);
+      expect(checkTrajectoryEfficiency(unknown).score).toBe(1);
+      expect(checkTrajectoryEfficiency({ ...unknown, totalDurationMs: 0 }, { maxTotalDurationMs: 0 }).score).toBe(1);
+      expect(
+        checkTrajectoryEfficiency(
+          { steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }] },
+          { maxTotalTokens: 0 },
+        ).score,
+      ).toBe(1);
+    });
+
+    it.each([NaN, Infinity, -1])('rejects invalid configured limits: %s', limit => {
+      for (const field of ['maxSteps', 'maxTotalTokens', 'maxTotalDurationMs'] as const) {
+        expect(() =>
+          checkTrajectoryEfficiency(
+            {
+              steps: [{ stepType: 'model_generation', name: 'model', promptTokens: 0, completionTokens: 0 }],
+              totalDurationMs: 0,
+            },
+            { [field]: limit },
+          ),
+        ).toThrow(/budget/i);
+      }
+    });
+
+    it('rejects non-finite measurement totals', () => {
+      expect(() =>
+        checkTrajectoryEfficiency(
+          {
+            steps: [
+              {
+                stepType: 'model_generation',
+                name: 'model',
+                promptTokens: Number.MAX_VALUE,
+                completionTokens: Number.MAX_VALUE,
+              },
+            ],
+          },
+          { maxTotalTokens: 10 },
+        ),
+      ).toThrow(/token/i);
+      expect(() =>
+        checkTrajectoryEfficiency(
+          {
+            steps: [
+              { stepType: 'tool_call', name: 'a', durationMs: Number.MAX_VALUE },
+              { stepType: 'tool_call', name: 'b', durationMs: Number.MAX_VALUE },
+            ],
+          },
+          { maxTotalDurationMs: 10 },
+        ),
+      ).toThrow(/duration/i);
+    });
+
     it('should return score 1.0 when all budgets are met and no redundancy', () => {
       const trajectory: Trajectory = {
         steps: [

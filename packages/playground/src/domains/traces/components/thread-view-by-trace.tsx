@@ -1,5 +1,7 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -13,14 +15,16 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MessageSquare } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
+import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { useExpandedSpanIds } from '@/domains/traces/hooks/use-expanded-span-ids';
 import { useThreadRailTurns } from '@/domains/traces/hooks/use-thread-rail-turns';
+import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useVisibleTraceRows } from '@/domains/traces/hooks/use-visible-trace-rows';
 
 export interface ThreadViewByTraceProps {
@@ -131,16 +135,16 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
     if (!spanId) setHighlight(null);
   };
 
+  // Fades the other spans and brings the last (most specific, deepest) span into view, since it is
+  // the one most likely to sit below the fold. Opening a span's detail panel stays a separate,
+  // deliberate click so highlighting does not hijack the side panel.
   const highlightSpans = (traceId: string, spanIds: string[]) => {
-    const lastSpanId = spanIds.at(-1);
-    if (!lastSpanId) {
+    if (spanIds.length === 0) {
       setHighlight(null);
       return;
     }
     setHighlight({ traceId, spanIds });
-    // Open the detail panel on the last highlighted span: the first is always the root, the
-    // last is the deepest step behind the message. The timeline scrolls the selected row into view.
-    selectSpan(traceId, lastSpanId);
+    setTraceExpanded(traceId, true);
   };
 
   return (
@@ -151,7 +155,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
       )}
     >
       <div ref={listRef} className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
-        <div className="relative min-h-full py-4">
+        <div className="relative min-h-full pb-4">
           {/* Same rail as the chat page: one stop per turn, pinned mid-height while the page scrolls. */}
           <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
             <ThreadRail
@@ -170,9 +174,9 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
               key={trace.traceId}
               traceId={trace.traceId}
               isFirst={index === 0}
-              isLast={index === traces.length - 1}
               selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
+              revealSpanId={highlight?.traceId === trace.traceId ? highlight.spanIds.at(-1) : undefined}
               isCurrent={currentTraceId === trace.traceId}
               isExpanded={expandedTraceIds.has(trace.traceId)}
               isAnchor={anchorTraceId === trace.traceId}
@@ -196,16 +200,17 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
   );
 }
 
+type TraceRowTab = 'spans' | 'feedback';
+
 interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
   featuredSpanIds?: string[];
+  revealSpanId?: string;
   isCurrent: boolean;
   isExpanded: boolean;
-  /** The oldest trace; its timeline column gets the rounded top edge of the list. */
+  /** The oldest trace; its timeline column gets the top border of the list. */
   isFirst: boolean;
-  /** The newest trace; its timeline column gets the rounded bottom edge. Can be the same row as `isFirst`. */
-  isLast: boolean;
   /** The row the reader came from via "View full thread"; scrolled into view once it mounts. */
   isAnchor: boolean;
   onExpandedChange: (expanded: boolean) => void;
@@ -222,10 +227,10 @@ function TraceThreadRow({
   traceId,
   selectedSpanId,
   featuredSpanIds,
+  revealSpanId,
   isCurrent,
   isExpanded,
   isFirst,
-  isLast,
   isAnchor,
   onExpandedChange,
   onSpanSelect,
@@ -238,7 +243,9 @@ function TraceThreadRow({
 
   const { expandedSpanIds, setExpandedSpanIds } = useExpandedSpanIds(hierarchicalSpans);
 
-  const [showFeedback, setShowFeedback] = useState(false);
+  // First page only, for the tab badge; the Feedback tab body owns its own pagination and
+  // shares this query through the React Query cache.
+  const { data: feedbackData } = useTraceFeedback({ traceId });
 
   // The whole row is dimmed unless it is the first one in view, hovered, or its span is open in
   // the side panel, so the reader keeps track of which turn they are on without hovering.
@@ -249,90 +256,121 @@ function TraceThreadRow({
   // clamp only makes sense when the timeline actually overflows.
   const messages = useMeasuredAutoHeight<HTMLDivElement>();
   const timeline = useMeasuredAutoHeight<HTMLDivElement>();
-  const overflows = messages.height !== null && timeline.height !== null && timeline.height > messages.height;
+  const tabsHeader = useMeasuredAutoHeight<HTMLDivElement>();
+  // The tab header sits above the timeline, so the timeline budget is what's left of the
+  // messages height once the header is taken out — otherwise the right cell overshoots the left.
+  const timelineBudget =
+    messages.height !== null && tabsHeader.height !== null ? messages.height - tabsHeader.height : null;
+  const overflows = timelineBudget !== null && timeline.height !== null && timeline.height > timelineBudget;
   const isClamped = overflows && !isExpanded;
+
+  // Controlled so a highlight can bring the span tree back: the timeline is unmounted on the
+  // Feedback tab, and a highlight nobody can see is just a no-op.
+  const [tab, setTab] = useState<TraceRowTab>('spans');
+  const highlightSpans = useCallback(
+    (spanIds: string[]) => {
+      setTab('spans');
+      onHighlightSpans(spanIds);
+    },
+    [onHighlightSpans],
+  );
 
   return (
     <div
       className={cn(
         'group grid grid-cols-[1fr_1fr] pr-4 pl-14 transition-opacity hover:opacity-100',
-        isActive || isCurrent || showFeedback ? 'opacity-100' : 'opacity-50',
+        isActive || isCurrent ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
       ref={isAnchor ? scrollIntoViewOnMount : undefined}
     >
       {/* The messages column has no borders so consecutive turns read as one continuous
-          conversation; the timeline column carries the divider and the bottom border. */}
-      <div className="relative min-h-[240px] min-w-0 pr-4">
+          conversation; the timeline column carries the borders. */}
+      <div className="relative min-w-0 pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
-        <div ref={messages.ref} className="sticky top-0 flex flex-col gap-2 py-4" data-testid="trace-row-messages">
-          <div
-            className={cn(
-              'z-30 flex items-center gap-1 transition-opacity',
-              showFeedback ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-            )}
-          >
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              tooltip="Feedback"
-              aria-label="Toggle feedback"
-              onClick={() => setShowFeedback(v => !v)}
-            >
-              <MessageSquare />
-            </Button>
-          </div>
-          <div className="min-h-0">
-            <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
-          </div>
-          {showFeedback && (
-            <div className="border-border1 bg-surface3 absolute top-12 left-0 z-20 w-80 overflow-y-auto rounded-lg border shadow-lg">
-              <TraceFeedbackTab key={traceId} traceId={traceId} variant="embed" />
-            </div>
-          )}
+        <div ref={messages.ref} className="sticky top-0 py-4" data-testid="trace-row-messages">
+          <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </div>
       </div>
-      <div
+      <Tabs<TraceRowTab>
+        defaultTab="spans"
+        value={tab}
+        onValueChange={setTab}
         className={cn(
-          'border-border1 min-w-0 overflow-hidden border-b border-l',
-          isFirst && 'rounded-tl-xl border-t',
-          isLast && 'rounded-bl-xl',
+          'border-border1 min-w-0 overflow-hidden border-x border-b group-last:rounded-b-xl',
+          // While collapsed the messages column alone sets the row height: `h-0` keeps this
+          // cell out of the grid's row sizing (so measurement rounding can't nudge the row by
+          // a pixel between tabs) and `min-h-full` stretches it back to the row afterwards.
+          !isExpanded && 'h-0 min-h-full',
+          isFirst && 'rounded-t-xl border-t',
         )}
       >
-        <div
-          className="relative overflow-hidden"
-          style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
-          data-testid="trace-row-timeline"
-        >
-          <div ref={timeline.ref} className="py-4 pl-4">
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              selectedSpanId={selectedSpanId}
-              featuredSpanIds={featuredSpanIds}
-              onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-              isLoading={isLoading}
-            />
+        {/* Same header/tab layout as the traces page so both surfaces read identically. */}
+        <div ref={tabsHeader.ref}>
+          {/* Explicit border: the measuring wrapper makes the header the "last" child. */}
+          <DataPanel.Header className="border-border1 min-h-0 border-b py-1.5">
+            <TabList variant="pill-ghost" className="px-0">
+              <Tab value="spans">Spans</Tab>
+              <Tab value="feedback">
+                Feedback
+                <NeedsReviewDot feedback={feedbackData?.feedback} />
+              </Tab>
+            </TabList>
+            <Button
+              as={Link}
+              to={`/traces?traceId=${encodeURIComponent(traceId)}`}
+              variant="ghost"
+              size="md"
+              className="shrink-0"
+            >
+              <ExternalLinkIcon />
+              Go to trace
+            </Button>
+          </DataPanel.Header>
+        </div>
+        <TabContent value="spans" className="min-h-0 py-0">
+          {/* The clamp is applied whenever the row is collapsed, not only once `overflows` is known:
+              the timeline remounts on every tab switch and its measurement lags a frame, which
+              would otherwise let the cell grow and snap back. A short timeline ignores it anyway. */}
+          <div
+            className="relative overflow-hidden"
+            style={!isExpanded && timelineBudget !== null ? { maxHeight: timelineBudget } : undefined}
+            data-testid="trace-row-timeline"
+          >
+            <div ref={timeline.ref} className="px-4 pt-2 pb-4">
+              <TraceTimeline
+                hierarchicalSpans={hierarchicalSpans}
+                selectedSpanId={selectedSpanId}
+                featuredSpanIds={featuredSpanIds}
+                revealSpanId={revealSpanId}
+                onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
+                expandedSpanIds={expandedSpanIds}
+                setExpandedSpanIds={setExpandedSpanIds}
+                isLoading={isLoading}
+              />
+            </div>
+            {overflows && isClamped && (
+              <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
+                <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
+                  Show more
+                </Button>
+              </div>
+            )}
           </div>
-          {overflows && isClamped && (
-            <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
-              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
-                Show more
+          {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
+          {overflows && !isClamped && !isActive && (
+            <div className="flex justify-center py-2">
+              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
+                Show less
               </Button>
             </div>
           )}
-        </div>
-        {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
-        {overflows && !isClamped && !isActive && (
-          <div className="flex justify-center py-2">
-            <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
-              Show less
-            </Button>
-          </div>
-        )}
-      </div>
+        </TabContent>
+        <TabContent value="feedback" className="min-h-0 pt-2 pb-4">
+          <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+        </TabContent>
+      </Tabs>
     </div>
   );
 }
@@ -349,15 +387,17 @@ function ThreadSpanPanel({ traceId, spanId, onSpanSelect }: ThreadSpanPanelProps
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceData?.spans, spanId, onSpanSelect);
 
   return (
-    <SpanDataPanelView
-      className="border-border1 h-full rounded-none border-0 border-l"
-      traceId={traceId}
-      spanId={spanId}
-      span={spanDetailData?.span}
-      isLoading={isLoading}
-      onClose={() => onSpanSelect(undefined)}
-      onPrevious={handlePreviousSpan}
-      onNext={handleNextSpan}
-    />
+    <div className="min-h-0 min-w-0 pr-4 pb-4">
+      <SpanDataPanelView
+        className="h-full"
+        traceId={traceId}
+        spanId={spanId}
+        span={spanDetailData?.span}
+        isLoading={isLoading}
+        onClose={() => onSpanSelect(undefined)}
+        onPrevious={handlePreviousSpan}
+        onNext={handleNextSpan}
+      />
+    </div>
   );
 }
