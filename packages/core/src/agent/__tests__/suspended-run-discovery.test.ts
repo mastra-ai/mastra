@@ -339,6 +339,83 @@ describe('suspended-run discovery', () => {
       expect((await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2 })).runs).toHaveLength(3);
     }, 30000);
 
+    it('scans bounded storage pages while filtering and counting across workflow names', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const seedRun = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(seedRun).not.toBeNull();
+      const seedSnapshot = seedRun!.snapshot as WorkflowRunState;
+      type StoredRun = Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'][number];
+
+      const createRun = (runId: string, snapshot: WorkflowRunState | string, workflowName = 'agentic-loop') =>
+        ({
+          runId,
+          workflowName,
+          resourceId: 'resource-1',
+          snapshot,
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        }) satisfies StoredRun;
+      const snapshotForAgent = (agentId: string) => {
+        const snapshot = structuredClone(seedSnapshot);
+        for (const key in snapshot.context) {
+          const step = snapshot.context[key];
+          if (step?.status === 'suspended' && step.suspendPayload) {
+            step.suspendPayload.__agentId = agentId;
+          }
+        }
+        return snapshot;
+      };
+      const unrelatedRuns = Array.from({ length: 100 }, (_, index) =>
+        createRun(`other-${index}`, snapshotForAgent('other-agent')),
+      );
+      const runningSnapshot = structuredClone(seedSnapshot);
+      runningSnapshot.status = 'running';
+      const regularRuns = [
+        ...unrelatedRuns,
+        createRun('regular-first', structuredClone(seedSnapshot)),
+        createRun('regular-second', JSON.stringify(seedSnapshot)),
+        createRun('malformed', '{'),
+        createRun('not-suspended', runningSnapshot),
+        ...Array.from({ length: 96 }, (_, index) => createRun(`other-late-${index}`, snapshotForAgent('other-agent'))),
+        createRun('regular-third', structuredClone(seedSnapshot)),
+      ];
+      const durableRuns = [createRun('durable-first', structuredClone(seedSnapshot), DurableStepIds.AGENTIC_LOOP)];
+      const runsByWorkflow = new Map([
+        ['agentic-loop', regularRuns],
+        [DurableStepIds.AGENTIC_LOOP, durableRuns],
+      ]);
+      const listSpy = vi.spyOn(workflowsStore, 'listWorkflowRuns').mockImplementation(async args => {
+        const workflowRuns = runsByWorkflow.get(args?.workflowName!) ?? [];
+        const currentPage = args?.page ?? 0;
+        const currentPerPage = args?.perPage ?? workflowRuns.length;
+        if (typeof currentPerPage !== 'number') throw new Error('expected numeric storage page size');
+
+        return {
+          runs: workflowRuns.slice(currentPage * currentPerPage, (currentPage + 1) * currentPerPage),
+          total: workflowRuns.length,
+        };
+      });
+
+      const firstPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 1, page: 0 });
+      expect(firstPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-first' }] });
+      expect(listSpy.mock.calls.map(([args]) => [args.workflowName, args.page, args.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        ['agentic-loop', 2, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
+      expect(listSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'suspended', resourceId: 'resource-1', perPage: 100 }),
+      );
+
+      listSpy.mockClear();
+      const secondPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2, page: 1 });
+      expect(secondPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-third' }, { runId: 'durable-first' }] });
+    }, 30000);
+
     it('only returns runs owned by the listing agent', async () => {
       const storage = new InMemoryStore();
       const agentA = new Agent({
