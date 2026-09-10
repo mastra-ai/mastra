@@ -2,4 +2,4 @@
 '@mastra/schema-compat': patch
 ---
 
-Removed redundant type assertions without changing runtime behavior or public types.
+Preserved existing schema compatibility behavior and public types; no integration changes are needed.
