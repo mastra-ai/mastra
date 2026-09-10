@@ -21,6 +21,8 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import { isMCPToolV2 } from '../mcp/native-tool';
+import type { NonNativeMCPTool } from '../mcp/native-tool';
 import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
@@ -361,7 +363,7 @@ export function createStep<
   TId extends string,
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> & NonNativeMCPTool,
   toolOptions?: {
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
@@ -433,6 +435,9 @@ export function createStep<
 // ============================================
 
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
+  if (isMCPToolV2(params)) {
+    throw new Error('Native MCP tools cannot be used as workflow steps');
+  }
   // Type assertions are needed because each branch returns a different Step type,
   // but the overloads ensure type safety for consumers
   if (isAgentCompatible(params)) {

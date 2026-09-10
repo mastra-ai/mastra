@@ -36,6 +36,7 @@ import type { IMastraLogger } from '../logger';
 import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
+import type { NonNativeMCPTool } from '../mcp/native-tool';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { NotificationDeliveryPolicyConfig } from '../notifications/delivery-policy';
@@ -121,7 +122,14 @@ type ProviderDefinedToolInput = ProviderDefinedTool & { id: string };
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedToolInput | WebSearchToolPlaceholder
+  (
+    | ToolAction<any, any, any, any, any>
+    | VercelTool
+    | VercelToolV5
+    | ProviderDefinedToolInput
+    | WebSearchToolPlaceholder
+  ) &
+    NonNativeMCPTool
 >;
 
 export type AgentInstructions = SystemMessage;

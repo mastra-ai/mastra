@@ -4,7 +4,7 @@ import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MCPServerBase } from '../mcp';
+import type { MCPServerRegistryEntry } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
@@ -329,9 +329,9 @@ export interface IEditorMCPNamespace {
 // ============================================================================
 
 export interface IEditorMCPServerNamespace {
-  create(input: StorageCreateMCPServerInput): Promise<MCPServerBase>;
-  getById(id: string, options?: GetByIdOptions): Promise<MCPServerBase | null>;
-  update(input: StorageUpdateMCPServerInput): Promise<MCPServerBase>;
+  create(input: StorageCreateMCPServerInput): Promise<MCPServerRegistryEntry>;
+  getById(id: string, options?: GetByIdOptions): Promise<MCPServerRegistryEntry | null>;
+  update(input: StorageUpdateMCPServerInput): Promise<MCPServerRegistryEntry>;
   delete(id: string): Promise<void>;
   list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput>;
   listResolved(args?: StorageListMCPServersInput): Promise<StorageListMCPServersResolvedOutput>;

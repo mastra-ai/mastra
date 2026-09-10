@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MCPServer, MCPClient } from '@mastra/mcp';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { NativeMCPFixture } from './native-mcp-fixture';
 
 /**
  * Configuration for MCP transport test suite
@@ -151,6 +152,7 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         mcpServers: {
           'test-server-1': mcpServer1,
           'test-server-2': mcpServer2,
+          'native-fixture': new NativeMCPFixture(),
         },
       });
 
@@ -178,6 +180,37 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       await mcpServer1?.close();
       await mcpServer2?.close();
     }, 30000);
+
+    describe('native MCP v2 adapter dispatch', () => {
+      it('dispatches HTTP without legacy transport options', async () => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/mcp`, { method: 'POST' });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ native: true, hasLegacyOptions: false });
+      });
+
+      it.each([
+        { path: 'sse', method: 'GET' },
+        { path: 'messages', method: 'POST' },
+      ])('rejects the legacy $path route for a native server', async ({ path, method }) => {
+        const response = await fetch(`http://localhost:${port}/api/mcp/native-fixture/${path}`, { method });
+        expect(response.status).toBe(404);
+      });
+
+      it('executes ordinary tools without a legacy context and reports unsupported native REST interaction', async () => {
+        const base = `http://localhost:${port}/api/mcp/native-fixture/tools`;
+        const init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: {} }),
+        };
+        const ordinary = await fetch(`${base}/ordinary/execute`, init);
+        expect(ordinary.status).toBe(200);
+        expect(await ordinary.json()).toEqual({ result: { hasLegacyContext: false } });
+        const native = await fetch(`${base}/interaction/execute`, init);
+        expect(native.status).toBe(422);
+        expect(await native.text()).toContain('Native MCP interaction requires an MCP protocol client');
+      });
+    });
 
     describe('HTTP Transport (/api/mcp/:serverId/mcp)', () => {
       describe('Error handling (raw HTTP)', () => {

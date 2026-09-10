@@ -1,3 +1,4 @@
+import { isMCPServerV2 } from '@mastra/core/mcp';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -255,7 +256,7 @@ export class StreamingInterceptor implements NestInterceptor {
         httpPath: `${this.normalizedPrefix}${httpPath}`,
         req: request,
         res: response,
-        options: Object.keys(options).length > 0 ? options : undefined,
+        ...(isMCPServerV2(server) ? {} : { options: Object.keys(options).length > 0 ? options : undefined }),
       });
       // Response handled by startHTTP. Keep the interceptor alive until the response finishes.
       await new Promise<void>(resolve => {

@@ -39,7 +39,9 @@ import {
   createExportSuppressedLogger,
 } from '../logger';
 import type { IMastraLogger, LoggerAdapterOptions } from '../logger';
-import type { MCPServerBase } from '../mcp';
+import { isMCPToolV2 } from '../mcp/native-tool';
+import type { NonNativeMCPTool } from '../mcp/native-tool';
+import type { MCPServerRegistryEntry } from '../mcp/server-v2';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
@@ -258,9 +260,9 @@ export interface Config<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
+  TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any> & NonNativeMCPTool> = Record<
     string,
     ToolAction<any, any, any, any, any, any>
   >,
@@ -729,9 +731,9 @@ export class Mastra<
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
-  TMCPServers extends Record<string, MCPServerBase<any>> = Record<string, MCPServerBase<any>>,
+  TMCPServers extends Record<string, MCPServerRegistryEntry> = Record<string, MCPServerRegistryEntry>,
   TScorers extends Record<string, MastraScorer<any, any, any, any>> = Record<string, MastraScorer<any, any, any, any>>,
-  TTools extends Record<string, ToolAction<any, any, any, any, any, any>> = Record<
+  TTools extends Record<string, ToolAction<any, any, any, any, any, any> & NonNativeMCPTool> = Record<
     string,
     ToolAction<any, any, any, any, any, any>
   >,
@@ -4435,9 +4437,12 @@ export class Mastra<
    * mastra.addTool(newTool, 'customKey'); // Uses custom key
    * ```
    */
-  public addTool<T extends ToolAction<any, any, any, any>>(tool: T, key?: string): void {
+  public addTool<T extends ToolAction<any, any, any, any>>(tool: T & NonNativeMCPTool, key?: string): void {
     if (!tool) {
       throw createUndefinedPrimitiveError('tool', tool, key);
+    }
+    if (isMCPToolV2(tool)) {
+      throw new Error('Native MCP tools cannot be registered as business tools');
     }
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
@@ -6081,7 +6086,7 @@ export class Mastra<
    * }
    * ```
    */
-  public listMCPServers(): Record<string, MCPServerBase> | undefined {
+  public listMCPServers(): Record<string, MCPServerRegistryEntry> | undefined {
     return this.#mcpServers;
   }
 
@@ -6104,7 +6109,7 @@ export class Mastra<
    * mastra.addMCPServer(newServer, 'customKey'); // Uses custom key
    * ```
    */
-  public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
+  public addMCPServer<M extends MCPServerRegistryEntry>(server: M, key?: string): void {
     if (!server) {
       throw createUndefinedPrimitiveError('mcp-server', server, key);
     }
@@ -6129,7 +6134,7 @@ export class Mastra<
     }
 
     const serverKey = key ?? resolvedId;
-    const servers = this.#mcpServers as Record<string, MCPServerBase>;
+    const servers = this.#mcpServers as Record<string, MCPServerRegistryEntry>;
     if (servers[serverKey]) {
       return;
     }

@@ -1,6 +1,7 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { isMCPServerV2 } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
@@ -371,7 +372,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           httpPath: `${resolvedPrefix}${httpPath}`,
           req: request,
           res: response,
-          options: Object.keys(options).length > 0 ? options : undefined,
+          ...(isMCPServerV2(server) ? {} : { options: Object.keys(options).length > 0 ? options : undefined }),
         });
         // Response handled by startHTTP
       } catch {

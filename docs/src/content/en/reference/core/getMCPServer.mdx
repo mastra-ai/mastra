@@ -52,11 +52,80 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
   content={[
   {
     name: 'server',
-    type: 'MCPServerBase | undefined',
+    type: 'MCPServerRegistryEntry | undefined',
     description: 'The MCP server instance with the specified registry key, or undefined if not found.',
   },
 ]}
 />
+
+## MCP v1 and v2 servers
+
+`MCPServerRegistryEntry` is the union of `MCPServerBase` and `MCPServerBaseV2`, exported from `@mastra/core/mcp`. Existing MCP 1.x servers don't need new properties or methods. Use `isMCPServerV2(server)` after checking that the lookup returned a server to narrow the union.
+
+`MCPServerBaseV2` defines the abstract core contract. Implementations provide HTTP and stdio transports, discovery metadata, resource access, and tool listings. The base provides tool registration and execution. It has no legacy SSE or session methods. Adding these core contracts doesn't change the behavior of an installed `@mastra/mcp` 1.x server.
+
+### `createMCPTool(options)`
+
+Define protocol-aware tools with `createMCPTool` from `@mastra/core/mcp`. Keep using `createTool` for business tools shared with agents and workflows.
+
+```typescript
+import { createMCPTool } from '@mastra/core/mcp'
+import { z } from 'zod'
+
+const confirm = createMCPTool({
+  id: 'confirm',
+  description: 'Ask for confirmation',
+  inputSchema: z.object({}),
+  outputSchema: z.boolean(),
+  execute: (_, { request }) => {
+    const response = request.inputResponses?.confirmation
+    if (response) {
+      return { kind: 'completed', value: response.action === 'accept' }
+    }
+    return {
+      kind: 'input_required',
+      result: {
+        resultType: 'input_required',
+        inputRequests: {
+          confirmation: {
+            method: 'elicitation/create',
+            params: {
+              mode: 'form',
+              message: 'Continue?',
+              requestedSchema: { type: 'object', properties: {} },
+            },
+          },
+        },
+      },
+    }
+  },
+})
+```
+
+The required options are `id`, `description`, `inputSchema`, `outputSchema`, and `execute`. An optional `requestContextSchema` validates application context. Input and output schemas support the same schema formats as business tools. The returned tool exposes `invoke(input, context)`, not a business-tool `execute` method.
+
+`MCPToolOutcomeV2<T>` separates two outcomes:
+
+- `{ kind: 'completed', value: T }`: only `value` is validated against `outputSchema`.
+- `{ kind: 'input_required', result }`: the control envelope is validated separately. It must contain nonempty `inputRequests` or `requestState`. Form and URL input requests are supported. Roots and sampling requests are rejected.
+
+Invalid input, context, output, or control throws before a result is returned. A business object containing `resultType` isn't a control outcome and can't bypass output validation.
+
+### Native execution context
+
+`MCPToolExecutionContextV2` contains the trusted application `requestContext`, an optional registered `mastra` instance, observability context, and a separate `request: MCPRequestContextV2`. It doesn't inherit the legacy `context.mcp` API.
+
+The request contains `protocolVersion: '2026-07-28'`, `requestId`, `signal`, optional `metadata`, current-round `inputResponses`, optional `requestState`, and request-scoped `log(level, data, logger?)` and `progress(progress, total?, message?)` functions. Transport implementations supply these fields. Cancellation is checked before execution and before returning the outcome.
+
+Input responses replace the previous round's responses, and handlers choose explicit phases without framework replay. Echoed request state is untrusted: verify its integrity before using it for business decisions. Each round requires authorization, and writes need domain-owned idempotency even when state verification succeeds.
+
+### Registration and execution
+
+Pass native tools to a v2 server's tool catalogue. They aren't added to Mastra's global business-tool registry, and agent/workflow ingestion rejects them. Ordinary `createTool` instances retain their identity and are registered as business tools. On v2 execution they receive ordinary context with `context.mcp` omitted, while retaining cancellation, application context, and observability.
+
+`invokeTool(toolId, input, context)` returns a native outcome for either tool family. `executeTool(toolId, input, context?)` executes only business tools. Shared REST execution endpoints reject native tools with a 422 response directing the caller to an MCP protocol client. Legacy SSE routes remain available only to v1 server instances.
+
+Registering another server under an occupied registry key keeps the existing instance. Registry keys and intrinsic server IDs remain distinct.
 
 ## Related methods
 

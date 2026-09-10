@@ -1,4 +1,9 @@
-import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
+import { isMCPServerV2, isMCPToolV2 } from '@mastra/core/mcp';
+import type {
+  MCPServerBase as MastraMCPServerImplementation,
+  MCPServerRegistryEntry,
+  ServerInfo,
+} from '@mastra/core/mcp';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,
@@ -234,6 +239,10 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
+    if (isMCPServerV2(server) && isMCPToolV2(server.tools()[toolId])) {
+      throw new HTTPException(422, { message: 'Native MCP interaction requires an MCP protocol client' });
+    }
+
     const result = await server.executeTool(toolId, data, { requestContext });
     return { result };
   },
@@ -340,7 +349,7 @@ export interface MCPTransportOptions {
  * Adapters use this to set up the HTTP transport via MCPServer.startHTTP()
  */
 export interface MCPHttpTransportResult {
-  server: MastraMCPServerImplementation;
+  server: MCPServerRegistryEntry;
   httpPath: string;
   /**
    * Optional MCP transport options for this specific route.
@@ -406,6 +415,10 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
 
     if (!server) {
       throw new HTTPException(404, { message: `MCP server '${serverId}' not found` });
+    }
+
+    if (isMCPServerV2(server)) {
+      throw new HTTPException(404, { message: 'Legacy SSE transport is unavailable for MCP v2 servers' });
     }
 
     return {

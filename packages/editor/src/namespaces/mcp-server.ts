@@ -1,4 +1,4 @@
-import type { MCPServerBase } from '@mastra/core/mcp';
+import type { MCPServerRegistryEntry } from '@mastra/core/mcp';
 import type { ToolAction } from '@mastra/core/tools';
 import type { Agent } from '@mastra/core/agent';
 import type { Workflow } from '@mastra/core/workflows';
@@ -22,7 +22,7 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
   StorageListMCPServersOutput,
   StorageListMCPServersResolvedOutput,
   StorageResolvedMCPServerType,
-  MCPServerBase
+  MCPServerRegistryEntry
 > {
   private mcpServerCtor: any;
 
@@ -31,7 +31,7 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
     // The server will be re-created on next hydration.
   }
 
-  protected override async hydrate(resolved: StorageResolvedMCPServerType): Promise<MCPServerBase> {
+  protected override async hydrate(resolved: StorageResolvedMCPServerType): Promise<MCPServerRegistryEntry> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
     }
@@ -51,7 +51,7 @@ export class EditorMCPServerNamespace extends CrudEditorNamespace<
       }
     }
 
-    const server: MCPServerBase = new this.mcpServerCtor({
+    const server: MCPServerRegistryEntry = new this.mcpServerCtor({
       id: resolved.id,
       name: resolved.name,
       version: resolved.version,

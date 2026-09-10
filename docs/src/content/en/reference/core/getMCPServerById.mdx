@@ -57,7 +57,7 @@ const serverByKey = mastra.getMCPServer('customKey')
   content={[
   {
     name: 'server',
-    type: 'MCPServerBase | undefined',
+    type: 'MCPServerRegistryEntry | undefined',
     description: 'The MCP server instance with the specified id (and version, if provided), or undefined if not found.',
   },
 ]}
@@ -65,9 +65,10 @@ const serverByKey = mastra.getMCPServer('customKey')
 
 ## Notes
 
-- The server's `id` is slugified during construction, so `'myMcpServer'` becomes `'my-mcp-server'`
-- If multiple servers have the same `id` but different versions, you must provide the `version` parameter to disambiguate
-- If no `version` is provided and multiple versions exist, the method returns the first match
+- MCP 1.x server IDs are slugified during construction. The core `MCPServerBaseV2` preserves an explicitly supplied ID.
+- The result can be either server family. See [MCP v1 and v2 server contracts](/reference/core/getMCPServer#mcp-v1-and-v2-servers) for narrowing and execution.
+- Use `version` to select an exact version when multiple servers share an intrinsic ID.
+- Without `version`, the method selects the most recent valid `releaseDate`. If multiple matches have no valid release date, it returns `undefined`.
 
 ## Related methods
 

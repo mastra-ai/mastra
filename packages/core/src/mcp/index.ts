@@ -7,6 +7,7 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
 import { slugify } from '../utils/slugify';
+import { isMCPToolV2 } from './native-tool';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -19,6 +20,8 @@ import type {
   ServerInfo,
 } from './types';
 export * from './types';
+export * from './native-tool';
+export * from './server-v2';
 export type { MCPToolType } from '../tools';
 
 /**
@@ -171,6 +174,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    */
   constructor(config: MCPServerConfig<TId>) {
     super({ component: RegisteredLogger.MCP_SERVER, name: config.name });
+    if (Object.values(config.tools).some(isMCPToolV2)) {
+      throw new Error('Native MCP tools require an MCP v2 server');
+    }
     this.name = config.name;
     this.version = config.version;
 

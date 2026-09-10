@@ -18,6 +18,8 @@ import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { isMCPToolV2 } from '../../mcp/native-tool';
+import type { NonNativeMCPTool } from '../../mcp/native-tool';
 import {
   EntityType,
   SpanType,
@@ -285,7 +287,7 @@ export function createStep<
   TId extends string,
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> & NonNativeMCPTool,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
@@ -342,6 +344,9 @@ export function createStep<
 // ============================================
 
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
+  if (isMCPToolV2(params)) {
+    throw new Error('Native MCP tools cannot be used as workflow steps');
+  }
   // Type guards determine the correct factory function
   // Overloads ensure type safety for consumers
   if (isAgentCompatible(params)) {
