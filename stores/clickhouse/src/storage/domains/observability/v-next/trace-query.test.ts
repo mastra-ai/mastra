@@ -228,9 +228,14 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toMatch(/s\.valueNumber < \{trace_query_\d+:Float64\}/);
     expect(compiled.query).toMatch(/s\.valueString IN \(\{trace_query_\d+:String\}/);
     expect(compiled.query).toContain('(isNotNull(s.valueString) OR isNotNull(s.valueNumber))');
-    expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
-    expect(compiled.query).toContain('ORDER BY feedbackId, timestamp DESC');
-    expect(compiled.query).toContain('LIMIT 1 BY feedbackId');
+    expect(compiled.query).toContain(`FROM (
+      SELECT *
+      FROM mastra_feedback_events FINAL
+      ORDER BY feedbackId, writeVersion DESC, timestamp DESC
+      LIMIT 1 BY feedbackId
+    ) AS current
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)`);
     expect(compiled.query).not.toContain("rating' OR 1");
     expect(Object.values(compiled.query_params)).toContain("rating' OR 1");
     expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');

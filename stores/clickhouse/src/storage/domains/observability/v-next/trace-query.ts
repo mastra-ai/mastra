@@ -323,11 +323,14 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
       entityVersionId,
       parentEntityVersionId,
       rootEntityVersionId
-    FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    FROM (
+      SELECT *
+      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+      ORDER BY feedbackId, writeVersion DESC, timestamp DESC
+      LIMIT 1 BY feedbackId
+    ) AS current
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)
-    ORDER BY feedbackId, timestamp DESC
-    LIMIT 1 BY feedbackId
   )`);
   }
 

@@ -5,6 +5,7 @@ import {
   planTraceQuery,
   type NormalizedTraceQueryRequest,
   type TraceQueryGroupResponse,
+  type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
   type TraceQueryTrace,
@@ -152,6 +153,481 @@ const feedbackRecord = (
   rootEntityVersionId: null,
   ...overrides,
 });
+
+export interface TraceQueryFeedbackReplacementWrite {
+  method: 'create' | 'batch';
+  feedback: RawTraceQueryFeedback[];
+}
+
+export interface TraceQueryFeedbackReplacementAssertion {
+  name: string;
+  request: TraceQueryRequest;
+  expected: Array<{ traceId: string }>;
+}
+
+export interface TraceQueryFeedbackReplacementScenario {
+  name: string;
+  fixture: TraceQueryFixtureData;
+  writes: TraceQueryFeedbackReplacementWrite[];
+  assertions: TraceQueryFeedbackReplacementAssertion[];
+}
+
+const feedbackReplacementRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+const feedbackReplacementWideRange = { from: '2026-07-01T00:00:00Z', to: '2026-08-01T00:00:00Z' };
+
+const feedbackReplacementRoot = (traceId: string, startedAt: string): RawTraceQuerySpan =>
+  span(1, traceId, `root-${traceId}`, {
+    startedAt,
+    endedAt: new Date(new Date(startedAt).getTime() + 1000).toISOString(),
+  });
+
+const feedbackReplacementRequest = (
+  traceId: string,
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryPredicate,
+  timeRange = feedbackReplacementRange,
+): TraceQueryRequest => ({
+  timeRange,
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
+      { feedback: { [quantifier]: predicate } },
+    ],
+  },
+});
+
+const feedbackReplacementAssertions = (args: {
+  oldPredicate: TraceQueryPredicate;
+  currentPredicate: TraceQueryPredicate;
+  oldTraceId?: string;
+  currentTraceId?: string;
+  currentIsCorrelated?: boolean;
+  currentTimeRange?: { from: string; to: string };
+}): TraceQueryFeedbackReplacementAssertion[] => {
+  const oldTraceId = args.oldTraceId ?? 'feedback-replacement-a';
+  const currentTraceId = args.currentTraceId ?? oldTraceId;
+  const currentIsCorrelated = args.currentIsCorrelated ?? true;
+  return [
+    {
+      name: 'old predicate does not satisfy some',
+      request: feedbackReplacementRequest(oldTraceId, 'some', args.oldPredicate),
+      expected: [],
+    },
+    {
+      name: 'old predicate satisfies none',
+      request: feedbackReplacementRequest(oldTraceId, 'none', args.oldPredicate),
+      expected: [{ traceId: oldTraceId }],
+    },
+    {
+      name: 'current predicate satisfies some',
+      request: feedbackReplacementRequest(
+        currentTraceId,
+        'some',
+        args.currentPredicate,
+        args.currentTimeRange ?? feedbackReplacementRange,
+      ),
+      expected: currentIsCorrelated ? [{ traceId: currentTraceId }] : [],
+    },
+    {
+      name: 'current predicate does not satisfy none',
+      request: feedbackReplacementRequest(
+        currentTraceId,
+        'none',
+        args.currentPredicate,
+        args.currentTimeRange ?? feedbackReplacementRange,
+      ),
+      expected: currentIsCorrelated ? [] : [{ traceId: currentTraceId }],
+    },
+  ];
+};
+
+const feedbackSourcePredicate = (value: string): TraceQueryPredicate => ({
+  op: 'eq',
+  left: { path: 'feedbackSource' },
+  right: { literal: value },
+});
+
+const feedbackValuePredicate = (value: string | number): TraceQueryPredicate => ({
+  op: 'eq',
+  left: { path: 'value' },
+  right: { literal: value },
+});
+
+const feedbackReplacementScenario = (args: {
+  name: string;
+  roots?: RawTraceQuerySpan[];
+  writes: TraceQueryFeedbackReplacementWrite[];
+  assertions: TraceQueryFeedbackReplacementAssertion[];
+}): TraceQueryFeedbackReplacementScenario => ({
+  name: args.name,
+  fixture: {
+    spans: args.roots ?? [feedbackReplacementRoot('feedback-replacement-a', '2026-08-10T00:00:00.000Z')],
+    scores: [],
+    feedback: args.writes.flatMap(write => write.feedback),
+  },
+  writes: args.writes,
+  assertions: args.assertions,
+});
+
+const sequentialFeedbackWrites = (
+  oldRecord: RawTraceQueryFeedback,
+  currentRecord: RawTraceQueryFeedback,
+): TraceQueryFeedbackReplacementWrite[] => [
+  { method: 'create', feedback: [oldRecord] },
+  { method: 'create', feedback: [currentRecord] },
+];
+
+/**
+ * Feedback replacement contract:
+ * - feedbackId alone is the logical identity;
+ * - the last accepted sequential write, or last matching entry in one batch, is current;
+ * - caller timestamps do not define replacement order;
+ * - current selection happens globally before trace correlation and some/none evaluation;
+ * - exact retries are idempotent;
+ * - concurrent writes without an observable acceptance order are outside this deterministic contract.
+ */
+export const TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS: TraceQueryFeedbackReplacementScenario[] = [
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-later-timestamp',
+      'feedback-replacement-a',
+      'rating',
+      'old-later-timestamp',
+      1,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-later-timestamp',
+      2,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with a later timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-backdated',
+      'feedback-replacement-a',
+      'rating',
+      'old-backdated',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-backdated',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with an earlier timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-same-timestamp',
+      'feedback-replacement-a',
+      'rating',
+      'old-same-timestamp',
+      1,
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-same-timestamp',
+      2,
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with the same timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const record = feedbackRecord(
+      1,
+      'feedback-replacement-exact-retry',
+      'feedback-replacement-a',
+      'rating',
+      'exact-retry',
+      1,
+    );
+    const retry = { ...record, cursorId: 2 };
+    return feedbackReplacementScenario({
+      name: 'exact retry with the same timestamp and payload',
+      writes: sequentialFeedbackWrites(record, retry),
+      assertions: [
+        {
+          name: 'retried predicate satisfies some',
+          request: feedbackReplacementRequest(
+            'feedback-replacement-a',
+            'some',
+            feedbackSourcePredicate(record.feedbackSource),
+          ),
+          expected: [{ traceId: 'feedback-replacement-a' }],
+        },
+        {
+          name: 'retried predicate does not satisfy none',
+          request: feedbackReplacementRequest(
+            'feedback-replacement-a',
+            'none',
+            feedbackSourcePredicate(record.feedbackSource),
+          ),
+          expected: [],
+        },
+      ],
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-one-batch',
+      'feedback-replacement-a',
+      'rating',
+      'old-one-batch',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-one-batch',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'repeated feedbackId in one batch uses the last entry',
+      writes: [{ method: 'batch', feedback: [oldRecord, currentRecord] }],
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-across-batches',
+      'feedback-replacement-a',
+      'rating',
+      'old-across-batches',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-across-batches',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'repeated feedbackId across batches uses the backdated final write',
+      writes: [
+        { method: 'batch', feedback: [oldRecord] },
+        { method: 'batch', feedback: [currentRecord] },
+      ],
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-number-to-text',
+      'feedback-replacement-a',
+      'rating',
+      'number-to-text',
+      7,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'number-to-text',
+      'current-text',
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'numeric value replaced by a textual value',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackValuePredicate(oldRecord.value),
+        currentPredicate: feedbackValuePredicate(currentRecord.value),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-text-to-number',
+      'feedback-replacement-a',
+      'rating',
+      'text-to-number',
+      'old-text',
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'text-to-number',
+      8,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'textual value replaced by a numeric value',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackValuePredicate(oldRecord.value),
+        currentPredicate: feedbackValuePredicate(currentRecord.value),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-comment',
+      'feedback-replacement-a',
+      'rating',
+      'comment-transition',
+      1,
+      { comment: 'old comment', timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'comment-transition',
+      2,
+      { comment: null, timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'present comment replaced by a missing comment',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: { op: 'exists', path: 'comment' },
+        currentPredicate: { op: 'notExists', path: 'comment' },
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-moved-trace',
+      'feedback-replacement-a',
+      'rating',
+      'old-moved-trace',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-b',
+      'rating',
+      'current-moved-trace',
+      2,
+      { timestamp: '2026-08-10T03:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'feedback moved from trace A to trace B outside the selected root range',
+      roots: [
+        feedbackReplacementRoot('feedback-replacement-a', '2026-08-10T00:00:00.000Z'),
+        feedbackReplacementRoot('feedback-replacement-b', '2026-07-10T00:00:00.000Z'),
+      ],
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+        currentTraceId: 'feedback-replacement-b',
+        currentTimeRange: feedbackReplacementWideRange,
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-trace-to-null',
+      'feedback-replacement-a',
+      'rating',
+      'old-trace-to-null',
+      1,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(2, oldRecord.feedbackId, null, 'rating', 'current-trace-to-null', 2, {
+      timestamp: '2026-08-10T02:00:00.000Z',
+    });
+    return feedbackReplacementScenario({
+      name: 'feedback moved from trace A to a null trace',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+        currentIsCorrelated: false,
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(1, 'feedback-replacement-null-to-trace', null, 'rating', 'old-null-to-trace', 1, {
+      timestamp: '2026-08-10T01:00:00.000Z',
+    });
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-null-to-trace',
+      2,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'feedback moved from a null trace to trace A',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+];
 
 export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [

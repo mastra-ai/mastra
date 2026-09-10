@@ -2168,10 +2168,10 @@ describe('ObservabilityStorageDuckDB', () => {
   // ==========================================================================
 
   describe('feedback', () => {
-    it('replaces an existing feedbackId with the latest single write', async () => {
+    it('replaces an existing feedbackId with a backdated latest single write', async () => {
       const original = {
         feedbackId: 'feedback-supersession-single',
-        timestamp: new Date('2026-01-01T00:00:00Z'),
+        timestamp: new Date('2026-01-02T00:00:00Z'),
         traceId: 'trace-feedback-supersession-single',
         spanId: null,
         feedbackSource: 'superseded-patient',
@@ -2187,7 +2187,7 @@ describe('ObservabilityStorageDuckDB', () => {
       await storage.createFeedback({
         feedback: {
           ...original,
-          timestamp: new Date('2026-01-02T00:00:00Z'),
+          timestamp: new Date('2026-01-01T00:00:00Z'),
           feedbackSource: 'patient',
           value: 1,
           comment: 'new',
@@ -2198,7 +2198,7 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback).toHaveLength(1);
       expect(result.feedback[0]).toMatchObject({
         feedbackId: original.feedbackId,
-        timestamp: new Date('2026-01-02T00:00:00Z'),
+        timestamp: new Date('2026-01-01T00:00:00Z'),
         feedbackSource: 'patient',
         value: 1,
         comment: 'new',
