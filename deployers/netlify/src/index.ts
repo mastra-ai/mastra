@@ -4,7 +4,7 @@ import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
-import { DepsService } from '@mastra/deployer/services';
+import { DepsService, type BundleDependencyInstallState } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
 
 /** Bare Node.js built-in module names (excludes internal `_`-prefixed ones). */
@@ -75,16 +75,27 @@ export class NetlifyDeployer extends Deployer {
       this.target === 'edge' ? join('.netlify', 'v1', 'edge-functions') : join('.netlify', 'v1', 'functions', 'api');
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(
+    outputDirectory: string,
+    rootDir = process.cwd(),
+    pnpmOverrides?: Record<string, string>,
+    installState?: BundleDependencyInstallState,
+  ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
     if (this.target === 'edge') {
       // Edge functions run on Deno — no platform-specific architecture constraints
-      await deps.install({ dir: join(outputDirectory, this.outputDir) });
+      await deps.install({
+        dir: join(outputDirectory, this.outputDir),
+        pnpmOverrides,
+        installState,
+      });
     } else {
       await deps.install({
         dir: join(outputDirectory, this.outputDir),
+        pnpmOverrides,
+        installState,
         architecture: {
           os: ['linux'],
           cpu: ['x64'],
