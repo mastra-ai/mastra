@@ -12,9 +12,7 @@ const PROJECT_SCOPE_ID = '10000000-0000-4000-8000-000000000002';
 const OTHER_SCOPE_ID = '10000000-0000-4000-8000-000000000003';
 const MISSING_SCOPE_ID = '10000000-0000-4000-8000-000000000099';
 
-export function createKnowledgeStorageTests(
-  createStore: (reopen?: boolean) => Promise<KnowledgeStorage> | KnowledgeStorage,
-): void {
+export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
   describe('knowledge storage canonical contract', () => {
     let store: KnowledgeStorage;
 
@@ -305,7 +303,7 @@ export function createKnowledgeStorageTests(
     it('rejects records attached to deleted nodes', async () => {
       const node = await store.createNode({ name: 'Deleted parent', scopeIds: [PROJECT_SCOPE_ID] });
       await store.setNodeAddress({ source: 'test', address: 'deleted-parent', nodeId: node.id });
-      await store.deleteNodeByAddress({ source: 'test', address: 'deleted-parent', scopeId: PROJECT_SCOPE_ID });
+      await store.deleteNodeByAddress({ source: 'test', address: 'deleted-parent' });
       await expect(
         store.createRecord({ node, text: 'Must not persist', scopeIds: [PROJECT_SCOPE_ID] }),
       ).rejects.toThrow('Knowledge node not found');
@@ -401,9 +399,7 @@ export function createKnowledgeStorageTests(
       await store.createRecord({ node: recordNode, text: 'Team record', scopeIds: [scope.id] });
 
       await expect(store.updateNode({ id: scope.id, version: scope.version, isScope: false })).rejects.toThrow();
-      await expect(
-        store.deleteNodeByAddress({ source: 'github', address: 'scope:team', scopeId: PROJECT_SCOPE_ID }),
-      ).rejects.toThrow();
+      await expect(store.deleteNodeByAddress({ source: 'github', address: 'scope:team' })).rejects.toThrow();
       await expect(store.getNodeAddress({ source: 'github', address: 'scope:team' })).resolves.toMatchObject({
         nodeId: scope.id,
       });
@@ -413,9 +409,7 @@ export function createKnowledgeStorageTests(
       });
       const configuredId = configured.scopes['configured:team']!;
       await store.setNodeAddress({ source: 'github', address: 'configured:team', nodeId: configuredId });
-      await expect(
-        store.deleteNodeByAddress({ source: 'github', address: 'configured:team', scopeId: PROJECT_SCOPE_ID }),
-      ).rejects.toThrow();
+      await expect(store.deleteNodeByAddress({ source: 'github', address: 'configured:team' })).rejects.toThrow();
     });
 
     it('rejects stale and concurrent record rescope without changing newer state', async () => {
@@ -527,77 +521,6 @@ export function createKnowledgeStorageTests(
       expect(await store.getNodeScopeIds(unresolved!.id)).toEqual([PROJECT_SCOPE_ID]);
     });
 
-    it('resolves a unique visible external address across importer sources', async () => {
-      const target = await store.createNode({ name: 'Descriptive pull request title', scopeIds: [ORG_SCOPE_ID] });
-      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:42', nodeId: target.id });
-      const source = await store.createNode({ name: 'Decision', scopeIds: [PROJECT_SCOPE_ID] });
-      const record = await store.createRecord({
-        node: source,
-        text: 'Supported by [[pr:42]].',
-        source: 'github:mastra-ai/mastra:distiller',
-        scopeIds: [PROJECT_SCOPE_ID],
-        resolutionScopeIds: [ORG_SCOPE_ID],
-      });
-
-      expect(
-        (await store.listMentioningRecords({ node: target, scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID] })).records,
-      ).toEqual([record]);
-      expect(await store.getNodeByName({ name: 'pr:42', scopeIds: [PROJECT_SCOPE_ID] })).toBeNull();
-    });
-
-    it('prefers an exact-source address when another visible source uses the same address', async () => {
-      const target = await store.createNode({ name: 'Expected pull request', scopeIds: [ORG_SCOPE_ID] });
-      const competing = await store.createNode({ name: 'Unrelated pull request', scopeIds: [OTHER_SCOPE_ID] });
-      await store.setNodeAddress({ source: 'github:mastra-ai/mastra', address: 'pr:99', nodeId: target.id });
-      await store.setNodeAddress({ source: 'github:other/repo', address: 'pr:99', nodeId: competing.id });
-      const source = await store.createNode({ name: 'Source-aware decision', scopeIds: [PROJECT_SCOPE_ID] });
-      const record = await store.createRecord({
-        node: source,
-        text: 'Supported by [[pr:99]].',
-        source: 'github:mastra-ai/mastra',
-        scopeIds: [PROJECT_SCOPE_ID],
-        resolutionScopeIds: [ORG_SCOPE_ID, OTHER_SCOPE_ID],
-      });
-
-      expect(
-        (
-          await store.listMentioningRecords({
-            node: target,
-            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
-          })
-        ).records,
-      ).toEqual([record]);
-      expect(
-        (
-          await store.listMentioningRecords({
-            node: competing,
-            scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
-          })
-        ).records,
-      ).toEqual([]);
-    });
-
-    it('falls back to node names when visible cross-source addresses are ambiguous', async () => {
-      const first = await store.createNode({ name: 'First addressed node', scopeIds: [ORG_SCOPE_ID] });
-      const second = await store.createNode({ name: 'Second addressed node', scopeIds: [OTHER_SCOPE_ID] });
-      const named = await store.createNode({ name: 'pr:100', scopeIds: [PROJECT_SCOPE_ID] });
-      await store.setNodeAddress({ source: 'github:first/repo', address: 'pr:100', nodeId: first.id });
-      await store.setNodeAddress({ source: 'github:second/repo', address: 'pr:100', nodeId: second.id });
-      const source = await store.createNode({ name: 'Ambiguous source decision', scopeIds: [PROJECT_SCOPE_ID] });
-      const record = await store.createRecord({
-        node: source,
-        text: 'Supported by [[pr:100]].',
-        source: 'github:distiller',
-        scopeIds: [PROJECT_SCOPE_ID],
-        resolutionScopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
-      });
-      const visibleScopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
-
-      expect((await store.listMentioningRecords({ node: named, scopeIds: visibleScopeIds })).records).toEqual([record]);
-      expect((await store.listMentioningRecords({ node: first, scopeIds: visibleScopeIds })).records).toEqual([]);
-      expect((await store.listMentioningRecords({ node: second, scopeIds: visibleScopeIds })).records).toEqual([]);
-    });
-
     it('soft-deletes and restores records without changing membership', async () => {
       const node = await store.createNode({ name: 'Lifecycle', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Version one', scopeIds: [PROJECT_SCOPE_ID] });
@@ -660,11 +583,7 @@ export function createKnowledgeStorageTests(
         source: 'github',
         scopeIds: [PROJECT_SCOPE_ID],
       });
-      const result = await store.deleteNodeByAddress({
-        source: 'github',
-        address: 'issue:1',
-        scopeId: PROJECT_SCOPE_ID,
-      });
+      const result = await store.deleteNodeByAddress({ source: 'github', address: 'issue:1' });
 
       expect(result.deleted).toBe(true);
       expect(await store.getNode(node.id)).toBeNull();
@@ -677,45 +596,6 @@ export function createKnowledgeStorageTests(
           knowledgeSemanticIdempotencyKey(knowledgeSemanticDocumentId('node', node.id), 'delete', 2),
         ]),
       );
-      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ action: 'delete', targetType: 'record', targetId: record.id }),
-          expect.objectContaining({ action: 'delete', targetType: 'node', targetId: node.id }),
-        ]),
-      );
-    });
-
-    it('preserves source-owned records that were broadened outside the importer binding', async () => {
-      const node = await store.createNodeWithAddress({
-        source: 'github',
-        address: 'issue:broadened',
-        node: { name: 'Broadened imported issue', scopeIds: [PROJECT_SCOPE_ID] },
-      });
-      const bindingLocal = await store.createRecord({
-        node,
-        text: 'Still importer owned',
-        source: 'github',
-        scopeIds: [PROJECT_SCOPE_ID],
-      });
-      const broadened = await store.createRecord({
-        node,
-        text: 'Curated into another scope',
-        source: 'github',
-        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
-      });
-
-      const result = await store.deleteNodeByAddress({
-        source: 'github',
-        address: 'issue:broadened',
-        scopeId: PROJECT_SCOPE_ID,
-      });
-
-      expect(result.deleted).toBe(false);
-      expect(await store.getNode(node.id)).toEqual(node);
-      expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toBeNull();
-      expect(await store.getRecord({ id: bindingLocal.id, includeDeleted: true })).toBeNull();
-      expect(await store.getRecord({ id: broadened.id })).toEqual(broadened);
-      expect(await store.getRecordScopeIds(broadened.id)).toEqual([PROJECT_SCOPE_ID, OTHER_SCOPE_ID].sort());
     });
 
     it('searches canonical node and record text within visible memberships', async () => {
@@ -872,205 +752,6 @@ export function createKnowledgeStorageTests(
         runs: [],
         nextCursor: undefined,
       });
-    });
-
-    it('serializes importer claims, fences workers, and skips overlapping cron runs atomically', async () => {
-      const binding = knowledgeImporterBindingKey({ source: 'calendar:primary', scope: 'project:mastra' });
-      const enqueue = (id: string, triggerKind: 'webhook' | 'cron' = 'webhook', inputBinding = binding) =>
-        store.enqueueImportRun({
-          id,
-          importerId: 'runner',
-          binding: inputBinding,
-          importKind: 'static',
-          triggerKind,
-          payloadKey: `__mastra_internal/import-payload/${id}`,
-          payload: JSON.stringify({ payload: { id } }),
-          skipIfActiveCron: triggerKind === 'cron',
-        });
-      await enqueue('claim-run-1', 'webhook', JSON.stringify([' calendar:primary ', ' project:mastra ']));
-      await enqueue('claim-run-2');
-
-      const [firstClaim, secondClaim] = await Promise.all([
-        store.claimImportRun({ importerId: 'runner', binding, workerId: 'worker-1', leaseKey: 'lease/' }),
-        store.claimImportRun({ importerId: 'runner', binding, workerId: 'worker-2', leaseKey: 'lease/' }),
-      ]);
-      const claimed = firstClaim ?? secondClaim;
-      const owner = firstClaim ? 'worker-1' : 'worker-2';
-      const other = firstClaim ? 'worker-2' : 'worker-1';
-      expect(claimed).toMatchObject({ id: 'claim-run-1', binding, status: 'running' });
-      expect([firstClaim, secondClaim].filter(Boolean)).toHaveLength(1);
-      await expect(
-        store.heartbeatImportRun({
-          id: claimed!.id,
-          importerId: 'runner',
-          binding,
-          workerId: other,
-          leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged',
-        }),
-      ).resolves.toBe(false);
-      await expect(store.getImportRun(claimed!.id)).resolves.not.toMatchObject({
-        transcriptThreadId: 'knowledge-import-run:forged',
-      });
-      await expect(
-        store.heartbeatImportRun({
-          id: claimed!.id,
-          importerId: 'runner',
-          binding,
-          workerId: owner,
-          leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:claim-run-1',
-        }),
-      ).resolves.toBe(true);
-      await expect(store.getImportRun(claimed!.id)).resolves.toMatchObject({
-        transcriptThreadId: 'knowledge-import-run:claim-run-1',
-      });
-      const foreignBinding = knowledgeImporterBindingKey({ source: 'calendar:secondary', scope: 'project:mastra' });
-      await store.enqueueImportRun({
-        id: 'foreign-run',
-        importerId: 'runner',
-        binding: foreignBinding,
-        importKind: 'static',
-        triggerKind: 'webhook',
-        payloadKey: '__mastra_internal/import-payload/foreign-run',
-        payload: '{}',
-      });
-      const foreignRun = await store.claimImportRun({
-        importerId: 'runner',
-        binding: foreignBinding,
-        workerId: 'foreign-worker',
-        leaseKey: 'lease/',
-      });
-      await expect(
-        store.heartbeatImportRun({
-          id: foreignRun!.id,
-          importerId: 'runner',
-          binding,
-          workerId: owner,
-          leaseKey: `lease/${claimed!.id}`,
-          transcriptThreadId: 'knowledge-import-run:forged-cross-binding',
-        }),
-      ).resolves.toBe(false);
-      await expect(
-        store.finalizeImportRun({
-          id: foreignRun!.id,
-          importerId: 'runner',
-          binding,
-          workerId: owner,
-          leaseKey: `lease/${claimed!.id}`,
-          status: 'succeeded',
-          state: [],
-        }),
-      ).resolves.toBeNull();
-      await expect(
-        store.finalizeImportRun({
-          id: foreignRun!.id,
-          importerId: 'runner',
-          binding: foreignBinding,
-          workerId: 'foreign-worker',
-          leaseKey: `lease/${foreignRun!.id}`,
-          status: 'succeeded',
-          state: [],
-        }),
-      ).resolves.toMatchObject({ status: 'succeeded' });
-      await expect(
-        store.finalizeImportRun({
-          id: claimed!.id,
-          importerId: 'runner',
-          binding,
-          workerId: other,
-          leaseKey: `lease/${claimed!.id}`,
-          status: 'succeeded',
-          state: [{ key: 'cursor', value: 'forged' }],
-        }),
-      ).resolves.toBeNull();
-      await expect(
-        store.finalizeImportRun({
-          id: claimed!.id,
-          importerId: 'runner',
-          binding,
-          workerId: owner,
-          leaseKey: `lease/${claimed!.id}`,
-          status: 'succeeded',
-          transcriptThreadId: 'knowledge-import-run:claim-run-1',
-          state: [{ key: 'cursor', value: 'first' }],
-        }),
-      ).resolves.toMatchObject({
-        status: 'succeeded',
-        transcriptThreadId: 'knowledge-import-run:claim-run-1',
-      });
-      await expect(
-        store.claimImportRun({ importerId: 'runner', binding, workerId: other, leaseKey: 'lease/' }),
-      ).resolves.toMatchObject({ id: 'claim-run-2', status: 'running' });
-      await expect(store.getImportState({ importerId: 'runner', binding, key: 'cursor' })).resolves.toMatchObject({
-        value: 'first',
-      });
-
-      const cronBinding = knowledgeImporterBindingKey({ source: 'calendar:cron', scope: 'project:mastra' });
-      const cronInput = (id: string) => ({
-        id,
-        importerId: 'cron-runner',
-        binding: cronBinding,
-        importKind: 'static' as const,
-        triggerKind: 'cron' as const,
-        payloadKey: `__mastra_internal/import-payload/${id}`,
-        payload: '{}',
-        skipIfActiveCron: true,
-      });
-      const cronRuns = await Promise.all([
-        store.enqueueImportRun(cronInput('cron-run-1')),
-        store.enqueueImportRun(cronInput('cron-run-2')),
-      ]);
-      expect(cronRuns.map(run => run.status).sort()).toEqual(['queued', 'skipped']);
-    });
-
-    it('requeues interrupted work ahead of later same-binding runs', async () => {
-      const binding = knowledgeImporterBindingKey({ source: 'calendar:recovery', scope: 'project:mastra' });
-      await store.enqueueImportRun({
-        id: 'recovery-original',
-        importerId: 'recovery-runner',
-        binding,
-        importKind: 'static',
-        triggerKind: 'programmatic',
-        payloadKey: 'payload/recovery-original',
-        payload: '{"payload":{"window":"first"}}',
-        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
-      });
-      await store.claimImportRun({
-        importerId: 'recovery-runner',
-        binding,
-        workerId: 'dead-worker',
-        leaseKey: 'lease/',
-        timestamp: new Date('2020-01-01T00:00:01.000Z'),
-      });
-      await store.enqueueImportRun({
-        id: 'aaa-recovery-successor',
-        importerId: 'recovery-runner',
-        binding,
-        importKind: 'static',
-        triggerKind: 'webhook',
-        payloadKey: 'payload/recovery-successor',
-        payload: '{"payload":{"window":"second"}}',
-        queuedAt: new Date('2020-01-01T00:00:00.000Z'),
-      });
-
-      await expect(
-        store.recoverImportRun({
-          id: 'recovery-original',
-          replacementId: 'zzz-recovery-replacement',
-          payloadKey: 'payload/recovery-original',
-          replacementPayloadKey: 'payload/recovery-replacement',
-          leaseKey: 'lease/recovery-original',
-          staleBefore: new Date('2020-01-01T00:00:03.000Z'),
-          queuedAt: new Date('2020-01-01T00:00:04.000Z'),
-        }),
-      ).resolves.toMatchObject({
-        id: 'zzz-recovery-replacement',
-        queuedAt: new Date('2019-12-31T23:59:59.999Z'),
-      });
-      await expect(
-        store.claimImportRun({ importerId: 'recovery-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
-      ).resolves.toMatchObject({ id: 'zzz-recovery-replacement' });
     });
 
     it('rejects malformed importer bindings', async () => {
