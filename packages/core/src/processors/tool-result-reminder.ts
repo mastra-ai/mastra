@@ -352,19 +352,29 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       readFile: this.readFile,
       getPathIdentity: this.getPathIdentity,
     };
+    const pathIdentities = new Map<string, string>();
+    const resolvePathIdentity = (path: string) => {
+      const cached = pathIdentities.get(path);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const identity = getPathIdentity(path, reader);
+      pathIdentities.set(path, identity);
+      return identity;
+    };
     const messages = messageList.get.all.db();
     // Memory processors can reclassify completed responses before this hook runs.
     const completedToolCalls = getCompletedToolCalls(messages);
     const checkedPaths = new Set<string>();
     for (const toolCall of completedToolCalls) {
       for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader)) {
-        const identity = getPathIdentity(instructionPath, reader);
+        const identity = resolvePathIdentity(instructionPath);
         if (checkedPaths.has(identity)) {
           continue;
         }
         checkedPaths.add(identity);
 
-        if (this.isIgnoredInstructionPath(args, identity, reader)) {
+        if (this.isIgnoredInstructionPath(args, identity, resolvePathIdentity)) {
           continue;
         }
 
@@ -374,7 +384,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         }
 
         const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
-        if (this.hasReminderAlready(messages, reminderMarkup, reader)) {
+        if (this.hasReminderAlready(messages, reminderMarkup, resolvePathIdentity)) {
           continue;
         }
 
@@ -405,9 +415,13 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return this.reminderText?.trim() || undefined;
   }
 
-  private isIgnoredInstructionPath(args: ProcessInputStepArgs, identity: string, reader: ReminderFileReader): boolean {
+  private isIgnoredInstructionPath(
+    args: ProcessInputStepArgs,
+    identity: string,
+    resolvePathIdentity: (path: string) => string,
+  ): boolean {
     const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
-    return ignoredPaths.some(path => getPathIdentity(path, reader) === identity);
+    return ignoredPaths.some(path => resolvePathIdentity(path) === identity);
   }
 
   private *findInstructionPathsInInvocation(invocation: unknown, reader: ReminderFileReader): Generator<string> {
@@ -433,9 +447,13 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     }
   }
 
-  private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string, reader: ReminderFileReader): boolean {
+  private hasReminderAlready(
+    messages: MastraDBMessage[],
+    reminderMarkup: string,
+    resolvePathIdentity: (path: string) => string,
+  ): boolean {
     const reminderPath = extractReminderPath(reminderMarkup);
-    const identity = reminderPath ? getPathIdentity(reminderPath, reader) : undefined;
+    const identity = reminderPath ? resolvePathIdentity(reminderPath) : undefined;
 
     return messages.some(message => {
       if (message.role !== 'user' && message.role !== 'signal') {
@@ -443,7 +461,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       }
 
       const metadataPath = extractReminderPathFromMetadata(message);
-      if (metadataPath && getPathIdentity(metadataPath, reader) === identity) {
+      if (metadataPath && resolvePathIdentity(metadataPath) === identity) {
         return true;
       }
 
@@ -457,7 +475,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       }
 
       const markupPath = extractReminderPath(messageText);
-      return !!markupPath && getPathIdentity(markupPath, reader) === identity;
+      return !!markupPath && resolvePathIdentity(markupPath) === identity;
     });
   }
 }

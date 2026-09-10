@@ -682,6 +682,32 @@ describe('AgentsMDInjector', () => {
     expect(readFile.mock.calls).toEqual([['/virtual/first/AGENTS.md']]);
   });
 
+  it('resolves each path identity once per processor request', async () => {
+    const instructionPath = '/virtual/project/AGENTS.md';
+    const messageList = new TestMessageList();
+    messageList.push(createUserMessage('Already loaded', { systemReminder: { path: instructionPath } }));
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart('list', { path: instructionPath }, 'result', {})],
+      }),
+    );
+    const getPathIdentity = vi.fn((path: string) => path);
+    const testProcessor = new AgentsMDInjector({
+      getReader: () => ({
+        pathExists: () => true,
+        isDirectory: () => false,
+        readFile: () => FILE_CONTENT,
+        getPathIdentity,
+      }),
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(getPathIdentity).toHaveBeenCalledTimes(1);
+    expect(getPathIdentity).toHaveBeenCalledWith(instructionPath);
+  });
+
   it('does not inject for instruction files already loaded statically', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-static';
