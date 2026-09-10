@@ -449,10 +449,34 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      // With nothing else on the page to stay proportional with, the single trace starts expanded.
+      // With nothing else on the page to stay proportional with, the single trace is shown in full.
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+    });
+
+    it('clamps the lone trace again once a second trace arrives', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      let list = { ...threadTracesList, spans: [threadTracesList.spans[0]] };
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(list)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
+          HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans),
+        ),
+      );
+      const { queryClient } = renderView();
+
+      await screen.findByText('Chef agent run');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+
+      // The next turn of a live conversation lands as a new trace on refetch.
+      list = newestFirstList;
+      await act(() => queryClient.refetchQueries());
+
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px'));
+      expect(screen.getAllByRole('button', { name: 'Show more' }).length).toBeGreaterThan(0);
     });
 
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
