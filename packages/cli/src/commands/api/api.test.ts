@@ -65,6 +65,28 @@ describe('api command registration', () => {
       path: '/observability/traces/:traceId/spans/:spanId',
     });
   });
+
+  it('exposes score and feedback deletion commands', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const score = api?.commands.find(command => command.name() === 'score');
+    const feedback = api?.commands.find(command => command.name() === 'feedback');
+
+    expect(score?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(feedback?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(API_COMMANDS.scoreDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/scores',
+      inputRequired: true,
+    });
+    expect(API_COMMANDS.feedbackDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/feedback',
+      inputRequired: true,
+    });
+  });
 });
 
 describe('api command executor', () => {
@@ -406,6 +428,40 @@ describe('api command executor', () => {
       body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
+  });
+
+  it('sends score and feedback deletion filters in request bodies', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+
+    await executeDescriptor(
+      API_COMMANDS.scoreDelete,
+      [],
+      '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+    await executeDescriptor(
+      API_COMMANDS.feedbackDelete,
+      [],
+      '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.com/api/observability/scores', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({
+        scoreIds: ['score_123'],
+        organizationId: 'org_123',
+        resourceId: 'resource_123',
+      }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.com/api/observability/feedback', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ feedbackIds: ['feedback_123'], organizationId: 'org_123' }),
+    });
   });
 
   it('does not treat JSON input as an identity argument', async () => {

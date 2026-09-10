@@ -1,5 +1,9 @@
 {
   "attachment": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "amazon/moonshotai.kimi-k2.5",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
@@ -152,6 +156,14 @@
     "zai/glm-5v-turbo"
   ],
   "temperature": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
+    "amazon/mistral.pixtral-large-2502-v1:0",
+    "amazon/mistral.pixtral-large-2502-v1:0@us",
     "amazon/moonshot.kimi-k2-thinking",
     "amazon/zai.glm-4.7-flash",
     "amazon/zai.glm-4.7-flash@us",
@@ -257,6 +269,7 @@
     "mistral/voxtral-small-latest",
     "moonshot/kimi-k2.6",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
+    "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/meta-llama/Llama-3.3-70B-Instruct",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
@@ -363,6 +376,12 @@
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
@@ -454,6 +473,7 @@
     "moonshot/kimi-k2.7-code",
     "moonshot/kimi-k3",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
+    "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/meta-llama/Llama-3.3-70B-Instruct",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",

@@ -51,6 +51,7 @@ function registeredFactoryRoutes() {
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
     comments: {} as never,
+    liveSessions: {} as never,
     resolveProject: async () => ({}) as never,
   });
   const supervisor = buildSupervisorRoutes({
@@ -85,6 +86,31 @@ describe('Factory route contracts', () => {
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
   });
 
+  it('accepts custom transition identifiers and rejects malformed identifiers', () => {
+    const request = {
+      board: 'Release-board_1',
+      stage: 'Preparing-release_2',
+      expectedRevision: 1,
+      requestId: decisionId,
+      cause: 'release-approved',
+    };
+    expect(transitionBodySchema.parse(request)).toEqual({
+      board: request.board,
+      stage: request.stage,
+      expectedRevision: 1,
+      ingress: { type: 'human', identity: decisionId },
+      cause: request.cause,
+    });
+    for (const field of ['board', 'stage']) {
+      expect(transitionBodySchema.safeParse({ ...request, [field]: 'a'.repeat(128) }).success).toBe(true);
+      for (const value of ['', 'a'.repeat(129), ' release', 'release ', '-release', 'release/prepare', 123, null]) {
+        expect(transitionBodySchema.safeParse({ ...request, [field]: value }).success, `${field}: ${value}`).toBe(
+          false,
+        );
+      }
+    }
+  });
+
   it('normalizes deterministic decision and attention query inputs', () => {
     const decisionCursor = Buffer.from(JSON.stringify(['2030-01-01T00:00:00.000Z', decisionId])).toString('base64url');
     expect(
@@ -99,8 +125,15 @@ describe('Factory route contracts', () => {
     const attentionCursor = Buffer.from(JSON.stringify({ mention: ['2030-01-02T00:00:00.000Z', decisionId] })).toString(
       'base64url',
     );
-    const attention = attentionQuerySchema.parse({ before: attentionCursor, limit: '0', search: '  FIND ME  ' });
-    expect(attention).toMatchObject({ view: 'open', tier: 'all', limit: 1, search: 'find me' });
+    const attention = attentionQuerySchema.parse({
+      before: attentionCursor,
+      limit: '0',
+      search: '  FIND ME  ',
+      kind: ['mention', 'agent-waiting'],
+    });
+    expect(attention).toMatchObject({ view: 'open', limit: 1, search: 'find me', kind: ['mention', 'agent-waiting'] });
+    expect(attentionQuerySchema.parse({}).kind).toBeUndefined();
+    expect(attentionQuerySchema.safeParse({ kind: ['bogus'] }).success).toBe(false);
     expect(attention.before?.get('mention')).toEqual({
       occurredAt: new Date('2030-01-02T00:00:00.000Z'),
       id: decisionId,
@@ -147,6 +180,14 @@ describe('Factory route contracts', () => {
   });
 
   it('accepts representative successful response envelopes', () => {
+    const ATTENTION_KINDS = [
+      'automation-failed',
+      'automation-proposed',
+      'mention',
+      'activity',
+      'supervisor-finding',
+      'agent-waiting',
+    ];
     expect(
       FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId }] }).success,
     ).toBe(true);
@@ -154,18 +195,13 @@ describe('Factory route contracts', () => {
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
         workItems: [{ id: projectId }],
         runningSessionIds: ['session-1'],
+        parkedSessionIds: ['session-2'],
       }).success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse({
         items: [],
-        openCount: 1,
-        badgeCount: 1,
-        unreadCount: 1,
-        activityUnreadCount: 0,
-        latestOccurrenceKey: null,
-        latestOccurrenceAt: null,
-        latestOccurrenceUnread: false,
+        kinds: Object.fromEntries(ATTENTION_KINDS.map(kind => [kind, { open: 0, unread: 0, latest: null }])),
         hasMore: false,
       }).success,
     ).toBe(true);

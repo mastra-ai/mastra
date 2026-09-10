@@ -70,6 +70,8 @@ export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveLifecycleHooks,
+  ObserveTransformHooks,
   ObserveHookContext,
   ObserveHookUsage,
   ObserveTrigger,

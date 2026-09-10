@@ -66,7 +66,19 @@ Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal
 
 Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
 
-To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Decision and tool-input validation still accept only built-in board IDs and phase names, so custom-board handlers cannot emit `transition` decisions into custom phases yet.
+To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Bound transition tools accept custom phase identifiers and validate live membership and topology on the item's installed board.
+
+## Execute a custom board
+
+Use the custom-board execution example in the Factory README as the configuration pattern. Board and phase identifiers are case-sensitive, 1–128 letters, digits, underscores, or hyphens, beginning with a letter or digit, without surrounding whitespace. Lifecycle, tool-result, and integration decisions may target installed custom phases. Validate membership on the target board, never against a union of installed phase names.
+
+A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Preserve committed replay and its original `configVersion` even if the installed configuration changes.
+
+Working roles identify bindings on the shared Code Agent, not separately configured agents. There is no per-role agent registration option. Declare `invokeSkill` decisions with the working role and a board-owned prompt (or an available skill); do not invent an `agents` configuration. For automatic session preparation, verify the deployment's GitHub integration, project connection and linked repository, sandbox, organization model credentials, and project automatic-run setting. Enter a working phase through the public transition route as an authorized human when approval is required.
+
+Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` do not inherit Work classification requirements. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload needed by the board's policy rather than treating every completed tool call as business success.
+
+Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, `held-waiting` is Work-specific, and built-in board replacement/customization is unsupported. Existing integration defaults do not automatically route events to a custom board.
 
 ## Change a built-in handler
 

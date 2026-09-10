@@ -36,6 +36,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
+import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -469,7 +470,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               showPartialThread
               featuredSpanIds={url.highlightSpanIdsParam}
               onHighlightSpans={url.handleHighlightSpans}
-              feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
+              feedbackTabBadge={<NeedsReviewDot feedback={traceFeedbackData?.feedback} />}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
               scoresTabSlot={({ traceId: tid, rootSpanId }) =>
@@ -485,7 +486,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               }
               spanActiveTab={url.spanTabParam ?? 'details'}
               onSpanTabChange={tab => url.handleSpanTabChange(tab as SpanTab)}
-              spanFeedbackTabBadge={spanFeedbackData?.pagination?.total ?? undefined}
+              spanFeedbackTabBadge={<NeedsReviewDot feedback={spanFeedbackData?.feedback} />}
               spanFeedbackTabSlot={({ traceId: tid, spanId: sid }) =>
                 tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
               }

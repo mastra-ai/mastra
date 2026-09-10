@@ -1,6 +1,6 @@
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MASTRA_USER_KEY } from '../constants';
 
@@ -616,39 +616,30 @@ describe('auth helpers', () => {
 
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
     });
-    it('should not set resource ID when mapUserToResourceId returns null', async () => {
-      const requestContext = createRequestContext();
+    it.each([null, undefined, '', '   ', 0, false, {}, []])(
+      'rejects an invalid mapped resource ID: %s',
+      async resourceId => {
+        const requestContext = createRequestContext();
 
-      await coreAuthMiddleware({
-        ...baseCtx,
-        mastra: createMockMastra(),
-        authConfig: {
-          protected: ['/api/*'],
-          authenticateToken: async () => ({ id: 'user-123' }),
-          mapUserToResourceId: () => null,
-        },
-        requestContext,
-      });
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          mastra: createMockMastra(),
+          authConfig: {
+            protected: ['/api/*'],
+            authenticateToken: async () => ({ id: 'user-123' }),
+            mapUserToResourceId: vi.fn().mockReturnValue(resourceId),
+          },
+          requestContext,
+        });
 
-      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
-    });
-
-    it('should not set resource ID when mapUserToResourceId returns undefined', async () => {
-      const requestContext = createRequestContext();
-
-      await coreAuthMiddleware({
-        ...baseCtx,
-        mastra: createMockMastra(),
-        authConfig: {
-          protected: ['/api/*'],
-          authenticateToken: async () => ({ id: 'user-123' }),
-          mapUserToResourceId: () => undefined,
-        },
-        requestContext,
-      });
-
-      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
-    });
+        expect(result).toEqual({
+          action: 'error',
+          status: 500,
+          body: { error: 'Failed to map authenticated user to a resource ID' },
+        });
+        expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+      },
+    );
 
     it('should not set resource ID when mapUserToResourceId is not provided', async () => {
       const requestContext = createRequestContext();

@@ -119,7 +119,7 @@ export function createDurableLLMMappingStep() {
         | undefined;
       if (llmOutput.stepSpanData) {
         try {
-          const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -152,9 +152,7 @@ export function createDurableLLMMappingStep() {
           // Start from the existing providerMetadata so it's preserved even when
           // toModelOutput is absent or fails — otherwise provider-executed tools
           // or tools without a mapper lose their metadata.
-          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
-            | Record<string, unknown>
-            | undefined;
+          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata;
           if (
             !toolResult.error &&
             toolResult.result != null &&
@@ -198,7 +196,7 @@ export function createDurableLLMMappingStep() {
               } catch (err) {
                 mappingSpan?.error({ error: err as Error, endSpan: true });
                 // toModelOutput errors are non-fatal — the tool result is still usable
-                (mastra as Mastra | undefined)
+                mastra
                   ?.getLogger?.()
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
               }
@@ -322,9 +320,7 @@ export function createDurableLLMMappingStep() {
           });
         } catch (error) {
           // Span bookkeeping must never break the merge step.
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
         }
       }
 
@@ -374,9 +370,7 @@ export function createDurableLLMMappingStep() {
           };
           await emitChunkEvent(pubsub, _runId, enrichedChunk);
         } catch (error) {
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
       }
 

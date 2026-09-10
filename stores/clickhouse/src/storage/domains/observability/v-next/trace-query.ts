@@ -3,6 +3,7 @@ import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
   TraceQueryField,
+  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -35,13 +36,33 @@ const TRACE_FIELDS = {
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
+  name: { sql: 's.name', parameterType: 'String' },
   spanType: { sql: 's.spanType', parameterType: 'String' },
+  model: { sql: 's.model', parameterType: 'String' },
+  provider: { sql: 's.provider', parameterType: 'String' },
+  startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
+  endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
+  durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
+  status: { sql: 's.status', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
+  entityType: { sql: 's.entityType', parameterType: 'String' },
+  entityId: { sql: 's.entityId', parameterType: 'String' },
+  entityName: { sql: 's.entityName', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'String' },
+  scorerVersion: { sql: 's.scorerVersion', parameterType: 'String' },
+  scoreSource: { sql: 's.scoreSource', parameterType: 'String' },
   score: { sql: 's.score', parameterType: 'Float64' },
+  timestamp: { sql: 's.timestamp', parameterType: "DateTime64(3, 'UTC')" },
+  spanId: { sql: 's.spanId', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `
@@ -82,19 +103,35 @@ function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
   parameters: ParameterBuilder,
+  allowMetadata = false,
 ): string {
   if (predicate.type === 'boolean') {
-    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters)})`);
+    const parts = predicate.args.map(arg => `(${compileScalarPredicate(arg, registry, parameters, allowMetadata)})`);
     return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
   }
 
-  if (predicate.type === 'not') return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters)})`;
+  if (predicate.type === 'not') {
+    return `NOT (${compileScalarPredicate(predicate.arg, registry, parameters, allowMetadata)})`;
+  }
 
-  const field = fieldDefinition(registry, predicate.field);
+  const field = isMetadataField(predicate.field)
+    ? (() => {
+        if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+        const key = parameters.add(predicate.field.slice('metadata.'.length), 'String');
+        return {
+          sql: `coalesce(if(mapContains(r.metadataSearch, ${key}), r.metadataSearch[${key}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, ${key})), ''))`,
+          parameterType: 'String' as const,
+        };
+      })()
+    : fieldDefinition(registry, predicate.field);
   if (predicate.type === 'presence') {
     return `${predicate.operator === 'exists' ? 'isNotNull' : 'isNull'}(${field.sql})`;
   }
@@ -146,7 +183,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   }
 
   if (predicate.type === 'not') return `NOT (${compilePredicate(predicate.arg, parameters)})`;
-  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
 }
 
 export interface CompiledClickHouseTraceQuery {
@@ -180,19 +217,48 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS (
-    SELECT traceId, spanType, error
+    SELECT
+      traceId,
+      name,
+      spanType,
+      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
+      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
+      startedAt,
+      endedAt,
+      dateDiff('millisecond', startedAt, endedAt) AS durationMs,
+      if(isNotNull(error), 'error', 'success') AS status,
+      error,
+      entityType,
+      entityId,
+      entityName,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
     FROM ${TABLE_SPAN_EVENTS}
-    WHERE traceId IN (SELECT traceId FROM root_scope)
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)
     ORDER BY dedupeKey
     LIMIT 1 BY dedupeKey
   )`);
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS (
-    SELECT traceId, scorerId, score
+    SELECT
+      traceId,
+      spanId,
+      timestamp,
+      scorerId,
+      scorerVersion,
+      scoreSource,
+      score,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
     FROM ${TABLE_SCORE_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)
+    ORDER BY scoreId, timestamp DESC
+    LIMIT 1 BY scoreId
   )`);
   }
 

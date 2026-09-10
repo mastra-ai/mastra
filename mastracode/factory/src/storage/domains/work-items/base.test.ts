@@ -738,6 +738,38 @@ describe('getBySource', () => {
     expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
   });
 
+  it('resolves canonical sources within the requested organization and project', async () => {
+    const storage = await makeStorage();
+    for (const orgId of ['org1', 'org2']) {
+      for (const factoryProjectId of orgId === 'org1' ? ['p1', 'p2'] : ['p3', 'p4']) {
+        const created = await storage.upsert({
+          orgId,
+          userId: 'u',
+          factoryProjectId,
+          input: { ...input, externalSource: slackThread },
+        });
+        expect(await storage.getByProjectSource({ orgId, factoryProjectId, source: slackThread })).toEqual(
+          created.item,
+        );
+      }
+    }
+    const found = await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'p1', source: slackThread });
+    expect(found).toMatchObject({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(
+      await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'missing', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({ orgId: 'missing', factoryProjectId: 'p1', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        source: { ...slackThread, integrationId: 'other' },
+      }),
+    ).toBeNull();
+  });
+
   it('refuses to guess when two projects hold the same source', async () => {
     const storage = await makeStorage();
     for (const factoryProjectId of ['p1', 'p2']) {

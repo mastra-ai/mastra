@@ -1096,6 +1096,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return result.labels;
   }
 
+  async removeIssueLabel(_installationId: number, sourceId: string, issueNumber: number, label: string): Promise<void> {
+    const name = label.trim();
+    if (!name) return;
+    await this.#client.request<void>(
+      'DELETE',
+      repositoryPath(sourceId, `issues/${issueNumber}/labels/${encodeURIComponent(name)}`),
+    );
+  }
+
   getInstallationOctokit(_installationId: number): ReturnType<GithubIntegration['getInstallationOctokit']> {
     return {
       pulls: {

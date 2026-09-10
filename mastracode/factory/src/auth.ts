@@ -15,6 +15,7 @@ import { HTTPException } from 'hono/http-exception';
 
 import type { RouteAuth } from './routes/route.js';
 import { actorFromAuthUser } from './storage/domains/comments/actor.js';
+import { isFactoryTelemetryEnabled } from './telemetry.js';
 import { timedAboveThreshold } from './timing.js';
 
 const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
@@ -460,6 +461,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
   await ensureUserOrg(provider, user);
   return c.json({
     authenticated: true,
+    telemetryEnabled: isFactoryTelemetryEnabled(provider.name),
     user: {
       userId: getFactoryAuthUserId(user),
       email: user.email,

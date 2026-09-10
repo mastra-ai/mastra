@@ -187,6 +187,8 @@ describe('PlatformLinearIntegration', () => {
         expect.objectContaining({
           id: 'issue-1',
           identifier: 'ENG-42',
+          // Must match the intake binding key so board routing can resolve it.
+          sourceId: project1SourceId,
           source: 'ENG',
           stateType: 'unstarted',
           priority: 'High',
@@ -518,6 +520,15 @@ describe('PlatformLinearIntegration', () => {
       orgId: 'org-1',
       userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+    });
+    // Board reads only ingest sources explicitly routed to a board of the project.
+    await seed.intake.setBinding({
+      orgId: 'org-1',
+      userId: 'user-1',
+      integrationId: 'linear',
+      sourceId: project1SourceId,
+      factoryProjectId: projectRecord.id,
+      board: 'work',
     });
     const context = {
       auth: fakeAuth(),

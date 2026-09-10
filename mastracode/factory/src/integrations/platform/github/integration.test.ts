@@ -1335,6 +1335,20 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it('removes one issue label through the Platform proxy and surfaces a missing label as a 404', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json({})).mockResolvedValueOnce(json({}, 404));
+    const integration = createIntegration(fetchImpl);
+
+    await integration.removeIssueLabel(7, 'acme/app', 12, 'status: needs approval');
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(init?.method).toBe('DELETE');
+    expect(String(url)).toContain('/issues/12/labels/status%3A%20needs%20approval');
+
+    await expect(integration.removeIssueLabel(7, 'acme/app', 12, 'gone')).rejects.toMatchObject({ status: 404 });
+    await expect(integration.removeIssueLabel(7, 'acme/app', 12, '  ')).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   describe('resolveIntakeDispatch', () => {
     it('derives repository + issue number from the intake externalId format', async () => {
       const integration = createIntegration();

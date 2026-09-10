@@ -155,6 +155,7 @@ export type ScenarioName =
   | 'stream-error-retry'
   | 'streaming-render-stability'
   | 'streaming-tool-args'
+  | 'subagents-command'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
   | 'subagent-model-startup-restore'

@@ -1,7 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
@@ -119,7 +118,7 @@ export async function resolveModelConfig(
     if (modelConfig.specificationVersion === 'v1') {
       // Wrap legacy v1 models so the underlying SDK client (and any
       // enumerable config) does not leak into observability spans.
-      return new AISDKV4LegacyLanguageModel(modelConfig as LanguageModelV1);
+      return new AISDKV4LegacyLanguageModel(modelConfig);
     }
     // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
     // If the model has doStream/doGenerate methods, wrap it as a modern model

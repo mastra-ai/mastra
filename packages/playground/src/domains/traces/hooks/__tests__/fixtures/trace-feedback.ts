@@ -10,19 +10,21 @@ type Feedback = ListFeedbackResponse['feedback'][number];
 
 const baseFeedback = {
   timestamp: new Date('2026-08-26T10:00:00.000Z'),
+  traceId: TRACE_ID,
   feedbackType: 'thumbs',
   value: 1,
-} satisfies Partial<Feedback>;
+  reviewStatus: 'needs-review',
+} satisfies Feedback;
 
-export function feedbackRecord(overrides: Partial<Feedback> & { feedbackId: string }): Feedback {
-  return { ...baseFeedback, traceId: TRACE_ID, ...overrides } as Feedback;
+export function feedbackRecord(overrides: Partial<Feedback> = {}): Feedback {
+  return { ...baseFeedback, ...overrides };
 }
 
 export function listFeedbackResponse(feedback: Feedback[], page = 0): ListFeedbackResponse {
   return {
     feedback,
     pagination: { page, perPage: 10, total: feedback.length, hasMore: false },
-  } as ListFeedbackResponse;
+  };
 }
 
 /** Mixed page: trace-level records (spanId absent / null) alongside span-scoped ones. */
@@ -44,6 +46,11 @@ export const authoredFeedbackResponse = listFeedbackResponse([
     value: 'Looks off to me',
     author: { id: 'user-1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/marvin.png' },
   }),
+]);
+
+/** Trace-level record that has already been reviewed. */
+export const reviewedFeedbackResponse = listFeedbackResponse([
+  feedbackRecord({ feedbackId: 'reviewed', feedbackType: 'comment', value: 'All good', reviewStatus: 'reviewed' }),
 ]);
 
 export const otherSpanFeedbackResponse = listFeedbackResponse([

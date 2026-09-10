@@ -8,7 +8,7 @@ import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -18,6 +18,23 @@ import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-item
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+
+const auditRecorder: AuditRecorder = {
+  async record(input) {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      actorType: input.actorType,
+      action: input.action,
+      factoryProjectId: input.factoryProjectId,
+      targets: input.targets,
+      metadata: input.metadata,
+      context: input.context,
+    });
+    return null;
+  },
+};
 
 const audit: AuditEmitter = {
   async emit({ context, input }) {
@@ -48,12 +65,15 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
+const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
+
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
   boardRegistry: BoardRegistry = createBoardRegistry(),
+  parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -75,9 +95,14 @@ function buildApp(
         configVersion: 'factory-config-v1',
         storage: seed.workItems,
         boards: boardRegistry,
+        audit: auditRecorder,
       }),
       startCoordinator,
-      liveSessions: { isRunning: sessionId => running.has(sessionId) },
+      liveSessions: {
+        isRunning: sessionId => running.has(sessionId),
+        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
+        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+      },
     }).routes(),
   );
   return app;
@@ -132,6 +157,76 @@ beforeEach(async () => {
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+describe('installed board catalog', () => {
+  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { 'github-issue': () => [] },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(response.status).toBe(200);
+    const { boards } = await response.json();
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
+      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+    );
+    expect(boards.at(-1)).toEqual({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'preparing',
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          transitions: [{ outcome: null, to: 'shipped' }],
+        },
+        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+      ],
+    });
+  });
+
+  it('supports an empty installation', async () => {
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ includeDefaultBoards: false }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(await response.json()).toEqual({ boards: [] });
+  });
+
+  it('requires authentication and project membership', async () => {
+    expect((await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(401);
+    expect((await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(403);
+    await seedProject('other-org');
+    expect((await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(404);
+  });
 });
 
 // ── Auth / scoping ───────────────────────────────────────────────────────
@@ -195,7 +290,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('creates a work item on an installed custom board at its initial phase', async () => {
+  it('imports incident.io incidents and follow-ups onto an installed custom board at its initial phase', async () => {
     const releaseBoard = defineBoard({
       id: 'release',
       title: 'Release',
@@ -206,19 +301,56 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       },
     });
     const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
-    const res = await buildApp(orgUser, undefined, undefined, new Set(), boardRegistry).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
+    const importedItems = [
       {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:incident:incident-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'INC-42: API unavailable',
+      },
+      {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:follow-up:follow-up-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'Add database failover alert',
+      },
+    ];
+
+    for (const importedItem of importedItems) {
+      const res = await app.request(`/web/factory/projects/${PROJECT_ID}/work-items`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(createBody({ board: 'release', stages: undefined })),
-      },
-    );
+        body: JSON.stringify(createBody({ ...importedItem, board: 'release', stages: undefined })),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).workItem).toMatchObject({
+        ...importedItem,
+        board: 'release',
+        stages: ['queued'],
+      });
+    }
 
-    expect(res.status).toBe(200);
-    expect((await res.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
-    const [stored] = await listItems();
-    expect(stored).toMatchObject({ board: 'release', stages: ['queued'] });
+    await expect(listItems()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSource: importedItems[0]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+        expect.objectContaining({
+          externalSource: importedItems[1]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+      ]),
+    );
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {
@@ -575,6 +707,38 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     );
   });
 
+  it('stamps the browser request onto the row a move leaves behind', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const res = await buildApp(orgUser).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': 'Mozilla/5.0 (factory board)',
+          'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+        },
+        body: JSON.stringify({
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+          cause: 'board_drag',
+        }),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        context: { location: '203.0.113.7', userAgent: 'Mozilla/5.0 (factory board)' },
+      }),
+    );
+  });
+
   it('accepts a human cancel over HTTP', async () => {
     const item = await createItem();
     const res = await transition(item, { stage: 'canceled' });
@@ -689,12 +853,38 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         requestContext,
       }),
     );
-    expect(auditRecorded).toContainEqual(
-      expect.objectContaining({
-        action: 'factory.run.started',
-        metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
+    expect(auditRecorded).toEqual([]);
+  });
+
+  it('starts the run under the caller, whatever actor the body claims', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...startBody(workItem.id),
+        actor: { type: 'system', id: 'forged' },
+        userId: 'forged',
+        orgId: 'forged',
       }),
-    );
+    });
+
+    expect(res.status).toBe(202);
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', userId: 'u1' }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {
@@ -978,12 +1168,9 @@ describe('GET /web/factory/projects/:id/attention', () => {
           target: { kind: 'work-item', workItemId: workItem.id, board: 'work' },
         },
       ],
-      openCount: 1,
-      badgeCount: 1,
-      unreadCount: 1,
-      latestOccurrenceKey: firstKey,
-      latestOccurrenceAt: now.toISOString(),
-      latestOccurrenceUnread: true,
+      kinds: {
+        'automation-failed': { open: 1, unread: 1, latest: { key: firstKey, at: now.toISOString(), unread: true } },
+      },
       hasMore: false,
     });
     const receiptRead = findMany.mock.calls.find(([collection]) => collection === 'factory_attention_receipts');
@@ -1025,13 +1212,12 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], openCount: 1, unreadCount: 0 });
+    ).resolves.toMatchObject({ items: [], kinds: { 'automation-failed': { open: 1, unread: 0 } } });
 
     expect((await json('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      openCount: 0,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 0, unread: 0 } },
     });
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
@@ -1043,8 +1229,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/restore`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ key: firstKey, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
     await seed.workItems.setAttentionReceipt({
       orgId: 'org1',
@@ -1089,8 +1274,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
     });
 
     const readAll = await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
@@ -1098,8 +1282,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ occurrence: 2, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
 
     const [retried, staleReceipt] = await Promise.all([
@@ -1185,9 +1368,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      badgeCount: 1,
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-proposed': { open: 1, unread: 1 } },
     });
 
     await seed.workItems.supersedeTerminalDecisionsForWorkItem({
@@ -1198,8 +1379,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      badgeCount: 0,
-      openCount: 0,
+      kinds: { 'automation-proposed': { open: 0 } },
     });
   });
 
@@ -1675,8 +1855,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json(),
     ).resolves.toMatchObject({
       items: [{ decisionId: target.id }],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
       hasMore: false,
     });
     await expect(
@@ -1918,6 +2097,23 @@ describe('run activity on the work-item listing', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(2);
     expect(body.runningSessionIds).toEqual(['session-running']);
+    expect(body.parkedSessionIds).toEqual([]);
+  });
+
+  it('reports the listed cards whose session waits on an answer', async () => {
+    await startRun('session-parked');
+    await startRun('session-idle');
+
+    const res = await buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      undefined,
+      new Set(['session-parked']),
+    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+
+    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
   });
 
   it('reports no activity for a session that belongs to no card in the project', async () => {
@@ -2001,24 +2197,14 @@ describe('audit events', () => {
     expect(auditRecorded).toEqual([]);
   });
 
-  it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
+  it('files a session onto a role as an update, never as a run start', async () => {
     const item = await createItem();
     auditRecorded = [];
 
     const session = { sessionId: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
     await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
-    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
-    expect(auditRecorded[1].metadata).toEqual({
-      role: 'work',
-      branch: 'factory/issue-42',
-      threadId: 't-1',
-      sessionId: '/sb/wt/issue-42',
-    });
-
-    // Re-filing the same role is not a new run.
-    auditRecorded = [];
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['sessions'] });
   });
 
   it('records only updated when the patch does not move stages', async () => {

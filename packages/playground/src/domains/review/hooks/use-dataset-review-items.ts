@@ -42,7 +42,10 @@ const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | und
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: r.comment ?? '',
+                createdAt: r.createdAt,
+                status: r.status,
+                groundTruth: r.groundTruth,
+                toolMockReport: r.toolMockReport,
               }));
           } catch {
             return [];

@@ -31,7 +31,8 @@ import { withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
-import type { ResolvedObservationConfig } from './types';
+import { applyBeforeObservation, applyTextTransform } from './transform-hooks';
+import type { ObserveTransformHooks, ObserveTrigger, ResolvedObservationConfig } from './types';
 
 type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
 
@@ -65,6 +66,45 @@ export interface ObserverExchange {
   retriedDueToDegenerate: boolean;
 }
 
+interface ObserverCallOptions {
+  skipContinuationHints?: boolean;
+  requestContext?: RequestContext;
+  observabilityContext?: ObservabilityContext;
+  priorCurrentTask?: string;
+  priorSuggestedResponse?: string;
+  priorThreadTitle?: string;
+  priorExtractedValues?: Record<string, unknown>;
+  wasTruncated?: boolean;
+  model?: ConcreteObservationModel;
+  threadId?: string;
+  resourceId?: string;
+  /** Which pipeline path initiated this cycle; passed to transform hooks. */
+  trigger?: ObserveTrigger;
+  mainAgent?: ProcessorContext['agent'];
+}
+
+interface ObserverCallResult {
+  observations: string;
+  currentTask?: string;
+  suggestedContinuation?: string;
+  threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+  extractors?: readonly Extractor<any>[];
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  providerMetadata?: ProviderMetadata;
+}
+
+interface MultiThreadObserverResult {
+  observations: string;
+  currentTask?: string;
+  suggestedContinuation?: string;
+  threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+  extractors?: readonly Extractor<any>[];
+}
+
 function filterObserverExtractors(
   extractors: ResolvedObservationConfig['extractors'] | undefined,
   skipContinuationHints?: boolean,
@@ -84,6 +124,7 @@ export class ObserverRunner {
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
   private readonly memory?: Memory;
+  private readonly hooks?: ObserveTransformHooks;
   private mastra?: Mastra;
 
   /** Captured prompt/response from the last observer call (for repro capture). */
@@ -96,6 +137,7 @@ export class ObserverRunner {
     tokenCounter: TokenCounter;
     mastra?: Mastra;
     memory?: Memory;
+    hooks?: ObserveTransformHooks;
   }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
@@ -103,6 +145,7 @@ export class ObserverRunner {
     this.tokenCounter = opts.tokenCounter;
     this.mastra = opts.mastra;
     this.memory = opts.memory;
+    this.hooks = opts.hooks;
   }
 
   __registerMastra(mastra: Mastra): void {
@@ -192,36 +235,36 @@ export class ObserverRunner {
   }
 
   /**
-   * Call the Observer agent for a single thread.
+   * Call the Observer agent for a single thread, running the config-level
+   * `beforeObservation` / `afterObservation` transform hooks around it.
    */
   async call(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: {
-      skipContinuationHints?: boolean;
-      requestContext?: RequestContext;
-      observabilityContext?: ObservabilityContext;
-      priorCurrentTask?: string;
-      priorSuggestedResponse?: string;
-      priorThreadTitle?: string;
-      priorExtractedValues?: Record<string, unknown>;
-      wasTruncated?: boolean;
-      model?: ConcreteObservationModel;
-      resourceId?: string;
-      mainAgent?: ProcessorContext['agent'];
-    },
-  ): Promise<{
-    observations: string;
-    currentTask?: string;
-    suggestedContinuation?: string;
-    threadTitle?: string;
-    extractedValues?: Record<string, unknown>;
-    extractionFailures?: Array<{ slug: string; error: string }>;
-    extractors?: readonly Extractor<any>[];
-    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
-    providerMetadata?: ProviderMetadata;
-  }> {
+    options?: ObserverCallOptions,
+  ): Promise<ObserverCallResult> {
+    const context = {
+      threadId: options?.threadId ?? messagesToObserve[0]?.threadId,
+      resourceId: options?.resourceId,
+      trigger: options?.trigger,
+    };
+    const messages = await applyBeforeObservation(this.hooks, messagesToObserve, context);
+    if (messages.length === 0) {
+      omDebug('[OM:callObserver] beforeObservation returned no messages, skipping observer call');
+      return { observations: '' };
+    }
+    const result = await this.callObserver(existingObservations, messages, abortSignal, options);
+    result.observations = await applyTextTransform(this.hooks, 'afterObservation', result.observations, context);
+    return result;
+  }
+
+  private async callObserver(
+    existingObservations: string | undefined,
+    messagesToObserve: MastraDBMessage[],
+    abortSignal?: AbortSignal,
+    options?: ObserverCallOptions,
+  ): Promise<ObserverCallResult> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const activeExtractors = await resolveExtractors(
@@ -376,6 +419,67 @@ export class ObserverRunner {
    */
   async callMultiThread(
     existingObservations: string | undefined,
+    allMessagesByThread: Map<string, MastraDBMessage[]>,
+    allThreadOrder: string[],
+    abortSignal?: AbortSignal,
+    requestContext?: RequestContext,
+    priorMetadataByThread?: Map<
+      string,
+      { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
+    >,
+    observabilityContext?: ObservabilityContext,
+    model?: ConcreteObservationModel,
+    hookContext?: { resourceId?: string; trigger?: ObserveTrigger },
+  ): Promise<{
+    results: Map<string, MultiThreadObserverResult>;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    providerMetadata?: ProviderMetadata;
+  }> {
+    const contextFor = (threadId: string) => ({ threadId, ...hookContext });
+
+    // Apply beforeObservation per thread; threads left with no messages are
+    // excluded from the observer call but still get an empty result.
+    const messagesByThread = new Map<string, MastraDBMessage[]>();
+    for (const threadId of allThreadOrder) {
+      const filtered = await applyBeforeObservation(
+        this.hooks,
+        allMessagesByThread.get(threadId) ?? [],
+        contextFor(threadId),
+      );
+      if (filtered.length > 0) messagesByThread.set(threadId, filtered);
+    }
+    const threadOrder = allThreadOrder.filter(threadId => messagesByThread.has(threadId));
+
+    const output = await this.callMultiThreadObserver(
+      existingObservations,
+      messagesByThread,
+      threadOrder,
+      abortSignal,
+      requestContext,
+      priorMetadataByThread,
+      observabilityContext,
+      model,
+    );
+
+    for (const threadId of allThreadOrder) {
+      const threadResult = output.results.get(threadId);
+      if (!threadResult) {
+        output.results.set(threadId, { observations: '' });
+        continue;
+      }
+      threadResult.observations = await applyTextTransform(
+        this.hooks,
+        'afterObservation',
+        threadResult.observations,
+        contextFor(threadId),
+      );
+    }
+
+    return output;
+  }
+
+  private async callMultiThreadObserver(
+    existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
     abortSignal?: AbortSignal,
@@ -387,21 +491,14 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
   ): Promise<{
-    results: Map<
-      string,
-      {
-        observations: string;
-        currentTask?: string;
-        suggestedContinuation?: string;
-        threadTitle?: string;
-        extractedValues?: Record<string, unknown>;
-        extractionFailures?: Array<{ slug: string; error: string }>;
-        extractors?: readonly Extractor<any>[];
-      }
-    >;
+    results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     providerMetadata?: ProviderMetadata;
   }> {
+    if (threadOrder.length === 0) {
+      return { results: new Map() };
+    }
+
     const inputTokens = Array.from(messagesByThread.values()).reduce(
       (total, messages) => total + this.tokenCounter.countMessages(messages),
       0,
@@ -418,29 +515,23 @@ export class ObserverRunner {
     const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
 
     if (structuredExtractors.length > 0) {
-      const results = new Map<
-        string,
-        {
-          observations: string;
-          currentTask?: string;
-          suggestedContinuation?: string;
-          threadTitle?: string;
-          extractedValues?: Record<string, unknown>;
-          extractionFailures?: Array<{ slug: string; error: string }>;
-          extractors?: readonly Extractor<any>[];
-        }
-      >();
+      const results = new Map<string, MultiThreadObserverResult>();
       let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       for (const threadId of threadOrder) {
-        const threadResult = await this.call(existingObservations, messagesByThread.get(threadId) ?? [], abortSignal, {
-          requestContext,
-          observabilityContext,
-          priorCurrentTask: priorMetadataByThread?.get(threadId)?.currentTask,
-          priorSuggestedResponse: priorMetadataByThread?.get(threadId)?.suggestedResponse,
-          priorThreadTitle: priorMetadataByThread?.get(threadId)?.threadTitle,
-          priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
-          model: resolvedModel.model,
-        });
+        const threadResult = await this.callObserver(
+          existingObservations,
+          messagesByThread.get(threadId) ?? [],
+          abortSignal,
+          {
+            requestContext,
+            observabilityContext,
+            priorCurrentTask: priorMetadataByThread?.get(threadId)?.currentTask,
+            priorSuggestedResponse: priorMetadataByThread?.get(threadId)?.suggestedResponse,
+            priorThreadTitle: priorMetadataByThread?.get(threadId)?.threadTitle,
+            priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
+            model: resolvedModel.model,
+          },
+        );
         results.set(threadId, {
           observations: threadResult.observations,
           currentTask: threadResult.currentTask,
@@ -591,18 +682,7 @@ export class ObserverRunner {
       retriedDueToDegenerate,
     };
 
-    const results = new Map<
-      string,
-      {
-        observations: string;
-        currentTask?: string;
-        suggestedContinuation?: string;
-        threadTitle?: string;
-        extractedValues?: Record<string, unknown>;
-        extractionFailures?: Array<{ slug: string; error: string }>;
-        extractors?: readonly Extractor<any>[];
-      }
-    >();
+    const results = new Map<string, MultiThreadObserverResult>();
     for (const [threadId, threadResult] of parsed.threads) {
       const structuredExtraction = structuredExtractionByThread.get(threadId);
       const extractedValues = mergeExtractedValues(threadResult.extractedValues, structuredExtraction?.values);

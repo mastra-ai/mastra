@@ -157,6 +157,6 @@ describe('OpenCode Console generated documentation', () => {
     const grouped = await parseProviders();
     const content = generateIndexPage(grouped);
     expect(content).toContain('201');
-    expect(content).toContain('7166');
+    expect(content).toContain('7200');
   });
 });

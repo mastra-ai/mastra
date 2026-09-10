@@ -2,6 +2,7 @@ import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
   TraceQueryField,
+  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -31,13 +32,33 @@ const TRACE_FIELDS = {
 } satisfies FieldRegistry<TraceQueryField>;
 
 const SPAN_FIELDS = {
+  name: 's."name"',
   spanType: 's."spanType"',
+  model: 's."model"',
+  provider: 's."provider"',
+  startedAt: 's."startedAt"',
+  endedAt: 's."endedAt"',
+  durationMs: 's."durationMs"',
+  status: 's."status"',
   error: 's."error"',
+  entityType: 's."entityType"',
+  entityId: 's."entityId"',
+  entityName: 's."entityName"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 const SCORE_FIELDS = {
   scorerId: 's."scorerId"',
+  scorerVersion: 's."scorerVersion"',
+  scoreSource: 's."scoreSource"',
   score: 's."score"',
+  timestamp: 's."timestamp"',
+  spanId: 's."spanId"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `
@@ -61,6 +82,10 @@ function fieldSql<TField extends string>(
   return sql;
 }
 
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
 function placeholders(values: readonly unknown[], offset: number): string {
   return values.map((_, index) => `$${offset + index}`).join(', ');
 }
@@ -69,11 +94,12 @@ function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
   parameterOffset: number,
+  allowMetadata = false,
 ): SqlFragment {
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
-      const compiled = compileScalarPredicate(arg, registry, parameterOffset + values.length);
+      const compiled = compileScalarPredicate(arg, registry, parameterOffset + values.length, allowMetadata);
       values.push(...compiled.values);
       return `(${compiled.sql})`;
     });
@@ -81,37 +107,53 @@ function compileScalarPredicate<TField extends string>(
   }
 
   if (predicate.type === 'not') {
-    const compiled = compileScalarPredicate(predicate.arg, registry, parameterOffset);
+    const compiled = compileScalarPredicate(predicate.arg, registry, parameterOffset, allowMetadata);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  const field = fieldSql(registry, predicate.field);
+  let field: string;
+  let fieldValues: unknown[] = [];
+  if (isMetadataField(predicate.field)) {
+    if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+    const keyParameter = `$${parameterOffset++}`;
+    field = `COALESCE(
+      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
+      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
+    )`;
+    fieldValues = [predicate.field.slice('metadata.'.length)];
+  } else {
+    field = fieldSql(registry, predicate.field);
+  }
+
   if (predicate.type === 'presence') {
     return {
       sql: `${field} IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`,
-      values: [],
+      values: fieldValues,
     };
   }
 
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
-      return { sql: `${field} IS NOT NULL AND ${field} IN (${list})`, values: predicate.values };
+      return { sql: `${field} IS NOT NULL AND ${field} IN (${list})`, values: [...fieldValues, ...predicate.values] };
     }
-    return { sql: `${field} IS NULL OR ${field} NOT IN (${list})`, values: predicate.values };
+    return { sql: `${field} IS NULL OR ${field} NOT IN (${list})`, values: [...fieldValues, ...predicate.values] };
   }
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
-  return { sql: `${field} IS NOT NULL AND ${field} ${operator} ${parameter}`, values: [predicate.value] };
+  return {
+    sql: `${field} IS NOT NULL AND ${field} ${operator} ${parameter}`,
+    values: [...fieldValues, predicate.value],
+  };
 }
 
 function latestRootPredicate(spanTable: string): string {
@@ -186,7 +228,7 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset, true);
 }
 
 export interface CompiledPostgresTraceQuery {
@@ -217,7 +259,26 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
 
   if (relationCollections.has('spans')) {
     ctes.push(`current_spans AS MATERIALIZED (
-    SELECT s."traceId", s."spanType", s."error"
+    SELECT
+      s."traceId",
+      s."name",
+      s."spanType",
+      CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END AS "model",
+      CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END AS "provider",
+      s."startedAt",
+      CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
+      CASE
+        WHEN s."isPending" THEN NULL
+        ELSE EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000
+      END AS "durationMs",
+      CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
+      s."error",
+      s."entityType",
+      s."entityId",
+      s."entityName",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${spanTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
@@ -226,7 +287,17 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS MATERIALIZED (
-    SELECT s."traceId", s."scorerId", s."score"
+    SELECT
+      s."traceId",
+      s."spanId",
+      s."timestamp",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

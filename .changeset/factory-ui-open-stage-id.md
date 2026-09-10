@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-The Factory board now names a column for a stage it does not recognise, and invites you to drag work there, instead of leaving the column blank.
+Added a compile-time check that every built-in Factory stage has an explicit review-board visibility setting.

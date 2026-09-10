@@ -25,6 +25,13 @@ export type ModelTimeoutSettings = {
    * advance to the next entry in `models` when fallback models are configured.
    */
   stepMs?: number;
+
+  /**
+   * Maximum wall-clock duration, in milliseconds, for a streaming model call to
+   * emit its first content-bearing chunk. Metadata and stream-start chunks do not
+   * satisfy this budget. Once content begins, only `stepMs` and `totalMs` remain active.
+   */
+  firstChunkMs?: number;
 };
 
 /**

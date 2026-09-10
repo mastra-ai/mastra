@@ -132,10 +132,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // called this step. A pure-safe batch parallelizes even while an
         // approval/suspend tool stays registered; a batch that calls one still
         // serializes; run-wide requireToolApproval still forces sequential.
-        const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
+        const stepActiveTools = _internal?.stepActiveTools;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
-          tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
+          tools: (_internal?.stepTools as Tools | undefined) ?? rest.tools,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
           strategy: toolCallConcurrencyStrategy,
