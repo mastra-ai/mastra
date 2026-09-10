@@ -4,6 +4,8 @@ import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
+import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
 
@@ -21,6 +23,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
   const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(null);
+  const [scorerIds, setScorerIds] = useState<string[]>([]);
   const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
   const { createDataset } = useDatasetMutations();
 
@@ -51,6 +54,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         requestContextSchema,
         targetType,
         targetIds,
+        scorerIds: scorerIds.length > 0 ? scorerIds : undefined,
       })) as { id: string };
 
       toast.success('Dataset created successfully');
@@ -79,6 +83,14 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         value={description}
         onChange={e => setDescription(e.target.value)}
         placeholder="Enter dataset description (optional)"
+      />
+
+      <ScorerSelector
+        selectedScorers={scorerIds}
+        setSelectedScorers={setScorerIds}
+        disabled={createDataset.isPending}
+        label={DEFAULT_SCORERS_LABEL}
+        helperText={DEFAULT_SCORERS_HELPER_TEXT}
       />
 
       {targetType && !showCustomSchema ? (

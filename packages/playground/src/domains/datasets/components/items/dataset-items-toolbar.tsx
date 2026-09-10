@@ -2,7 +2,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Plus, Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
@@ -69,18 +69,17 @@ export function DatasetItemsToolbar({
     </div>
   );
 
-  const searchField = (
-    <div className="w-full min-w-24">
-      <SearchFieldBlock
-        name="search-items"
-        label="Search"
-        labelIsHidden
-        size="md"
+  // Hidden on an empty dataset: the list's empty state takes over. Kept while a
+  // search is active so a query with no results can still be edited.
+  const showItemActions = hasItems || Boolean(searchQuery);
+
+  const searchField = showItemActions && (
+    <div className="max-w-120 min-w-64 flex-1">
+      <ListSearch
+        label="Search items"
         placeholder="Search items..."
         value={searchQuery ?? ''}
-        onChange={e => onSearchChange?.(e.target.value)}
-        onReset={() => onSearchChange?.('')}
-        disabled={!hasItems && !searchQuery}
+        onSearch={query => onSearchChange?.(query)}
       />
     </div>
   );
@@ -142,7 +141,7 @@ export function DatasetItemsToolbar({
       <ButtonsGroup className="ml-auto flex-wrap justify-end">
         {leftSlot}
         {selectionDropdown}
-        {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (
+        {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
             <Button onClick={onAddClick}>
               <Plus /> Add Item
