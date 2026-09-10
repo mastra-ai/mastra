@@ -1,3 +1,4 @@
+import type { QueueAgentMessageParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
@@ -388,45 +389,48 @@ describe('Thread', () => {
         sendText('FIRST');
         await screen.findByRole('button', { name: 'Queue', exact: true });
         server.use(
-          http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, async ({ request }) => {
-            const body = await request.json();
-            emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} });
-            emit({ type: 'start', runId: 'already-started', from: 'AGENT', payload: { messageId: 'answer-second' } });
-            if (echoReceived)
+          http.post<never, QueueAgentMessageParams>(
+            `${BASE_URL}/api/agents/:agentId/queue-message`,
+            async ({ request }) => {
+              const body = await request.json();
+              emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} });
+              emit({ type: 'start', runId: 'already-started', from: 'AGENT', payload: { messageId: 'answer-second' } });
+              if (echoReceived)
+                emit({
+                  type: 'data-user-message',
+                  runId: 'already-started',
+                  from: 'AGENT',
+                  data: {
+                    type: 'user-message',
+                    id: 'server-second',
+                    contents: 'SECOND',
+                    metadata: isRecord(body.message) ? body.message.metadata : undefined,
+                  },
+                });
+              emit({ type: 'text-start', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
               emit({
-                type: 'data-user-message',
+                type: 'text-delta',
                 runId: 'already-started',
                 from: 'AGENT',
-                data: {
-                  type: 'user-message',
-                  id: 'server-second',
-                  contents: 'SECOND',
-                  metadata: body.message.metadata,
-                },
+                payload: { id: 'text-second', text: 'Answer' },
               });
-            emit({ type: 'text-start', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
-            emit({
-              type: 'text-delta',
-              runId: 'already-started',
-              from: 'AGENT',
-              payload: { id: 'text-second', text: 'Answer' },
-            });
-            emit({
-              type: 'step-start',
-              runId: 'already-started',
-              from: 'AGENT',
-              payload: { messageId: 'answer-second' },
-            });
-            emit({
-              type: 'text-delta',
-              runId: 'already-started',
-              from: 'AGENT',
-              payload: { id: 'text-second', text: ' SECOND' },
-            });
-            emit({ type: 'text-end', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
-            await new Promise(resolve => setTimeout(resolve, 30));
-            return HttpResponse.json(acceptedMessage('already-started'));
-          }),
+              emit({
+                type: 'step-start',
+                runId: 'already-started',
+                from: 'AGENT',
+                payload: { messageId: 'answer-second' },
+              });
+              emit({
+                type: 'text-delta',
+                runId: 'already-started',
+                from: 'AGENT',
+                payload: { id: 'text-second', text: ' SECOND' },
+              });
+              emit({ type: 'text-end', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
+              await new Promise(resolve => setTimeout(resolve, 30));
+              return HttpResponse.json(acceptedMessage('already-started'));
+            },
+          ),
         );
         sendText('SECOND');
         await waitFor(() => expect(document.querySelector('[data-message-delivery="sent"]')).toBeTruthy());
