@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogTitle,
@@ -140,37 +141,55 @@ export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDial
 
 interface TxtEntryProps {
   data: string;
+  name?: string;
 }
 
-export const TxtEntry = ({ data }: TxtEntryProps) => {
+export const TxtEntry = ({ data, name }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
 
-  // assistant-ui wraps txt related files with something like <attachment name=text.txt>
-  // We remove the <attachment> tag and everything inside it
-  const formattedContent = data.replace(/<attachment[^>]*>/, '').replace(/<\/attachment>/g, '');
+  // Remove only the outer envelope, preserving attachment-like tags inside the file.
+  const formattedContent = data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data;
+  const filename =
+    name ??
+    data
+      .match(/^<attachment name="([^"]*)">/)?.[1]
+      ?.replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className={ctaClassName} type="button">
-        <FileText className="text-neutral3" />
-      </button>
-      <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />
+      <Button
+        onClick={() => setOpen(true)}
+        variant="outline"
+        size="sm"
+        className="max-w-64 min-w-0"
+        type="button"
+        aria-label={filename ? `Preview ${filename}` : 'Preview text attachment'}
+        title={filename}
+      >
+        <FileText className="shrink-0" />
+        {filename && <span className="truncate">{filename}</span>}
+      </Button>
+      <TxtPreviewDialog data={formattedContent} title={filename} open={open} onOpenChange={setOpen} />
     </>
   );
 };
 
 interface TxtPreviewDialogProps {
   data: string;
+  title?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogProps) => {
+export const TxtPreviewDialog = ({ data, title, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[80vh] max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Text preview</DialogTitle>
+          <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
           <DialogDescription>Preview of the text file</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
