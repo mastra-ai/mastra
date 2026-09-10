@@ -20,6 +20,7 @@ import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
+import { getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 /**
  * AgentController session routes.
@@ -1013,14 +1014,20 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
   responseSchema: listActiveRunsResponseSchema,
   summary: 'List active controller runs',
   description:
-    'Lists the runs in flight on the controller across all resources, without creating or touching a session.',
+    'Lists runs in flight within the server-owned resource and thread scope, without creating or touching a session.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId }) => {
+  handler: async ({ mastra, controllerId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      return { runs: controller.listActiveThreadRuns() };
+      const resourceId = getEffectiveResourceId(requestContext, undefined);
+      const threadId = getEffectiveThreadId(requestContext, undefined);
+      return {
+        runs: controller
+          .listActiveThreadRuns()
+          .filter(run => (!resourceId || run.resourceId === resourceId) && (!threadId || run.threadId === threadId)),
+      };
     } catch (error) {
       return handleError(error, 'error listing active controller runs');
     }
