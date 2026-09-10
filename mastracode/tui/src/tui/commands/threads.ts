@@ -3,6 +3,7 @@ import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
+import { withPluginBindingTransition } from '../plugin-binding.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -34,10 +35,12 @@ export function showThreadLockPrompt(
     } else if (answer === 'Clone thread' && lockedThreadId) {
       try {
         const customTitle = await askCloneName(ctx.state);
-        const clonedThread = await ctx.state.session.thread.clone({
-          sourceThreadId: lockedThreadId,
-          ...(customTitle ? { title: customTitle } : {}),
-        });
+        const clonedThread = await withPluginBindingTransition(ctx.state, () =>
+          ctx.state.session.thread.clone({
+            sourceThreadId: lockedThreadId,
+            ...(customTitle ? { title: customTitle } : {}),
+          }),
+        );
         ctx.state.pendingNewThread = false;
         await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
       } catch (error) {
@@ -118,11 +121,14 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           return;
         }
 
-        if (thread.resourceId !== currentResourceId) {
-          await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
-        }
         try {
-          await state.session.thread.switch({ threadId: thread.id });
+          await withPluginBindingTransition(state, async () => {
+            if (thread.resourceId !== currentResourceId) {
+              await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
+            }
+            await state.session.thread.switch({ threadId: thread.id });
+            state.pendingNewThread = false;
+          });
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -155,10 +161,12 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         try {
           const customTitle = await askCloneName(state);
-          const clonedThread = await state.session.thread.clone({
-            sourceThreadId: thread.id,
-            ...(customTitle ? { title: customTitle } : {}),
-          });
+          const clonedThread = await withPluginBindingTransition(state, () =>
+            state.session.thread.clone({
+              sourceThreadId: thread.id,
+              ...(customTitle ? { title: customTitle } : {}),
+            }),
+          );
           state.pendingNewThread = false;
           await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
         } catch (error) {

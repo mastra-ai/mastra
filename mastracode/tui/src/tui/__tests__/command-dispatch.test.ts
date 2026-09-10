@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   handleKnowledgeCommand: vi.fn().mockResolvedValue(undefined),
   handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
+  handlePluginSettingsCommand: vi.fn().mockResolvedValue(undefined),
   handleProfileCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
@@ -83,6 +84,8 @@ vi.mock('@mastra/code-sdk/utils/slash-command-processor', () => ({
   processSlashCommand: mocks.processSlashCommand,
 }));
 
+vi.mock('../commands/plugin-settings.js', () => ({ handlePluginSettingsCommand: mocks.handlePluginSettingsCommand }));
+
 vi.mock('../commands/goal.js', () => ({
   startGoalWithDefaults: mocks.startGoalWithDefaults,
 }));
@@ -94,6 +97,21 @@ import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { createMockState } from './agent-controller-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
+  it('opens a registered native settings command during an active run without chat submission', async () => {
+    const entry = { name: 'heartbeat', signal: new AbortController().signal };
+    const state = createMockState({
+      threadId: 'thread-1',
+      session: { stream: { isActive: () => true } },
+      extra: { customSlashCommands: [], pluginSettingsCommands: [entry] },
+    });
+    const ctx = { state } as any;
+    await dispatchSlashCommand('/heartbeat', state as any, () => ctx);
+    expect(mocks.handlePluginSettingsCommand).toHaveBeenCalledWith(ctx, entry);
+    expect(state.session.sendMessage).not.toHaveBeenCalled();
+    expect(state.session.sendSignal).not.toHaveBeenCalled();
+    expect(mocks.processSlashCommand).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     mocks.handleModelCommand.mockClear();
     mocks.handleConnectCommand.mockClear();

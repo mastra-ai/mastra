@@ -32,6 +32,71 @@ function writePlugin(filePath: string, source: string): void {
 }
 
 describe('plugin loader', () => {
+  it('resolves settings with stable profile dataDir and absent interactive capability', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-settings-loader-'));
+    const pluginDir = makeResolvableDir('settings-loader');
+    writePlugin(
+      path.join(pluginDir, 'index.ts'),
+      `import { z } from 'zod';
+      export default { id: 'settings.fixture', config: { enabled: { type: 'boolean', default: false } },
+        settingsCommands: async context => ({ fixture: {
+          label: context.dataDir,
+          fields: { enabled: { type: 'boolean', label: 'Enabled' } },
+          schema: z.object({ enabled: z.boolean() }),
+          resolve: () => ({ values: { enabled: context.config.enabled }, status: [{ label: 'Interactive', value: String(context.getInteractiveBinding?.()) }] }),
+          save: async () => {}
+        } })
+      };`,
+    );
+    const record = {
+      enabled: true,
+      source: 'local' as const,
+      specifier: pluginDir,
+      path: pluginDir,
+      entry: 'index.ts',
+    };
+    const options = { projectRoot: tempDir, homeDir: path.join(tempDir, 'home'), configDir: '.custom' };
+    const project = await loadPlugins({
+      ...options,
+      projectRegistry: { plugins: { 'settings.fixture': record } },
+      globalRegistry: { plugins: {} },
+    });
+    const global = await loadPlugins({
+      ...options,
+      projectRegistry: { plugins: {} },
+      globalRegistry: { plugins: { 'settings.fixture': record } },
+    });
+    expect(project[0]?.settingsCommandErrors).toEqual([]);
+    expect(project[0]?.settingsCommands?.fixture.label).toBe(
+      path.join(options.homeDir, '.custom/plugin-data/settings.fixture'),
+    );
+    expect(global[0]?.settingsCommands?.fixture.label).toBe(project[0]?.settingsCommands?.fixture.label);
+    expect(project[0]?.configValues).toEqual({ enabled: false });
+    expect(fs.existsSync(path.join(options.homeDir, '.custom/plugin-data'))).toBe(false);
+  });
+
+  it('reports invalid settings without disabling unrelated tools', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-settings-loader-'));
+    writePlugin(
+      path.join(tempDir, 'index.ts'),
+      `export default { id: 'bad.settings', settingsCommands: { broken: { label: 'Missing schema' } }, tools: { intact: { tool: { id: 'intact' } } } };`,
+    );
+    const [loaded] = await loadPlugins({
+      projectRoot: tempDir,
+      homeDir: tempDir,
+      globalRegistry: { plugins: {} },
+      projectRegistry: {
+        plugins: {
+          'bad.settings': { enabled: true, source: 'local', specifier: tempDir, path: tempDir, entry: 'index.ts' },
+        },
+      },
+    });
+    expect(loaded?.status).toBe('active');
+    expect(loaded?.settingsCommands).toBeUndefined();
+    expect(loaded?.settingsCommandErrors?.[0]).toContain('bad.settings');
+    expect(loaded?.toolNames).toEqual(['intact']);
+  });
+
   it('loads default exported TypeScript plugins and resolves tools functions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const entryPath = path.join(tempDir, 'plugin.ts');

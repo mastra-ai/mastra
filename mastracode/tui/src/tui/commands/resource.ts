@@ -1,4 +1,5 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
+import { withPluginBindingTransition } from '../plugin-binding.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -33,46 +34,47 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     return;
   }
 
-  await controller.setResourceId(session, { resourceId: newId });
+  await withPluginBindingTransition(state, async () => {
+    await controller.setResourceId(session, { resourceId: newId });
 
-  // Try to resume the most recent thread for this resource
-  const threads = await session.thread.list();
-  const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    // Try to resume the most recent thread for this resource
+    const threads = await session.thread.list();
+    const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
-  if (latest) {
-    await session.thread.switch({ threadId: latest.id, emitEvent: false });
-    disposeAssistantRenderState(state);
-    state.chatContainer.clear();
-    state.pendingTools.clear();
-    state.pendingTaskToolIds?.clear();
-    state.allToolComponents = [];
-    state.allSystemReminderComponents = [];
-    state.messageComponentsById.clear();
-    state.allShellComponents = [];
-    state.pendingNewThread = false;
-    await ctx.renderExistingMessages();
-    ctx.showInfo(
-      sub === 'reset'
-        ? `Resource ID reset to: ${defaultId} — resumed thread: ${latest.title || latest.id}`
-        : `Switched to resource: ${newId} — resumed thread: ${latest.title || latest.id}`,
-    );
-  } else {
-    disposeAssistantRenderState(state);
-    state.chatContainer.clear();
-    state.pendingTools.clear();
-    state.pendingTaskToolIds?.clear();
-    state.allToolComponents = [];
-    state.allSystemReminderComponents = [];
-    state.messageComponentsById.clear();
-    state.allShellComponents = [];
-    state.pendingNewThread = true;
-    ctx.showInfo(
-      sub === 'reset'
-        ? `Resource ID reset to: ${defaultId} (no existing threads, a new one will be created)`
-        : `Switched to resource: ${newId} (no existing threads, a new one will be created)`,
-    );
-  }
-
+    if (latest) {
+      await session.thread.switch({ threadId: latest.id, emitEvent: false });
+      disposeAssistantRenderState(state);
+      state.chatContainer.clear();
+      state.pendingTools.clear();
+      state.pendingTaskToolIds?.clear();
+      state.allToolComponents = [];
+      state.allSystemReminderComponents = [];
+      state.messageComponentsById.clear();
+      state.allShellComponents = [];
+      state.pendingNewThread = false;
+      await ctx.renderExistingMessages();
+      ctx.showInfo(
+        sub === 'reset'
+          ? `Resource ID reset to: ${defaultId} — resumed thread: ${latest.title || latest.id}`
+          : `Switched to resource: ${newId} — resumed thread: ${latest.title || latest.id}`,
+      );
+    } else {
+      disposeAssistantRenderState(state);
+      state.chatContainer.clear();
+      state.pendingTools.clear();
+      state.pendingTaskToolIds?.clear();
+      state.allToolComponents = [];
+      state.allSystemReminderComponents = [];
+      state.messageComponentsById.clear();
+      state.allShellComponents = [];
+      state.pendingNewThread = true;
+      ctx.showInfo(
+        sub === 'reset'
+          ? `Resource ID reset to: ${defaultId} (no existing threads, a new one will be created)`
+          : `Switched to resource: ${newId} (no existing threads, a new one will be created)`,
+      );
+    }
+  });
   ctx.updateStatusLine();
   state.ui.requestRender();
 }

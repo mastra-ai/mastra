@@ -53,6 +53,7 @@ import {
   handlePruneCommand,
   handleProfileCommand,
 } from './commands/index.js';
+import { handlePluginSettingsCommand } from './commands/plugin-settings.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -306,6 +307,11 @@ export async function dispatchSlashCommand(
       await handleGoalCommand(buildCtx(), args);
       return true;
     default: {
+      const settingsCommand = state.pluginSettingsCommands?.find(entry => entry.name === command);
+      if (settingsCommand) {
+        await handlePluginSettingsCommand(ctx, settingsCommand);
+        return true;
+      }
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
       if (customCommand) {
         await handleCustomSlashCommand(

@@ -76,7 +76,9 @@ describe('handlePluginsCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Plugin system not initialized.');
   });
 
-  it('opens the plugin list with install item and plugin metadata', async () => {
+  it('opens the plugin list without invoking contributed settings forms', async () => {
+    const resolveSettings = vi.fn();
+    const saveSettings = vi.fn();
     const pluginManager = {
       reload: vi.fn(async () => undefined),
       getLoadedPlugins: vi.fn(() => [
@@ -92,6 +94,7 @@ describe('handlePluginsCommand', () => {
           entry: 'src/index.ts',
           tools: {},
           toolNames: ['foo_search'],
+          settingsCommands: { fixture: { resolve: resolveSettings, save: saveSettings } },
         },
       ]),
     };
@@ -108,6 +111,8 @@ describe('handlePluginsCommand', () => {
     expect(list.items[1].label).toContain('acme.foo');
     expect(list.items[1].label).toContain('project');
     expect(list.items[1].label).toContain('active');
+    expect(resolveSettings).not.toHaveBeenCalled();
+    expect(saveSettings).not.toHaveBeenCalled();
   });
 
   it('configures plugin string and boolean settings from the detail view', async () => {

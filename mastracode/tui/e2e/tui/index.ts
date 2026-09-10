@@ -100,6 +100,7 @@ import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
+import { pluginSettingsScenario } from './plugin-settings.js';
 import {
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
@@ -223,6 +224,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-modal-validation': customProviderModalValidationScenario,
   'custom-provider-model-selector': customProviderModelSelectorScenario,
   'custom-slash-command': customSlashCommandScenario,
+  'plugin-settings': pluginSettingsScenario,
   'ctrlf-queued-custom-slash': ctrlfQueuedCustomSlashScenario,
   'ctrlf-queued-image-followup': ctrlfQueuedImageFollowupScenario,
   'debug-logging': debugLoggingScenario,

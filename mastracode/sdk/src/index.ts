@@ -86,6 +86,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import type { MastraCodePluginRuntime } from './plugin.js';
 import { PluginManager } from './plugins/manager.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
@@ -308,6 +309,8 @@ export interface MastraCodeConfig {
   disableSettingsOmSeed?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
+  /** Explicit interactive host capability. Omit in headless/server hosts. */
+  pluginInteractiveHost?: Pick<MastraCodePluginRuntime, 'getInteractiveBinding' | 'onInteractiveBindingChange'>;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
    * When provided, this replaces the default `getDynamicMemory(storage, vector)` which
@@ -677,6 +680,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   pluginManager?.setRuntime({
     getController: () => pluginRuntimeController,
     getActiveSession: () => activeSession,
+    ...config?.pluginInteractiveHost,
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};

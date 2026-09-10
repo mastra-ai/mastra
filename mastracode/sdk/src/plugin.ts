@@ -3,7 +3,18 @@ import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { SignalProvider } from '@mastra/core/signals';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 
+import type { PluginInteractiveBinding, PluginSettingsCommands } from './plugins/settings-commands.js';
 import type { MastraCodeState } from './schema.js';
+
+export type {
+  PluginInteractiveBinding,
+  PluginSettingsCommand,
+  PluginSettingsCommands,
+  PluginSettingsContext,
+  PluginSettingsField,
+  PluginSettingsSnapshot,
+  PluginSettingsValues,
+} from './plugins/settings-commands.js';
 
 export { createTool } from '@mastra/core/tools';
 export { RequestContext } from '@mastra/core/di';
@@ -127,12 +138,15 @@ export type MastraCodePluginRuntime = {
    * @experimental see {@link MastraCodePluginRuntime}
    */
   getActiveSession?: () => MastraCodePluginSession | undefined;
+  getInteractiveBinding?: () => PluginInteractiveBinding | undefined;
+  onInteractiveBindingChange?: (listener: (binding: PluginInteractiveBinding | undefined) => void) => () => void;
 };
 
 export type MastraCodePluginContext = MastraCodePluginRuntime & {
   cwd: string;
   scope: 'global' | 'project';
   pluginDir: string;
+  readonly dataDir: string;
   config: MastraCodePluginConfigValues;
 };
 
@@ -181,6 +195,9 @@ export type MastraCodePlugin = {
   version?: string;
   description?: string;
   config?: MastraCodePluginConfigSchema;
+  settingsCommands?:
+    | PluginSettingsCommands
+    | ((context: MastraCodePluginContext) => PluginSettingsCommands | Promise<PluginSettingsCommands>);
   instructions?: MastraCodePluginInstructions;
   tools?:
     | MastraCodePluginToolEntries

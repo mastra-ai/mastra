@@ -185,6 +185,7 @@ const sidebars = {
           label: 'mountAgentControllerOnMastra()',
           customProps: { tags: ['new'] },
         },
+        { type: 'doc', id: 'code-sdk/plugin-settings-commands', label: 'Plugin settings commands' },
       ],
     },
     {

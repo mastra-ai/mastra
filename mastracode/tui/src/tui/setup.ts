@@ -18,6 +18,7 @@ import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo 
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
+import { syncPluginBinding } from './plugin-binding.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -490,6 +491,28 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'help', description: 'Show available commands' },
   ];
 
+  const settings = state.pluginManager?.getPluginSettingsCommands([
+    ...slashCommands.map(command => command.name),
+    'mode',
+    'knowledge',
+    'workflow',
+    'gateway',
+    'memory-gateway',
+    'feedback',
+    ...state.customSlashCommands.map(command => command.name),
+  ]);
+  state.pluginSettingsCommands = settings?.commands ?? [];
+  for (const diagnostic of settings?.diagnostics ?? []) {
+    if (!state.pluginSettingsDiagnostics?.includes(diagnostic)) showError(state, diagnostic);
+  }
+  state.pluginSettingsDiagnostics = settings?.diagnostics ?? [];
+  slashCommands.push(
+    ...state.pluginSettingsCommands.map(entry => ({
+      name: entry.name,
+      description: entry.command.description ?? entry.command.label,
+    })),
+  );
+
   // Only show /mode if there's more than one mode
   const modes = state.controller.listModes();
   if (modes.length > 1) {
@@ -656,6 +679,9 @@ export function setupKeyHandlers(
 export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
   const listener: AgentControllerEventListener = event => {
+    if (event.type === 'thread_created' || event.type === 'thread_changed') {
+      syncPluginBinding(state);
+    }
     // Notify at receipt, before queueing: a pending prompt blocks the serial
     // queue until answered, which would starve any notification queued behind
     // it — exactly when the user has walked away and needs the ping.
