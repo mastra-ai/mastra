@@ -387,15 +387,17 @@ function ThreadSpanPanel({ traceId, spanId, onSpanSelect }: ThreadSpanPanelProps
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceData?.spans, spanId, onSpanSelect);
 
   return (
-    <SpanDataPanelView
-      className="border-border1 h-full rounded-none border-0 border-l"
-      traceId={traceId}
-      spanId={spanId}
-      span={spanDetailData?.span}
-      isLoading={isLoading}
-      onClose={() => onSpanSelect(undefined)}
-      onPrevious={handlePreviousSpan}
-      onNext={handleNextSpan}
-    />
+    <div className="min-h-0 min-w-0 py-4 pr-4">
+      <SpanDataPanelView
+        className="h-full"
+        traceId={traceId}
+        spanId={spanId}
+        span={spanDetailData?.span}
+        isLoading={isLoading}
+        onClose={() => onSpanSelect(undefined)}
+        onPrevious={handlePreviousSpan}
+        onNext={handleNextSpan}
+      />
+    </div>
   );
 }
