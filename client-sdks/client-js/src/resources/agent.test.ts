@@ -607,6 +607,62 @@ describe('Agent signal routes', () => {
     expect(continuationCall[0].streamOptions?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
   });
 
+  it('resolves client tools through clientToolsResolver for signals-path execution', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+
+    const toolCallChunk = {
+      type: 'tool-call',
+      runId: 'run-resolver',
+      payload: { toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' } },
+    };
+    const finishChunk = {
+      type: 'finish',
+      runId: 'run-resolver',
+      payload: {
+        stepResult: { reason: 'tool-calls' },
+        messages: { nonUser: [] },
+      },
+    };
+    vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'continuation-run' } as never);
+
+    const staleExecuteSpy = vi.fn(async () => ({ stale: true }));
+    const freshExecuteSpy = vi.fn(async () => ({ fresh: true }));
+    const makeTool = (execute: (...args: any[]) => Promise<any>) => ({
+      myTool: {
+        id: 'myTool',
+        description: 'tool',
+        inputSchema: z.object({ x: z.string() }),
+        execute,
+      },
+    });
+    const staleClientTools = makeTool(staleExecuteSpy);
+    const freshClientTools = makeTool(freshExecuteSpy);
+    const clientToolsResolver = vi.fn(() => freshClientTools);
+
+    const mockRequest = await mockSignalAndSubscriptionRequests(agent, 'run-resolver', [toolCallChunk, finishChunk], {
+      signal: { type: 'user-message', contents: 'hello' },
+      resourceId: 'resource-resolver',
+      threadId: 'thread-resolver',
+      ifIdle: { streamOptions: { clientTools: staleClientTools, clientToolsResolver } },
+    } as SendAgentSignalParams);
+
+    // The resolver never crosses the wire; the serialized tools come from the resolver.
+    const signalBody = (mockRequest.mock.calls[0] as any[])[1].body;
+    expect(signalBody.ifIdle.streamOptions.clientToolsResolver).toBeUndefined();
+    expect(signalBody.ifIdle.streamOptions.clientTools).toEqual(processClientTools(freshClientTools as any));
+
+    const subscribed = await agent.subscribeToThread({
+      resourceId: 'resource-resolver',
+      threadId: 'thread-resolver',
+    } as SubscribeAgentThreadParams);
+
+    await subscribed.processDataStream({ onChunk: async () => {} });
+
+    // Execution used the resolver's fresh tools, not the tools captured at send time.
+    expect(freshExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(staleExecuteSpy).not.toHaveBeenCalled();
+  });
+
   it('applies client tool toModelOutput and attaches it to the continuation tool-result providerOptions', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
 

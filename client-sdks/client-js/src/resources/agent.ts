@@ -500,7 +500,10 @@ export class Agent extends BaseResource {
           streamOptions: {
             ...streamOptions,
             requestContext: parseClientRequestContext(streamOptions.requestContext),
-            clientTools: processClientTools(streamOptions.clientTools),
+            clientTools: processClientTools(streamOptions.clientToolsResolver?.() ?? streamOptions.clientTools),
+            // Functions can't ride along to the server; the live resolver stays
+            // in the local signal runtime options for continuation rounds.
+            clientToolsResolver: undefined,
           },
         },
       } as Params,
@@ -731,7 +734,12 @@ export class Agent extends BaseResource {
           }
 
           const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeRuntimeOptions) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
+
+          const activeClientTools = activeRuntimeOptions.clientToolsResolver?.() ?? activeRuntimeOptions.clientTools;
           if (!activeClientTools) {
             agent.deleteSignalRuntimeOptions(runId);
             return;

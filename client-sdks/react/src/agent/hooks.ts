@@ -465,7 +465,7 @@ export const useChat = ({
 
   const ensureThreadSubscription = useCallback(
     async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
-      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}`;
       if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
         await _threadSubscriptionPromiseRef.current;
         return;
@@ -539,7 +539,7 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk],
+    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk, streamPath],
   );
 
   useEffect(() => {
@@ -807,6 +807,8 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
+      clientTools: resolvedClientTools,
+      clientToolsResolver,
     };
 
     try {
@@ -821,6 +823,7 @@ export const useChat = ({
             ...signalContinuationOptions,
             requestContext: requestContextRecord,
             clientTools: resolvedClientTools,
+            clientToolsResolver,
           },
         },
       });
