@@ -149,7 +149,9 @@ export class ObservabilitySpanner extends ObservabilityStorage {
               deleted = Number(count ?? 0);
               await tx.commit();
             } catch (error) {
-              await tx.rollback();
+              await tx.rollback().catch(rollbackError => {
+                throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+              });
               throw error;
             }
           });
