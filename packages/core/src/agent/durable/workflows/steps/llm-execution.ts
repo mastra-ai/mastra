@@ -33,7 +33,7 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../../processors/provider-history-compat';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
-import { MastraModelOutput } from '../../../../stream/base/output';
+import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
@@ -1650,9 +1650,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 args: tc.args,
               }));
 
+              // Persist non-transient data-* chunks into the workflow-side
+              // messageList (serialized into messageListState and flushed to
+              // memory at finalize) before streaming them, mirroring the main
+              // loop's outputWriter behavior (#19375 parity port).
               const outputStepWriter = pubsub
                 ? {
-                    custom: async (data: { type: string }) => {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                       await emitChunkEvent(pubsub, runId, data as any);
                     },
                   }

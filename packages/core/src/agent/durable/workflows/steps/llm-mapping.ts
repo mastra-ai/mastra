@@ -7,6 +7,7 @@ import {
 import type { Mastra } from '../../../../mastra';
 import { SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
+import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
@@ -228,6 +229,21 @@ export function createDurableLLMMappingStep() {
             providerMetadata: providerMetadata as any,
             fallbackAppend: true,
           });
+        }
+      }
+
+      // 2a. Persist processor-emitted data-* chunks (#19375 parity port).
+      // The tool-call step's messageList is a local copy whose mutations don't
+      // cross the step boundary, so non-transient data-* chunks emitted by
+      // output processors during tool execution travel on the output record
+      // and are committed here, into the messageList that gets serialized and
+      // flushed to memory. Runs for every entry — including aborted/blocked/
+      // provider-executed calls skipped by the commit loop above — because in
+      // the main loop persistence happens at emission time, before any
+      // tripwire or abort can intervene.
+      for (const toolResult of toolResults) {
+        for (const part of toolResult.processorDataParts ?? []) {
+          persistProcessorDataChunk(messageList, part.messageId ?? messageId, part);
         }
       }
 

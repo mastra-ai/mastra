@@ -375,6 +375,18 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  /**
+   * Non-transient data-* chunks emitted by output processors via
+   * writer.custom() during this tool call. The tool-call step's messageList
+   * is a local copy whose mutations don't cross the step boundary, so parts
+   * are carried here and persisted into the authoritative messageList by the
+   * mapping step (#19375 parity port).
+   */
+  processorDataParts?: Array<{
+    type: string;
+    data?: unknown;
+    messageId?: string;
+  }>;
   /** Error if tool execution failed */
   error?: {
     name: string;

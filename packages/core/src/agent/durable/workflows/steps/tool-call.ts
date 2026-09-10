@@ -89,6 +89,20 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       reason: z.string().optional(),
     })
     .optional(),
+  // Non-transient data-* chunks emitted by output processors via writer.custom()
+  // during this tool call. The tool-call step's messageList is a local copy whose
+  // mutations don't cross the step boundary, so these are carried on the output
+  // record and persisted into the authoritative messageList by the mapping step
+  // (#19375 parity port). Must be declared or Zod strips it.
+  processorDataParts: z
+    .array(
+      z.object({
+        type: z.string(),
+        data: z.any().optional(),
+        messageId: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -161,6 +175,7 @@ async function processChunkThroughOutputProcessors(
   logger: any,
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
+  collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
 ): Promise<ChunkType | null> {
   const runner =
     registryEntry?.outputProcessors?.length && registryEntry.processorStates
@@ -181,7 +196,16 @@ async function processChunkThroughOutputProcessors(
     messageList,
     streamWriter: pubsub
       ? {
-          custom: async (data: { type: string }) => {
+          custom: async (
+            data: { type: string; data?: unknown; transient?: boolean },
+            writerOptions?: { messageId?: string },
+          ) => {
+            // Collect non-transient data-* chunks for persistence by the
+            // mapping step (#19375 parity port); transient chunks stay
+            // stream-only.
+            if (data.type.startsWith('data-') && !data.transient) {
+              collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
+            }
             await emitChunkEvent(pubsub, runId, data as ChunkType);
           },
         }
@@ -254,6 +278,16 @@ export function createDurableToolCallStep() {
         args = argsFromInput;
         resumeDataFromArgs = resumeDataFromInput;
       }
+      // Non-transient data-* chunks emitted by output processors via
+      // writer.custom() during this tool call. This step's messageList is a
+      // local copy whose mutations don't cross the step boundary, so parts are
+      // collected here and carried on the output record for the mapping step
+      // to persist into the authoritative messageList (#19375 parity port).
+      const processorDataParts: Array<{ type: string; data?: unknown; messageId?: string }> = [];
+      const collectProcessorDataPart = (part: { type: string; data?: unknown; messageId?: string }) => {
+        processorDataParts.push(part);
+      };
+
       const resumeData = resumeDataFromArgs ?? workflowResumeData;
       const approvalDecision =
         workflowResumeData != null &&
@@ -779,6 +813,7 @@ export function createDurableToolCallStep() {
                 logger,
                 messageList,
                 processorObservabilityContext,
+                collectProcessorDataPart,
               );
             } catch (emitError) {
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
@@ -787,6 +822,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             approval,
+            ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
       }
@@ -1337,7 +1373,17 @@ export function createDurableToolCallStep() {
               retryCount: 0,
               writer: pubsub
                 ? {
-                    custom: async (data: { type: string }) => {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      if (data.type.startsWith('data-') && !data.transient) {
+                        collectProcessorDataPart({
+                          type: data.type,
+                          data: data.data,
+                          messageId: writerOptions?.messageId,
+                        });
+                      }
                       await emitChunkEvent(pubsub, runId, data as ChunkType);
                     },
                   }
@@ -1375,6 +1421,7 @@ export function createDurableToolCallStep() {
               return {
                 ...typedInput,
                 resultBlocked: true,
+                ...(processorDataParts.length ? { processorDataParts } : {}),
               };
             }
             // A non-tripwire processor failure must not kill the run in this
@@ -1415,6 +1462,7 @@ export function createDurableToolCallStep() {
               logger,
               messageList,
               processorObservabilityContext,
+              collectProcessorDataPart,
             );
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
@@ -1427,6 +1475,7 @@ export function createDurableToolCallStep() {
           result,
           modelOutputComputed,
           ...(approvalGrant ?? {}),
+          ...(processorDataParts.length ? { processorDataParts } : {}),
         };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them —
@@ -1464,6 +1513,7 @@ export function createDurableToolCallStep() {
               logger,
               messageList,
               processorObservabilityContext,
+              collectProcessorDataPart,
             );
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
@@ -1474,6 +1524,7 @@ export function createDurableToolCallStep() {
           ...typedInput,
           error: toolError,
           ...(approvalGrant ?? {}),
+          ...(processorDataParts.length ? { processorDataParts } : {}),
         };
       }
     },
