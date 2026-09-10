@@ -11,7 +11,11 @@ A GitLab project can now drive the whole Factory loop: issues arrive as work ite
 - GitLab issues and merge requests open, update, and close Factory cards through a webhook, so a card tracks its issue without polling
 - Merge requests are served through the same version-control capability as GitHub pull requests, so a review session checks out the merge request's own code instead of the base branch
 - The triage, review, and completion skills carry a GitLab branch and post their handoffs as GitLab notes
-- A deployment whose codebase lives on GitLab can open sessions at all: the integration that owns source control is now resolved by capability rather than assumed to be GitHub
+- The integration that owns source control is resolved by capability rather than assumed to be GitHub, so session, filesystem, and config routes read the owning provider's rows instead of GitHub's
+
+**Not yet included**
+
+Session workspaces are still created through the GitHub integration, so a GitLab-only deployment cannot open a session to work a card yet. Sandbox git remotes and the review skills are provider-neutral in preparation, but the workspace factory itself still requires GitHub.
 
 **Breaking**
 

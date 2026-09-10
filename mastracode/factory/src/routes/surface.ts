@@ -464,6 +464,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   // the same owner it always did.
   const ownerId = sourceControlOwner(registrations.map(({ integration }) => integration))?.id;
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
+  // Session rows are written under the owning integration's id, so the filesystem and
+  // config routes must read from that same owner or a GitLab-only deployment sees none.
+  // With no owner registered there are no sessions either way; 'github' keeps the
+  // pre-existing handle rather than inventing a new one.
+  const ownerSessions = deps.sourceControlStorage.forIntegration(ownerId ?? 'github').sessions;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
 
   const integrationRoutes = registrations.flatMap(registration => {
@@ -531,7 +536,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
-        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+        sessions: ownerSessions,
         filesystem: deps.domains.filesystem,
       },
     }),
@@ -541,7 +546,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
-      sourceControlSessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      sourceControlSessions: ownerSessions,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,

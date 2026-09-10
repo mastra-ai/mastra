@@ -51,10 +51,18 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
+// Sources whose content arrives from a forge, where the author may sit outside the
+// write-access circle. A `manual` or `linear-issue` card is created by someone who
+// already holds Factory access, so it carries no outside author to gate on.
+const PROVIDER_AUTHORED_SOURCES = new Set<WorkItemSource>(['github-pr', 'github-issue', 'gitlab-mr', 'gitlab-issue']);
+
 // Authored outside the write-access circle: a missing trust stamp fails closed until
 // the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
+// GitLab never stamps `authorTrusted` — its webhook payload carries no write-access
+// signal and its connection is org-wide rather than scoped to the acting user — so
+// every non-Factory GitLab card stays closed rather than being waved through.
 export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
-  if (item.source !== 'github-pr' && item.source !== 'github-issue') return false;
+  if (!PROVIDER_AUTHORED_SOURCES.has(item.source as WorkItemSource)) return false;
   if (item.metadata?.factoryAuthored === true) return false;
   return item.metadata?.authorTrusted !== true;
 }

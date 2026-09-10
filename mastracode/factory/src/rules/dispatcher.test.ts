@@ -2733,6 +2733,58 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  // GitLab never stamps `authorTrusted`, so an unstamped card is the normal case there,
+  // not a gap awaiting reconcile. It must be held exactly like an untrusted GitHub one.
+  it('keeps an unstamped GitLab card from self-starting, even armed with auto-run on', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'gitlab', type: 'merge-request', externalId: '42!12' },
+          title: 'Outside merge request',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      })
+    ).item;
+    await armItem(storage, item.id);
+    const armed = await storage.get({ orgId: 'org-1', id: item.id });
+    const transitionService = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'gitlab-run-1', triggerType: 'gitlab' },
+      configVersion: 'rules-v1',
+      expectedRevision: armed?.revision ?? item.revision,
+      actor: { type: 'gitlab', login: 'stranger', trusted: false, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-review', idempotencyKey: 'gitlab-run-1' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
   it("runs the plan an agent's move queues on an externally authored card a person started", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (

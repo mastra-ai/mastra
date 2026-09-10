@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemSource } from './types.js';
-import { factoryRuleSourceForWorkItem, WORK_ITEM_SOURCES, workItemSource } from './types.js';
+import {
+  externallyAuthored,
+  factoryRuleSourceForWorkItem,
+  knownExternalAuthor,
+  WORK_ITEM_SOURCES,
+  workItemSource,
+} from './types.js';
 
 describe('workItemSource', () => {
   it('maps stored provenance onto the board vocabulary', () => {
@@ -15,6 +21,44 @@ describe('workItemSource', () => {
 
   it('treats a provider without its own identity as a plain work item', () => {
     expect(workItemSource({ integrationId: 'slack', type: 'slack-thread', externalId: 'C1:1.2' })).toBe('manual');
+  });
+});
+
+describe('externallyAuthored', () => {
+  // Every source `workItemSource` can return, so a new provider cannot be added
+  // without deciding whether its authors sit outside the write-access circle.
+  const forgeBacked: WorkItemSource[] = ['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-mr'];
+  const insiderOnly: WorkItemSource[] = ['linear-issue', 'manual'];
+
+  it('covers every work-item source', () => {
+    expect([...forgeBacked, ...insiderOnly].sort()).toEqual([...WORK_ITEM_SOURCES].sort());
+  });
+
+  it.each(forgeBacked)('fails closed for an unstamped %s card', source => {
+    expect(externallyAuthored({ source, metadata: null })).toBe(true);
+    expect(externallyAuthored({ source, metadata: {} })).toBe(true);
+  });
+
+  it.each(forgeBacked)('holds an explicitly untrusted %s author outside the circle', source => {
+    expect(externallyAuthored({ source, metadata: { authorTrusted: false } })).toBe(true);
+    expect(knownExternalAuthor({ source, metadata: { authorTrusted: false } })).toBe(true);
+  });
+
+  it.each(forgeBacked)('lets a trusted %s author through', source => {
+    expect(externallyAuthored({ source, metadata: { authorTrusted: true } })).toBe(false);
+  });
+
+  it.each(forgeBacked)("does not gate Factory's own %s card", source => {
+    expect(externallyAuthored({ source, metadata: { factoryAuthored: true } })).toBe(false);
+  });
+
+  it.each(insiderOnly)('carries no outside author for a %s card', source => {
+    expect(externallyAuthored({ source, metadata: null })).toBe(false);
+  });
+
+  // A missing stamp is silence, not a claim that the author is an outsider.
+  it.each(forgeBacked)('does not mark an unstamped %s card as a known outsider', source => {
+    expect(knownExternalAuthor({ source, metadata: null })).toBe(false);
   });
 });
 

@@ -513,6 +513,11 @@ describe('checkoutSessionBranch', () => {
     // `glab` is not installed in the session sandbox; configuring gh's helper
     // would point every on-demand blob fetch at a binary that cannot answer.
     expect(joined).not.toContain('credential.helper');
+    // Fetching a GitLab ref is meaningless if origin still points at GitHub, and a
+    // GitLab token must never be composed into a github.com URL.
+    expect(joined).not.toContain('github.com');
+    expect(joined).toContain("remote set-url origin 'https://oauth2:tok-secret@gitlab.example.com/octocat/hello.git'");
+    expect(joined).toContain("remote set-url origin 'https://gitlab.example.com/octocat/hello.git'");
   });
 
   it('keeps the history fetch plain when the clone is not shallow', async () => {

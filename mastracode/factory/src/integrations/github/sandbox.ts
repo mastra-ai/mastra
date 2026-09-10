@@ -459,7 +459,7 @@ async function checkoutSessionBranchImpl(
   const shallowClone =
     pullRequestSession &&
     (await sh(sandbox, `git -C ${shellQuote(workdir)} rev-parse --is-shallow-repository`)).stdout.trim() === 'true';
-  const authUrl = tokenUrl(repoFullName, token);
+  const authUrl = tokenUrl(repoFullName, token, remote);
   try {
     const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`, {
       phase: 'branch checkout remote',
@@ -503,7 +503,10 @@ async function checkoutSessionBranchImpl(
       }
     }
   } finally {
-    await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
+    await sh(
+      sandbox,
+      `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName, remote))}`,
+    );
   }
 }
 

@@ -53,7 +53,7 @@ async function createItem(
   storage: WorkItemsStorage,
   overrides: Partial<{
     orgId: string;
-    source: 'github-issue' | 'github-pr' | 'slack-thread';
+    source: 'github-issue' | 'github-pr' | 'slack-thread' | 'gitlab-mr';
     sourceKey: string;
     board: string;
     stages: string[];
@@ -70,8 +70,15 @@ async function createItem(
       input: {
         ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
-          integrationId: source === 'slack-thread' ? 'slack' : 'github',
-          type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
+          integrationId: source === 'slack-thread' ? 'slack' : source === 'gitlab-mr' ? 'gitlab' : 'github',
+          type:
+            source === 'slack-thread'
+              ? 'slack-thread'
+              : source === 'gitlab-mr'
+                ? 'merge-request'
+                : source === 'github-pr'
+                  ? 'pull-request'
+                  : 'issue',
           externalId: overrides.sourceKey ?? '1',
         },
         title: 'Fix the bug',
@@ -432,6 +439,23 @@ describe('installed board transition policies', () => {
       }),
     ).toMatchObject({ status: 'accepted' });
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ triageType: null, acceptedAt: null });
+  });
+
+  // The GitLab twin: no `authorTrusted` stamp is ever written, so an agent must not
+  // be able to walk an outside merge request into a working lane on board allowance.
+  it('holds an agent out of a working lane on an unstamped GitLab card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'review', source: 'gitlab-mr', metadata: {} });
+    const service = new FactoryTransitionService({ storage, configVersion: 'policy-test' });
+
+    expect(
+      await service.transition({
+        ...request(item, { stage: 'review' }),
+        actor: { type: 'agent', bindingId: 'review-agent', role: 'review' },
+        ingress: { type: 'agent', identity: 'gitlab-review-transition' },
+      }),
+    ).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['intake'] });
   });
 
   it('keeps external-author safety shared even when a custom policy allows', async () => {
