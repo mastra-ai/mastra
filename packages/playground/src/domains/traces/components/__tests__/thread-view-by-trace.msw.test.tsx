@@ -441,6 +441,20 @@ describe('ThreadViewByTrace', () => {
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
     });
 
+    it('shows a lone trace in full instead of clamping it behind Show more', async () => {
+      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
+      installHandlers({ list: { ...threadTracesList, spans: [threadTracesList.spans[0]] } });
+      const { queryClient } = renderView();
+
+      await screen.findByText('Chef agent run');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // With nothing else on the page to stay proportional with, the single trace starts expanded.
+      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
+    });
+
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
