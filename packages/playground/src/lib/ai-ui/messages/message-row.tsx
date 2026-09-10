@@ -315,8 +315,8 @@ export const MessageRow = memo(function MessageRow({
 
   if (dbMessage === null) return null;
 
-  // Right-aligned with the same inset as a tool badge's trailing slot, so stacked messages line up.
-  const footerSlot = footer ? <div className="ml-auto pr-1">{footer}</div> : null;
+  // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
+  const footerSlot = footer ? <div className="pr-1">{footer}</div> : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
