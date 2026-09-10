@@ -875,7 +875,7 @@ describe('Express Server Adapter', () => {
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
 
-    it('aborts registered route signals when the response closes early', async () => {
+    it('cancels registered route streams and aborts their signals when the response closes early', async () => {
       const app = express();
       app.use(express.json());
 
@@ -885,6 +885,7 @@ describe('Express Server Adapter', () => {
       });
 
       const signalAbort = vi.fn();
+      const streamCancel = vi.fn();
       const testRoute: ServerRoute<any, any, any> = {
         method: 'GET',
         path: '/test/stream-close',
@@ -896,6 +897,7 @@ describe('Express Server Adapter', () => {
               start(controller) {
                 controller.enqueue({ type: 'text-delta', textDelta: 'one' });
               },
+              cancel: streamCancel,
             }),
           };
         },
@@ -919,8 +921,10 @@ describe('Express Server Adapter', () => {
       await reader.read();
       await reader.cancel();
       await waitFor(() => signalAbort.mock.calls.length > 0);
+      await waitFor(() => streamCancel.mock.calls.length > 0);
 
       expect(signalAbort).toHaveBeenCalledTimes(1);
+      expect(streamCancel).toHaveBeenCalledTimes(1);
     });
   });
 
