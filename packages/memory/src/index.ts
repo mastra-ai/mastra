@@ -3011,11 +3011,21 @@ Notes:
           await this.embedClonedMessages(messages, config);
         }
       } catch (error) {
-        this.logger.warn('Failed to migrate semantic-recall vectors during thread transfer', {
+        // The storage transfer already committed, but if vector migration fails the thread's
+        // messages can become unrecallable under resource-scoped semantic recall while the
+        // caller believes the transfer fully succeeded. Surface the failure instead of
+        // swallowing it so the caller can retry the migration rather than silently losing recall.
+        this.logger.error('Failed to migrate semantic-recall vectors during thread transfer', {
           threadId,
           resourceId,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw new Error(
+          `Thread "${threadId}" was transferred to resource "${resourceId}", but migrating its ` +
+            `semantic-recall vectors failed. The thread's messages may not surface under resource-scoped ` +
+            `recall until the vectors are re-indexed. Cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
       }
     }
 

@@ -96,4 +96,31 @@ describe('MemoryStorage.updateThreadResourceId', () => {
     const reread = await store.getThreadById({ threadId: 'thread-a' });
     expect(reread!.resourceId).toBe('resource-a');
   });
+
+  it('restores already-moved messages when the message update fails mid-batch', async () => {
+    const original = store.updateMessages.bind(store);
+    let call = 0;
+    store.updateMessages = async (args: Parameters<typeof original>[0]) => {
+      call += 1;
+      if (call === 1) {
+        // Simulate a non-atomic adapter: move the first message, then fail before the rest.
+        await original({ messages: [args.messages[0]!] });
+        throw new Error('updateMessages failed mid-batch');
+      }
+      return original(args);
+    };
+
+    await expect(store.updateThreadResourceId({ threadId: 'thread-a', resourceId: 'resource-b' })).rejects.toThrow(
+      /mid-batch/,
+    );
+
+    const reread = await store.getThreadById({ threadId: 'thread-a' });
+    expect(reread!.resourceId).toBe('resource-a');
+
+    const { messages } = await store.listMessages({ threadId: 'thread-a', perPage: false });
+    expect(messages).toHaveLength(3);
+    for (const message of messages) {
+      expect(message.resourceId).toBe('resource-a');
+    }
+  });
 });

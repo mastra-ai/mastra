@@ -66,4 +66,6 @@ const thread = await memory.updateThreadResourceId({
 
 ## Security
 
-Thread ownership transfer changes which resource a thread belongs to, bypassing the normal per-resource ownership checks. The HTTP endpoint (`POST /memory/threads/:threadId/transfer`) is only available to privileged, non-resource-scoped callers — requests made with a resolved resource scope are rejected. Perform transfers from a trusted service context rather than exposing this operation directly to end users.
+Thread ownership transfer changes which resource a thread belongs to, bypassing the normal per-resource ownership checks. The HTTP endpoint (`POST /memory/threads/:threadId/transfer`) is only available to privileged, non-resource-scoped callers — requests made with a resolved resource scope are rejected, and when `server.auth` is configured without an FGA provider the endpoint also rejects unscoped requests rather than treating them as implicitly privileged. Perform transfers from a trusted service context rather than exposing this operation directly to end users.
+
+Like all memory mutations (deleting threads, listing messages, writing working memory), this endpoint is unauthenticated on a server configured with no authentication at all. Configure `server.auth` (and, for per-resource enforcement, an FGA provider) before exposing the memory API to untrusted callers.

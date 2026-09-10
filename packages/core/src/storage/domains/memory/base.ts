@@ -226,12 +226,17 @@ export abstract class MemoryStorage extends StorageDomain {
     });
 
     // The base class has no cross-table transaction primitive, so move the messages after
-    // the thread and compensate on failure: if the message update fails we revert the thread
-    // to its original owner rather than leave the thread under the new resource while its
-    // history still points at the old one (thread ownership is what gates access).
+    // the thread and compensate on failure. Adapters whose `updateMessages` is not atomic
+    // per-batch can fail mid-way, leaving some rows already moved to the new resource. On any
+    // failure we revert the thread to its original owner AND restore every message we moved
+    // back to its original resource, so the transfer fails closed with no split ownership
+    // (thread ownership is what gates access).
+    let messagesToMove: { id: string; originalResourceId?: string }[] = [];
     try {
       const { messages } = await this.listMessages({ threadId, perPage: false });
-      const messagesToMove = messages.filter(message => message.resourceId !== resourceId);
+      messagesToMove = messages
+        .filter(message => message.resourceId !== resourceId)
+        .map(message => ({ id: message.id, originalResourceId: message.resourceId }));
       if (messagesToMove.length > 0) {
         await this.updateMessages({
           messages: messagesToMove.map(message => ({ id: message.id, resourceId })),
@@ -241,6 +246,28 @@ export abstract class MemoryStorage extends StorageDomain {
       await this.saveThread({
         thread: { ...thread, createdAt: thread.createdAt, updatedAt: thread.updatedAt },
       });
+      // Restore any messages that may have already been moved before the failure. Messages
+      // without an original resourceId are left as-is (nothing meaningful to revert to).
+      const messagesToRestore = messagesToMove.filter(
+        (message): message is { id: string; originalResourceId: string } =>
+          typeof message.originalResourceId === 'string' && message.originalResourceId.length > 0,
+      );
+      if (messagesToRestore.length > 0) {
+        try {
+          await this.updateMessages({
+            messages: messagesToRestore.map(message => ({
+              id: message.id,
+              resourceId: message.originalResourceId,
+            })),
+          });
+        } catch (rollbackError) {
+          this.logger?.error?.(
+            `Failed to restore message ownership after a failed thread transfer for thread "${threadId}". ` +
+              `Some messages may remain under resource "${resourceId}".`,
+            rollbackError,
+          );
+        }
+      }
       throw error;
     }
 
