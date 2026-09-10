@@ -76,12 +76,13 @@ function getRecallSignalType(message: MastraDBMessage): AgentSignalType | undefi
 export function filterSystemReminderMessages(
   messages: MastraDBMessage[],
   includeSystemReminders?: boolean,
-  hideSignals?: AgentSignalType[],
+  hideSignals?: boolean | AgentSignalType[],
 ): MastraDBMessage[] {
+  if (hideSignals === false) return messages;
   if (hideSignals !== undefined) {
     return messages.filter(message => {
       const type = getRecallSignalType(message);
-      return type === undefined || !hideSignals.includes(type);
+      return type === undefined || (hideSignals !== true && !hideSignals.includes(type));
     });
   }
 

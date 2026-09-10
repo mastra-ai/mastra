@@ -44,11 +44,11 @@ const stream = await agent.stream('message for agent')
         parameters: [
           {
             name: 'hideSignals',
-            type: 'AgentSignalType[]',
+            type: 'boolean | AgentSignalType[]',
             isOptional: true,
             defaultValue: '[]',
             description:
-              "Signal types to omit from this caller's fullStream after experimental transforms. Does not filter model context, storage, aggregates, or other subscribers. See Signal visibility below.",
+              "Use true to hide all recognized signals, false to show all, or an array to hide selected types from this caller's fullStream after experimental transforms. Does not filter model context, storage, aggregates, or other subscribers. See Signal visibility below.",
           },
           {
             name: 'maxSteps',
@@ -958,7 +958,9 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-The option accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
+Set `hideSignals: true` to hide all recognized signal types, or `hideSignals: false` to show all signals. An array selects individual types.
+
+The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
 
 Exclusions apply after `experimentalTransform`, so transforms still receive the unfiltered input. Adapters consuming `fullStream` inherit the filter, but aggregate `content`, `getFullOutput()`, response messages, callbacks, model context, and saved messages remain unchanged.
 

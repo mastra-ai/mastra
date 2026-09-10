@@ -13,7 +13,7 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
 
   it.each([false, true])('leaves generated results unchanged (resumed: %s)', async resumed => {
     const results = [];
-    for (const hideSignals of [undefined, ['reactive', 'system-reminder', 'state'] as const]) {
+    for (const hideSignals of [undefined, false, true, ['reactive', 'system-reminder', 'state'] as const]) {
       let calls = 0;
       const prompts: unknown[] = [];
       const model = new MockLanguageModelV2({
@@ -86,7 +86,9 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
       onTestFinished(() => mastra.stopEventEngine());
       const registered = mastra.getAgent('agent');
       expect(registered.constructor.name).toBe(durable ? 'DurableAgent' : 'Agent');
-      const options = { hideSignals: hideSignals ? [...hideSignals] : undefined };
+      const options = {
+        hideSignals: typeof hideSignals === 'boolean' ? hideSignals : hideSignals ? [...hideSignals] : undefined,
+      };
       const initial = await registered.generate('hello', options);
       let result = initial;
       if (resumed) {
@@ -106,6 +108,6 @@ describe.each([false, true])('generate signal visibility (durable: %s)', durable
       expect(JSON.stringify(prompts.at(-1))).toContain('retained generated state');
       results.push({ text: result.text, content: result.content, usage: result.usage });
     }
-    expect(results[1]).toEqual(results[0]);
+    for (const result of results.slice(1)) expect(result).toEqual(results[0]);
   });
 });

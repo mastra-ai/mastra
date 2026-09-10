@@ -2519,8 +2519,10 @@ describe('Memory', () => {
     });
 
     const legacyIds = ['legacy-metadata', 'legacy-system-metadata', 'legacy-markup'];
-    const exclusionCases: { hideSignals: AgentSignalType[] | undefined; hidden: string[] }[] = [
+    const exclusionCases: { hideSignals: boolean | AgentSignalType[] | undefined; hidden: string[] }[] = [
       { hideSignals: undefined, hidden: [] },
+      { hideSignals: false, hidden: [] },
+      { hideSignals: true, hidden: [...signalTypes, ...legacyIds, 'encoded-precedence', 'encoded-legacy-user'] },
       { hideSignals: [], hidden: [] },
       { hideSignals: ['reactive'], hidden: ['reactive'] },
       { hideSignals: ['system-reminder'], hidden: ['system-reminder', ...legacyIds] },
@@ -2575,7 +2577,7 @@ describe('Memory', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
       try {
-        for (const hideSignals of [[], signalTypes]) {
+        for (const hideSignals of [[], signalTypes, false, true]) {
           const isolated = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
           await isolated.createThread(target);
           const saved = signalTypes.map((type, i) =>
@@ -2587,7 +2589,9 @@ describe('Memory', () => {
           const store = await isolated.storage.getStore('memory');
           const before = await store!.listMessages({ ...target, perPage: false });
           const recalled = await isolated.recall({ ...target, perPage: false, hideSignals });
-          expect(recalled.messages).toHaveLength(hideSignals.length ? 0 : 6);
+          expect(recalled.messages).toHaveLength(
+            hideSignals === true || (Array.isArray(hideSignals) && hideSignals.length) ? 0 : 6,
+          );
           expect(await store!.listMessages({ ...target, perPage: false })).toEqual(before);
           const agent = new Agent({
             id: 'recall-proof',
@@ -2603,8 +2607,8 @@ describe('Memory', () => {
           for (let i = 0; i < 6; i++)
             expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(`context-${i}`);
         }
-        expect(model.doStreamCalls).toHaveLength(2);
-        expect(model.doStreamCalls[1]?.prompt).toEqual(model.doStreamCalls[0]?.prompt);
+        expect(model.doStreamCalls).toHaveLength(4);
+        for (const call of model.doStreamCalls.slice(1)) expect(call.prompt).toEqual(model.doStreamCalls[0]?.prompt);
       } finally {
         vi.useRealTimers();
       }
@@ -2615,6 +2619,8 @@ describe('Memory', () => {
         for (const page of [0, 1, 2, 3]) {
           const unfiltered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: [] });
           const filtered = await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: signalTypes });
+          expect(await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: false })).toEqual(unfiltered);
+          expect(await memory.recall({ ...target, perPage: 4, page, orderBy, hideSignals: true })).toEqual(filtered);
           expect(filtered).toEqual({
             ...unfiltered,
             messages: filterSystemReminderMessages(unfiltered.messages, undefined, signalTypes),

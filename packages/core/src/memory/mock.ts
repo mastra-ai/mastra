@@ -149,8 +149,8 @@ export class MockMemory extends MastraMemory {
       vectorSearchString?: string;
       /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
-      /** Filter returned messages by exact stored signal type. Takes precedence over includeSystemReminders. */
-      hideSignals?: AgentSignalType[];
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | AgentSignalType[];
     },
   ): Promise<{
     messages: MastraDBMessage[];

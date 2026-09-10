@@ -272,12 +272,13 @@ function getRecallSignalType(message: MastraDBMessage): RecallSignalType | undef
 function filterSystemReminderMessages(
   messages: MastraDBMessage[],
   includeSystemReminders?: boolean,
-  hideSignals?: RecallSignalType[],
+  hideSignals?: boolean | RecallSignalType[],
 ): MastraDBMessage[] {
+  if (hideSignals === false) return messages;
   if (hideSignals !== undefined) {
     return messages.filter(message => {
       const type = getRecallSignalType(message);
-      return type === undefined || !hideSignals.includes(type);
+      return type === undefined || (hideSignals !== true && !hideSignals.includes(type));
     });
   }
 
@@ -615,8 +616,8 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
-      /** Filter returned messages by exact stored signal type. Takes precedence over includeSystemReminders. */
-      hideSignals?: RecallSignalType[];
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | RecallSignalType[];
       threadId: string;
       observabilityContext?: Partial<ObservabilityContext>;
     },

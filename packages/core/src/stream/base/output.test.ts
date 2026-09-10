@@ -1413,61 +1413,64 @@ describe('MastraModelOutput', () => {
   });
 
   describe('caller-local signal exclusions', () => {
-    it('filters after transforms without changing other consumers or aggregates', async () => {
-      const runId = 'signal-exclusion-run';
-      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
-      const state: ChunkType = { type: 'data-signal', data: { type: 'state', contents: 'state' } };
-      const seen: ChunkType[] = [];
-      const chunks = [
-        reminder,
-        state,
-        createTextDeltaChunk(runId, 'hello'),
-        createStepFinishChunk(runId),
-        createFinishChunk(runId),
-      ];
-      const output = new MastraModelOutput({
-        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
-        stream: createChunkStream(chunks),
-        messageList: new MessageList({ threadId: 'test-thread' }),
-        messageId: 'msg-1',
-        options: {
-          runId,
-          hideSignals: ['system-reminder'],
-          experimentalTransform: () =>
-            new TransformStream({
-              transform(chunk, controller) {
-                seen.push(chunk);
-                controller.enqueue(chunk);
-              },
-            }),
-        },
-      });
-      const collect = async (stream: ReadableStream<ChunkType>) => {
-        const result: ChunkType[] = [];
-        for await (const chunk of stream) result.push(chunk);
-        return result;
-      };
-      const [caller, shared] = await Promise.all([
-        collect(output.fullStream),
-        collect(output.__getUnfilteredFullStream()),
-      ]);
-      expect(caller).not.toContainEqual(reminder);
-      expect(caller).toContainEqual(state);
-      expect(caller).toContainEqual(createTextDeltaChunk(runId, 'hello'));
-      expect(caller.at(-1)?.type).toBe('finish');
-      expect(shared).toContainEqual(reminder);
-      expect(seen).toContainEqual(reminder);
-      const control = new MastraModelOutput({
-        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
-        stream: createChunkStream(chunks),
-        messageList: new MessageList({ threadId: 'test-thread' }),
-        messageId: 'msg-1',
-        options: { runId },
-      });
-      await collect(control.fullStream);
-      expect(await output.content).toEqual(await control.content);
-      expect((await output.getFullOutput()).content).toEqual((await control.getFullOutput()).content);
-    });
+    it.each([undefined, false, true, ['system-reminder'] as const])(
+      'filters after transforms without changing other consumers or aggregates (hideSignals=%j)',
+      async hideSignals => {
+        const runId = 'signal-exclusion-run';
+        const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+        const state: ChunkType = { type: 'data-signal', data: { type: 'state', contents: 'state' } };
+        const seen: ChunkType[] = [];
+        const chunks = [
+          reminder,
+          state,
+          createTextDeltaChunk(runId, 'hello'),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ];
+        const output = new MastraModelOutput({
+          model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+          stream: createChunkStream(chunks),
+          messageList: new MessageList({ threadId: 'test-thread' }),
+          messageId: 'msg-1',
+          options: {
+            runId,
+            hideSignals: typeof hideSignals === 'boolean' ? hideSignals : hideSignals ? [...hideSignals] : undefined,
+            experimentalTransform: () =>
+              new TransformStream({
+                transform(chunk, controller) {
+                  seen.push(chunk);
+                  controller.enqueue(chunk);
+                },
+              }),
+          },
+        });
+        const collect = async (stream: ReadableStream<ChunkType>) => {
+          const result: ChunkType[] = [];
+          for await (const chunk of stream) result.push(chunk);
+          return result;
+        };
+        const [caller, shared] = await Promise.all([
+          collect(output.fullStream),
+          collect(output.__getUnfilteredFullStream()),
+        ]);
+        expect(caller.includes(reminder)).toBe(!hideSignals);
+        expect(caller.includes(state)).toBe(hideSignals !== true);
+        expect(caller).toContainEqual(createTextDeltaChunk(runId, 'hello'));
+        expect(caller.at(-1)?.type).toBe('finish');
+        expect(shared).toContainEqual(reminder);
+        expect(seen).toContainEqual(reminder);
+        const control = new MastraModelOutput({
+          model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+          stream: createChunkStream(chunks),
+          messageList: new MessageList({ threadId: 'test-thread' }),
+          messageId: 'msg-1',
+          options: { runId },
+        });
+        await collect(control.fullStream);
+        expect(await output.content).toEqual(await control.content);
+        expect((await output.getFullOutput()).content).toEqual((await control.getFullOutput()).content);
+      },
+    );
 
     it.each(['error', 'abort'] as const)('preserves %s boundaries when every signal is excluded', async type => {
       const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };

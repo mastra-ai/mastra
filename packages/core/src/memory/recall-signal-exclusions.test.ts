@@ -43,7 +43,8 @@ describe('MockMemory recall exclusions', () => {
       await memory.saveMessages({ messages });
       const store = await memory.storage.getStore('memory');
       const before = await store!.listMessages({ ...target, perPage: false });
-      for (const hideSignals of [undefined, [], ['reactive'], ['system-reminder'], types] satisfies (
+      for (const hideSignals of [undefined, false, true, [], ['reactive'], ['system-reminder'], types] satisfies (
+        | boolean
         | AgentSignalType[]
         | undefined
       )[]) {
@@ -53,7 +54,11 @@ describe('MockMemory recall exclusions', () => {
             ? includeSystemReminders
               ? []
               : ['reactive', 'system-reminder', 'legacy']
-            : [...hideSignals, ...(hideSignals.includes('system-reminder') ? ['legacy'] : [])];
+            : hideSignals === true
+              ? [...types, 'legacy']
+              : hideSignals === false
+                ? []
+                : [...hideSignals, ...(hideSignals.includes('system-reminder') ? ['legacy'] : [])];
         expect(result.messages.map(message => message.id)).toEqual(
           messages.filter(message => !hidden.includes(message.id)).map(message => message.id),
         );
@@ -101,6 +106,7 @@ describe('recall encoded type precedence', () => {
         content: { format: 2, parts: [{ type: 'data-signal', data }] },
       };
       expect(filterSystemReminderMessages([message], undefined, types)).toEqual([message]);
+      expect(filterSystemReminderMessages([message], undefined, true)).toEqual([message]);
     },
   );
 

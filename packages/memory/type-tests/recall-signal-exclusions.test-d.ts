@@ -6,14 +6,11 @@ import type { Memory } from '../src/index';
 
 test('recall exclusion literals stay compatible with core without importing them in published memory types', () => {
   type RecallOptions = Parameters<Memory['recall']>[0];
-  type RecallSignalType = NonNullable<RecallOptions['hideSignals']>[number];
+  type RecallSignalType = Exclude<RecallOptions['hideSignals'], boolean | undefined>[number];
   expectTypeOf<RecallSignalType>().toEqualTypeOf<AgentSignalType>();
-  expectTypeOf<RecallSignalType>().toEqualTypeOf<
-    NonNullable<Parameters<MastraMemory['recall']>[0]['hideSignals']>[number]
-  >();
-  expectTypeOf<RecallSignalType>().toEqualTypeOf<
-    NonNullable<Parameters<MockMemory['recall']>[0]['hideSignals']>[number]
-  >();
+  expectTypeOf<RecallOptions['hideSignals']>().toEqualTypeOf<boolean | AgentSignalType[] | undefined>();
+  expectTypeOf<RecallOptions['hideSignals']>().toEqualTypeOf<Parameters<MastraMemory['recall']>[0]['hideSignals']>();
+  expectTypeOf<RecallOptions['hideSignals']>().toEqualTypeOf<Parameters<MockMemory['recall']>[0]['hideSignals']>();
   const options: RecallOptions = {
     threadId: 'thread',
     hideSignals: ['reactive', 'system-reminder', 'user', 'user-message', 'state', 'notification'],

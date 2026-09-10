@@ -40,7 +40,7 @@ const result = await agent.generate('message for agent')
         parameters: [
           {
             name: 'hideSignals',
-            type: 'AgentSignalType[]',
+            type: 'boolean | AgentSignalType[]',
             isOptional: true,
             description:
               'Accepted through shared execution options, but does not filter generated results. Only streamed signal chunks are hidden; model context and saved messages remain unchanged.',

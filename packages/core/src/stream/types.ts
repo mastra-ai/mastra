@@ -1184,7 +1184,7 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** @internal Signal exclusions for caller-facing streams, not internal fanout. */
-  hideSignals?: AgentSignalType[];
+  hideSignals?: boolean | AgentSignalType[];
 } & Partial<ObservabilityContext>;
 
 /**

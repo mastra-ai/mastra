@@ -1472,7 +1472,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   get fullStream() {
     const stream = this.__getUnfilteredFullStream();
     const hideSignals = this.#options.hideSignals;
-    if (!hideSignals?.length) return stream;
+    if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.length === 0)) return stream;
     return stream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform(chunk, controller) {

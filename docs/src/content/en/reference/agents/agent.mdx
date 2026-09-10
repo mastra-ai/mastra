@@ -735,11 +735,11 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
           },
           {
             name: 'hideSignals',
-            type: 'AgentSignalType[]',
+            type: 'boolean | AgentSignalType[]',
             isOptional: true,
             defaultValue: '[]',
             description:
-              'Signal types to omit from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
+              'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
           },
         ],
       },
@@ -758,7 +758,7 @@ const filtered = await agent.subscribeToThread({
 })
 ```
 
-`hideSignals` accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
+`hideSignals: true` hides all recognized signal types. Set it to `false` to show all signals. An array accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option, `false`, or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.
 
 Exclusions don't change model context, storage, shared broadcasts, or another caller's output. They aren't a security boundary and don't replace `ifActive`/`ifIdle` delivery policies or `transient` persistence behavior. This option is supported by the in-process core API, not HTTP or client-js subscription requests. See [stream signal visibility](/reference/streaming/agents/stream#signal-visibility) for transform ordering and the distinction from recall's exact stored-type matching and reminder-hidden history default.
 

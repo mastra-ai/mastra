@@ -7,12 +7,13 @@ Added `hideSignals` to `memory.recall()` so callers can choose which stored sign
 ```ts
 // Before: include all reminders through the legacy flag.
 await memory.recall({ threadId: 'thread-1', includeSystemReminders: true });
-// Now: an explicit list takes precedence over that flag, including an empty list.
-await memory.recall({ threadId: 'thread-1', hideSignals: [] });
+// Now: any explicit visibility setting takes precedence over that flag.
+await memory.recall({ threadId: 'thread-1', hideSignals: false });
+await memory.recall({ threadId: 'thread-1', hideSignals: true });
 await memory.recall({
   threadId: 'thread-1',
   hideSignals: ['reactive', 'system-reminder'],
 });
 ```
 
-Unlike modern streams, recall matches stored types exactly. Legacy reminder rows without recognized signal types match `system-reminder`. Filtering preserves pagination totals and never changes ordinary messages. HTTP/client-js options are unchanged.
+Use `true` to hide all recognized signals, `false` or `[]` to include all, or an array to select types. Unlike modern streams, recall matches stored types exactly. Legacy reminder rows without recognized signal types match `system-reminder`. Filtering preserves pagination totals and never changes ordinary messages. HTTP/client-js options are unchanged.

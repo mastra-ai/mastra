@@ -362,8 +362,8 @@ export interface AgentThreadIdentityOptions {
 
 /** @experimental Agent signals are experimental and may change in a future release. */
 export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
-  /** Signal chunks to omit for this subscriber only. Defaults to none. */
-  hideSignals?: AgentSignalType[];
+  /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
+  hideSignals?: boolean | AgentSignalType[];
 }
 
 /**

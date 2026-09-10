@@ -537,10 +537,11 @@ export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
   /**
-   * Signal chunks to hide from this caller's stream. Defaults to none.
+   * Signal chunks to hide from this caller's stream: true hides all recognized signals,
+   * false hides none, and an array hides selected types. Defaults to none.
    * Does not affect generated results, model context, or storage.
    */
-  hideSignals?: AgentSignalType[];
+  hideSignals?: boolean | AgentSignalType[];
 
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;

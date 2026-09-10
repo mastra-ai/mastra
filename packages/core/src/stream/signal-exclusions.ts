@@ -17,11 +17,16 @@ function canonicalSignalType(type: unknown): AgentSignalCategory | undefined {
 }
 
 /** @internal Caller-local policy; never apply to shared buffers or model messages. */
-export function isSignalChunkExcluded(chunk: unknown, hideSignals: readonly AgentSignalType[] | undefined): boolean {
-  if (!hideSignals?.length || !chunk || typeof chunk !== 'object') return false;
+export function isSignalChunkExcluded(
+  chunk: unknown,
+  hideSignals: boolean | readonly AgentSignalType[] | undefined,
+): boolean {
+  if (!hideSignals || !chunk || typeof chunk !== 'object') return false;
   if (!('type' in chunk) || (chunk.type !== 'data-signal' && chunk.type !== 'data-user-message')) return false;
   if (!('data' in chunk) || !chunk.data || typeof chunk.data !== 'object' || Array.isArray(chunk.data)) return false;
   if (!('type' in chunk.data)) return false;
   const type = canonicalSignalType(chunk.data.type);
-  return type !== undefined && hideSignals.some(excluded => canonicalSignalType(excluded) === type);
+  return (
+    type !== undefined && (hideSignals === true || hideSignals.some(excluded => canonicalSignalType(excluded) === type))
+  );
 }

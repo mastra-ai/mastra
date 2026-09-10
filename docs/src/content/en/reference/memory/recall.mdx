@@ -70,16 +70,16 @@ const { messages } = await memory.recall({
   },
   {
     name: 'hideSignals',
-    type: "('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder')[]",
+    type: "boolean | ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder')[]",
     description:
-      'Signal types to omit from returned messages. Matches exact stored types and takes precedence over includeSystemReminders, including an empty list. Does not change storage or model context.',
+      'Use true to hide all recognized signals, false to include all, or an array to omit exact stored types. Any explicit value takes precedence over includeSystemReminders. Does not change storage or model context.',
     isOptional: true,
   },
   {
     name: 'includeSystemReminders',
     type: 'boolean',
     description:
-      'Deprecated. Use hideSignals: [] to include all signals, or hideSignals: ["reactive", "system-reminder"] to hide reminders. When hideSignals is omitted, true includes all signals; false or omitted preserves reminder-hidden history.',
+      'Deprecated. Use hideSignals: false to include all signals, or hideSignals: ["reactive", "system-reminder"] to hide reminders. When hideSignals is omitted, true includes all signals; false or omitted preserves reminder-hidden history.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -148,7 +148,8 @@ const { messages } = await memory.recall({
 | - | - | - |
 | Omitted | Omitted or `false` | Existing reminder-hidden history |
 | Omitted | `true` | All signals |
-| `[]` | Any value | All signals |
+| `false` or `[]` | Any value | All signals |
+| `true` | Any value | No recognized signals, including legacy reminders |
 | Nonempty list | Any value | All except matching types |
 
 Unlike [agent streams](/reference/streaming/agents/stream), recall continues to hide reminders by default for compatibility. The deprecated `includeSystemReminders` flag only applies when `hideSignals` is omitted.
@@ -156,7 +157,12 @@ Unlike [agent streams](/reference/streaming/agents/stream), recall continues to 
 ```typescript
 const all = await memory.recall({
   threadId: 'thread-123',
-  hideSignals: [],
+  hideSignals: false,
+})
+
+const withoutSignals = await memory.recall({
+  threadId: 'thread-123',
+  hideSignals: true,
 })
 
 const withoutReminders = await memory.recall({
@@ -169,7 +175,7 @@ const withoutReminders = await memory.recall({
 
 Recall matches the **exact stored type**, without alias normalization. For example, `['reactive']` doesn't exclude a row encoded as `system-reminder`, and `['user']` doesn't exclude one encoded as `user-message`. Modern streams and subscriptions normalize these aliases instead. Use `['reactive', 'system-reminder']` to exclude both reminder representations across these APIs.
 
-A recognized type in a `data-signal` or `data-user-message` part takes precedence over signal metadata and legacy reminder markers. Signal-role messages can also encode their type in `content.metadata.signal.type`. Unknown types and malformed signal parts don't match exclusions.
+A recognized type in a `data-signal` or `data-user-message` part takes precedence over signal metadata and legacy reminder markers. Signal-role messages can also encode their type in `content.metadata.signal.type`. Unknown types and malformed signal parts don't match exclusions, including `hideSignals: true`.
 
 If no recognized encoded type exists, a message classified by the existing legacy reminder rules counts as `system-reminder`, not `reactive`. These rules include user messages with `systemReminder` or `dynamicAgentsMdReminder` metadata, or a first text part starting with `<system-reminder`. Such rows remain visible with `['reactive']` and are excluded with `['system-reminder']`.
 

@@ -8,6 +8,8 @@ describe('signal chunk exclusions', () => {
   it.each(types)('matches encoded %s on either signal envelope', type => {
     for (const envelope of ['data-signal', 'data-user-message']) {
       const chunk = { type: envelope, data: { type } };
+      expect(isSignalChunkExcluded(chunk, true)).toBe(true);
+      expect(isSignalChunkExcluded(chunk, false)).toBe(false);
       expect(isSignalChunkExcluded(chunk, [type])).toBe(true);
       expect(isSignalChunkExcluded(chunk, [])).toBe(false);
       expect(isSignalChunkExcluded(chunk, undefined)).toBe(false);
@@ -49,5 +51,7 @@ describe('signal chunk exclusions', () => {
     })),
   ])('preserves unknown, malformed and non-signal chunks: %j', chunk => {
     expect(isSignalChunkExcluded(chunk, types)).toBe(false);
+    expect(isSignalChunkExcluded(chunk, true)).toBe(false);
+    expect(isSignalChunkExcluded(chunk, false)).toBe(false);
   });
 });

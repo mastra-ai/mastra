@@ -11,6 +11,23 @@ const options = {
 } satisfies AgentExecutionOptionsBase<unknown>;
 
 describe('signal visibility API ownership', () => {
+  it.each([true, false])('accepts boolean hideSignals=%s on execution and subscriptions', hideSignals => {
+    const options = { hideSignals } satisfies AgentExecutionOptionsBase<unknown>;
+    void agent.stream('hello', options);
+    void agent.streamUntilIdle('hello', options);
+    void agent.resumeStream({}, options);
+    void agent.resumeStreamUntilIdle({}, options);
+    void agent.subscribeToThread({ ...target, ...options });
+    void durable.stream('hello', options);
+    void durable.streamUntilIdle('hello', options);
+    void durable.resume('run', {}, options);
+    void durable.subscribeToThread({ ...target, ...options });
+    void agent.generate('hello', options);
+    void agent.resumeGenerate({}, options);
+    void durable.generate('hello', options);
+    void durable.resumeGenerate('run', {}, options);
+  });
+
   it('accepts shared execution options without adding filtering to identity APIs', () => {
     void agent.stream('hello', options);
     void agent.streamUntilIdle('hello', options);
