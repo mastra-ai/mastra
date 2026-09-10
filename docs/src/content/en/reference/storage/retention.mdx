@@ -3,6 +3,7 @@ title: "Reference: Storage retention (prune) | Storage"
 description: "prune() deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable)."
 packages:
   - "@mastra/core"
+  - "@mastra/duckdb"
   - "@mastra/libsql"
   - "@mastra/pg"
 ---
@@ -11,11 +12,20 @@ packages:
 
 Because storage grows without bound by default, Mastra provides an opt-in, age-based retention system. Declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their configured age. Unconfigured data is kept forever, so behavior doesn't change until you opt in.
 
-`prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk: on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS (for example a `VACUUM`) is left to the underlying database and the operator to manage.
+`prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk: on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS is left to the underlying database and the operator to manage. For file-backed DuckDB stores, run `CHECKPOINT` after pruning to reclaim deleted rows in storage. DuckDB's `VACUUM` doesn't reclaim deleted rows.
 
 Retention covers **growth tables** only: tables that accumulate rows unbounded as a side effect of normal operation (conversation history, telemetry, job and run records, schedule fire history, event feeds). User-authored artifacts and config (agents, skills, workspaces, prompt blocks, datasets, schedule definitions, channel installations, and so on) grow with user intent and are edited or deleted explicitly, so they're not valid retention keys.
 
-The reference implementations are [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), and [MongoDB](/integrations/databases/mongodb). Other adapters keep rows forever until they implement retention.
+The reference implementations are [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), [MongoDB](/integrations/databases/mongodb), and DuckDB observability storage. Other adapters keep rows forever until they implement retention.
+
+| Adapter | Retention support |
+| - | - |
+| libSQL | `prune()` across all supported growth domains |
+| PostgreSQL | `prune()` across all supported growth domains; v-next observability drops expired partitions or chunks |
+| MongoDB | `prune()` across supported growth domains; native TTL indexes are also available |
+| DuckDB | `prune()` for observability spans, metrics, logs, scores, and feedback |
+| ClickHouse | Opt-in native TTL for observability signals |
+| MySQL, Microsoft SQL Server, Oracle Database, Amazon Aurora DSQL, Google Cloud Spanner | Not supported |
 
 ## Usage example
 
@@ -135,7 +145,8 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 - Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. Retention doesn't have a separate `results` key.
 - For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire): schedule definitions are config and aren't pruned.
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
-- LibSQL and PostgreSQL support all domains above except `harness`, which PostgreSQL doesn't implement. MongoDB supports all except `threadState` and `harness`.
+- DuckDB observability stores append-only events for all five signals. Its `spans` policy uses the event `timestamp` column rather than `startedAt`.
+- LibSQL and PostgreSQL support all domains above except `harness`, which PostgreSQL doesn't implement. MongoDB supports all except `threadState` and `harness`. DuckDB supports only the `observability` domain.
 - The v-next PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows: effective level of detail is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
 
 :::
@@ -152,7 +163,7 @@ Deletes rows older than their configured `maxAge` across every domain that has a
 
 Pass `options.retention` to replace the configured policies for that call only: for example to skip a domain (keep chat history) or prune more aggressively than the standing config. The store's configured `retention` is unchanged.
 
-Anchor-column indexes are created lazily on the first `prune()` call for each table with a policy (never at `init()`) so deployments that don't configure retention pay no extra index write or disk overhead. The first prune of an existing large table pays a one-time index build. Subsequent prunes reuse the index.
+Adapters that use anchor-column indexes create them lazily on the first `prune()` call for each table with a policy (never at `init()`) so deployments that don't configure retention pay no extra index write or disk overhead. The first prune of an existing large table pays a one-time index build. Subsequent prunes reuse the index. DuckDB uses its built-in zone maps instead of creating retention indexes.
 
 ```typescript
 const results = await storage.prune({
