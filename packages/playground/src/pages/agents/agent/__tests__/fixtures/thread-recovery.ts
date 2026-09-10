@@ -34,6 +34,29 @@ export const completedHistory: typeof emptyHistory = {
   ],
 };
 
+export const approvalHistory = (runId = 'recovery-run', toolCallId = 'approval-tool'): typeof emptyHistory => ({
+  messages: [
+    {
+      id: `pending-${toolCallId}`,
+      role: 'assistant',
+      createdAt: new Date('2026-01-02'),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId, toolName: 'weather', args: {} } },
+        ],
+        metadata: { pendingToolApprovals: { weather: { toolCallId, toolName: 'weather', args: {}, runId } } },
+      },
+    },
+  ],
+});
+export const approvalChunk: ChunkType = {
+  type: 'tool-call-approval',
+  runId: 'recovery-run',
+  from: ChunkFrom.AGENT,
+  payload: { toolCallId: 'approval-tool', toolName: 'weather', args: {}, resumeSchema: '{"type":"object"}' },
+};
+
 export const savedTasks = [{ id: 'saved-task', content: 'Saved task', status: 'pending', activeForm: 'Saving task' }];
 export const taskHistory: typeof emptyHistory = {
   messages: [

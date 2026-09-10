@@ -313,6 +313,9 @@ export const useChat = ({
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
   const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const liveApprovalIds = useRef(new Set<string>());
+  const liveRunId = useRef<string | undefined>(undefined);
+  const liveRunFinished = useRef(false);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -351,16 +354,29 @@ export const useChat = ({
         ];
       });
       setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
-      if (isRunning || isAwaitingToolApproval) return;
+      // History may arrive before the live approval event, but must not undo
+      // a live approval decision or terminal event, nor switch the active run.
+      const historyRunId = extractRunIdFromMessages(formattedMessages);
+      if (liveRunFinished.current) return;
+      if (liveRunId.current && historyRunId && historyRunId !== liveRunId.current) return;
+      if (!liveRunId.current && isRunning && historyRunId !== _currentRunId.current) return;
     } else {
       liveTasks.current = undefined;
+      liveApprovalIds.current.clear();
+      liveRunId.current = undefined;
+      liveRunFinished.current = false;
       if (previous) setIsRunning(false);
       setMessages(formattedMessages);
       setTasks(extractLatestTasksFromMessages(formattedMessages));
     }
-    pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
-    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    const pendingApprovals = extractPendingToolApprovalIdsFromMessages(formattedMessages);
+    for (const toolCallId of liveApprovalIds.current) {
+      if (pendingToolApprovalIdsRef.current.has(toolCallId)) pendingApprovals.add(toolCallId);
+      else pendingApprovals.delete(toolCallId);
+    }
+    pendingToolApprovalIdsRef.current = pendingApprovals;
+    setIsAwaitingToolApproval(pendingApprovals.size > 0);
+    _currentRunId.current = liveRunId.current ?? extractRunIdFromMessages(formattedMessages);
   }, [agentId, resourceId, threadId, initialMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
@@ -472,6 +488,9 @@ export const useChat = ({
       if (chunk.type === 'start') {
         setIsRunning(true);
         if ('runId' in chunk && typeof chunk.runId === 'string') {
+          if (liveRunId.current !== chunk.runId) liveApprovalIds.current.clear();
+          liveRunFinished.current = false;
+          liveRunId.current = chunk.runId;
           _currentRunId.current = chunk.runId;
         }
       }
@@ -479,6 +498,7 @@ export const useChat = ({
       if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
         const toolCallId = chunk.payload?.toolCallId;
         if (typeof toolCallId === 'string') {
+          liveApprovalIds.current.add(toolCallId);
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
@@ -486,6 +506,8 @@ export const useChat = ({
       }
 
       if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
+        for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.clear();
         setIsAwaitingToolApproval(false);
         setIsRunning(false);
@@ -971,6 +993,7 @@ export const useChat = ({
     });
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
+    liveRunFinished.current = true;
     pendingToolApprovalIdsRef.current.clear();
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
@@ -1004,6 +1027,8 @@ export const useChat = ({
           ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: continuation.requestContext,
         });
+        liveRunId.current ??= currentRunId;
+        liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);
@@ -1071,6 +1096,8 @@ export const useChat = ({
           ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
           requestContext: continuation.requestContext,
         });
+        liveRunId.current ??= currentRunId;
+        liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);

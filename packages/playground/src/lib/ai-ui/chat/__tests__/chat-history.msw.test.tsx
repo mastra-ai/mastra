@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ChunkType, DataChunkType } from '@mastra/core/stream';
+import { ChunkFrom, type ChunkType, type DataChunkType } from '@mastra/core/stream';
 import { MastraReactProvider, useChat } from '@mastra/react';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -7,6 +7,8 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   completedHistory,
+  approvalHistory,
+  approvalChunk,
   emptyHistory,
   finishChunk,
   liveChunks,
@@ -64,6 +66,97 @@ afterEach(() => {
 });
 
 describe('Chat history recovery', () => {
+  describe('when approval history races with live run state', () => {
+    it('hydrates same-run approvals before their live event arrives', async () => {
+      const { result, rerender } = await setup();
+      const history = approvalHistory();
+      rerender({ threadId: 'first', history });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+      rerender({ threadId: 'first', history });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+    });
+
+    it('does not replace a live pending approval with empty history', async () => {
+      const { result, rerender } = await setup();
+      await act(async () => push(approvalChunk));
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      rerender({ threadId: 'first', history: { messages: [] } });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+    });
+
+    it('preserves approval waiting when a suspended transport closes without a finish chunk', async () => {
+      const { result, rerender } = await setup();
+      await act(async () => push(approvalChunk));
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      await act(async () => connections.shift()?.close());
+      rerender({ threadId: 'first', history: { messages: [] } });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+    });
+
+    it('does not restore stale pending approvals after the run finishes', async () => {
+      const { result, rerender } = await setup();
+      await act(async () => push(finishChunk));
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+      rerender({ threadId: 'first', history: approvalHistory() });
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+    });
+
+    it('keeps parallel approvals independent and does not resurrect accepted decisions', async () => {
+      const { result, rerender } = await setup();
+      const requests: unknown[] = [];
+      server.use(
+        http.post('http://localhost:4111/api/agents/agent/send-tool-approval', async ({ request }) => {
+          requests.push(await request.json());
+          return HttpResponse.json({ accepted: true, runId: 'recovery-run' });
+        }),
+      );
+      await act(async () => push(approvalChunk));
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      const history = {
+        messages: [...approvalHistory().messages, ...approvalHistory('recovery-run', 'second-tool').messages],
+      };
+      rerender({ threadId: 'first', history });
+      await act(async () => result.current.approveToolCall('approval-tool'));
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+      rerender({ threadId: 'first', history: { messages: [...history.messages] } });
+      await act(async () => result.current.declineToolCall('second-tool'));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      rerender({ threadId: 'first', history: { messages: [...history.messages] } });
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      await act(async () => push({ type: 'start', runId: 'recovery-run', from: ChunkFrom.AGENT, payload: {} }));
+      await waitFor(() => expect(result.current.isRunning).toBe(true));
+      rerender({ threadId: 'first', history: { messages: [...history.messages] } });
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      expect(requests).toEqual([
+        expect.objectContaining({ toolCallId: 'approval-tool', approved: true }),
+        expect.objectContaining({ toolCallId: 'second-tool', approved: false }),
+      ]);
+    });
+
+    it('hydrates a new run after a previous run has finished', async () => {
+      const { result, rerender } = await setup();
+      await act(async () => push(finishChunk));
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+      await act(async () => push({ type: 'start', runId: 'next-run', from: ChunkFrom.AGENT, payload: {} }));
+      await waitFor(() => expect(result.current.isRunning).toBe(true));
+      rerender({ threadId: 'first', history: approvalHistory('next-run') });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+    });
+
+    it('resets live approval authority when changing threads', async () => {
+      const { result, rerender } = await setup();
+      await act(async () => push(finishChunk));
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+      rerender({ threadId: 'second', history: approvalHistory('other-run') });
+      expect(result.current.isAwaitingToolApproval).toBe(true);
+    });
+
+    it('ignores approvals belonging to an older run while a new run streams', async () => {
+      const { result, rerender } = await setup();
+      rerender({ threadId: 'first', history: approvalHistory('older-run') });
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+    });
+  });
   describe('when the thread changes during a run', () => {
     it('clears the old conversation even if the initial history reference is unchanged', async () => {
       const { result, rerender } = await setup();
