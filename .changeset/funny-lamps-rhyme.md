@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved coding-agent commit attribution for Factory.
+Factory-generated commits now use the Mastra Platform bot as the commit co-author.
