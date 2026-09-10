@@ -109,6 +109,21 @@ describe('composer attachments', () => {
     });
   });
 
+  describe('when an unknown text file has a UTF-16 byte-order mark', () => {
+    it.each([
+      ['little-endian', [0xff, 0xfe, 0x5a, 0, 0x6f, 0, 0xeb, 0]],
+      ['big-endian', [0xfe, 0xff, 0, 0x5a, 0, 0x6f, 0, 0xeb]],
+    ] as const)('preserves valid %s text', async (_encoding, bytes) => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="source.unknown">Zoë</attachment>' },
+      ]);
+    });
+  });
+
   describe('when an unknown text file contains a literal replacement character', () => {
     it('accepts its valid UTF-8 encoding', async () => {
       const { ref } = renderProvider();
