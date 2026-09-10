@@ -758,6 +758,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.
     callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Run-level execution budget (#21724). Parked on the registry so the
+    // abort-controller install sites (stream/resume) can arm a session
+    // timer without re-deriving it from options or the snapshot.
+    timeoutTotalMs: (execOptions?.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout?.totalMs,
     // Call-time structured output config with the live schema. The schema is
     // non-serializable (Zod / standard-schema instance), so it lives on the
     // in-process registry. The durable stream adapter reads it to pipe LLM

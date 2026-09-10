@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -38,6 +39,7 @@ import type {
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
   RegistryModelListEntry,
+  RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
@@ -1127,36 +1129,44 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    const registryEntry = {
+      // Restore the original run's flag from the persisted snapshot so a
+      // warm resume after recovery keeps returning scoringData without the
+      // caller re-passing the option.
+      returnScorerData: workflowInput.options?.returnScorerData,
+      mastra: this.#mastra,
+      model,
+      modelList,
+      memory,
+      saveQueueManager,
+      requestContext,
+      agentSpan: recoverAgentSpan,
+      // abortController/abortSignal are installed by
+      // #installAbortWithTotalTimeout below, with the run-level budget
+      // composed in.
+      // Restore the run-level execution budget from the persisted snapshot so
+      // a recovered session is bounded like the original one (#21724).
+      timeoutTotalMs: (workflowInput.options?.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout
+        ?.totalMs,
+      backgroundTaskManager,
+      backgroundTasksConfig,
+      inputProcessors,
+      llmRequestInputProcessors,
+      outputProcessors,
+      errorProcessors,
+      processorStates,
+      drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
+      cleanup: () => {},
+    };
+    this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController);
+
     return {
       requestContext,
       threadId,
       resourceId,
       messageList,
       recoverAgentSpan,
-      registryEntry: {
-        // Restore the original run's flag from the persisted snapshot so a
-        // warm resume after recovery keeps returning scoringData without the
-        // caller re-passing the option.
-        returnScorerData: workflowInput.options?.returnScorerData,
-        mastra: this.#mastra,
-        model,
-        modelList,
-        memory,
-        saveQueueManager,
-        requestContext,
-        agentSpan: recoverAgentSpan,
-        abortController,
-        abortSignal: abortController.signal,
-        backgroundTaskManager,
-        backgroundTasksConfig,
-        inputProcessors,
-        llmRequestInputProcessors,
-        outputProcessors,
-        errorProcessors,
-        processorStates,
-        drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
-        cleanup: () => {},
-      },
+      registryEntry,
     };
   }
 
@@ -1822,6 +1832,32 @@ export class DurableAgent<
   }
 
   /**
+   * Install `abortController` on a registry entry with the run-level execution
+   * budget (`modelSettings.timeout.totalMs`, #21724 parity port) composed in.
+   *
+   * Every durable step reads `abortSignal` off the registry, so composing here
+   * bounds the whole session — every loop iteration, tool call and retry.
+   * Pass-through when no budget is configured. The budget is armed per
+   * execution session (stream/generate/resume), matching the main loop where
+   * each session gets a fresh timer. The timer is torn down via the entry's
+   * `cleanup` slot, which every settle path invokes through the run registry.
+   */
+  #installAbortWithTotalTimeout(entry: RunRegistryEntry, abortController: AbortController): void {
+    entry.abortController = abortController;
+    const totalTimeout = createTimeoutAbortSignal({
+      parentSignal: abortController.signal,
+      timeoutMs: entry.timeoutTotalMs,
+      timeoutType: 'total',
+    });
+    entry.abortSignal = totalTimeout.signal;
+    const previousCleanup = entry.cleanup;
+    entry.cleanup = () => {
+      totalTimeout.cleanup();
+      previousCleanup?.();
+    };
+  }
+
+  /**
    * Delete the persisted workflow snapshot rows for a completed durable run.
    *
    * A durable agent write two rows per run: one for the outer `AGENTIC_LOOP`
@@ -1939,8 +1975,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    registryEntry.abortController = abortController;
-    registryEntry.abortSignal = abortController.signal;
+    this.#installAbortWithTotalTimeout(registryEntry, abortController);
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
@@ -2206,6 +2241,10 @@ export class DurableAgent<
         // Restore the original run's flag from the persisted snapshot so a
         // cross-process resume still returns scoringData; caller override wins.
         returnScorerData: options?.returnScorerData ?? workflowInput.options?.returnScorerData,
+        // Restore the original run's modelSettings so the rebuilt registry
+        // entry re-arms the run-level timeout budget (#21724); caller
+        // override wins.
+        modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
       });
       entry = this.#runRegistry.get(runId);
     }
@@ -2303,12 +2342,20 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    entry.abortController = abortController;
-    entry.abortSignal = abortController.signal;
+    // Re-arm the run-level execution budget for the resumed session (#21724).
+    // Warm resumes read the original budget parked on the registry entry;
+    // cold resumes restored it from the persisted workflow input during
+    // prepare(). A caller-supplied modelSettings on the resume call wins.
+    const resumeTotalMs = (resolvedOptions.modelSettings as { timeout?: { totalMs?: number } } | undefined)?.timeout
+      ?.totalMs;
+    if (resumeTotalMs !== undefined) {
+      entry.timeoutTotalMs = resumeTotalMs;
+    }
+    this.#installAbortWithTotalTimeout(entry, abortController);
     const globalEntryForAbort = globalRunRegistry.get(runId);
     if (globalEntryForAbort) {
       globalEntryForAbort.abortController = abortController;
-      globalEntryForAbort.abortSignal = abortController.signal;
+      globalEntryForAbort.abortSignal = entry.abortSignal;
     }
 
     // Track cleanup state to avoid double cleanup
@@ -2926,8 +2973,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    registryEntry.abortController = abortController;
-    registryEntry.abortSignal = abortController.signal;
+    this.#installAbortWithTotalTimeout(registryEntry, abortController);
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });

@@ -169,6 +169,12 @@ export interface SerializableModelSettings {
   stopSequences?: string[];
   seed?: number;
   maxRetries?: number;
+  /**
+   * Execution time budgets (#21724). Persisted so a cold resume / recovery can
+   * re-arm the run-level budget the run was started with; `stepMs` is consumed
+   * by the shared per-call execute wrapper.
+   */
+  timeout?: { stepMs?: number; totalMs?: number };
 }
 
 /**
@@ -768,6 +774,16 @@ export interface RunRegistryEntry {
    * should call `result.abort()` instead, which routes through here.
    */
   abortController?: AbortController;
+  /**
+   * Run-level execution budget from `modelSettings.timeout.totalMs` (#21724
+   * parity port). Parked here so warm resumes re-arm the original budget
+   * without re-reading the snapshot; cold resumes restore it from the
+   * persisted workflow input. The budget is armed per execution session
+   * (stream/resume/recover) — matching the main loop, where each session
+   * gets a fresh timer — by composing `abortSignal` through
+   * `createTimeoutAbortSignal` at install time.
+   */
+  timeoutTotalMs?: number;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

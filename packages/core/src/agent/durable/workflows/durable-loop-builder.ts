@@ -5,6 +5,7 @@ import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
+import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
@@ -480,8 +481,20 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // reason so the FINISH event carries 'abort' and the client sees
       // the correct finishReason.
       if (rt.abortSignal?.aborted) {
+        // A run-level budget expiry (`modelSettings.timeout.totalMs`, #21724)
+        // is a failure, not a cancellation. If the budget expired between
+        // steps (e.g. inside a tool call), run one more llm-execution
+        // iteration: its early abort guard routes total timeouts through the
+        // fatal error path (error chunk + stepResult.reason 'error'), after
+        // which this guard sees reason 'error' and stops the loop keeping
+        // that reason intact.
+        const abortReason = getAbortReason(rt.abortSignal);
+        const isTotalTimeout = isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total';
+        if (isTotalTimeout && state.lastStepResult?.reason !== 'error') {
+          return true;
+        }
         if (state.lastStepResult) {
-          state.lastStepResult.reason = 'abort';
+          state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
           state.lastStepResult.isContinued = false;
         }
         return false;

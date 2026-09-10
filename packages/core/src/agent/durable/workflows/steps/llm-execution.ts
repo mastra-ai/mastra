@@ -15,6 +15,8 @@ import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
+import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
+import type { MastraTimeoutError } from '../../../../loop/timeout';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
@@ -53,6 +55,23 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+
+/**
+ * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
+ * parity port). Total timeouts must surface as run *failures* — not clean
+ * aborts and never retries/fallbacks — matching the main loop, where the
+ * total-timeout race rejects the stream with the `MastraTimeoutError`.
+ *
+ * Step budgets (`timeoutType: 'step'`) are deliberately excluded: they are
+ * handled inside the shared `execute()` (no same-model retry, fall back to
+ * the next model) and must not kill the whole run.
+ */
+function resolveTotalTimeoutAbort(signal: AbortSignal | undefined, error?: Error): MastraTimeoutError | undefined {
+  const reason = getAbortReason(signal);
+  if (isMastraTimeoutError(reason) && reason.timeoutType === 'total') return reason;
+  if (isMastraTimeoutError(error) && error.timeoutType === 'total') return error;
+  return undefined;
+}
 
 /**
  * Input schema for the durable LLM execution step
@@ -216,6 +235,65 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
 
+      // Emit error + step-finish chunks and return a bail response. This
+      // mirrors the regular agent which sets stepResult.reason = 'error' and
+      // emits a deferred error chunk rather than crashing the loop. Used by
+      // the exhausted-models path and by run-level timeout expiry (#21724).
+      const emitFatalErrorBail = async (fatalError: Error, modelId: string): Promise<DurableLLMStepOutput> => {
+        // End the root spans here too — this is the only error path that covers EventedAgent,
+        // whose fire-and-forget launch never sees the failure (so emitError never runs).
+        endRunSpansWithError(runId, fatalError);
+
+        // Emit the deferred error chunk so consumers see it
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
+            // transports, which destroys the producer stack and makes crashes
+            // unattributable on the consumer side.
+            payload: {
+              error: {
+                message: fatalError.message,
+                stack: fatalError.stack,
+                name: fatalError.name,
+              },
+            },
+          });
+
+          // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
+          await emitChunkEvent(pubsub, runId, {
+            type: 'step-finish',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              stepResult: {
+                reason: 'error',
+                isContinued: false,
+              },
+              output: {
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+              },
+              metadata: {},
+            },
+          });
+        }
+
+        return {
+          messageListState: messageList.serialize(),
+          text: '',
+          toolCalls: [],
+          stepResult: {
+            reason: 'error' as any,
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: { modelId },
+          state: typedInput.state,
+        } satisfies DurableLLMStepOutput;
+      };
+
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
       // clean output so the dowhile predicate sees isContinued: false and
@@ -225,6 +303,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // that would close the stream before the FINISH event arrives.
       const executionAbortSignalEarly = globalRunRegistry.get(runId)?.abortSignal ?? abortSignal;
       if (executionAbortSignalEarly?.aborted) {
+        // A run-level budget expiry between iterations (e.g. while a tool
+        // call was running) must fail the run, not settle it as a clean
+        // abort (#21724).
+        const earlyTimeout = resolveTotalTimeoutAbort(executionAbortSignalEarly);
+        if (earlyTimeout) {
+          return emitFatalErrorBail(earlyTimeout, typedInput.modelConfig?.modelId ?? 'unknown');
+        }
         return {
           messageListState: messageList.serialize(),
           text: '',
@@ -1577,6 +1662,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // text (e.g. /abort/i) because that can fire for retryable provider
               // errors whose message happens to mention "abort"; we only trust
               // the canonical AbortError name or an actual aborted signal.
+              // A run-level budget expiry (#21724) is a failure, not a clean
+              // abort: rethrow so the outer catch routes it to the fatal
+              // error path (no retry, no fallback, error chunk emitted).
+              const innerTimeout = resolveTotalTimeoutAbort(executionAbortSignal, errorObj);
+              if (innerTimeout) {
+                throw innerTimeout;
+              }
+
               const isAbort = executionAbortSignal?.aborted === true || errorObj.name === 'AbortError';
               if (isAbort) {
                 // Persist already-streamed partial output (#22593).
@@ -1653,6 +1746,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 modelSpanTracker.reportGenerationError({ error: streamErrorObj });
               } else if (modelSpan) {
                 modelSpan.error({ error: streamErrorObj });
+              }
+
+              // Mirror the iterator catch: a run-level budget expiry (#21724)
+              // routes to the fatal error path via the outer catch.
+              const streamErrorTimeout = resolveTotalTimeoutAbort(executionAbortSignal, streamErrorObj);
+              if (streamErrorTimeout) {
+                throw streamErrorTimeout;
               }
 
               // Mirror the iterator catch: a captured stream error that turns out
@@ -1984,6 +2084,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // out of scope here).
             const outerRegistryEntry = globalRunRegistry.get(runId);
             const outerAbortSignal = outerRegistryEntry?.abortSignal ?? abortSignal;
+
+            // A run-level budget expiry (#21724) is a hard failure: no retry
+            // on the same model, no fallback to the next one (the budget is
+            // shared across the whole run, so another attempt would start
+            // already-expired), and no clean-abort masking. Persist partial
+            // output, then bail through the shared fatal error path.
+            const totalTimeout = resolveTotalTimeoutAbort(outerAbortSignal, lastError);
+            if (totalTimeout) {
+              materializeStreamedMessages?.();
+              return emitFatalErrorBail(totalTimeout, modelEntry.config.modelId);
+            }
+
             const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
             if (isAbort) {
               // Return a clean output instead of throwing so the workflow
@@ -2064,65 +2176,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         } // end retry loop
       } // end model loop
 
-      // All models exhausted - emit error + step-finish chunks and return a bail response.
-      // This mirrors the regular agent which sets stepResult.reason = 'error' and emits
-      // a deferred error chunk rather than crashing the loop.
+      // All models exhausted (or the run-level budget expired) - emit error +
+      // step-finish chunks and return a bail response.
       const fatalError =
         lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
 
-      // End the root spans here too — this is the only error path that covers EventedAgent,
-      // whose fire-and-forget launch never sees the failure (so emitError never runs).
-      endRunSpansWithError(runId, fatalError);
-
-      // Emit the deferred error chunk so consumers see it
-      if (pubsub) {
-        await emitChunkEvent(pubsub, runId, {
-          type: 'error',
-          runId,
-          from: ChunkFrom.AGENT,
-          // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
-          // transports, which destroys the producer stack and makes crashes
-          // unattributable on the consumer side.
-          payload: {
-            error: {
-              message: fatalError.message,
-              stack: fatalError.stack,
-              name: fatalError.name,
-            },
-          },
-        });
-
-        // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
-        await emitChunkEvent(pubsub, runId, {
-          type: 'step-finish',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            stepResult: {
-              reason: 'error',
-              isContinued: false,
-            },
-            output: {
-              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-            },
-            metadata: {},
-          },
-        });
-      }
-
-      const modelId = modelList[0]?.id ?? 'unknown';
-      return {
-        messageListState: messageList.serialize(),
-        text: '',
-        toolCalls: [],
-        stepResult: {
-          reason: 'error' as any,
-          warnings: [],
-          isContinued: false,
-        },
-        metadata: { modelId },
-        state: typedInput.state,
-      };
+      return emitFatalErrorBail(fatalError, modelList[0]?.id ?? 'unknown');
     },
   });
 }
