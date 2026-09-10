@@ -15,7 +15,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
+import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import {
@@ -788,18 +788,22 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       this.logger.info('Done copying .npmrc file');
 
-      this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
-      this.logger.info('Done installing dependencies');
-
-      if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
-        this.logger.info('Generating package-lock.json for deploy');
-        await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
-        this.logger.info('Done generating package-lock.json');
+      if (shouldSkipInstall()) {
+        this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
       } else {
-        this.logger.warn(
-          'Skipping package-lock.json generation because the output contains packed workspace dependencies',
-        );
+        this.logger.info('Installing dependencies');
+        await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
+        this.logger.info('Done installing dependencies');
+
+        if (Object.keys(transitiveWorkspaceDependencies.resolutions).length === 0) {
+          this.logger.info('Generating package-lock.json for deploy');
+          await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+          this.logger.info('Done generating package-lock.json');
+        } else {
+          this.logger.warn(
+            'Skipping package-lock.json generation because the output contains packed workspace dependencies',
+          );
+        }
       }
     } catch (error) {
       if (
