@@ -253,6 +253,25 @@ describe('token rotation', () => {
     });
     expect(refreshAccessToken).not.toHaveBeenCalled();
   });
+
+  it('refreshes once a refresh token appears, having skipped the unrefreshable attempt', async () => {
+    // The unrefreshable path returns before any `await`, so the attempt settles
+    // during construction — a de-dupe entry registered after that would never be
+    // cleared by the `finally` and would latch this `null` for the process
+    // lifetime, leaving the org unable to refresh even after a valid reconnect.
+    await connect({ expiresAt: Date.now() - 1000, refreshToken: undefined });
+    const gitlab = integration();
+
+    await expect(resolve(gitlab)).resolves.toBeNull();
+    expect(refreshAccessToken).not.toHaveBeenCalled();
+
+    await seed.integrations
+      .forIntegration('gitlab')
+      .connections.update('org1', data => ({ ...data, refreshToken: 'gl-refresh' }));
+
+    await expect(resolve(gitlab)).resolves.toMatchObject({ connection: { accessToken: 'gl-access-2' } });
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ── dispatch resolution ──────────────────────────────────────────────────

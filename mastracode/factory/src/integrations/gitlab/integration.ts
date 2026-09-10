@@ -377,10 +377,15 @@ export class GitLabIntegration implements FactoryIntegration {
     const existing = this.refreshInFlight.get(orgId);
     if (existing) return existing;
 
+    // Nothing to rotate: a grant with no refresh token, or a deployment that
+    // stored grants and later reconfigured to a static token. Answered before
+    // the de-dupe entry exists so the unrefreshable case never occupies it.
+    const oauthApp = this.oauthApp;
+    if (!oauthApp || !current.refreshToken) return Promise.resolve(null);
+
     const attempt = (async (): Promise<GitLabConnectionData | null> => {
       try {
-        if (!this.oauthApp || !current.refreshToken) return null;
-        const tokens = await refreshAccessToken(this.oauthApp, {
+        const tokens = await refreshAccessToken(oauthApp, {
           refreshToken: current.refreshToken,
           redirectUri: this.redirectUri(),
         });
@@ -397,16 +402,16 @@ export class GitLabIntegration implements FactoryIntegration {
       } catch (error) {
         console.warn(`[gitlab] token refresh failed for org ${orgId} — reconnect required.`, error);
         return null;
-      } finally {
-        // Clearing the entry is what makes a retry possible: without it a
-        // rejected attempt would be served from the map forever, latching a
-        // transient refresh failure into a permanently disconnected org.
-        this.refreshInFlight.delete(orgId);
       }
     })();
 
     this.refreshInFlight.set(orgId, attempt);
-    return attempt;
+    // Cleared here rather than in the attempt's own `finally`: a `finally`
+    // callback always runs in a later microtask, so the delete cannot outrun
+    // the `set` above even if the body settles during construction. Clearing
+    // is what makes a retry possible — a settled attempt served from the map
+    // forever would latch one transient failure into a disconnected org.
+    return attempt.finally(() => this.refreshInFlight.delete(orgId));
   }
 
   private toConnectionFields(tokens: GitLabTokenSet): Partial<GitLabConnectionData> {
