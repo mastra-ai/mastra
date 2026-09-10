@@ -27,17 +27,30 @@ describe('Session approval recovery after a real process restart', () => {
         );
         const line = stdout.split('\n').find(line => line.startsWith('RESULT '));
         expect(line).toBeDefined();
-        return JSON.parse(line!.slice(7)) as { pid: number; runId: string; executions: number; calls: number };
+        return JSON.parse(line!.slice(7)) as {
+          pid: number;
+          runId: string;
+          executions: number;
+          calls: number;
+          initialInputChecks: number;
+          stepInputIds: string[][];
+        };
       };
       try {
         const prepared = await run('prepare');
         expect(prepared.executions).toBe(0);
+        expect(prepared.initialInputChecks).toBe(1);
+        expect(new Set(prepared.stepInputIds[0]).size).toBe(1);
         // The ID is a test assertion only. Session discovers saved work from
         // native storage; the expected ID is never passed to a recovery API.
         const recovered = await run('resume', prepared.runId);
         expect(recovered.pid).not.toBe(prepared.pid);
         expect(recovered.runId).toBe(prepared.runId);
         expect(recovered.executions).toBe(decision === 'approve' ? 1 : 0);
+        expect(recovered.initialInputChecks).toBe(0);
+        for (const inputIds of recovered.stepInputIds) {
+          expect(new Set(inputIds)).toEqual(new Set(prepared.stepInputIds[0]));
+        }
       } finally {
         await rm(directory, { recursive: true, force: true });
       }

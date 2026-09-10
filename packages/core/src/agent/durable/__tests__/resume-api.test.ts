@@ -22,6 +22,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -90,6 +91,8 @@ async function seedSuspendedRun(
   status: WorkflowRunState['status'] = 'suspended',
 ) {
   const workflows = (await store.getStore('workflows'))!;
+  const messageList = new MessageList(memory);
+  messageList.add({ id: 'saved-input', role: 'user', content: 'The original request' }, 'input');
   await workflows.persistWorkflowSnapshot({
     workflowName: DurableStepIds.AGENTIC_LOOP,
     runId,
@@ -103,7 +106,7 @@ async function seedSuspendedRun(
           __workflowKind: 'durable-agent',
           runId,
           agentId,
-          messageListState: { memoryInfo: memory },
+          messageListState: messageList.serialize(),
           requestContextEntries: { tenantId: 'tenant-1' },
           state: memory,
         },
@@ -223,21 +226,65 @@ describe('Resume API', () => {
 
       const result = await durableAgent.resume(runId, { approved: true });
 
-      expect(prepareSpy).toHaveBeenCalledOnce();
-      expect(prepareSpy).toHaveBeenCalledWith(
-        [],
-        expect.objectContaining({
-          runId,
-          memory: { thread: 'cold-thread', resource: 'cold-resource' },
-          requestContext: expect.anything(),
-        }),
-      );
-      expect(prepareSpy.mock.calls[0]?.[1]?.requestContext?.get('tenantId')).toBe('tenant-1');
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(durableAgent.runRegistry.get(runId)?.requestContext?.get('tenantId')).toBe('tenant-1');
       expect(durableAgent.runRegistry.has(runId)).toBe(true);
       expect(result.runId).toBe(runId);
       expect(result.threadId).toBe('cold-thread');
       expect(result.resourceId).toBe('cold-resource');
       result.cleanup();
+    });
+
+    it('does not run initial input processors again when restoring a saved run', async () => {
+      const processInput = vi.fn(({ messages }) => messages);
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'cold-input-processors-agent',
+        name: 'Cold Input Processors Agent',
+        instructions: 'Resume the saved request',
+        model: createTextModel('Resumed') as LanguageModelV2,
+        inputProcessors: [{ id: 'initial-input-check', processInput }],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      const runId = 'saved-input-processors-run';
+      await seedSuspendedRun(store, runId, durableAgent.id, {
+        threadId: 'saved-input-thread',
+        resourceId: 'saved-input-resource',
+      });
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        expect(processInput).not.toHaveBeenCalled();
+        expect(
+          durableAgent.runRegistry
+            .getMessageList(runId)
+            ?.getPersisted.input.db()
+            .map(message => message.id),
+        ).toEqual(['saved-input']);
+      } finally {
+        result.cleanup();
+      }
+    });
+
+    it('still checks fresh input once and does not repeat it on a warm resume', async () => {
+      const processInput = vi.fn(({ messages }) => messages);
+      const baseAgent = new Agent({
+        id: 'fresh-input-processors-agent',
+        name: 'Fresh Input Processors Agent',
+        instructions: 'Check fresh input',
+        model: createTextModel('Resumed') as LanguageModelV2,
+        inputProcessors: [{ id: 'initial-input-check', processInput }],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('A new request');
+      expect(processInput).toHaveBeenCalledOnce();
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        expect(processInput).toHaveBeenCalledOnce();
+      } finally {
+        result.cleanup();
+      }
     });
 
     it('rejects a persisted run that is not suspended before rehydrating', async () => {
