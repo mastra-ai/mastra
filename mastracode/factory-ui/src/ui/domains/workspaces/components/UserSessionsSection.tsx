@@ -46,20 +46,18 @@ export function UserSessionsSection() {
   // sort before sessions started by other org members, and inside each of those
   // groups the most recently updated session comes first.
   // This deliberately diverges from `WorkspacesSection`, which sorts on
-  // `createdAt` to hold rows still. `updatedAt` here is not inert: `setSandbox`
-  // is called from the workspace start hook, which runs on every sandbox start
-  // — including a `'connected'` reconnect, not just the first attach — so a
-  // run-start refetch can lift the row whose run just started to the top of
-  // its tier.
-  // That is acceptable here where it was not for the board, because this list
-  // renders every filtered row: a reordered row changes position but can never
-  // cross a fold and leave view, which is the harm the board avoids by slicing
-  // to `COLLAPSED_ROW_COUNT` and pulling the open row back in. The movement is
-  // also bounded — window-focus refetch is off and the sessions poll only runs
-  // while a session is unmaterialized — and it is the reader's own click
-  // promoting the reader's own row.
-  // Recency is also the ask: `createdAt` is the insertion order this ordering
-  // exists to replace.
+  // `createdAt` precisely to stop rows moving under the reader. That harm is
+  // real here too and is not engineered away: `setSandbox` is called from the
+  // workspace start hook on every sandbox start — a `'connected'` reconnect
+  // included, not just the first attach — and the list refetches when a run
+  // starts or ends, so a row can change position while it is being read. Nor is
+  // it always this reader's own doing: the endpoint returns every org-visible
+  // session, so another member's reconnect can reorder the list too.
+  // It is accepted here rather than avoided because recency is what this list is
+  // for — it answers "where was I", and `createdAt` is the insertion order that
+  // ordering exists to replace. The board carries no such requirement and its
+  // rows are rewritten continuously by card writes while it polls, so stability
+  // is the right default there and not here.
   // Session id closes it into a total order — the sessions endpoint sorts
   // nothing, so anything falling through to its order would still shuffle.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
