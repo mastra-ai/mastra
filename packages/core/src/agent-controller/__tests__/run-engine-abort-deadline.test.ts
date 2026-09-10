@@ -1,4 +1,6 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Agent } from '../../agent';
 import { RequestContext } from '../../request-context';
 import { Workspace } from '../../workspace';
 import { LocalFilesystem } from '../../workspace/filesystem/local-filesystem';
@@ -27,10 +29,19 @@ function createHarness() {
     events.push(event);
   });
 
+  const agent = new Agent({
+    id: 'abort-deadline-agent',
+    name: 'Abort deadline agent',
+    instructions: 'No model request is expected in these stream tests.',
+    model: new MockLanguageModelV2({
+      doStream: async () => {
+        throw new Error('These tests must not start a model request');
+      },
+    }),
+  });
   const machinery: SessionMachinery = {
-    getAgent: () => {
-      throw new Error('getAgent is not used by these tests');
-    },
+    getAgent: () => agent,
+    getRunScope: () => undefined,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these tests');
     },
@@ -44,6 +55,7 @@ function createHarness() {
     saveSystemReminder: vi.fn(async () => null),
   };
 
+  session.setMachinery(machinery);
   const engine = new SessionRunEngine(session, machinery);
   return { engine, events, session };
 }

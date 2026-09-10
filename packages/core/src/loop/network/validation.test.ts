@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { CompletionContext, CompletionRunResult, StreamCompletionContext } from './validation';
 import {
@@ -41,6 +41,185 @@ function createMockContext(overrides: Partial<CompletionContext> = {}): Completi
 describe('runCompletionScorers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('deadlines', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it.each([true, false])('returns at the deadline with an unfinished scorer (parallel: %s)', async parallel => {
+      let resolveLate!: (value: { score: number }) => void;
+      const slow = {
+        id: 'slow',
+        run: vi.fn(
+          () =>
+            new Promise<{ score: number }>(resolve => {
+              resolveLate = resolve;
+            }),
+        ),
+      };
+      const next = createMockScorer('next', 1);
+      let observed: CompletionRunResult | undefined;
+      const pending = runCompletionScorers([slow, next], createMockContext(), { parallel, timeout: 10 }).then(
+        result => {
+          observed = result;
+        },
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      expect(observed).toMatchObject({ complete: false, timedOut: true, totalDuration: 10 });
+      expect(observed?.scorers.find(s => s.scorerId === 'slow')).toMatchObject({ passed: false, errored: true });
+      if (!parallel) expect(next.run).not.toHaveBeenCalled();
+      const snapshot = structuredClone(observed);
+      resolveLate({ score: 1 });
+      await vi.advanceTimersByTimeAsync(0);
+      await pending;
+      expect(observed).toEqual(snapshot);
+      if (!parallel) expect(next.run).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['all', 'any'] as const)(
+      'keeps completed evidence but never accepts a timed-out %s campaign',
+      async strategy => {
+        const fast = createMockScorer('fast', 1, 'Verified first result');
+        const stuck = { id: 'stuck', run: vi.fn(() => new Promise(() => {})) };
+        let observed: CompletionRunResult | undefined;
+        void runCompletionScorers([fast, stuck], createMockContext(), { strategy, timeout: 10 }).then(result => {
+          observed = result;
+        });
+        await vi.advanceTimersByTimeAsync(10);
+        expect(observed).toMatchObject({ complete: false, timedOut: true });
+        expect(observed?.scorers[0]).toMatchObject({ scorerId: 'fast', score: 1, reason: 'Verified first result' });
+        expect(observed?.scorers[1]).toMatchObject({ scorerId: 'stuck', score: 0, errored: true });
+        expect(observed?.completionReason).toMatch(/timed out/i);
+      },
+    );
+
+    it.each([true, false])('clears the default deadline after success (parallel: %s)', async parallel => {
+      const result = await runCompletionScorers([createMockScorer('fast', 1)], createMockContext(), { parallel });
+      expect(result).toMatchObject({ complete: true, timedOut: false });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('shares one deadline across sequential scorers', async () => {
+      const delayed = (id: string) => ({
+        id,
+        run: vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 6));
+          return { score: 1 };
+        }),
+      });
+      const first = delayed('first');
+      const second = delayed('second');
+      const third = createMockScorer('third', 1);
+      const pending = runCompletionScorers([first, second, third], createMockContext(), {
+        parallel: false,
+        timeout: 10,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      const result = await pending;
+      expect(result).toMatchObject({ complete: false, timedOut: true, totalDuration: 10 });
+      expect(result.scorers[0]).toMatchObject({ scorerId: 'first', passed: true });
+      expect(result.scorers[1]).toMatchObject({ scorerId: 'second', errored: true });
+      expect(third.run).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2);
+      expect(third.run).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([
+      { label: 'Error', reason: new Error('Late read failure') },
+      { label: 'null', reason: null },
+      { label: 'undefined', reason: undefined },
+    ])('handles a late $label rejection without changing the timeout result', async ({ reason }) => {
+      let rejectLate!: (reason: unknown) => void;
+      const scorer = {
+        id: 'late-rejection',
+        run: vi.fn(
+          () =>
+            new Promise((_, reject) => {
+              rejectLate = reject;
+            }),
+        ),
+      };
+      const pending = runCompletionScorers([scorer], createMockContext(), { timeout: 10 });
+      await vi.advanceTimersByTimeAsync(10);
+      const result = await pending;
+      const snapshot = structuredClone(result);
+      expect(result).toMatchObject({ complete: false, timedOut: true });
+      rejectLate(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(result).toEqual(snapshot);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('clears the deadline after a scorer rejects', async () => {
+      const scorer = { id: 'failed', run: vi.fn().mockRejectedValue(new Error('Read unavailable')) };
+      const result = await runCompletionScorers([scorer], createMockContext());
+      expect(result).toMatchObject({ complete: false, timedOut: false });
+      expect(result.scorers[0].errored).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([null, undefined, 'Read unavailable'])('reports a non-Error rejection: %s', async reason => {
+      const scorer = { id: 'non-error', run: vi.fn().mockRejectedValue(reason) };
+      const result = await runCompletionScorers([scorer], createMockContext());
+      expect(result).toMatchObject({ complete: false, timedOut: false });
+      expect(result.scorers[0]).toMatchObject({
+        score: 0,
+        passed: false,
+        errored: true,
+        reason: `Scorer threw an error: ${String(reason)}`,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([
+      {
+        label: 'message object',
+        value: { message: 'Read unavailable' },
+        expected: 'Scorer threw an error: Read unavailable',
+      },
+      {
+        label: 'numeric message',
+        value: { message: 503 },
+        expected: 'Scorer threw an error: 503',
+      },
+      {
+        label: 'null prototype',
+        value: Object.create(null),
+        expected: 'Scorer threw an error that could not be converted to text',
+      },
+      {
+        label: 'throwing message',
+        value: Object.defineProperty({}, 'message', {
+          get() {
+            throw new Error('Unreadable message');
+          },
+        }),
+        expected: 'Scorer threw an error that could not be converted to text',
+      },
+    ])('preserves a failure for a $label rejection', async ({ value, expected }) => {
+      const scorer = { id: 'object-error', run: vi.fn().mockRejectedValue(value) };
+      const result = await runCompletionScorers([scorer], createMockContext());
+      expect(result).toMatchObject({ complete: false, timedOut: false });
+      expect(result.scorers[0]).toMatchObject({ passed: false, errored: true, reason: expected });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('rejects a late result even when the deadline callback has not run yet', async () => {
+      const scorer = {
+        id: 'blocking',
+        run: vi.fn(async () => {
+          vi.setSystemTime(Date.now() + 20);
+          return { score: 1 };
+        }),
+      };
+      const result = await runCompletionScorers([scorer], createMockContext(), { timeout: 10 });
+      expect(result).toMatchObject({ complete: false, timedOut: true });
+      expect(result.scorers[0].errored).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   describe('strategy: all (default)', () => {

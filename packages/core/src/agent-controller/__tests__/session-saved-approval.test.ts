@@ -22,6 +22,32 @@ function fixture() {
 }
 
 describe('saved Session approvals', () => {
+  it.each(['same-owner', 'different-current-mode'] as const)(
+    'restores an approval through the subscribed agent when the mode is %s',
+    async scenario => {
+      const f = fixture();
+      const otherAgent = {
+        id: 'other-agent',
+        listSuspendedRuns: vi.fn(async () => ({ runs: [], total: 0 })),
+        sendToolApproval: vi.fn(async () => {}),
+      };
+      f.session.stream.attach({ key: 'key', subscription: f.subscription, agent: f.agent as any });
+      f.session.setMachinery({
+        getAgent: () => (scenario === 'same-owner' ? f.agent : otherAgent),
+        buildRequestContext: async () => f.context,
+        buildToolsets: async () => ({}),
+      } as any);
+
+      await f.session.restorePendingApproval({ threadId: 'thread', subscription: f.subscription });
+      expect(f.agent.listSuspendedRuns).toHaveBeenCalledWith({ threadId: 'thread', resourceId: 'resource' });
+      expect(otherAgent.listSuspendedRuns).not.toHaveBeenCalled();
+      expect(f.session.displayState.get().pendingApproval?.toolCallId).toBe('saved-call');
+      f.session.respondToToolApproval({ decision: 'approve', toolCallId: 'saved-call' });
+      await vi.waitFor(() => expect(f.sendToolApproval).toHaveBeenCalledTimes(1));
+      expect(otherAgent.sendToolApproval).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['approve', 'decline'] as const)(
     'restores the prompt without execution and delivers %s exactly once',
     async decision => {

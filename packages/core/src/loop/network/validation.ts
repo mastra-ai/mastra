@@ -219,11 +219,22 @@ async function runSingleScorer(
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    let reason = 'Scorer threw an error that could not be converted to text';
+    try {
+      const message =
+        error && (typeof error === 'object' || typeof error === 'function') && 'message' in error
+          ? error.message
+          : error;
+      reason = `Scorer threw an error: ${String(message)}`;
+    } catch {
+      // Rejection values can have throwing getters or no string conversion.
+      // Keep the failure visible even when its details cannot be read.
+    }
     return {
       score: 0,
       passed: false,
-      reason: `Scorer threw an error: ${error.message}`,
+      reason,
       scorerId: scorer.id,
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
@@ -249,52 +260,66 @@ export async function runCompletionScorers(
   const timeout = options?.timeout ?? 600000;
 
   const startTime = Date.now();
-  const results: ScorerResult[] = [];
+  const settledResults: (ScorerResult | undefined)[] = new Array(scorers.length);
   let timedOut = false;
-
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<'timeout'>(resolve => {
-    setTimeout(() => resolve('timeout'), timeout);
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      resolve('timeout');
+    }, timeout);
   });
 
-  if (parallel) {
-    const scorerPromises = scorers.map(scorer => runSingleScorer(scorer, context));
-    const raceResult = await Promise.race([Promise.all(scorerPromises), timeoutPromise]);
-
-    if (raceResult === 'timeout') {
-      timedOut = true;
-      const settledResults = await Promise.allSettled(scorerPromises);
-      for (const settled of settledResults) {
-        if (settled.status === 'fulfilled') {
-          results.push(settled.value);
-        }
-      }
+  const runScorer = async (scorer: MastraScorer<any, any, any, any>, index: number) => {
+    const result = await runSingleScorer(scorer, context);
+    if (Date.now() - startTime >= timeout) timedOut = true;
+    // A late result cannot change the returned verdict or its evidence.
+    if (!timedOut) settledResults[index] = result;
+    return result;
+  };
+  const runScorers = async () => {
+    if (parallel) {
+      await Promise.all(scorers.map(runScorer));
     } else {
-      results.push(...raceResult);
-    }
-  } else {
-    for (const scorer of scorers) {
-      if (Date.now() - startTime > timeout) {
-        timedOut = true;
-        break;
+      for (const [index, scorer] of scorers.entries()) {
+        if (timedOut) break;
+        const result = await runScorer(scorer, index);
+        if (strategy === 'all' && !result.passed) break;
+        if (strategy === 'any' && result.passed) break;
       }
-
-      const result = await runSingleScorer(scorer, context);
-      results.push(result);
-
-      // Short-circuit
-      if (strategy === 'all' && !result.passed) break;
-      if (strategy === 'any' && result.passed) break;
     }
+  };
+  try {
+    await Promise.race([runScorers(), timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
+  // Scorer.run has no cancellation contract. Return on time without waiting
+  // for an uncooperative scorer, and expose unfinished checks as errors.
+  const results: ScorerResult[] = timedOut
+    ? scorers.map(
+        (scorer, index) =>
+          settledResults[index] ?? {
+            score: 0,
+            passed: false,
+            errored: true,
+            scorerId: scorer.id,
+            scorerName: scorer.name ?? scorer.id,
+            reason: `Completion scoring timed out after ${timeout}ms before this scorer returned.`,
+            duration: Date.now() - startTime,
+          },
+      )
+    : settledResults.filter((result): result is ScorerResult => result !== undefined);
   const complete =
-    strategy === 'all'
+    !timedOut &&
+    (strategy === 'all'
       ? results.length === scorers.length && results.every(r => r.passed)
-      : results.some(r => r.passed);
+      : results.some(r => r.passed));
 
   // Get reason from first passing scorer (or first failing if none passed)
   const relevantScorer = results.find(r => r.passed) || results[0];
-  const completionReason = relevantScorer?.reason;
+  const completionReason = timedOut ? `Completion scoring timed out after ${timeout}ms.` : relevantScorer?.reason;
 
   return {
     complete,

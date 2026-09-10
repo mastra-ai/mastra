@@ -1,3 +1,4 @@
+import type { Agent } from '../agent';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -10,7 +11,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON } from './session';
+import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -486,6 +487,7 @@ export class SessionRunEngine {
     state: StreamState,
     chunk: StreamChunk,
     requestContext: RequestContext,
+    agent: Agent = this.#machinery.getAgent(),
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
@@ -738,6 +740,13 @@ export class SessionRunEngine {
 
         const suspRunId = this.#session.run.getRunId();
         if (suspRunId) {
+          const runScope = this.#machinery.getRunScope(suspRunId);
+          // A subscription restored for the current mode can replay this
+          // suspension after a plan→build transition. Keep the agent that first
+          // owned the run so a later resume reaches its original snapshot.
+          if (!runScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
+            runScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+          }
           this.#session.suspensions.register({
             toolCallId: suspToolCallId,
             runId: suspRunId,
@@ -1230,6 +1239,7 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+    const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
@@ -1258,7 +1268,7 @@ export class SessionRunEngine {
         }
 
         try {
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
+          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
           if (
             streamResult ||
             chunk.type === 'finish' ||

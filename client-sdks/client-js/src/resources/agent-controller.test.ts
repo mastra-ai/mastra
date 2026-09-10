@@ -520,6 +520,105 @@ describe('AgentController Resource', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(1);
   });
 
+  it('does not dispatch a pending read after unsubscribe returns', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    const cancel = vi.fn();
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            source = controller;
+          },
+          cancel,
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    const onEvent = vi.fn();
+    const sub = await client.getAgentController('code').session('user-1').subscribe({ onEvent, reconnect: true });
+    try {
+      source.enqueue(new TextEncoder().encode('data: {"type":"agent_start"}\n\n'));
+      sub.unsubscribe();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(onEvent).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledOnce();
+    } finally {
+      sub.unsubscribe();
+    }
+  });
+
+  it('stops dispatching buffered frames when onEvent unsubscribes', async () => {
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    const cancel = vi.fn();
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            source = controller;
+          },
+          cancel,
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    const onEvent = vi.fn(() => sub.unsubscribe());
+    const sub = await client.getAgentController('code').session('user-1').subscribe({ onEvent, reconnect: true });
+    try {
+      source.enqueue(
+        new TextEncoder().encode('data: {"type":"agent_start"}\n\ndata: {"type":"agent_end","reason":"complete"}\n\n'),
+      );
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(onEvent).toHaveBeenCalledOnce();
+      expect(onEvent).toHaveBeenCalledWith({ type: 'agent_start' });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(global.fetch).toHaveBeenCalledOnce();
+    } finally {
+      sub.unsubscribe();
+    }
+  });
+
+  it('cancels the new response when onReconnect unsubscribes before reading it', async () => {
+    let firstSource!: ReadableStreamDefaultController<Uint8Array>;
+    const firstBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        firstSource = controller;
+      },
+    });
+    const secondCancel = vi.fn();
+    const secondBody = new ReadableStream<Uint8Array>({ cancel: secondCancel });
+    (global.fetch as any)
+      .mockResolvedValueOnce(new Response(firstBody, { headers: { 'Content-Type': 'text/event-stream' } }))
+      .mockResolvedValueOnce(new Response(secondBody, { headers: { 'Content-Type': 'text/event-stream' } }));
+    let observedReconnect!: () => void;
+    const reconnected = new Promise<void>(resolve => {
+      observedReconnect = resolve;
+    });
+    const onEvent = vi.fn();
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent,
+        onReconnect: () => {
+          sub.unsubscribe();
+          observedReconnect();
+        },
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+    try {
+      firstSource.close();
+      await reconnected;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(secondCancel).toHaveBeenCalledOnce();
+      expect(onEvent).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      sub.unsubscribe();
+      if (!secondBody.locked) await secondBody.cancel();
+    }
+  });
+
   it('calls onError with the stream read failure when reconnect is exhausted', async () => {
     const readError = new Error('stream read failed');
     (global.fetch as any).mockResolvedValueOnce(
@@ -639,6 +738,7 @@ describe('AgentController Resource', () => {
   });
 
   it('does not reopen the stream after cancelling during reconnect binding', async () => {
+    const onError = vi.fn();
     mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 'original-thread' });
     (global.fetch as any).mockResolvedValueOnce(sseResponse([]));
     let finishBinding!: (response: Response) => void;
@@ -654,6 +754,7 @@ describe('AgentController Resource', () => {
       .subscribe({
         threadId: 'original-thread',
         onEvent: () => {},
+        onError,
         reconnect: { maxRetries: 1, delayMs: 0 },
       });
     await vi.waitFor(() => expect(finishBinding).toBeDefined());
@@ -666,6 +767,37 @@ describe('AgentController Resource', () => {
     );
     await new Promise(resolve => setTimeout(resolve, 30));
     expect((global.fetch as any).mock.calls).toHaveLength(3);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('does not report a late reconnect failure after unsubscribe', async () => {
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([]));
+    let rejectReconnect!: (error: Error) => void;
+    (global.fetch as any).mockImplementationOnce(
+      () =>
+        new Promise<Response>((_, reject) => {
+          rejectReconnect = reject;
+        }),
+    );
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+    try {
+      await vi.waitFor(() => expect(rejectReconnect).toBeDefined());
+      sub.unsubscribe();
+      rejectReconnect(new Error('Connection rejected after unsubscribe'));
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(onError).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(2);
+    } finally {
+      sub.unsubscribe();
+    }
   });
 
   it('rejects subscribe when the initial connection fails without reconnect', async () => {
