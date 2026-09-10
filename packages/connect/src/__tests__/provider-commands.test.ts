@@ -70,6 +70,33 @@ const action = createAction({
 export default action;
 `;
 
+const connectionContextTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ value: z.string() });
+const OutputSchema = z.object({ value: z.string() });
+
+const action = createAction({
+  description: 'Use connection configuration and metadata.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const connection = await nango.getConnection();
+    const metadata = await nango.getMetadata();
+    const response = await nango.post({
+      endpoint: '/echo',
+      baseUrlOverride: connection.connection_config.projectUrl,
+      data: { ...input, metadata },
+    });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const noProxyCallTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -107,6 +134,7 @@ describe('maintainer provider commands', () => {
       writeFileSync(resolve(actionDir, 'echo.ts'), actionTemplate);
       if (providerId === 'second-provider') {
         writeFileSync(resolve(actionDir, 'proxy-configuration.ts'), proxyConfigurationTemplate);
+        writeFileSync(resolve(actionDir, 'connection-context.ts'), connectionContextTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
       }
@@ -193,7 +221,7 @@ describe('maintainer provider commands', () => {
     expect(listProviders({ installedOnly: false, search: 'custom' })).toEqual([
       'first-provider (1 action templates) [installed as custom]',
     ]);
-    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (4 action templates)']);
+    expect(listProviders({ installedOnly: false, search: 'second' })).toEqual(['second-provider (5 action templates)']);
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -211,6 +239,14 @@ describe('maintainer provider commands', () => {
     expect(generatedTool).toMatch(/import type \{[\s\S]*PlatformProxy,[\s\S]*PlatformProxyRequest,[\s\S]*\} from/);
     expect(generatedTool).toContain('const config: PlatformProxyRequest =');
     expect(generatedTool).not.toContain('ProxyConfiguration');
+
+    const connectionContextTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/connection-context.ts'),
+      'utf8',
+    );
+    expect(connectionContextTool).toContain('await platformProxy.getConnection()');
+    expect(connectionContextTool).toContain('await platformProxy.getMetadata()');
+    expect(connectionContextTool).toContain('baseUrlOverride: connection.connection_config.projectUrl');
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
       false,
@@ -219,7 +255,7 @@ describe('maintainer provider commands', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(2);
+    expect(manifest.toolCount).toBe(3);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -282,7 +318,7 @@ describe('maintainer provider commands', () => {
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (1 tools, 0 skipped)',
+      'other <- second-provider (3 tools, 2 skipped)',
     ]);
   });
 

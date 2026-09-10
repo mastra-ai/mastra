@@ -30,8 +30,43 @@ describe('createPlatformProxy request context binding', () => {
     const bound = createPlatformProxy({ connectionId: 'conn-1' }).withRequestContext(new RequestContext());
     expect(typeof bound.get).toBe('function');
     expect(typeof bound.post).toBe('function');
+    expect(typeof bound.getConnection).toBe('function');
+    expect(typeof bound.getMetadata).toBe('function');
     expect(typeof bound.log).toBe('function');
     expect(bound.ActionError).toBeDefined();
+  });
+
+  it('does not forward template baseUrlOverride values to the platform proxy request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    await proxy.get({ endpoint: '/items', baseUrlOverride: 'https://caller-controlled.example' });
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/conn-1/proxy/items');
+    expect(JSON.stringify(fetchMock.mock.calls[0]![1])).not.toContain('caller-controlled.example');
+  });
+
+  it('fetches connection context once per bound execution and returns metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connection_config: { projectUrl: 'https://project.supabase.co' },
+        metadata: { region: 'us-east-1' },
+      }),
+    );
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    }).withRequestContext(new RequestContext());
+
+    await expect(proxy.getConnection()).resolves.toEqual({
+      connection_config: { projectUrl: 'https://project.supabase.co' },
+      metadata: { region: 'us-east-1' },
+    });
+    await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1' });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 

@@ -47,7 +47,7 @@ import { TEMPLATE_SHA } from './templates-config.js';
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
 const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
-const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'ActionError', 'log']);
+const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'getConnection', 'getMetadata', 'ActionError', 'log']);
 const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
