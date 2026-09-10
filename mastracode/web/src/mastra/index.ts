@@ -278,13 +278,15 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-// GitLab intake (issues in), dispatched onto work-item rules by its webhook.
-// GitLab does NOT provide the source-control capability — the factory resolves
-// its source-control owner by the literal integration id `github` — so merge
-// requests keep shipping through GitHub, the same split Linear already runs
-// under. Either credential path enables it: a complete OAuth app (per-user
-// connect flow) or a static group/personal access token for single-team
-// self-hosted installs.
+// GitLab intake (issues and merge requests in), dispatched onto work-item and
+// review rules by its webhook. GitLab provides the source-control capability,
+// so the factory can resolve it as the source-control owner; GitHub keeps
+// precedence when both are registered, leaving an existing deployment on the
+// forge it already used. Session workspaces are still created through the
+// GitHub integration, so a GitLab-only deployment cannot open a session to
+// work a card yet. Either credential path enables it: a complete OAuth app
+// (per-user connect flow) or a static group/personal access token for
+// single-team self-hosted installs.
 //
 // GITLAB_WEBHOOK_SECRET is required alongside either path: the webhook route
 // authenticates deliveries with that secret alone, so the integration refuses
