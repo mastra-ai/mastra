@@ -255,7 +255,12 @@ function TraceThreadRow({
   // clamp only makes sense when the timeline actually overflows.
   const messages = useMeasuredAutoHeight<HTMLDivElement>();
   const timeline = useMeasuredAutoHeight<HTMLDivElement>();
-  const overflows = messages.height !== null && timeline.height !== null && timeline.height > messages.height;
+  const tabsHeader = useMeasuredAutoHeight<HTMLDivElement>();
+  // The tab header sits above the timeline, so the timeline budget is what's left of the
+  // messages height once the header is taken out — otherwise the right cell overshoots the left.
+  const timelineBudget =
+    messages.height !== null && tabsHeader.height !== null ? messages.height - tabsHeader.height : null;
+  const overflows = timelineBudget !== null && timeline.height !== null && timeline.height > timelineBudget;
   const isClamped = overflows && !isExpanded;
 
   return (
@@ -285,19 +290,21 @@ function TraceThreadRow({
         )}
       >
         {/* Same header/tab layout as the traces page so both surfaces read identically. */}
-        <DataPanel.Header className="py-2">
-          <TabList variant="pill-ghost" className="px-0">
-            <Tab value="spans">Spans</Tab>
-            <Tab value="feedback">
-              Feedback
-              <NeedsReviewDot feedback={feedbackData?.feedback} />
-            </Tab>
-          </TabList>
-        </DataPanel.Header>
+        <div ref={tabsHeader.ref}>
+          <DataPanel.Header className="py-2">
+            <TabList variant="pill-ghost" className="px-0">
+              <Tab value="spans">Spans</Tab>
+              <Tab value="feedback">
+                Feedback
+                <NeedsReviewDot feedback={feedbackData?.feedback} />
+              </Tab>
+            </TabList>
+          </DataPanel.Header>
+        </div>
         <TabContent value="spans" className="min-h-0 py-0">
           <div
             className="relative overflow-hidden"
-            style={isClamped ? { maxHeight: messages.height ?? undefined } : undefined}
+            style={isClamped ? { maxHeight: timelineBudget ?? undefined } : undefined}
             data-testid="trace-row-timeline"
           >
             <div ref={timeline.ref} className="py-4 pl-4">
