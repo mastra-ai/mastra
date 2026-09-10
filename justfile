@@ -132,6 +132,15 @@ start:
     # Build the SPA into the Mastra entry's public dir. The API server runs with
     # that dir as its cwd, so `mastra factory dev` finds `factory/index.html`
     # there and serves the built SPA itself: one origin, no Vite, no HMR.
+    # The UI's workspace dependencies (@mastra/playground-ui and friends) are
+    # consumed through their dists, so build those first: the SPA build below
+    # is a bare `pnpm --dir` call that knows nothing of the workspace graph and
+    # fails to resolve any export a stale dist is missing. `^...` is the
+    # dependencies of factory-ui without factory-ui itself, which stays out of
+    # turbo so MASTRACODE_OUT_DIR reaches it and its output escapes the cache.
+    # The package name, not the path: `./mastracode/factory-ui^...` keeps the
+    # package in the selection and rebuilds the SPA into the wrong directory.
+    pnpm turbo build --filter '@internal/factory-ui^...'
     MASTRACODE_OUT_DIR="{{web}}/src/mastra/public/factory" pnpm --dir "{{factory_ui}}" build
     # Probe right before bind so a long build does not race a port that frees
     # (or is taken) in the meantime. Range matches `mastra factory dev` (4111–4131).
