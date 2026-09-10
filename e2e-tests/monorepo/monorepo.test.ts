@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, rm, readFile, writeFile, access } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -29,13 +29,24 @@ async function killOrphanedDevServer(projectDir: string) {
   } catch {}
 }
 
-async function pathExists(path: string): Promise<boolean> {
+async function findInDir(root: string, targetName: string): Promise<boolean> {
+  let entries;
   try {
-    await access(path);
-    return true;
+    entries = await readdir(root, { withFileTypes: true });
   } catch {
     return false;
   }
+  for (const entry of entries) {
+    if (entry.name === targetName) {
+      return true;
+    }
+    if (entry.isDirectory()) {
+      if (await findInDir(join(root, entry.name), targetName)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
@@ -994,7 +1005,7 @@ export const mastra = new Mastra({
           await setupMonorepo(isolatedFixturePath, pkgManager);
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
-          const outputNodeModules = join(appDir, '.mastra', 'output', 'node_modules');
+          const outputRoot = join(appDir, '.mastra', 'output');
 
           await removeOutputDir(isolatedFixturePath);
           const skipBuild = await execa(pkgManager, ['build'], {
@@ -1006,7 +1017,9 @@ export const mastra = new Mastra({
 
           expect(skipBuild.exitCode).toBe(0);
           expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
-          expect(await pathExists(outputNodeModules)).toBe(false);
+          // No dependencies installed and no lockfile generated anywhere in the build output.
+          expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
+          expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);
 
           await removeOutputDir(isolatedFixturePath);
           const defaultBuild = await execa(pkgManager, ['build'], {
@@ -1016,7 +1029,8 @@ export const mastra = new Mastra({
           });
 
           expect(defaultBuild.exitCode).toBe(0);
-          expect(await pathExists(outputNodeModules)).toBe(true);
+          // Default path installs dependencies into the build output.
+          expect(await findInDir(outputRoot, 'node_modules')).toBe(true);
         } finally {
           await removeOutputDir(isolatedFixturePath);
           await rm(isolatedFixturePath, { recursive: true, force: true });
