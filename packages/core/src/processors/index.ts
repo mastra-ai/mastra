@@ -1,12 +1,13 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
+import type { MastraModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -196,7 +197,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   activeTools?: string[];
 
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
@@ -244,7 +245,7 @@ export type ProcessInputStepResult = {
    */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
