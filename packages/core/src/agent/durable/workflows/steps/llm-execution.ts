@@ -11,6 +11,7 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
+import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
@@ -36,6 +37,7 @@ import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
+import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
 import { isMastraTool } from '../../../../tools/toolchecks';
@@ -1102,6 +1104,40 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             let deferredStepFinishChunk: any = null;
+
+            // ── processToolResult support for provider-executed results (#14282 parity port) ──
+            // Provider-executed tool results (same-stream or deferred) never reach
+            // the tool-call step (the passthrough gate skips client execution), so
+            // this is their only processToolResult site — mirrors the main loop's
+            // llm-execution tool-result case. Lazy: most streams carry no
+            // provider tool results.
+            let toolResultTripwire: TripWire | null = null;
+            let toolResultRunner: ProcessorRunner | undefined;
+            const getToolResultRunner = (): ProcessorRunner => {
+              toolResultRunner ??= new ProcessorRunner({
+                inputProcessors: [],
+                outputProcessors: effectiveOutputProcessors,
+                logger: logger as any,
+                agentName: typedInput.agentName ?? typedInput.agentId,
+                processorStates: registryEntry?.processorStates,
+              });
+              return toolResultRunner;
+            };
+            // Persist non-transient data-* chunks into the workflow-side
+            // messageList before streaming them (#19375 parity, same as the
+            // outputStepWriter below).
+            const toolResultChunkWriter = pubsub
+              ? {
+                  custom: async (
+                    data: { type: string; data?: unknown; transient?: boolean },
+                    writerOptions?: { messageId?: string },
+                  ) => {
+                    persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
+                    await emitChunkEvent(pubsub, runId, data as any);
+                  },
+                }
+              : undefined;
+
             const releaseStreamActivity = markRunActive(runId);
             try {
               let stepStartEmitted = false;
@@ -1123,6 +1159,91 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
                     warnings,
+                  });
+                }
+
+                // ── Deferred provider-executed tool results (#14282 parity port) ──
+                // When a provider tool is deferred (e.g. Anthropic web_search called
+                // alongside a client tool), the tool-call arrives in step N and is
+                // committed to the messageList as state:'call'; the tool-result only
+                // arrives in step N+1's stream. Patch the existing call part to
+                // state:'result' here so the real data reaches durable history —
+                // without this the invocation stays 'call' forever (the tool-call
+                // step's passthrough gate skips client execution for provider tools).
+                // For same-stream results no matching part exists yet, so
+                // updateToolInvocation returns false and buildMessagesFromChunks
+                // handles the merge from the mutated collected chunk.
+                //
+                // Run processToolResult BEFORE the raw result is emitted, collected,
+                // or persisted — this engine emits eagerly, so the hook must run
+                // pre-emission to honor the "scan before history / next LLM call"
+                // guarantee and so streaming clients see the post-processor value.
+                // Presence check (not truthiness): a tool legitimately returning
+                // `null` still triggers processors.
+                if (rawChunk.type === 'tool-result' && rawChunk.payload && 'result' in (rawChunk.payload as any)) {
+                  const resultPayload = rawChunk.payload as any;
+                  const resultToolDef = resolveToolDef(resultPayload.toolName);
+                  const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
+
+                  if (effectiveOutputProcessors.length > 0) {
+                    try {
+                      await getToolResultRunner().runProcessToolResult({
+                        steps: (inputData as any).accumulatedSteps ?? [],
+                        messages: messageList.get.all.db(),
+                        messageList,
+                        stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                        toolName: resultPayload.toolName,
+                        toolCallId: resultPayload.toolCallId,
+                        toolArgs: resultPayload.args,
+                        result: resultPayload.result,
+                        providerExecuted: resultProviderExecuted,
+                        requestContext,
+                        retryCount: (inputData as any).processorRetryCount ?? 0,
+                        tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                        writer: toolResultChunkWriter,
+                        abortSignal: executionAbortSignal,
+                      });
+                      // Sync any processor mutation (via messageList.updateToolInvocation)
+                      // back into the chunk so the emitted client chunk and the
+                      // collected chunk both carry the post-processor value.
+                      const postProcessorResult = readToolResultFromMessageList(messageList, resultPayload.toolCallId);
+                      if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
+                        resultPayload.result = postProcessorResult;
+                      }
+                    } catch (error) {
+                      if (error instanceof TripWire) {
+                        logger?.warn?.('Tool result processor tripwire triggered', {
+                          reason: error.message,
+                          processorId: error.processorId,
+                          retry: error.options?.retry,
+                        });
+                        // Stop consuming the stream: the raw result is never emitted,
+                        // collected, or persisted. The post-stream join below emits
+                        // the tripwire chunk and bails with reason 'tripwire'.
+                        toolResultTripwire = error;
+                        break;
+                      }
+                      logger?.error?.('Error in processToolResult processors:', error);
+                      throw error;
+                    }
+                  }
+
+                  // Patch the deferred tool-call to state:'result' with the
+                  // (possibly post-processor-mutated) value.
+                  messageList.updateToolInvocation({
+                    type: 'tool-invocation',
+                    toolInvocation: {
+                      state: 'result',
+                      toolCallId: resultPayload.toolCallId,
+                      toolName: resultPayload.toolName,
+                      args: resultPayload.args,
+                      result: resultPayload.result,
+                    },
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      resultPayload.providerMetadata,
+                      (rawChunk as { metadata?: Record<string, unknown> }).metadata,
+                    ),
+                    providerExecuted: resultProviderExecuted,
                   });
                 }
 
@@ -1557,6 +1678,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               lastError = streamErrorObj;
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
+            }
+
+            // A processToolResult tripwire fired mid-stream (#14282 parity port):
+            // the raw provider tool result was never emitted nor persisted. Join
+            // the shared tripwire bail path (mirrors processLLMResponse below).
+            if (toolResultTripwire) {
+              if (pubsub) {
+                await emitChunkEvent(pubsub, runId, {
+                  type: 'tripwire',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    processorId: toolResultTripwire.processorId,
+                    reason: toolResultTripwire.message,
+                    retry: toolResultTripwire.options?.retry,
+                    metadata: toolResultTripwire.options?.metadata,
+                  },
+                });
+              }
+              return {
+                messageListState: messageList.serialize(),
+                text: textDeltas.join(''),
+                toolCalls: [],
+                stepResult: {
+                  reason: 'tripwire' as const,
+                  warnings,
+                  isContinued: false,
+                },
+                metadata: {
+                  modelId: currentModel.modelId,
+                },
+                state: typedInput.state,
+              } satisfies DurableLLMStepOutput;
             }
 
             // Run `processLLMResponse` for any input processors that implement

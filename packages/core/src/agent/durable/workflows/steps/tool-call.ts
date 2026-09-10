@@ -355,8 +355,9 @@ export function createDurableToolCallStep() {
       // the result; a deferred result (e.g. Anthropic web_search resolving in
       // a later stream) must not fall through to client execution, which would
       // try to run the provider tool client-side and fail with
-      // ToolNotFoundError. (The next-stream result patch from #14282 is not
-      // yet ported to durable llm-execution — tracked as a parity item.)
+      // ToolNotFoundError. The deferred result is patched into the messageList
+      // by llm-execution's tool-result handling when it arrives in a later
+      // stream (#14282 parity port).
       if (providerExecuted) {
         return {
           ...typedInput,
