@@ -13,7 +13,7 @@ const textPreview = (data: string) => {
     let encoding = 'utf-8';
     if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
     if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
-    return new TextDecoder(encoding).decode(bytes);
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes);
   } catch {
     return undefined;
   }

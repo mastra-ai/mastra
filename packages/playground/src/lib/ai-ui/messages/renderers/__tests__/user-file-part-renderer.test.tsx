@@ -52,6 +52,9 @@ describe('UserFilePartRenderer', () => {
     it.each([
       ['application/vnd.ms-excel', 'data:application/vnd.ms-excel;base64,AAEC'],
       ['text/csv', 'data:text/csv;base64,%%%'],
+      ['text/plain', 'data:text/plain;base64,wyg='],
+      ['text/plain', 'data:text/plain;base64,//79'],
+      ['text/plain', 'data:text/plain;base64,/v8A'],
     ])('shows a named file placeholder rather than binary or base64 text for %s', (mimeType, data) => {
       const part = { type: 'file' as const, mimeType, data, filename: 'leads.xls' };
       const { container } = render(<UserFilePartRenderer part={part} />);
