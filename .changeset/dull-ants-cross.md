@@ -11,6 +11,11 @@ Fixed `mastra deploy` creating a plain Studio project when deploying a Mastra Fa
 - Deploying a Factory build into an existing project that was created without Factory support now explains the problem and offers to create a new Factory project instead, since that support cannot be added later.
 - `--region` now rejects values other than `us` and `eu` instead of silently ignoring them for the project.
 
+```bash
+# from a directory scaffolded with `npm create factory`
+mastra deploy --region us
+```
+
 **Legacy commands**
 
 - `mastra server deploy` creates Factory projects with the flag and sends it on the deploy request.
