@@ -309,7 +309,7 @@ function TraceThreadRow({
               as={Link}
               to={`/traces?traceId=${encodeURIComponent(traceId)}`}
               variant="ghost"
-              size="sm"
+              size="md"
               className="shrink-0"
             >
               <ExternalLinkIcon />
