@@ -10,6 +10,7 @@ import { DaytonaSandbox } from '../index';
 
 // Explicit opt-in: creates billable sandboxes and disposable objects in the configured R2 bucket.
 // Requires DAYTONA_API_KEY, S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.
+// The snapshot must already contain Python and boto3; see the package README for setup.
 describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credential mounts', () => {
   it('initializes, removes staged credentials, and denies access to another scope', async () => {
     for (const name of ['DAYTONA_API_KEY', 'S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
@@ -56,7 +57,11 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
         secretAccessKey: createHash('sha256').update(jwt).digest('hex'),
         sessionToken: Buffer.from(`jwt/${jwt}`).toString('base64'),
       });
-      const sandbox = new DaytonaSandbox({ language: 'python', ephemeral: true });
+      const sandbox = new DaytonaSandbox({
+        language: 'python',
+        ephemeral: true,
+        snapshot: process.env.DAYTONA_R2_TEST_SNAPSHOT,
+      });
       return {
         name,
         prefix,
@@ -78,6 +83,10 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
         await parent.writeFile(`${scope.name}/sentinel.txt`, `original-${scope.name}`);
         started.push(scope);
         await scope.workspace.init();
+        await command(
+          scope.sandbox,
+          'python -c "import boto3" 2>/dev/null || { echo "This test requires Python and boto3 preinstalled. Set DAYTONA_R2_TEST_SNAPSHOT to a prepared snapshot; see workspaces/daytona/README.md." >&2; exit 1; }',
+        );
         await scope.filesystem.init(); // Workspace initialization can report partial success.
         expect(await scope.filesystem.readFile('/sentinel.txt', { encoding: 'utf-8' })).toBe(`original-${scope.name}`);
         expect(await command(scope.sandbox, 'timeout 15 cat /s3-data/sentinel.txt')).toBe(`original-${scope.name}`);
@@ -88,7 +97,6 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
       }
       for (const scope of scopes) {
         const peer = scopes.find(candidate => candidate !== scope)!;
-        await command(scope.sandbox, 'python -c "import boto3" 2>/dev/null || pip -q install boto3');
         const python = `import boto3, glob
 from pathlib import Path
 from botocore.exceptions import ClientError
