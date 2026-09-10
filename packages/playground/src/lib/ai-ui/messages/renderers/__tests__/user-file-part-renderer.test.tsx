@@ -5,6 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { UserFilePartRenderer } from '../user-file-part-renderer';
 
 describe('UserFilePartRenderer', () => {
+  describe('when a named file contains literal attachment tags', () => {
+    it('preserves the entire file content in its preview', () => {
+      const text = '<attachment>literal</attachment>';
+      const part = { type: 'file' as const, mimeType: 'text/plain', data: text, filename: 'markup.txt' };
+      const { getByRole, getByText } = render(<UserFilePartRenderer part={part} />);
+      fireEvent.click(getByRole('button', { name: 'Preview markup.txt' }));
+      expect(getByText(text).textContent).toBe(text);
+    });
+  });
   describe('when an inline text file is rendered', () => {
     it.each(['text/csv', 'application/json', 'application/yaml'])(
       'shows decoded %s content in the existing preview',

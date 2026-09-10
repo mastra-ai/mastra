@@ -147,8 +147,9 @@ interface TxtEntryProps {
 export const TxtEntry = ({ data, name }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
 
-  // Remove only the outer envelope, preserving attachment-like tags inside the file.
-  const formattedContent = data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data;
+  // Named files contain raw content; only unnamed chat text carries an envelope.
+  const formattedContent =
+    name === undefined ? (data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data) : data;
   const filename =
     name ??
     data
