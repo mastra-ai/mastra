@@ -43,7 +43,7 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
-  /** Extra controls rendered under the message; only visible while hovering or focusing the row. */
+  /** Extra controls rendered under the message, alongside the assistant action bar. */
   footer?: ReactNode;
 }
 
@@ -315,11 +315,7 @@ export const MessageRow = memo(function MessageRow({
 
   if (dbMessage === null) return null;
 
-  const footerSlot = footer ? (
-    <div className="opacity-0 transition-opacity group-hover:opacity-100 has-[:focus-visible]:opacity-100">
-      {footer}
-    </div>
-  ) : null;
+  const footerSlot = footer ? <div>{footer}</div> : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;

@@ -92,7 +92,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
               );
             }
 
-            // Text messages: the action joins the hover-revealed action bar, next to Copy.
+            // Text messages: the action joins the action bar, next to Copy.
             return <MessageRow key={message.id} message={message} readOnly footer={action ?? undefined} />;
           })}
         </ToolCallProvider>
