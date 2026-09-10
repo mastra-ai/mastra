@@ -291,7 +291,8 @@ function TraceThreadRow({
       >
         {/* Same header/tab layout as the traces page so both surfaces read identically. */}
         <div ref={tabsHeader.ref}>
-          <DataPanel.Header className="py-2">
+          {/* Explicit border: the measuring wrapper makes the header the "last" child. */}
+          <DataPanel.Header className="border-border1 min-h-0 border-b py-1.5">
             <TabList variant="pill-ghost" className="px-0">
               <Tab value="spans">Spans</Tab>
               <Tab value="feedback">
@@ -302,12 +303,15 @@ function TraceThreadRow({
           </DataPanel.Header>
         </div>
         <TabContent value="spans" className="min-h-0 py-0">
+          {/* The clamp is applied whenever the row is collapsed, not only once `overflows` is known:
+              the timeline remounts on every tab switch and its measurement lags a frame, which
+              would otherwise let the cell grow and snap back. A short timeline ignores it anyway. */}
           <div
             className="relative overflow-hidden"
-            style={isClamped ? { maxHeight: timelineBudget ?? undefined } : undefined}
+            style={!isExpanded && timelineBudget !== null ? { maxHeight: timelineBudget } : undefined}
             data-testid="trace-row-timeline"
           >
-            <div ref={timeline.ref} className="py-4 pl-4">
+            <div ref={timeline.ref} className="pt-2 pb-4 pl-4">
               <TraceTimeline
                 hierarchicalSpans={hierarchicalSpans}
                 selectedSpanId={selectedSpanId}
@@ -335,10 +339,8 @@ function TraceThreadRow({
             </div>
           )}
         </TabContent>
-        <TabContent value="feedback" className="min-h-0 py-0">
-          <DataPanel.Content>
-            <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
-          </DataPanel.Content>
+        <TabContent value="feedback" className="min-h-0 px-4 pt-2 pb-4">
+          <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
         </TabContent>
       </Tabs>
     </div>
