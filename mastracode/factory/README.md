@@ -450,6 +450,28 @@ Linear event handlers are configured exclusively on the integration. Fetched iss
 
 `MastraFactory({ configVersion })` is the deployment-owned label stamped on Linear evaluations and audit records. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
+### GitLab event rules
+
+`GitLabIntegration` installs the built-in `issueOpened`, `issueEdited`, `issueClosed`, `issueNoteCreated`, `mergeRequestOpened`, `mergeRequestUpdated`, `mergeRequestMerged`, `mergeRequestClosed`, and `mergeRequestNoteCreated` handlers. Overrides follow the same contract as Linear: a function replaces one default, `null` disables it, and omitted events keep their defaults.
+
+```typescript
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
+
+const gitlab = new GitLabIntegration({
+  clientId: process.env.GITLAB_CLIENT_ID,
+  clientSecret: process.env.GITLAB_CLIENT_SECRET,
+  // Required whenever the webhook route is mounted.
+  webhookSecret: process.env.GITLAB_WEBHOOK_SECRET,
+  rules: { issueNoteCreated: null },
+});
+```
+
+Point a GitLab project or group webhook at `POST /web/gitlab/webhook` with **Issues events** and **Merge request events** enabled, and set the secret token to the same `webhookSecret`. Deliveries whose `X-Gitlab-Token` does not match are rejected, and the integration refuses to construct when a webhook is configured without a secret — an unauthenticated delivery can now start real work.
+
+Issues become Work-board cards and merge requests become Review-board cards. A delivery carries no tenant, so the org is resolved from the intake binding that links the GitLab project to a Factory project; a project bound in more than one org fans out to each. Notes posted by the connected account are skipped, so Factory's own handoff comments do not re-trigger a run. Treat issue titles, descriptions, and note bodies as untrusted data.
+
+Because the connected account is org-wide, GitLab reads and writes are not scoped to the acting user's own GitLab permissions.
+
 ### GitHub review commands
 
 A repository maintainer with write or admin access can start a Factory review from a pull-request comment by posting the exact first-line command:
