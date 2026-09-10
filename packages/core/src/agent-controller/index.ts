@@ -56,6 +56,7 @@ export type {
   TokenUsage,
 } from './types';
 export type {
+  AgentControllerThreadStreamEvent,
   AgentControllerWireEvent,
   ErrorCarryingAgentControllerEvent,
   JsonReadyAgentControllerEvent,

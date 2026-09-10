@@ -2985,6 +2985,15 @@ export class Session<TState = unknown> {
     return this.#bus.subscribe(listener);
   }
 
+  async subscribeToThread<OUTPUT = undefined>(): Promise<AgentThreadSubscription<OUTPUT> | undefined> {
+    const threadId = this.thread.getId();
+    if (!threadId) return undefined;
+    return this.machinery.subscribeToThread({
+      resourceId: this.identity.getResourceId(),
+      threadId,
+    });
+  }
+
   /** Subscribe to work that must complete before the terminal agent event is exposed. */
   onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void {
     this.#beforeAgentEndListeners.add(listener);

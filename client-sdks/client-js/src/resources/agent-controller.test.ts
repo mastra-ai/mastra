@@ -1,4 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
@@ -588,6 +589,84 @@ describe('AgentController Resource', () => {
   // request() has its own internal retry loop; disable it so these specs
   // observe subscribe()'s connection policy directly.
   const noRetryClient = () => new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+
+  it('delivers thread chunks separately from controller events over the scoped session stream', async () => {
+    const chunk: ChunkType = {
+      type: 'tool-call',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', args: { command: 'gh pr checkout 42' } },
+    };
+    const event = { type: 'agent_start' };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      openSseResponse([event, { type: 'thread_chunk', chunk }].map(frame => `data: ${JSON.stringify(frame)}\n\n`)),
+    );
+    const onEvent = vi.fn();
+    const onChunk = vi.fn();
+    const subscription = await client.getAgentController('code').session('user-1', '/workspace/main').subscribe({
+      onEvent,
+      onChunk,
+    });
+
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledWith(chunk));
+    subscription.unsubscribe();
+
+    expect(onEvent).toHaveBeenCalledExactlyOnceWith(event);
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true&sessionScope=%2Fworkspace%2Fmain',
+    );
+  });
+
+  it('calls onReconnect before replaying thread chunks so consumers can rebuild without duplicates', async () => {
+    const toolCall: ChunkType = {
+      type: 'tool-call',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', args: { command: 'gh pr checkout 42' } },
+    };
+    const toolResult: ChunkType = {
+      type: 'tool-result',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId: 'checkout-1', toolName: 'shell', result: 'Checked out' },
+    };
+    const replayFrames = [toolCall, toolResult].map(
+      chunk => `data: ${JSON.stringify({ type: 'thread_chunk', chunk })}\n\n`,
+    );
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(sseResponse(replayFrames.slice(0, 1)))
+      .mockResolvedValueOnce(openSseResponse(replayFrames));
+    const order: string[] = [];
+    const chunks: ChunkType[] = [];
+    const onEvent = vi.fn();
+    const subscription = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent,
+        onChunk: chunk => {
+          order.push(chunk.type);
+          chunks.push(chunk);
+        },
+        onReconnect: () => {
+          order.push('reconnect');
+          chunks.length = 0;
+        },
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+
+    await vi.waitFor(() => expect(chunks).toEqual([toolCall, toolResult]));
+    subscription.unsubscribe();
+
+    expect(order).toEqual(['tool-call', 'reconnect', 'tool-call', 'tool-result']);
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(vi.mocked(global.fetch).mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true',
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?includeThreadStream=true',
+    ]);
+  });
 
   it('rejects subscribe when the initial connection fails without reconnect', async () => {
     (global.fetch as any).mockRejectedValue(new Error('connect refused'));

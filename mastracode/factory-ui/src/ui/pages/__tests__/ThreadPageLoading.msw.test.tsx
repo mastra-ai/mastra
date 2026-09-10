@@ -5,7 +5,9 @@
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
 import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { ChunkFrom } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType } from '@mastra/core/stream';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -157,6 +159,83 @@ function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSI
 }
 
 describe('ThreadPage loading shell', () => {
+  it('shows a buffered checkout before it returns and continues receiving its result', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute();
+    const run = { runId: 'checkout-run', from: ChunkFrom.AGENT };
+    const checkoutArgs = { command: 'gh pr checkout 123', __mastraMetadata: undefined };
+    const buffered: (ChunkType | DataChunkType)[] = [
+      { ...run, type: 'start', payload: { messageId: 'response-1' } },
+      {
+        type: 'data-user-message',
+        data: {
+          id: 'request-1',
+          type: 'user',
+          contents: 'Review this pull request.',
+          createdAt: '2026-09-08T10:00:00Z',
+        },
+      },
+      { ...run, type: 'step-start', payload: { messageId: 'response-1', request: {} } },
+      { ...run, type: 'text-start', payload: { id: 'intro' } },
+      { ...run, type: 'text-delta', payload: { id: 'intro', text: 'Checking out the pull request.' } },
+      { ...run, type: 'text-end', payload: { id: 'intro' } },
+      {
+        ...run,
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'checkout-1',
+          toolName: 'execute_command',
+          args: checkoutArgs,
+        },
+      },
+    ];
+    const encoder = new TextEncoder();
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const emit = (chunk: ChunkType | DataChunkType) => {
+      if (!stream) throw new Error('Thread stream has not connected');
+      stream.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thread_chunk', chunk })}\n\n`));
+    };
+    server.use(
+      http.get(
+        `${AC}/sessions/:resourceId/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                stream = controller;
+                for (const chunk of buffered) emit(chunk);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    renderThreadRoute();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    const tool = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 5000 });
+    const prompt = screen.getByText('Review this pull request.');
+    const response = await screen.findByText('Checking out the pull request.', {}, { timeout: 5000 });
+    expect(prompt.compareDocumentPosition(response) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tool).toHaveAttribute('aria-busy', 'true');
+    expect(within(tool).getByText(checkoutArgs.command)).toBeInTheDocument();
+
+    act(() => {
+      emit({
+        ...run,
+        type: 'tool-result',
+        payload: { toolCallId: 'checkout-1', toolName: 'execute_command', args: {}, result: 'Checked out' },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('group', { name: 'Tool: execute_command' })).toHaveAttribute('aria-busy', 'false');
+    });
+    expect(screen.getAllByRole('group', { name: 'Tool: execute_command' })).toHaveLength(1);
+    expect(screen.getAllByText('Review this pull request.')).toHaveLength(1);
+  });
+
   it('keeps the sidebar mounted with a main-slot spinner while the session resolves, then shows the thread', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute();
     messagesGate.resolve();

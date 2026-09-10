@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { AgentThreadSubscription } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -452,6 +453,88 @@ describe('agent-controller routes', () => {
   });
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
+    it('starts forwarding when an unbound session creates a thread and stops when it deletes that thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'new-user', id: 'new-user', ownerId: 'code' });
+      session.thread.clear();
+      const subscribe = vi.spyOn(session, 'subscribeToThread');
+      const stream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'new-user',
+        includeThreadStream: 'true',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+      });
+      if (!(stream instanceof ReadableStream)) throw new Error('Expected session stream');
+      try {
+        expect(await subscribe.mock.results[0]?.value).toBeUndefined();
+        const thread = await session.thread.create();
+        expect(subscribe).toHaveBeenCalledTimes(2);
+        const subscription = await subscribe.mock.results[1]?.value;
+        if (!subscription) throw new Error('Expected passive thread subscription');
+        const unsubscribe = vi.spyOn(subscription, 'unsubscribe');
+        await session.thread.delete({ threadId: thread.id });
+        expect(unsubscribe).toHaveBeenCalledOnce();
+        expect(subscribe).toHaveBeenCalledTimes(3);
+        expect(await subscribe.mock.results[2]?.value).toBeUndefined();
+      } finally {
+        await stream.cancel();
+        subscribe.mockRestore();
+      }
+    });
+
+    it('drops a pending subscription after a thread change and releases the replacement on disconnect', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'rebind-user', id: 'rebind-user', ownerId: 'code' });
+      const pendingSubscription = Promise.withResolvers<AgentThreadSubscription<undefined>>();
+      const staleSubscription: AgentThreadSubscription<undefined> = {
+        stream: new ReadableStream(),
+        activeRunId: () => null,
+        abort: vi.fn(() => false),
+        unsubscribe: vi.fn(),
+      };
+      const currentSubscription: AgentThreadSubscription<undefined> = {
+        stream: new ReadableStream({
+          start(stream) {
+            stream.close();
+          },
+        }),
+        activeRunId: () => null,
+        abort: vi.fn(() => false),
+        unsubscribe: vi.fn(),
+      };
+      const subscribe = vi
+        .spyOn(session, 'subscribeToThread')
+        .mockReturnValueOnce(pendingSubscription.promise)
+        .mockResolvedValueOnce(currentSubscription);
+      const stream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'rebind-user',
+        includeThreadStream: 'true',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+      });
+      if (!(stream instanceof ReadableStream)) throw new Error('Expected session stream');
+      try {
+        session.emit({ type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' });
+        pendingSubscription.resolve(staleSubscription);
+        await vi.waitFor(() => expect(staleSubscription.unsubscribe).toHaveBeenCalledOnce());
+        expect(subscribe).toHaveBeenCalledTimes(2);
+        expect(currentSubscription.unsubscribe).not.toHaveBeenCalled();
+        await stream.cancel();
+        expect(currentSubscription.unsubscribe).toHaveBeenCalledOnce();
+        expect(staleSubscription.abort).not.toHaveBeenCalled();
+        expect(currentSubscription.abort).not.toHaveBeenCalled();
+      } finally {
+        await stream.cancel();
+        subscribe.mockRestore();
+      }
+    });
+
     it('delivers session events to the SSE stream', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,

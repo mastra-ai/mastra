@@ -711,11 +711,15 @@ function isUnconfirmedSteer(entry: MessageEntry): boolean {
   return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
 }
 
+function isUnconfirmedUserMessage(entry: MessageEntry): boolean {
+  return isUnconfirmedSteer(entry) || (entry.message.role === 'user' && entry.message.id.startsWith('local-'));
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    if (current?.kind !== 'message' || !isUnconfirmedUserMessage(current)) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
@@ -1005,7 +1009,7 @@ function upsertMessage(
   );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
-    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    idx = claimOnScreenEntries(entries, [message], isUnconfirmedUserMessage).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;

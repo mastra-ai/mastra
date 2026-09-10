@@ -1,11 +1,13 @@
 import type {
   AgentControllerThread,
+  AgentControllerThreadStreamEvent,
   AgentControllerWireEvent,
   MastraDBMessage,
   MastraMessagePart,
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType } from '@mastra/core/stream';
 
 import type {
   AgentControllerActiveRun,
@@ -183,6 +185,10 @@ function hydrateThread(thread: SerializedThread): AgentControllerThread {
 /** A frame straight off the stream: still wire-shaped, so its timestamps are strings. */
 type ParsedEvent = AgentControllerWireEvent | NotificationEvent | OtherAgentControllerEvent;
 
+function isThreadChunkEvent(event: { type: string }): event is AgentControllerThreadStreamEvent {
+  return event.type === 'thread_chunk';
+}
+
 function isKnownParsedEvent(event: ParsedEvent): event is AgentControllerWireEvent | NotificationEvent {
   return KNOWN_AGENT_CONTROLLER_EVENT_TYPES.has(event.type);
 }
@@ -235,17 +241,13 @@ export interface AgentControllerRequestOptions {
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
+  onChunk?: (chunk: ChunkType) => void;
   /**
    * Called when the stream errors or ends and no (further) reconnect will be
    * attempted — the subscription is dead after this fires.
    */
   onError?: (error: unknown) => void;
-  /**
-   * Called each time the stream is re-established after a drop (reconnect
-   * only). The server does NOT replay events missed while disconnected, so
-   * stateful consumers MUST re-sync from here (e.g. `session.state()`) or
-   * they will silently lose the gap.
-   */
+  /** Reset chunks before replay and re-fetch session state for missed controller events. */
   onReconnect?: () => void;
   /**
    * Automatically re-establish the stream after an established stream drops
@@ -378,7 +380,10 @@ export class AgentControllerSession extends BaseResource {
       });
 
     const requestStream = async (): Promise<Response> => {
-      const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
+      const threadStreamQuery = options.onChunk ? '?includeThreadStream=true' : '';
+      const response = await this.request<Response>(this.url(`${this.base()}/stream${threadStreamQuery}`), {
+        stream: true,
+      });
       if (!response.body) {
         throw new Error('No response body for agent controller session stream');
       }
@@ -423,14 +428,19 @@ export class AgentControllerSession extends BaseResource {
               if (!line.startsWith('data:')) continue;
               const data = line.slice(5).trim();
               if (!data) continue;
-              let event: AgentControllerEvent;
+              let event: AgentControllerEvent | AgentControllerThreadStreamEvent;
               try {
-                event = hydrateEventTimestamps(JSON.parse(data));
+                const parsedEvent: ParsedEvent | AgentControllerThreadStreamEvent = JSON.parse(data);
+                event = isThreadChunkEvent(parsedEvent) ? parsedEvent : hydrateEventTimestamps(parsedEvent);
               } catch {
                 continue;
               }
               try {
-                options.onEvent(event);
+                if (isThreadChunkEvent(event)) {
+                  options.onChunk?.(event.chunk);
+                } else {
+                  options.onEvent(event);
+                }
               } catch (cause) {
                 if (!cancelled) safeOnError(cause);
                 return { kind: 'consumer_error' };

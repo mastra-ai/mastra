@@ -152,6 +152,12 @@ unsubscribe()
 
 Returns: `() => void`
 
+#### `subscribeToThread()`
+
+Subscribe to the current thread's raw agent chunks through [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions). A run active in the same process replays its buffered chunks before delivering new chunks. Controller lifecycle events remain on `session.subscribe()`.
+
+Returns: `Promise<AgentThreadSubscription | undefined>`. The result is `undefined` when the session has no thread. Read chunks from `subscription.stream` and call `subscription.unsubscribe()` when finished. The subscription stays bound to that thread, so subscribe again after switching threads.
+
 ### Messages and run control
 
 #### `sendMessage({ content, files?, requestContext? })`

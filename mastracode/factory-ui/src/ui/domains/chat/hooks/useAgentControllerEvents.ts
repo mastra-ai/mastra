@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
 import type { AgentControllerSession } from '../services/agentControllerClient';
+import { createThreadStreamHandler } from '../services/thread-stream';
 
 export type SseConnectionState = 'never' | 'connected' | 'dropped';
 
@@ -52,11 +53,15 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
 
+  const threadStream = createThreadStreamHandler(event => {
+    for (const listener of subscription.eventListeners) listener(event);
+  });
+
   void session
     .subscribe({
-      onEvent: event => {
-        for (const listener of subscription.eventListeners) listener(event);
-      },
+      onEvent: threadStream.onEvent,
+      onChunk: threadStream.onChunk,
+      onReconnect: threadStream.reset,
       onError: () => {
         if (subscription.state === 'connected') setState(subscription, 'dropped');
       },
