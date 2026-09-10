@@ -26,15 +26,16 @@ const ANSI_CSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
  */
 const ANSI_STRING_SEQUENCE_RE = /\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?/g;
 /** Any CSI sequence: parameters, intermediates, final byte. SGR is re-admitted by the sanitiser. */
-const ANSI_CSI_ANY_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+const ANSI_CSI_ANY_RE = /\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
 /** Exact shape of the SGR (colour and style) sequences the formatter keeps. */
 const ANSI_SGR_EXACT_RE = /^\x1b\[[0-9;]*m$/;
 /**
  * Remaining two-byte and intermediate escape sequences, e.g. `ESC c` (reset)
- * or `ESC ( B`. The final byte excludes `[` so surviving SGR sequences are
- * left alone.
+ * or `ESC ( B`. Intermediates are bytes 0x20 to 0x2F and the final byte is
+ * 0x30 to 0x7E, as ECMA-48 defines them, except `[` (0x5B) so surviving SGR
+ * sequences are left alone.
  */
-const ANSI_OTHER_ESCAPE_RE = /\x1b[ -/]*[0-Z\\-~]/g;
+const ANSI_OTHER_ESCAPE_RE = /\x1b[\x20-\x2f]*[\x30-\x5a\x5c-\x7e]/g;
 /** Any escape byte still present that does not start an SGR sequence, with a dangling `[`. */
 const STRAY_ESCAPE_RE = /\x1b(?!\[[0-9;]*m)\[?/g;
 /** C0 control characters except tab (expanded separately) and escape (handled above). */
