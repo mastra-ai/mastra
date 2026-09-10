@@ -92,6 +92,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   toolApprovalPolicy,
+  toolApprovalContext,
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
@@ -590,7 +591,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalGated =
           !isDelegatedApproval &&
           (suspendedForApproval ||
-            ((toolRequiresApproval || toolApprovalPolicy === 'manual') && suspendData === undefined));
+            ((toolRequiresApproval || toolApprovalPolicy === 'manual' || toolApprovalPolicy === 'auto') &&
+              suspendData === undefined));
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
@@ -621,6 +623,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 from: ChunkFrom.AGENT,
                 payload: {
                   toolApprovalPolicy,
+                  toolApprovalContext,
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   args: inputData.args,
@@ -656,6 +659,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return suspend(
               {
                 toolApprovalPolicy,
+                toolApprovalContext,
                 requireToolApproval: {
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
@@ -768,6 +772,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: approvalArgs,
                     resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                     toolApprovalPolicy,
+                    toolApprovalContext,
                   },
                 },
                 'approval',
@@ -829,6 +834,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   suspendedToolRunId: options.runId,
                   __mastraToolInput: acceptedInput,
                   toolApprovalPolicy,
+                  toolApprovalContext,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -878,6 +884,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __mastraToolInput: acceptedInput,
                   toolApprovalPolicy,
+                  toolApprovalContext,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
                   ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),

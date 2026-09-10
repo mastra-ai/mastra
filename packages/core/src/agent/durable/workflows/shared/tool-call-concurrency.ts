@@ -43,7 +43,11 @@ export function resolveDurableToolCallConcurrency({
   toolsMetadata?: SerializableToolMetadata[];
   toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName'>[];
 }): number {
-  if (options?.requireToolApproval || options?.toolApprovalPolicy === 'manual') {
+  if (
+    options?.requireToolApproval ||
+    options?.toolApprovalPolicy === 'manual' ||
+    options?.toolApprovalPolicy === 'auto'
+  ) {
     return 1;
   }
 

@@ -1,3 +1,4 @@
+import { bindToolApprovalContext } from '../agent/tool-approval-context';
 import type { AgentSignal, AgentSignalIfIdleOptions } from '../agent/types';
 import type { Event, EventCallback } from '../events/types';
 import type { Mastra } from '../mastra';
@@ -440,6 +441,28 @@ export async function executeAgentSchedule(
 
     let signalResult;
     try {
+      let toolApprovalContext;
+      const target = effective.ifIdle?.streamOptions?.controllerTarget;
+      if (effective.ifIdle?.streamOptions?.toolApprovalPolicy === 'auto' && !target) {
+        throw new Error('Automatic scheduled approval requires a controller target');
+      }
+      if (target) {
+        const binding = {
+          ...target,
+          agentId: agent.id,
+          resourceId: effective.resourceId,
+          threadId: effective.threadId,
+        };
+        const session = await bindToolApprovalContext(mastra, agent, binding);
+        const rules = session.permissions.getRules();
+        toolApprovalContext = {
+          ...binding,
+          deniedTools: Object.keys(rules.tools).filter(name => rules.tools[name] === 'deny'),
+          deniedCategories: Object.entries(rules.categories)
+            .filter(([, policy]) => policy === 'deny')
+            .map(([name]) => name),
+        };
+      }
       const signalType = effective.signalType ?? 'notification';
       const signalBase = {
         tagName: effective.tagName ?? 'schedule',
@@ -453,7 +476,7 @@ export async function executeAgentSchedule(
         resourceId: effective.resourceId,
         threadId: effective.threadId,
         ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
-        ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
+        ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle, toolApprovalContext) } : {}),
       });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -654,7 +677,10 @@ function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'agent
  * `AgentSignalIfIdleOptions`, rehydrating the plain `streamOptions.requestContext`
  * object into a live `RequestContext` before the wake signal runs.
  */
-function buildIfIdleOptions(ifIdle: ScheduleIfIdle): AgentSignalIfIdleOptions {
+function buildIfIdleOptions(
+  ifIdle: ScheduleIfIdle,
+  toolApprovalContext?: import('../agent/tool-approval-context').ToolApprovalContext,
+): AgentSignalIfIdleOptions {
   const requestContext = ifIdle.streamOptions?.requestContext;
   return {
     ...(ifIdle.behavior ? { behavior: ifIdle.behavior } : {}),
@@ -662,6 +688,7 @@ function buildIfIdleOptions(ifIdle: ScheduleIfIdle): AgentSignalIfIdleOptions {
     ...(ifIdle.streamOptions
       ? {
           streamOptions: {
+            ...(toolApprovalContext ? { toolApprovalContext } : {}),
             ...(requestContext ? { requestContext: new RequestContext(Object.entries(requestContext)) } : {}),
             ...(ifIdle.streamOptions.toolApprovalPolicy
               ? { toolApprovalPolicy: ifIdle.streamOptions.toolApprovalPolicy }

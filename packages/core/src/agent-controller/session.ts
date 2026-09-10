@@ -331,6 +331,7 @@ export interface SessionMachinery {
  * because they drive the shared event bus and rebind the shared agent stream.
  */
 export class SessionThread {
+  #subscriptionOpening: Promise<void> | null = null;
   /** The active thread id, or null when the session is not bound to a thread. */
   #threadId: string | null = null;
   /** Gateway to the host's shared thread storage, injected via {@link connect}. */
@@ -554,14 +555,37 @@ export class SessionThread {
    * Ensure the session is subscribed to the given agent/thread stream, opening a
    * fresh subscription (and driving its run loop) when the binding changed.
    */
-  async ensureSubscription(threadId: string, agent = this.#owner.machinery.getAgent()): Promise<void> {
+  async ensureSubscription(threadId: string, agent = this.#owner.machinery.getAgent(), strict = false): Promise<void> {
+    while (this.#subscriptionOpening) await this.#subscriptionOpening;
+    const opening = this.ensureSubscriptionOnce(threadId, agent, strict);
+    this.#subscriptionOpening = opening;
+    try {
+      await opening;
+    } finally {
+      if (this.#subscriptionOpening === opening) this.#subscriptionOpening = null;
+    }
+  }
+
+  private async ensureSubscriptionOnce(threadId: string, agent: Agent, strict: boolean): Promise<void> {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    if (session.stream.matches({ key })) return;
+    if (session.stream.matches({ key }) && session.stream.getCurrentAgent() === agent) return;
+    if (strict && (session.run.isRunning() || session.stream.isActive() || session.approval.isArmed())) {
+      throw new Error('Cannot replace an active Session subscription');
+    }
 
     this.cleanupSubscription();
+    const operationId = session.run.getOperationId();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
+    if (
+      this.#threadId !== threadId ||
+      this.#getResourceId() !== resourceId ||
+      session.run.getOperationId() !== operationId
+    ) {
+      subscription.unsubscribe();
+      throw new Error('Session target changed while subscribing');
+    }
     session.stream.attach({ subscription, agent, key });
     void session.processSubscribedThreadStream(subscription);
     try {
@@ -1046,6 +1070,11 @@ export class SessionStream {
   /** Agent that owns `subscription`, when it is the live subscription. */
   getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
     return this.#subscription === subscription ? this.#agent : null;
+  }
+
+  /** Agent owning the current stream, independent of the selected chat mode. */
+  getCurrentAgent(): Agent | null {
+    return this.#agent;
   }
 
   /** Whether a subscription is currently open. */
@@ -3216,6 +3245,11 @@ export class Session<TState = unknown> {
         const resume = async () => {
           const requestContext = await this.machinery.buildRequestContext(decision.requestContext);
           const toolsets = await this.machinery.buildToolsets(requestContext);
+          if (call.toolApprovalContext) {
+            const thread = await this.thread.getById({ threadId });
+            if (!thread || thread.resourceId !== resourceId)
+              throw new Error('Scheduled result thread no longer exists');
+          }
           // A response racing navigation or Stop must not act on another binding.
           if (
             !this.stream.isCurrent({ subscription }) ||
@@ -3230,10 +3264,13 @@ export class Session<TState = unknown> {
             resourceId,
             runId,
             toolCallId,
-            approved: decision.decision === 'approve',
+            approved:
+              decision.decision === 'approve' &&
+              this.resolveToolApproval(toolName, call.toolApprovalPolicy, call.toolApprovalContext) !== 'deny',
             declineContext: decision.declineContext,
             requireToolApproval: (this.state.get() as Record<string, unknown>).yolo !== true,
             toolApprovalPolicy: call.toolApprovalPolicy,
+            toolApprovalContext: call.toolApprovalContext,
             memory: { thread: threadId, resource: resourceId },
             requestContext,
             toolsets,
@@ -3259,7 +3296,12 @@ export class Session<TState = unknown> {
         });
       },
     });
-    this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: call.args });
+    const policy = this.resolveToolApproval(toolName, call.toolApprovalPolicy, call.toolApprovalContext);
+    if (call.toolApprovalPolicy && policy !== 'ask') {
+      this.respondToToolApproval({ decision: policy === 'allow' ? 'approve' : 'decline', toolCallId });
+    } else {
+      this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: call.args });
+    }
   }
 
   /**
@@ -3445,7 +3487,11 @@ export class Session<TState = unknown> {
    * session-scoped grant, then the tool's category grant/policy, falling back to
    * "ask". Pure session state plus the injected category resolver.
    */
-  resolveToolApproval(toolName: string, toolApprovalPolicy?: 'manual'): PermissionPolicy {
+  resolveToolApproval(
+    toolName: string,
+    toolApprovalPolicy?: 'manual' | 'auto',
+    context?: import('../agent/tool-approval-context').ToolApprovalContext,
+  ): PermissionPolicy {
     const state = this.state.get() as Record<string, unknown>;
     const rules = this.permissions.getRules();
 
@@ -3453,8 +3499,11 @@ export class Session<TState = unknown> {
     if (toolPolicy === 'deny') return 'deny';
 
     const category = this.#resolveCategory?.(toolName);
-    if (toolApprovalPolicy === 'manual') {
-      return category && rules.categories[category] === 'deny' ? 'deny' : 'ask';
+    if (context?.deniedTools.includes(toolName) || (category && context?.deniedCategories.includes(category)))
+      return 'deny';
+    if (toolApprovalPolicy === 'manual' || toolApprovalPolicy === 'auto') {
+      if (category && rules.categories[category] === 'deny') return 'deny';
+      return toolApprovalPolicy === 'manual' ? 'ask' : 'allow';
     }
 
     if (state.yolo === true) return 'allow';
@@ -4039,78 +4088,96 @@ export class Session<TState = unknown> {
    * Approve a parked tool call: drive the agent to execute it. Throws when there
    * is no active run.
    */
-  async approveToolCall({
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
+  /** @internal Capture the actual run binding before waiting for a decision. */
+  captureToolApprovalTarget() {
     const runId = this.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to approve tool call for');
-    }
-
-    const agent = this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.thread.getId();
-    if (!threadId) {
-      throw new Error('Cannot approve a tool call without a current thread');
-    }
-    const resourceId = this.identity.getResourceId();
-    await agent.sendToolApproval({
-      threadId,
-      resourceId,
+    if (!runId || !threadId) throw new Error('No active run to decide a tool call for');
+    return {
+      agent: this.stream.getCurrentAgent() ?? this.machinery.getAgent(),
       runId,
-      toolCallId,
-      approved: true,
-      requireToolApproval: !isYolo,
-      memory: { thread: threadId, resource: resourceId },
-      abortSignal: this.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.machinery.buildToolsets(requestContext),
-    });
+      threadId,
+      resourceId: this.identity.getResourceId(),
+      operationId: this.run.getOperationId(),
+    };
   }
 
-  /**
-   * Decline a parked tool call: drive the agent to reject it. Throws when there
-   * is no active run.
-   */
-  async declineToolCall({
-    toolCallId,
-    requestContext: requestContextInput,
-    declineContext,
-  }: {
+  async approveToolCall(options: {
     toolCallId?: string;
     requestContext?: RequestContext;
-    declineContext?: { reason?: string; message?: string };
+    target?: ReturnType<Session['captureToolApprovalTarget']>;
+    toolName?: string;
+    toolApprovalPolicy?: 'manual' | 'auto';
+    toolApprovalContext?: import('../agent/tool-approval-context').ToolApprovalContext;
   }): Promise<void> {
-    const runId = this.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to decline tool call for');
-    }
+    await this.decideToolCall({ ...options, approved: true });
+  }
 
-    const agent = this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.thread.getId();
-    if (!threadId) {
-      throw new Error('Cannot decline a tool call without a current thread');
+  async declineToolCall(options: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+    target?: ReturnType<Session['captureToolApprovalTarget']>;
+    declineContext?: { reason?: string; message?: string };
+    toolName?: string;
+    toolApprovalPolicy?: 'manual' | 'auto';
+    toolApprovalContext?: import('../agent/tool-approval-context').ToolApprovalContext;
+  }): Promise<void> {
+    await this.decideToolCall({ ...options, approved: false });
+  }
+
+  private async decideToolCall(options: {
+    approved: boolean;
+    toolCallId?: string;
+    requestContext?: RequestContext;
+    target?: ReturnType<Session['captureToolApprovalTarget']>;
+    declineContext?: { reason?: string; message?: string };
+    toolName?: string;
+    toolApprovalPolicy?: 'manual' | 'auto';
+    toolApprovalContext?: import('../agent/tool-approval-context').ToolApprovalContext;
+  }): Promise<void> {
+    const target = options.target ?? this.captureToolApprovalTarget();
+    const abortSignal = this.run.ensureAbortController().signal;
+    const requestContext = await this.machinery.buildRequestContext(options.requestContext);
+    const toolsets = await this.machinery.buildToolsets(requestContext);
+    if (options.toolApprovalContext) {
+      const saved = options.toolApprovalContext;
+      const thread = await this.thread.getById({ threadId: target.threadId });
+      if (
+        !thread ||
+        thread.resourceId !== target.resourceId ||
+        saved.threadId !== target.threadId ||
+        saved.resourceId !== target.resourceId ||
+        saved.agentId !== target.agent.id
+      ) {
+        throw new Error('Scheduled tool approval target no longer matches its saved run');
+      }
     }
-    const resourceId = this.identity.getResourceId();
-    await agent.sendToolApproval({
-      threadId,
-      resourceId,
-      runId,
-      toolCallId,
-      approved: false,
-      declineContext,
-      requireToolApproval: !isYolo,
-      memory: { thread: threadId, resource: resourceId },
-      abortSignal: this.run.ensureAbortController().signal,
+    if (
+      this.thread.getId() !== target.threadId ||
+      this.identity.getResourceId() !== target.resourceId ||
+      this.run.getRunId() !== target.runId ||
+      this.run.getOperationId() !== target.operationId ||
+      (this.stream.getCurrentAgent() && this.stream.getCurrentAgent() !== target.agent)
+    ) {
+      throw new Error('Tool approval target changed while preparing the decision');
+    }
+    const denied =
+      options.toolName &&
+      this.resolveToolApproval(options.toolName, options.toolApprovalPolicy, options.toolApprovalContext) === 'deny';
+    await target.agent.sendToolApproval({
+      threadId: target.threadId,
+      resourceId: target.resourceId,
+      runId: target.runId,
+      toolCallId: options.toolCallId,
+      approved: options.approved && !denied && !this.run.isAbortRequested() && !abortSignal.aborted,
+      declineContext: options.declineContext,
+      requireToolApproval: (this.state.get() as Record<string, unknown>).yolo !== true,
+      toolApprovalPolicy: options.toolApprovalPolicy,
+      toolApprovalContext: options.toolApprovalContext,
+      memory: { thread: target.threadId, resource: target.resourceId },
+      abortSignal,
       requestContext,
-      toolsets: await this.machinery.buildToolsets(requestContext),
+      toolsets,
     });
   }
 

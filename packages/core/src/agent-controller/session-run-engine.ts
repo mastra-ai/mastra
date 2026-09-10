@@ -681,16 +681,27 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const runPolicy = getPayload(chunk).toolApprovalPolicy === 'manual' ? 'manual' : undefined;
-        const policy = this.#session.resolveToolApproval(toolName, runPolicy);
+        const requestedPolicy = getPayload(chunk).toolApprovalPolicy;
+        const runPolicy: 'manual' | 'auto' | undefined =
+          requestedPolicy === 'manual' || requestedPolicy === 'auto' ? requestedPolicy : undefined;
+        const toolApprovalContext = getPayload(chunk).toolApprovalContext as
+          | import('../agent/tool-approval-context').ToolApprovalContext
+          | undefined;
+        const decisionOptions = {
+          target: this.#session.captureToolApprovalTarget(),
+          toolName,
+          toolApprovalPolicy: runPolicy,
+          toolApprovalContext,
+        };
+        const policy = this.#session.resolveToolApproval(toolName, runPolicy, toolApprovalContext);
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, ...decisionOptions });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, ...decisionOptions });
           break;
         }
 
@@ -709,11 +720,13 @@ export class SessionRunEngine {
 
         if (!deferredAbort && approval.decision === 'approve') {
           await this.#session.approveToolCall({
+            ...decisionOptions,
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
           });
         } else {
           await this.#session.declineToolCall({
+            ...decisionOptions,
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
             declineContext: deferredAbort

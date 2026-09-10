@@ -16,7 +16,9 @@ export type ScheduleStreamOptions = {
   /** Request context applied to the woken run, stored as a plain object. */
   requestContext?: Record<string, unknown>;
   /** Require explicit tool decisions for this run, including in an automatic Session. */
-  toolApprovalPolicy?: 'manual';
+  toolApprovalPolicy?: 'manual' | 'auto';
+  /** Reuse an existing controller result Session for approvals without a browser. */
+  controllerTarget?: { controllerId: string; scope: string };
 };
 
 /**
@@ -90,10 +92,16 @@ export const SCHEDULE_STATUSES = ['active', 'paused'] as const;
 const ScheduleAttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
 
 /** Serializable stream options applied to a woken run. See {@link ScheduleStreamOptions}. */
-const ScheduleStreamOptionsSchema = z.object({
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  toolApprovalPolicy: z.literal('manual').optional(),
-});
+const ScheduleStreamOptionsSchema = z
+  .object({
+    requestContext: z.record(z.string(), z.unknown()).optional(),
+    toolApprovalPolicy: z.enum(['manual', 'auto']).optional(),
+    controllerTarget: z.object({ controllerId: z.string().min(1), scope: z.string().min(1) }).optional(),
+  })
+  .refine(options => options.toolApprovalPolicy !== 'auto' || !!options.controllerTarget, {
+    message: 'Automatic scheduled approval requires a controller target',
+    path: ['controllerTarget'],
+  });
 
 /** Options applied when the target thread is actively streaming. */
 const ScheduleIfActiveSchema = z.object({

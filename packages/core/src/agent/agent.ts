@@ -342,7 +342,8 @@ export interface AgentRunToolCall {
   /** True when the run is waiting on a tool-call approval. */
   requiresApproval: boolean;
   /** The saved run requires an explicit decision, regardless of Session grants. */
-  toolApprovalPolicy?: 'manual';
+  toolApprovalPolicy?: 'manual' | 'auto';
+  toolApprovalContext?: import('./tool-approval-context').ToolApprovalContext;
   /** The tool-defined suspend payload when the tool itself called `suspend()`. */
   suspendPayload?: unknown;
 }
@@ -6858,7 +6859,12 @@ export class Agent<
           toolName: approval.toolName,
           args: approval.args,
           requiresApproval: true,
-          ...(payload.toolApprovalPolicy === 'manual' ? { toolApprovalPolicy: 'manual' as const } : {}),
+          ...(payload.toolApprovalPolicy === 'manual' || payload.toolApprovalPolicy === 'auto'
+            ? {
+                toolApprovalPolicy: payload.toolApprovalPolicy as 'manual' | 'auto',
+                toolApprovalContext: payload.toolApprovalContext,
+              }
+            : {}),
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
@@ -6866,7 +6872,12 @@ export class Agent<
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
-          ...(payload.toolApprovalPolicy === 'manual' ? { toolApprovalPolicy: 'manual' as const } : {}),
+          ...(payload.toolApprovalPolicy === 'manual' || payload.toolApprovalPolicy === 'auto'
+            ? {
+                toolApprovalPolicy: payload.toolApprovalPolicy as 'manual' | 'auto',
+                toolApprovalContext: payload.toolApprovalContext,
+              }
+            : {}),
         });
       }
     };
@@ -7140,9 +7151,14 @@ export class Agent<
     const threadStreamPubSub = _threadStreamPubSub ?? this.getPubSub();
     const existingSnapshot = resumeContext?.snapshot;
     // A saved run keeps its manual policy when resumed through any public API.
-    const toolApprovalPolicy = this.#getSuspendedToolCalls(existingSnapshot).some(
-      call => call.toolApprovalPolicy === 'manual',
-    ) ? 'manual' : options.toolApprovalPolicy;
+    const savedToolPolicies = this.#getSuspendedToolCalls(existingSnapshot);
+    const toolApprovalPolicy = savedToolPolicies.some(call => call.toolApprovalPolicy === 'manual')
+      ? 'manual'
+      : savedToolPolicies.some(call => call.toolApprovalPolicy === 'auto')
+        ? 'auto'
+        : options.toolApprovalPolicy;
+    const toolApprovalContext =
+      savedToolPolicies.find(call => call.toolApprovalContext)?.toolApprovalContext ?? options.toolApprovalContext;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     const requestContext = options.requestContext || new RequestContext();
 
@@ -7523,6 +7539,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolApprovalPolicy,
+      toolApprovalContext,
       toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,

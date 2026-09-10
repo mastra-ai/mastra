@@ -186,7 +186,8 @@ export interface SerializableDurableOptions {
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
   /** Run-scoped explicit approval; retained across resume and process recreation. */
-  toolApprovalPolicy?: 'manual';
+  toolApprovalPolicy?: 'manual' | 'auto';
+  toolApprovalContext?: import('../tool-approval-context').ToolApprovalContext;
   /** Concurrency limit / strategy for parallel tool calls (JSON-safe union) */
   toolCallConcurrency?: ToolCallConcurrency;
   /** Whether to auto-resume suspended tools */

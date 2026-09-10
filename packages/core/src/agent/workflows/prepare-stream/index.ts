@@ -40,7 +40,8 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
-  toolApprovalPolicy?: 'manual';
+  toolApprovalPolicy?: 'manual' | 'auto';
+  toolApprovalContext?: import('../../tool-approval-context').ToolApprovalContext;
   toolCallConcurrency?: ToolCallConcurrency;
   resumeContext?: {
     resumeData: any;
@@ -80,6 +81,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   saveQueueManager,
   requireToolApproval,
   toolApprovalPolicy,
+  toolApprovalContext,
   toolCallConcurrency,
   resumeContext,
   agentId,
@@ -143,6 +145,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     returnScorerData,
     requireToolApproval,
     toolApprovalPolicy,
+    toolApprovalContext,
     toolCallConcurrency,
     resumeContext,
     agentId,

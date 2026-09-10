@@ -647,6 +647,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       requireToolApproval:
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolApprovalPolicy: execOptions?.toolApprovalPolicy,
+      toolApprovalContext: execOptions?.toolApprovalContext,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,

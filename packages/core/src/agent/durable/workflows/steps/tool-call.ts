@@ -508,6 +508,7 @@ export function createDurableToolCallStep() {
         registryRequireToolApproval !== undefined ? registryRequireToolApproval : agentOptions.requireToolApproval;
       const requiresApproval =
         agentOptions.toolApprovalPolicy === 'manual' ||
+        agentOptions.toolApprovalPolicy === 'auto' ||
         (await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
           toolName,
           requestContext: registryEntry?.requestContext
@@ -690,7 +691,14 @@ export function createDurableToolCallStep() {
                   type: 'tool-call-approval',
                   runId,
                   from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, resumeSchema, toolApprovalPolicy: agentOptions.toolApprovalPolicy },
+                  payload: {
+                    toolCallId,
+                    toolName,
+                    args,
+                    resumeSchema,
+                    toolApprovalPolicy: agentOptions.toolApprovalPolicy,
+                    toolApprovalContext: agentOptions.toolApprovalContext,
+                  },
                 });
               }
 
@@ -724,6 +732,7 @@ export function createDurableToolCallStep() {
           {
             type: 'approval',
             toolApprovalPolicy: agentOptions.toolApprovalPolicy,
+            toolApprovalContext: agentOptions.toolApprovalContext,
             toolCallId,
             toolName,
             args,
@@ -985,6 +994,7 @@ export function createDurableToolCallStep() {
                       args: approvalArgs,
                       resumeSchema: approvalResumeSchema,
                       toolApprovalPolicy: agentOptions.toolApprovalPolicy,
+                      toolApprovalContext: agentOptions.toolApprovalContext,
                     },
                   });
                 }
@@ -1008,6 +1018,7 @@ export function createDurableToolCallStep() {
                 requireToolApproval: { toolCallId, toolName: approvalToolName, args: approvalArgs },
                 __mastraToolInput: acceptedInput,
                 toolApprovalPolicy: agentOptions.toolApprovalPolicy,
+                toolApprovalContext: agentOptions.toolApprovalContext,
                 // Persist the inner suspended run id in the workflow snapshot,
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.
@@ -1068,6 +1079,7 @@ export function createDurableToolCallStep() {
                 toolCallSuspended: suspendPayload,
                 __mastraToolInput: acceptedInput,
                 toolApprovalPolicy: agentOptions.toolApprovalPolicy,
+                toolApprovalContext: agentOptions.toolApprovalContext,
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,

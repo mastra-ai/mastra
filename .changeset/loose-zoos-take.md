@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added a persisted manual tool approval policy for scheduled runs and direct agent execution. Each tool waits for a decision across resume even when the Session allows tools automatically. Omitting the policy preserves existing approval behavior.
+Added saved manual and automatic tool approval for scheduled runs. A controller target connects the existing result Session even without an open browser. Explicit denies remain blocked after resume, while normal chat settings stay unchanged. Durable recovery restores saved manual gates without executing them and continues eligible automatic gates.
 
 ```typescript
 await mastra.schedules.create({
@@ -13,7 +13,13 @@ await mastra.schedules.create({
   prompt: 'Prepare the daily report.',
   ifIdle: {
     behavior: 'wake',
-    streamOptions: { toolApprovalPolicy: 'manual' },
+    streamOptions: {
+      toolApprovalPolicy: 'manual',
+      controllerTarget: {
+        controllerId: 'report-controller',
+        scope: 'thread:existing-report-thread',
+      },
+    },
   },
 })
 ```
