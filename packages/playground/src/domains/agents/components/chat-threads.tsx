@@ -7,6 +7,7 @@ import {
   ThreadListItems,
   ThreadListNewItem,
 } from '@mastra/playground-ui/components/ThreadList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
@@ -56,17 +57,21 @@ export const ChatThreads = ({
             New Chat
           </ThreadListNewItem>
           {onHidePanel && (
-            <button
-              type="button"
-              aria-label="Hide threads panel"
-              title="Hide threads panel"
-              className={cn(panelIconButtonClass, 'shrink-0')}
-              onClick={onHidePanel}
-            >
-              <Icon>
-                <PanelEdgeIcon side="left" />
-              </Icon>
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Hide threads panel"
+                  className={cn(panelIconButtonClass, 'shrink-0')}
+                  onClick={onHidePanel}
+                >
+                  <Icon>
+                    <PanelEdgeIcon side="left" />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Hide threads panel</TooltipContent>
+            </Tooltip>
           )}
         </div>
 

@@ -4,6 +4,7 @@ import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -97,21 +98,26 @@ export const CollapsiblePanel = ({
       </div>
 
       {isCollapsed && (
-        <button
-          type="button"
-          aria-label="Expand panel"
-          onClick={() => onCollapsedChange(false)}
-          className={cn(
-            panelIconButtonClass,
-            'absolute top-2 z-10',
-            'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
-            direction === 'left' ? 'left-2' : 'right-2',
-          )}
-        >
-          <Icon>
-            <PanelEdgeIcon side={direction} />
-          </Icon>
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Expand panel"
+              onClick={() => onCollapsedChange(false)}
+              className={cn(
+                panelIconButtonClass,
+                'absolute top-2 z-10',
+                'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
+                direction === 'left' ? 'left-2' : 'right-2',
+              )}
+            >
+              <Icon>
+                <PanelEdgeIcon side={direction} />
+              </Icon>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side={direction === 'left' ? 'right' : 'left'}>Expand panel</TooltipContent>
+        </Tooltip>
       )}
     </Panel>
   );
