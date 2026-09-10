@@ -116,7 +116,9 @@ export function ProviderAccessSection({ description }: { description?: string })
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  const providers = providersQuery.data ?? [];
+  // Custom providers are edited in their own section; their keys live on the
+  // custom-provider record, not under the provider key routes used here.
+  const providers = (providersQuery.data ?? []).filter(provider => !provider.custom);
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const scopeOptions: SettingsScope[] = authEnabled ? ['personal', 'org'] : ['personal'];
