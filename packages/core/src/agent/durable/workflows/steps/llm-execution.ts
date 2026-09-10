@@ -12,6 +12,7 @@ import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
+import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
@@ -1624,8 +1625,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 12. Add assistant response to message list
             materializeStreamedMessages();
 
-            // 13. Determine if we should continue (has tool calls)
-            const isContinued = toolCalls.length > 0 && finishReason !== 'stop';
+            // 13. Determine if we should continue (has tool calls). Pending
+            // tool calls must never override a terminal finish reason:
+            // `error`, `length`, and `content-filter` all reproduce the same
+            // failure/truncation/refusal when the request is re-sent, so the
+            // loop would spin until maxSteps (#17893, #15717 parity port).
+            const isContinued = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
             const hasToolCalls = toolCalls.length > 0;
 
             // 13.5. Run processOutputStep for output processors (runs AFTER LLM response, BEFORE tool execution)

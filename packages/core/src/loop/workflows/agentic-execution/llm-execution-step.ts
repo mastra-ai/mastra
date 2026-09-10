@@ -83,6 +83,7 @@ import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -93,21 +94,6 @@ import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
-
-/**
- * Finish reasons that terminate the agentic loop. The loop must NOT continue on
- * any of these, otherwise it re-sends the same request and spins until maxSteps
- * (or forever when maxSteps is unset).
- *
- * - `stop`: the model finished normally.
- * - `error`: the model stream failed.
- * - `length`: the model hit max_tokens; retrying reproduces the truncation
- *   (issue #15717).
- * - `content-filter`: a classifier block / model refusal (e.g. `claude-fable-5`
- *   surfaced by the AI SDK as `content-filter`). Retrying re-triggers the same
- *   refusal, so the run would hang indefinitely.
- */
-const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
 
 function getRequestInputProcessors({
   inputProcessors,
