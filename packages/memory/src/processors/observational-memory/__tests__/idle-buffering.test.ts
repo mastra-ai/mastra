@@ -382,39 +382,46 @@ describe('turn.end() idle buffering', () => {
 describe('22573 idle', () => {
   it.each([
     { times: [100, 200, 300, 400], expected: 2 },
-    { times: [100, 300, 300, 400], expected: 1 },
-    { times: [100, 299, 300, 400], expected: 1 },
+    { times: [100, 200, 300, 400], expected: 2, reverse: true },
+    { times: [100, 300, 300, 400], expected: 0 },
+    { times: [100, 299, 300, 400], expected: 0 },
     { times: [299, 299, 300, 400], expected: 0 },
-    { times: [100, 200, 300, 400], expected: 1, splitTool: true },
-  ])('buffers only the cursor-safe prefix: $times split=$splitTool', async ({ times, expected, splitTool }) => {
-    const messages = times.map((time, index) =>
-      createTestMessage(`Message ${index}`, 'assistant', `prefix-${index}`, new Date(time)),
-    );
-    messages[2]!.content.parts.push({
-      type: 'tool-invocation',
-      toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {} },
-    });
-    if (splitTool) {
-      for (const index of [1, 3]) {
-        messages[index]!.content.parts.push({
-          type: 'tool-invocation',
-          toolInvocation: { state: 'result', toolCallId: 'split', toolName: 'split', args: {}, result: 'done' },
-        });
+    { times: [100, 200, 300, 400], expected: 0, splitTool: true },
+  ])(
+    'buffers the whole prefix or defers: $times split=$splitTool reverse=$reverse',
+    async ({ times, expected, splitTool, reverse }) => {
+      const messages = times.map((time, index) =>
+        createTestMessage(`Message ${index}`, 'assistant', `prefix-${index}`, new Date(time)),
+      );
+      messages[2]!.content.parts.push({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {} },
+      });
+      if (splitTool) {
+        for (const index of [1, 3]) {
+          messages[index]!.content.parts.push({
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'split', toolName: 'split', args: {}, result: 'done' },
+          });
+        }
       }
-    }
-    const list = new MessageList({ threadId: 'idle-buffer-thread' });
-    list.add(structuredClone(messages), 'input');
-    const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: messages });
-    const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
-    await turn.start();
-    await turn.end();
-    expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
-    if (expected) {
-      expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
-    } else {
-      expect(mockOM.buffer).not.toHaveBeenCalled();
-    }
-  });
+      const list = new MessageList({ threadId: 'idle-buffer-thread' });
+      list.add(structuredClone(messages), 'input');
+      const mockOM = createMockOM({
+        asyncEnabled: true,
+        unobservedMessages: reverse ? [...messages].reverse() : messages,
+      });
+      const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+      await turn.start();
+      await turn.end();
+      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+      if (expected) {
+        expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
+      } else {
+        expect(mockOM.buffer).not.toHaveBeenCalled();
+      }
+    },
+  );
   for (const source of ['input', 'response', 'memory'] as const) {
     for (const providerExecuted of [false, true]) {
       it(`defers pending ${source} calls with providerExecuted=${providerExecuted} and persists raw input/output`, async () => {
@@ -454,6 +461,19 @@ describe('22573 idle', () => {
 });
 
 describe('22573 control', () => {
+  it('preserves candidate order when no tools are pending', async () => {
+    const messages = [300, 100, 200].map((time, index) =>
+      createTestMessage(`Completed ${index}`, 'user', `completed-${index}`, new Date(time)),
+    );
+    const list = new MessageList({ threadId: 'idle-buffer-thread' });
+    list.add(structuredClone(messages), 'input');
+    const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: messages });
+    const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+    await turn.start();
+    await turn.end();
+    expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages }));
+  });
+
   it.each([
     { state: 'result', asyncEnabled: true, bufferOnIdle: true, expected: 1 },
     { state: 'text', asyncEnabled: true, bufferOnIdle: true, expected: 1 },

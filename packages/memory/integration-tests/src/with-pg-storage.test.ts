@@ -146,13 +146,20 @@ describe('PostgreSQL Storage Tests', () => {
     });
   }
 
-  it.each([0, 1, 100])('22573 safe prefix retains pending suffix across activation with gap %i', async gap => {
+  it.each([
+    { gap: 0, earlier: false },
+    { gap: 1, earlier: false },
+    { gap: 100, earlier: false },
+    { gap: 0, earlier: true },
+    { gap: 1, earlier: true },
+  ])('22573 prefix retains suffix with gap $gap earlier=$earlier', async ({ gap, earlier }) => {
     const start = new Date('2026-01-01T00:00:00.000Z').getTime();
     const fixture = await clientToolLifecycle(connectionString, false);
     const idle = fixture.makeAgent(true);
     const activation = fixture.makeAgent(false, 10, 1);
     try {
       await fixture.agent.generate('Completed prefix marker.', fixture.options);
+      if (earlier) await fixture.agent.generate('Earlier completed marker.', fixture.options);
       await fixture.memory.settled();
       const saved = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
       const pending = saved.messages.find(message =>
@@ -164,13 +171,35 @@ describe('PostgreSQL Storage Tests', () => {
       // Upserts preserve createdAt, so remove these isolated fixture rows first.
       prefix.createdAt = new Date(start);
       pending.createdAt = new Date(start + gap);
-      await store.deleteMessages([prefix.id, pending.id]);
-      await fixture.memory.saveMessages({ messages: [prefix, pending] });
+      const history = [prefix, pending];
+      if (earlier) {
+        const older = saved.messages.find(message =>
+          message.content.parts.some(part => part.type === 'text' && part.text === 'Earlier completed marker.'),
+        )!;
+        older.createdAt = new Date(start - 100);
+        history.unshift(older);
+      }
+      await store.deleteMessages(history.map(message => message.id));
+      await fixture.memory.saveMessages({ messages: history });
       const dated = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
       expect(dated.messages.find(message => message.id === prefix.id)?.createdAt.getTime()).toBe(start);
       expect(dated.messages.find(message => message.id === pending.id)?.createdAt.getTime()).toBe(start + gap);
-      await idle.agent.generate('Retained suffix marker.', fixture.options);
+      if (earlier)
+        expect(dated.messages.find(message => message.id === history[0]!.id)?.createdAt.getTime()).toBe(start - 100);
+      // Echo the actual history to make equal-timestamp ordering explicit.
+      await idle.agent.generate(
+        earlier
+          ? [...structuredClone(history), { role: 'user', content: 'Retained suffix marker.' }]
+          : 'Retained suffix marker.',
+        fixture.options,
+      );
       await idle.memory.settled();
+      if (earlier) {
+        const loaded = JSON.stringify(fixture.afterHistory.at(-1));
+        expect(loaded).toContain(prefix.id);
+        expect(loaded).toContain(pending.id);
+        expect(loaded.indexOf(prefix.id)).toBeLessThan(loaded.indexOf(pending.id));
+      }
       const buffered = await store.getObservationalMemory(fixture.threadId, fixture.resourceId);
       expect(JSON.stringify(fixture.observerPrompts)).not.toContain('changeColor');
       expect(JSON.stringify(fixture.observerPrompts)).not.toContain('Retained suffix marker');
@@ -197,6 +226,7 @@ describe('PostgreSQL Storage Tests', () => {
       await idle.memory.settled();
       expect(JSON.stringify(fixture.actorPrompts.at(-1))).toContain('22573-prefix-complete');
       expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('22573-prefix-complete');
+      if (earlier) expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('Earlier completed marker.');
       const final = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
       expect(JSON.stringify(final.messages.find(message => message.id === pending.id))).toContain(
         '22573-prefix-complete',

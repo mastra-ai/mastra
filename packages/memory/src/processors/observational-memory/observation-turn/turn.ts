@@ -235,36 +235,29 @@ export class ObservationTurn {
       const firstPending = chronological.findIndex(message =>
         message.content.parts?.some(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call'),
       );
-      let prefixEnd = firstPending === -1 ? chronological.length : firstPending;
+      let idleMessages = unobservedMessages;
       if (firstPending !== -1) {
-        // Buffer cursors advance to max(createdAt) + 1ms. Back up rather than
-        // letting activation consume retained messages with equal/adjacent timestamps.
-        // Also keep every occurrence of a tool call ID on the same side of the boundary.
-        const lastToolIndices = new Map<string, number>();
-        chronological.forEach((message, index) => {
-          for (const part of message.content.parts ?? []) {
-            if (part.type === 'tool-invocation') lastToolIndices.set(part.toolInvocation.toolCallId, index);
-          }
-        });
-        let retainedTime = Infinity;
-        for (let i = chronological.length - 1; i >= 0; i--) {
-          const message = chronological[i]!;
-          const time = new Date(message.createdAt).getTime();
-          const toolIds = (message.content.parts ?? []).flatMap(part =>
-            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-          );
-          if (
-            i < prefixEnd &&
-            (time + 1 >= retainedTime || toolIds.some(id => lastToolIndices.get(id)! >= prefixEnd))
-          ) {
-            prefixEnd = i;
-          }
-          if (i >= prefixEnd) {
-            retainedTime = Math.min(retainedTime, time);
-          }
-        }
+        const prefix = chronological.slice(0, firstPending);
+        const retained = chronological.slice(firstPending);
+        const retainedTime = new Date(retained[0]!.createdAt).getTime();
+        const retainedToolIds = new Set(
+          retained.flatMap(message =>
+            (message.content.parts ?? []).flatMap(part =>
+              part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+            ),
+          ),
+        );
+        // Defer this attempt if the buffer cursor (+1ms) would consume retained
+        // messages or a tool ID spans the boundary. Don't search for a smaller prefix.
+        const unsafeBoundary = prefix.some(
+          message =>
+            new Date(message.createdAt).getTime() + 1 >= retainedTime ||
+            message.content.parts?.some(
+              part => part.type === 'tool-invocation' && retainedToolIds.has(part.toolInvocation.toolCallId),
+            ),
+        );
+        idleMessages = unsafeBoundary ? [] : prefix;
       }
-      const idleMessages = chronological.slice(0, prefixEnd);
       if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(
           this.om
