@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
+import { createSignal, MessageList } from '@mastra/core/agent';
+import { AgentsMDInjector } from '@mastra/core/processors';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -26,6 +28,53 @@ import {
 function write(path: string, content: string): void {
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, content, 'utf-8');
+}
+
+async function injectInstructions(injector: AgentsMDInjector, messageList: MessageList) {
+  await injector.processInputStep({
+    messageList,
+    messages: messageList.get.all.db(),
+    stepNumber: 1,
+    steps: [],
+    systemMessages: [],
+    state: {},
+    model: 'openai/gpt-5.4-mini',
+    retryCount: 0,
+    abort: () => {
+      throw new Error('Unexpected abort');
+    },
+    sendSignal: async input => {
+      const signal = createSignal(input);
+      messageList.add(signal.toDBMessage(), 'input');
+      return signal;
+    },
+  });
+}
+
+function addListing(messageList: MessageList, path: string) {
+  messageList.add(
+    {
+      id: `listing-${path}`,
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolName: 'find_files',
+              toolCallId: `call-${path}`,
+              state: 'result',
+              args: { path },
+              result: 'AGENTS.md',
+            },
+          },
+        ],
+      },
+    },
+    'response',
+  );
 }
 
 describe('loadAgentInstructions', () => {
@@ -197,6 +246,91 @@ describe('git-ref instruction readers', () => {
     symlinkSync(repo, join(repo, 'nested'), 'junction');
     expect(reader.readFile(join(alias, 'nested', 'AGENTS.md'))).toBe('trusted nested instructions');
   });
+
+  describe.each(['alias', 'canonical'] as const)('%s project-root deduplication', projectSpelling => {
+    it.each(['static', 'metadata', 'markup'] as const)(
+      'deduplicates %s instructions through the injector',
+      async coverage => {
+        const alias = join(root, 'repo-alias');
+        symlinkSync(repo, alias, 'junction');
+        const canonical = realpathSync(repo);
+        const projectPath = projectSpelling === 'alias' ? alias : canonical;
+        const toolRoot = projectSpelling === 'alias' ? canonical : alias;
+        const knownPath = join(projectPath, 'AGENTS.md');
+        const messageList = new MessageList();
+        if (coverage !== 'static')
+          messageList.add(
+            {
+              id: 'prior',
+              role: 'user',
+              createdAt: new Date(),
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'text',
+                    text:
+                      coverage === 'markup'
+                        ? `<system-reminder path="${knownPath}">trusted base instructions</system-reminder>`
+                        : 'Already loaded',
+                  },
+                ],
+                ...(coverage === 'metadata' ? { metadata: { systemReminder: { path: knownPath } } } : {}),
+              },
+            },
+            'memory',
+          );
+        addListing(messageList, toolRoot);
+        const reader = createGitRefReminderReader(projectPath, 'main');
+        const injector = new AgentsMDInjector({
+          getReader: () => reader,
+          getIgnoredInstructionPaths: () =>
+            coverage === 'static'
+              ? getStaticallyLoadedInstructionPaths(
+                  projectPath,
+                  undefined,
+                  createGitRefInstructionReader(projectPath, 'main'),
+                )
+              : [],
+        });
+        const before = messageList.get.all.db();
+        await injectInstructions(injector, messageList);
+        expect(messageList.get.all.db()).toEqual(before);
+      },
+    );
+  });
+
+  it.each(['missing', 'root-symlink'] as const)(
+    'keeps %s trusted descendants distinct from covered root instructions',
+    async checkout => {
+      write(join(repo, 'nested', 'AGENTS.md'), 'trusted nested instructions');
+      git('add', 'nested');
+      git('commit', '-m', 'nested instructions');
+      rmSync(join(repo, 'nested'), { recursive: true });
+      if (checkout === 'root-symlink') symlinkSync(repo, join(repo, 'nested'), 'junction');
+      const alias = join(root, 'repo-alias');
+      symlinkSync(repo, alias, 'junction');
+      const canonical = realpathSync(repo);
+      const messageList = new MessageList();
+      addListing(messageList, join(alias, 'nested'));
+      const reader = createGitRefReminderReader(canonical, 'main');
+      expect(reader.getPathIdentity(join(alias, 'nested', 'AGENTS.md'))).toBe(join(canonical, 'nested', 'AGENTS.md'));
+      const injector = new AgentsMDInjector({
+        getReader: () => reader,
+        getIgnoredInstructionPaths: () => [join(canonical, 'AGENTS.md')],
+      });
+      await injectInstructions(injector, messageList);
+      const signals = messageList.get.all.db().filter(message => message.role === 'signal');
+      expect(signals).toHaveLength(1);
+      expect(signals[0]?.content.parts).toContainEqual(
+        expect.objectContaining({ type: 'text', text: 'trusted nested instructions' }),
+      );
+      // A subsequent canonical spelling must match the persisted alias path.
+      addListing(messageList, join(canonical, 'nested'));
+      await injectInstructions(injector, messageList);
+      expect(messageList.get.all.db().filter(message => message.role === 'signal')).toEqual(signals);
+    },
+  );
 
   it('includes canonical project-root paths in static instruction deduplication', () => {
     const alias = join(root, 'repo-alias');

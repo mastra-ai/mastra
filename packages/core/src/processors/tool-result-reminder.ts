@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
@@ -63,6 +63,24 @@ export interface ReminderFileReader {
   pathExists: (path: string) => boolean;
   isDirectory: (path: string) => boolean;
   readFile: (path: string) => string;
+  /**
+   * Stable identity used only to deduplicate instruction paths. Read addresses
+   * and emitted paths remain unchanged. Omit to use lexical absolute paths;
+   * virtual readers must not resolve identities through the host filesystem.
+   */
+  getPathIdentity?: (path: string) => string;
+}
+
+function getPathIdentity(path: string, reader: ReminderFileReader): string {
+  return reader.getPathIdentity?.(path) ?? toAbsolutePath(path);
+}
+
+function localPathIdentity(path: string): string {
+  try {
+    return toPosixPath(realpathSync(path));
+  } catch {
+    return toAbsolutePath(path);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -297,6 +315,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly pathExists: (path: string) => boolean;
   private readonly isDirectory: (path: string) => boolean;
   private readonly readFile: (path: string) => string;
+  private readonly getPathIdentity?: (path: string) => string;
   private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
   private readonly isEnabled?: (args: ProcessInputStepArgs) => boolean;
   private readonly getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
@@ -315,6 +334,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         }
       });
     this.readFile = options.readFile ?? (path => readFileSync(path, 'utf-8'));
+    this.getPathIdentity =
+      options.pathExists || options.isDirectory || options.readFile ? undefined : localPathIdentity;
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
     this.isEnabled = options.isEnabled;
     this.getReader = options.getReader;
@@ -329,40 +350,43 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       pathExists: this.pathExists,
       isDirectory: this.isDirectory,
       readFile: this.readFile,
+      getPathIdentity: this.getPathIdentity,
     };
     const messages = messageList.get.all.db();
     // Memory processors can reclassify completed responses before this hook runs.
     const completedToolCalls = getCompletedToolCalls(messages);
     const checkedPaths = new Set<string>();
     for (const toolCall of completedToolCalls) {
-      const instructionPath = this.findInstructionPathInInvocation(toolCall, reader);
-      if (!instructionPath || checkedPaths.has(instructionPath)) {
-        continue;
-      }
-      checkedPaths.add(instructionPath);
+      for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader)) {
+        const identity = getPathIdentity(instructionPath, reader);
+        if (checkedPaths.has(identity)) {
+          continue;
+        }
+        checkedPaths.add(identity);
 
-      if (this.isIgnoredInstructionPath(args, instructionPath)) {
-        continue;
-      }
+        if (this.isIgnoredInstructionPath(args, identity, reader)) {
+          continue;
+        }
 
-      const reminderText = this.getReminderText(instructionPath, reader);
-      if (!reminderText) {
-        continue;
-      }
+        const reminderText = this.getReminderText(instructionPath, reader);
+        if (!reminderText) {
+          continue;
+        }
 
-      const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
-      if (this.hasReminderAlready(messages, reminderMarkup)) {
-        continue;
-      }
+        const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
+        if (this.hasReminderAlready(messages, reminderMarkup, reader)) {
+          continue;
+        }
 
-      await args.sendSignal?.({
-        type: 'reactive',
-        tagName: 'system-reminder',
-        contents: reminderText,
-        attributes: { type: REMINDER_TYPE, path: instructionPath },
-        metadata: getReminderMetadata(instructionPath).systemReminder,
-      });
-      break;
+        await args.sendSignal?.({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: reminderText,
+          attributes: { type: REMINDER_TYPE, path: instructionPath },
+          metadata: getReminderMetadata(instructionPath).systemReminder,
+        });
+        return messageList;
+      }
     }
 
     return messageList;
@@ -381,20 +405,19 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return this.reminderText?.trim() || undefined;
   }
 
-  private isIgnoredInstructionPath(args: ProcessInputStepArgs, instructionPath: string): boolean {
+  private isIgnoredInstructionPath(args: ProcessInputStepArgs, identity: string, reader: ReminderFileReader): boolean {
     const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
-    const normalizedInstructionPath = toAbsolutePath(instructionPath);
-    return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
+    return ignoredPaths.some(path => getPathIdentity(path, reader) === identity);
   }
 
-  private findInstructionPathInInvocation(invocation: unknown, reader: ReminderFileReader): string | undefined {
+  private *findInstructionPathsInInvocation(invocation: unknown, reader: ReminderFileReader): Generator<string> {
     if (!isRecord(invocation)) {
-      return undefined;
+      return;
     }
 
     const args = parseInvocationArgs(invocation.args);
     if (!args) {
-      return undefined;
+      return;
     }
 
     for (const field of PATH_FIELDS) {
@@ -405,22 +428,22 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
 
       const instructionPath = findInstructionFileForPath(value, reader.pathExists, reader.isDirectory);
       if (instructionPath) {
-        return instructionPath;
+        yield instructionPath;
       }
     }
-
-    return undefined;
   }
 
-  private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string): boolean {
+  private hasReminderAlready(messages: MastraDBMessage[], reminderMarkup: string, reader: ReminderFileReader): boolean {
     const reminderPath = extractReminderPath(reminderMarkup);
+    const identity = reminderPath ? getPathIdentity(reminderPath, reader) : undefined;
 
     return messages.some(message => {
       if (message.role !== 'user' && message.role !== 'signal') {
         return false;
       }
 
-      if (reminderPath && extractReminderPathFromMetadata(message) === reminderPath) {
+      const metadataPath = extractReminderPathFromMetadata(message);
+      if (metadataPath && getPathIdentity(metadataPath, reader) === identity) {
         return true;
       }
 
@@ -433,7 +456,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         return false;
       }
 
-      return extractReminderPath(messageText) === reminderPath;
+      const markupPath = extractReminderPath(messageText);
+      return !!markupPath && getPathIdentity(markupPath, reader) === identity;
     });
   }
 }

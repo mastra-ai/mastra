@@ -127,9 +127,11 @@ export function createGitRefReminderReader(
   pathExists: (path: string) => boolean;
   isDirectory: (path: string) => boolean;
   readFile: (path: string) => string;
+  getPathIdentity: (path: string) => string;
 } {
   const gitReader = createGitRefInstructionReader(projectPath, ref);
   const toRelative = createProjectPathResolver(projectPath);
+  const canonicalRoot = realpathOrResolved(projectPath);
   const objectType = (rel: string): string | null => {
     if (rel === '') return 'tree'; // project root
     for (const candidate of [`origin/${ref}`, ref]) {
@@ -165,6 +167,12 @@ export function createGitRefReminderReader(
       const rel = toRelative(path);
       if (rel === null) return readFileSync(path, 'utf-8');
       return gitReader.read(path);
+    },
+    getPathIdentity: path => {
+      const rel = toRelative(path);
+      // Only canonicalize the project root: checkout symlinks do not define
+      // file identity in the trusted ref, including files missing on disk.
+      return rel === null ? realpathOrResolved(path) : join(canonicalRoot, rel);
     },
   };
 }

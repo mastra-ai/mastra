@@ -1,3 +1,16 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
@@ -561,6 +574,113 @@ describe('AgentsMDInjector', () => {
       expect(messageList.get.all.db()).toHaveLength(before + 1);
     },
   );
+
+  it.each(['static', 'metadata', 'markup'] as const)(
+    'continues past a %s-covered source to an uncovered destination in the same call',
+    async coverage => {
+      const messageList = new TestMessageList();
+      const source = '/repo/source/AGENTS.md';
+      const destination = '/repo/destination/AGENTS.md';
+      if (coverage === 'metadata') {
+        messageList.push(createUserMessage('Already loaded', { systemReminder: { path: source } }));
+      } else if (coverage === 'markup') {
+        messageList.push(createUserMessage(`<system-reminder path="${source}">Already loaded</system-reminder>`));
+      }
+      messageList.push(
+        createAssistantMessage({
+          format: 2,
+          parts: [createToolInvocationPart('move', { path: source, destination }, 'result', {})],
+        }),
+      );
+      const testProcessor = new AgentsMDInjector({
+        readFile: () => FILE_CONTENT,
+        getIgnoredInstructionPaths: () => (coverage === 'static' ? [source] : []),
+      });
+      const before = messageList.get.all.db().length;
+
+      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+      expect(messageList.get.all.db()).toHaveLength(before + 1);
+      expect(extractReminderMarkup(messageList).at(-1)).toContain(destination);
+      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(messageList.get.all.db()).toHaveLength(before + 1);
+    },
+  );
+
+  it.each(['static', 'metadata', 'markup', 'custom-instance', 'custom-request'] as const)(
+    'uses reader-owned identity for %s filesystem aliases',
+    async coverage => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'agents-md-identity-')));
+      try {
+        const project = join(root, 'project');
+        const alias = join(root, 'alias');
+        mkdirSync(project);
+        symlinkSync(project, alias, 'junction');
+        const knownPath = join(project, 'AGENTS.md');
+        writeFileSync(knownPath, FILE_CONTENT);
+        const messageList = new TestMessageList();
+        if (coverage === 'metadata') {
+          messageList.push(createUserMessage('Already loaded', { systemReminder: { path: knownPath } }));
+        } else if (coverage === 'markup') {
+          messageList.push(createUserMessage(`<system-reminder path="${knownPath}">${FILE_CONTENT}</system-reminder>`));
+        }
+        messageList.push(
+          createAssistantMessage({
+            format: 2,
+            parts: [createToolInvocationPart('list', { path: alias }, 'result', {})],
+          }),
+        );
+        const customReader = {
+          pathExists: existsSync,
+          isDirectory: (path: string) => statSync(path).isDirectory(),
+          readFile: (path: string) => readFileSync(path, 'utf-8'),
+        };
+        const testProcessor = new AgentsMDInjector({
+          getIgnoredInstructionPaths: () => (coverage === 'metadata' || coverage === 'markup' ? [] : [knownPath]),
+          ...(coverage === 'custom-instance' ? customReader : {}),
+          ...(coverage === 'custom-request' ? { getReader: () => customReader } : {}),
+        });
+        const before = messageList.get.all.db().length;
+        await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+        // Custom readers without an identity hook retain lexical comparison.
+        const custom = coverage === 'custom-instance' || coverage === 'custom-request';
+        expect(messageList.get.all.db()).toHaveLength(before + (custom ? 1 : 0));
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('uses a virtual reader identity for in-search deduplication without rewriting read paths', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(
+            'move',
+            {
+              path: '/virtual/first/AGENTS.md',
+              destination: '/virtual/second/AGENTS.md',
+            },
+            'result',
+            {},
+          ),
+        ],
+      }),
+    );
+    const readFile = vi.fn(() => '');
+    const testProcessor = new AgentsMDInjector({
+      getReader: () => ({
+        pathExists: () => true,
+        isDirectory: () => false,
+        readFile,
+        getPathIdentity: () => 'virtual-file-id',
+      }),
+    });
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+    expect(readFile.mock.calls).toEqual([['/virtual/first/AGENTS.md']]);
+  });
 
   it('does not inject for instruction files already loaded statically', async () => {
     const messageList = new TestMessageList();
