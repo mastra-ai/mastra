@@ -385,7 +385,32 @@ describe('suspended-run discovery', () => {
         ...Array.from({ length: 96 }, (_, index) => createRun(`other-late-${index}`, snapshotForAgent('other-agent'))),
         createRun('regular-third', structuredClone(seedSnapshot)),
       ];
-      const durableRuns = [createRun('durable-first', structuredClone(seedSnapshot), DurableStepIds.AGENTIC_LOOP)];
+      const durableSnapshot = structuredClone(seedSnapshot);
+      for (const step of Object.values(durableSnapshot.context)) {
+        if (step?.status === 'suspended' && step.suspendPayload) {
+          delete step.suspendPayload.__agentId;
+          delete step.suspendPayload.__streamState;
+        }
+      }
+      durableSnapshot.context.input = {
+        agentId: agent.id,
+        messageListState: { memoryInfo: { threadId: 'thread-1', resourceId: 'resource-1' } },
+      };
+      const durableRuns = [createRun('durable-first', durableSnapshot, DurableStepIds.AGENTIC_LOOP)];
+      const summaryReads = new Set<string>();
+      for (const run of [...regularRuns, ...durableRuns]) {
+        if (typeof run.snapshot === 'string') continue;
+        for (const step of Object.values(run.snapshot.context)) {
+          if (step?.status !== 'suspended' || !step.suspendPayload) continue;
+          const metadata = step.suspendPayload.__workflow_meta;
+          Object.defineProperty(step.suspendPayload, '__workflow_meta', {
+            get() {
+              summaryReads.add(run.runId);
+              return metadata;
+            },
+          });
+        }
+      }
       const runsByWorkflow = new Map([
         ['agentic-loop', regularRuns],
         [DurableStepIds.AGENTIC_LOOP, durableRuns],
@@ -404,6 +429,7 @@ describe('suspended-run discovery', () => {
 
       const firstPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 1, page: 0 });
       expect(firstPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-first' }] });
+      expect([...summaryReads]).toEqual(['regular-first']);
       expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
         ['agentic-loop', 0, 100],
         ['agentic-loop', 1, 100],
@@ -415,8 +441,18 @@ describe('suspended-run discovery', () => {
       );
 
       listSpy.mockClear();
-      const secondPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2, page: 1 });
-      expect(secondPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-third' }, { runId: 'durable-first' }] });
+      summaryReads.clear();
+      const secondPage = await agent.listSuspendedRuns({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        perPage: 2,
+        page: 1,
+      });
+      expect(secondPage).toMatchObject({
+        total: 4,
+        runs: [{ runId: 'regular-third' }, { runId: 'durable-first', threadId: 'thread-1', resourceId: 'resource-1' }],
+      });
+      expect([...summaryReads]).toEqual(['regular-third', 'durable-first']);
 
       runsByWorkflow.set(
         'agentic-loop',
