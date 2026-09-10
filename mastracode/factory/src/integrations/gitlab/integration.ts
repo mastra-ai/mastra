@@ -380,13 +380,17 @@ export class GitLabIntegration implements FactoryIntegration {
     // Nothing to rotate: a grant with no refresh token, or a deployment that
     // stored grants and later reconfigured to a static token. Answered before
     // the de-dupe entry exists so the unrefreshable case never occupies it.
+    // Both hoisted to locals: narrowing a property access does not survive the
+    // closure below, since TypeScript cannot prove `current` was not mutated
+    // before the attempt runs.
     const oauthApp = this.oauthApp;
-    if (!oauthApp || !current.refreshToken) return Promise.resolve(null);
+    const refreshToken = current.refreshToken;
+    if (!oauthApp || !refreshToken) return Promise.resolve(null);
 
     const attempt = (async (): Promise<GitLabConnectionData | null> => {
       try {
         const tokens = await refreshAccessToken(oauthApp, {
-          refreshToken: current.refreshToken,
+          refreshToken,
           redirectUri: this.redirectUri(),
         });
         // `connections.update` is an atomic read-modify-write, so a concurrent
