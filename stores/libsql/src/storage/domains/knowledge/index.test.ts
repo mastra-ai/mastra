@@ -4,18 +4,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
-import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
+import {
+  InMemoryStore,
+  knowledgeImporterBindingKey,
+  KnowledgeSchemaError,
+  TABLE_KNOWLEDGE_SCHEMA,
+} from '@mastra/core/storage';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 describe('InMemory canonical parity', () => {
-  createKnowledgeStorageTests(async () => (await new InMemoryStore().getStore('knowledge'))!);
+  let storage: InMemoryStore;
+  createKnowledgeStorageTests(async reopen => {
+    if (!reopen) storage = new InMemoryStore();
+    return (await storage.getStore('knowledge'))!;
+  });
 });
 
 const fixtures: { client: ReturnType<typeof createClient>; path: string }[] = [];
-createKnowledgeStorageTests(() => {
-  const path = join(tmpdir(), `mastra-knowledge-contract-${randomUUID()}.db`);
+createKnowledgeStorageTests(reopen => {
+  const path = reopen ? fixtures.at(-1)!.path : join(tmpdir(), `mastra-knowledge-contract-${randomUUID()}.db`);
   const client = createClient({ url: `file:${path}` });
   fixtures.push({ client, path });
   return new KnowledgeLibSQL({ client });
