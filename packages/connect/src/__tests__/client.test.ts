@@ -257,19 +257,21 @@ describe('proxyRequest', () => {
     expect(url).toBe('https://example.test/v2/connections/c_1/proxy/files/report.v1.2.pdf');
   });
 
-  it('JSON-encodes bodies and forwards custom headers', async () => {
+  it('JSON-encodes bodies and forwards custom headers and the base URL override', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await proxyRequest(client, 'c_1', {
       method: 'POST',
       path: 'graphql',
       headers: { 'x-custom': 'v1' },
+      baseUrlOverride: 'https://project.supabase.co',
       body: { query: '{ viewer { id } }' },
     });
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.method).toBe('POST');
     expect(init.headers['content-type']).toBe('application/json');
     expect(init.headers['x-custom']).toBe('v1');
+    expect(init.headers['base-url-override']).toBe('https://project.supabase.co');
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 

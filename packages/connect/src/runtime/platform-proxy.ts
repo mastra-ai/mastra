@@ -39,11 +39,7 @@ export interface PlatformProxyRequest {
    * PATCH the provider may have already applied is never repeated.
    */
   retries?: number;
-  /**
-   * Retained for source compatibility with provider templates. The client never
-   * forwards this value; the platform resolves provider-specific base URLs from
-   * trusted connection configuration.
-   */
+  /** Provider base URL selected by the tool from connection config or metadata. */
   baseUrlOverride?: string;
 }
 
@@ -140,6 +136,7 @@ async function callProxy<T>(
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
+        baseUrlOverride: config.baseUrlOverride,
         body: config.data,
       })) as T;
       // proxyRequest currently returns the parsed JSON body only; templates
