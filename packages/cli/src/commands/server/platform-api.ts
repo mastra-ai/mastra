@@ -434,6 +434,10 @@ const FINAL_LOG_FETCH_TIMEOUT_MS = 3000;
  * Server deploys don't have SSE streaming — we poll the JSON endpoint.
  * After the signal aborts (deploy reached a terminal state) the logs are
  * fetched once more so the closing lines are not lost.
+ *
+ * Deploys backed by a platform environment return every line in the
+ * combined `logs` string and leave `buildLogs` / `deployLogs` empty, so the
+ * combined string is used whenever the arrays carry nothing.
  */
 async function pollServerLogs(
   deployId: string,
@@ -447,6 +451,7 @@ async function pollServerLogs(
   const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
   let printedBuild = 0;
   let printedDeploy = 0;
+  let printedCombined = 0;
   let currentToken = token;
   let client = createApiClient(currentToken, orgId);
   let finalFetchDone = false;
@@ -473,6 +478,15 @@ async function pollServerLogs(
 
         logWriter.write(...data.deployLogs.slice(printedDeploy));
         printedDeploy = data.deployLogs.length;
+
+        // The generated API types predate the combined `logs` field.
+        const combined = (data as { logs?: string }).logs;
+        if (data.buildLogs.length === 0 && data.deployLogs.length === 0 && combined) {
+          const lines = combined.split('\n');
+          if (lines[lines.length - 1] === '') lines.pop();
+          logWriter.write(...lines.slice(printedCombined));
+          printedCombined = lines.length;
+        }
       }
     } catch {
       // Ignore errors during log polling — deploy status polling is the source of truth

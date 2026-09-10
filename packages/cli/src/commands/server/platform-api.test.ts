@@ -455,6 +455,59 @@ describe('pollServerDeploy', () => {
     expect(result.instanceUrl).toBe('https://app.example');
   });
 
+  it('prints the combined logs string when the build and deploy arrays are empty', async () => {
+    let logsCalls = 0;
+    let deployStatusCalls = 0;
+    mockGET.mockImplementation(async (path: string) => {
+      if (String(path).includes('/logs')) {
+        logsCalls++;
+        return {
+          data: {
+            logs:
+              logsCalls === 1
+                ? '[build] Starting Docker image build\n[2026-09-10T05:06:22.906072526Z] [info] load metadata\n'
+                : '[build] Starting Docker image build\n[2026-09-10T05:06:22.906072526Z] [info] load metadata\n[2026-09-10T05:09:09.504760317Z] [info] Healthcheck succeeded!\n',
+            buildLogs: [],
+            deployLogs: [],
+          },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      deployStatusCalls++;
+      return {
+        data: { id: 'd1', status: deployStatusCalls >= 3 ? 'running' : 'building', instanceUrl: null, error: null },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+
+    const writes: string[] = [];
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    vi.useFakeTimers();
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const pollPromise = pollServerDeploy('d1', 'tok', 'org-1', 60_000);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await pollPromise;
+    vi.useRealTimers();
+    writeSpy.mockRestore();
+
+    expect(result.status).toBe('running');
+    // eslint-disable-next-line no-control-regex
+    const output = writes.join('').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    expect(output).toContain('build Starting Docker image build');
+    expect(output).toContain('info  load metadata');
+    expect(output).toContain('info  Healthcheck succeeded!');
+    // Each line is printed once across polls.
+    expect(output.match(/Starting Docker image build/g)).toHaveLength(1);
+  });
+
   it('retries transient polling failures up to 3 times', async () => {
     vi.useFakeTimers();
 
