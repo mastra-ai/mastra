@@ -1,21 +1,18 @@
-import type { MastraDBMessage } from '../agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/agent';
 
 /*
- * Compatibility note: @mastra/memory intentionally copies the helpers in this
- * file into packages/memory/src/system-reminders.ts instead of importing them. Its peer
- * range permits older core versions that do not export these newer names, and
- * importing them can crash published memory builds during ESM instantiation.
- * Until v2 can tighten that peer contract, keep both sides manually in sync.
+ * Compatibility note: this is an intentional local copy of
+ * packages/core/src/memory/system-reminders.ts. The @mastra/memory peer range
+ * permits older core versions that do not export these newer names, and
+ * importing them from core can crash published memory builds during ESM
+ * instantiation. Until v2 can tighten that peer contract, keep both sides
+ * manually in sync.
  */
 
 const LEGACY_SYSTEM_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-export function isSystemReminderSignalType(type: unknown): boolean {
-  return type === 'system-reminder' || type === 'reactive';
 }
 
 export function isSystemReminderMessage(message: MastraDBMessage): boolean {
@@ -25,7 +22,11 @@ export function isSystemReminderMessage(message: MastraDBMessage): boolean {
 
   const metadata = message.content.metadata;
   if (message.role === 'signal') {
-    return isRecord(metadata) && isRecord(metadata.signal) && isSystemReminderSignalType(metadata.signal.type);
+    return (
+      isRecord(metadata) &&
+      isRecord(metadata.signal) &&
+      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
+    );
   }
 
   if (message.role !== 'user') {
