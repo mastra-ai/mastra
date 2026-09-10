@@ -610,6 +610,10 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
 export interface WorkflowStepAttributes extends AIBaseAttributes {
   /** Step status */
   status?: WorkflowStepStatus;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -686,6 +690,12 @@ export interface WorkflowSleepAttributes extends AIBaseAttributes {
   untilDate?: Date;
   /** Sleep type */
   sleepType?: 'fixed' | 'dynamic';
+  /** Authored graph entry id for this sleep operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**

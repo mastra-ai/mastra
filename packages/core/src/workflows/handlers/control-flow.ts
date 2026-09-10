@@ -53,7 +53,7 @@ function publishStepEvent(
  * identify the specific operation (e.g. `parallel: 'check-document'`).
  * Otherwise the generic structural name is used as a fallback.
  */
-function getControlFlowSpanName(entry: { id?: string }, fallbackName: string): string {
+export function getControlFlowSpanName(entry: { id?: string }, fallbackName: string): string {
   const id = typeof entry.id === 'string' ? entry.id.trim() : '';
   return id ? `${fallbackName.split(':')[0]}: '${id}'` : fallbackName;
 }
@@ -63,7 +63,7 @@ function getControlFlowSpanName(entry: { id?: string }, fallbackName: string): s
  * attributes so processors and exporters can identify the operation without
  * relying on structural matching. Only includes fields that are present.
  */
-function getControlFlowIdentityAttributes(entry: {
+export function getControlFlowIdentityAttributes(entry: {
   id?: string;
   description?: string;
   metadata?: Record<string, any>;

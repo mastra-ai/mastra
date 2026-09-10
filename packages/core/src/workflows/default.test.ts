@@ -2068,4 +2068,104 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
       entryMetadata: { batch: true },
     });
   });
+
+  it('attaches entry identity to the sleep span while keeping the duration name', async () => {
+    const workflowId = 'span-sleep';
+    const runId = randomUUID();
+
+    await engine.executeSleep({
+      workflowId,
+      runId,
+      serializedStepGraph: [],
+      entry: {
+        type: 'sleep',
+        id: 'cool-off',
+        description: 'wait before retrying',
+        metadata: { reason: 'rate-limit' },
+        duration: 5,
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      prevOutput: null,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_SLEEP);
+    expect(options?.name).toBe('sleep: 5ms');
+    expect(options?.attributes).toMatchObject({
+      entryId: 'cool-off',
+      entryDescription: 'wait before retrying',
+      entryMetadata: { reason: 'rate-limit' },
+    });
+  });
+
+  it('attaches entry identity to the sleepUntil span while keeping the date name', async () => {
+    const workflowId = 'span-sleep-until';
+    const runId = randomUUID();
+    const date = new Date(Date.now() - 1000);
+
+    await engine.executeSleepUntil({
+      workflowId,
+      runId,
+      serializedStepGraph: [],
+      entry: {
+        type: 'sleepUntil',
+        id: 'wait-for-window',
+        metadata: { window: 'business-hours' },
+        date,
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      prevOutput: null,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_SLEEP);
+    expect(options?.name).toBe(`sleepUntil: ${date.toISOString()}`);
+    expect(options?.attributes).toMatchObject({
+      entryId: 'wait-for-window',
+      entryMetadata: { window: 'business-hours' },
+    });
+  });
+
+  it('forwards mapping entry metadata to the step span', async () => {
+    const workflowId = 'span-mapping';
+    const runId = randomUUID();
+    const stepSpanSpy = vi.spyOn(engine, 'createStepSpan');
+
+    await engine.executeMapping({
+      workflowId,
+      runId,
+      entry: {
+        type: 'mapping',
+        id: 'collect-results',
+        description: 'gather branch outputs',
+        metadata: { title: 'Collect results' },
+        mapConfig: async ({ inputData }: { inputData: any }) => inputData,
+      } as any,
+      stepResults: { input: {} } as Record<string, StepResult<any, any, any, any>>,
+      prevOutput: { a: 1 },
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const stepCall = stepSpanSpy.mock.calls.find(([params]: any[]) => params?.options?.type === SpanType.WORKFLOW_STEP);
+    const options = stepCall?.[0]?.options as { attributes?: Record<string, any> } | undefined;
+    expect(options?.attributes).toMatchObject({
+      entryDescription: 'gather branch outputs',
+      entryMetadata: { title: 'Collect results' },
+    });
+  });
 });
