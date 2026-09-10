@@ -348,7 +348,11 @@ export const MessageRow = memo(function MessageRow({
             Queued
           </Txt>
         )}
-        {metadata?.deliveryState === 'steered' && <Txt variant="ui-sm">Sent to current run</Txt>}
+        {metadata?.deliveryState === 'steered' && (
+          <Txt variant="ui-sm" role="status">
+            Sent to current run
+          </Txt>
+        )}
         {metadata?.deliveryState === 'failed' && (
           <Txt variant="ui-sm" role="status">
             Not sent

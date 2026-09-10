@@ -578,6 +578,7 @@ describe('Thread', () => {
         fireEvent.click(await screen.findByRole('menuitemradio', { name: /Steer/ }));
         sendText('CHANGE DIRECTION');
         await screen.findByText('Sent to current run');
+        expect(screen.getAllByRole('status').map(node => node.textContent)).toContain('Sent to current run');
         if (type === 'cancel') {
           fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
         } else {
