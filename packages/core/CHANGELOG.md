@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 1.66.0-alpha.4
+
+### Minor Changes
+
+- Added feedback predicates to advanced trace queries. ([#23033](https://github.com/mastra-ai/mastra/pull/23033))
+
+  ```typescript
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { feedback: { some: { op: 'lt', left: { path: 'value' }, right: { literal: 0 } } } },
+  });
+  ```
+
+- Added `Mastra.getWorkerConfig()` for reporting the active worker topology and serializable instance-level settings so deployment tools can compare runtime and build-time configuration. ([#22394](https://github.com/mastra-ai/mastra/pull/22394))
+
+  ```ts
+  const workerConfig = mastra.getWorkerConfig();
+  ```
+
+### Patch Changes
+
+- Text and reasoning spans now fold into message parts through one shared unit, used by both the live agent-controller message and the persisted message builder. The live message gains the redacted reasoning parts it ignored and the empty reasoning parts OpenAI needs for `item_reference`, no longer draws an empty text part for a text block that never streamed, and keeps provider metadata off its parts since nothing live sends them back to a provider, so a running turn and its stored copy agree on every visible part. ([#23310](https://github.com/mastra-ai/mastra/pull/23310))
+
+- Added storage-backed pagination, ordering, filtering, and message includes to Agent Controller message listing. Existing Session and numeric client APIs continue to return message arrays for compatibility. ([#22977](https://github.com/mastra-ai/mastra/pull/22977))
+
+  ```ts
+  const page = await session.listMessages('thread-id', { perPage: 20, page: 0 });
+  ```
+
+- Fixed agent trajectories dropping thrown tool calls and using display labels as tool names. Trajectories now keep failed calls with success:false and prefer canonical tool identity from entityId/entityName. (#23462) ([#23511](https://github.com/mastra-ai/mastra/pull/23511))
+
 ## 1.66.0-alpha.3
 
 ### Minor Changes
