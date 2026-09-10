@@ -176,7 +176,7 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
       if (!store) throw new HTTPException(500, { message: 'workflowDefinitions storage domain is not available' });
 
       await store.delete(dynamicWorkflowId);
-      (mastra as Mastra).removeWorkflow(dynamicWorkflowId);
+      mastra.removeWorkflow(dynamicWorkflowId);
       return { success: true as const, message: `Workflow ${dynamicWorkflowId} deleted` };
     } catch (error) {
       return handleError(error, 'Error deleting dynamic workflow');

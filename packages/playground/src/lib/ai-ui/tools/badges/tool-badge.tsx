@@ -2,7 +2,6 @@ import { ToolMessage } from '@mastra/playground-ui/domains/chat';
 import type { ToolMessageProps } from '@mastra/playground-ui/domains/chat';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { useToolApprovalActions } from './use-tool-approval-actions';
-import { useTraceHighlight } from '@/domains/traces/components/trace-highlight-context';
 import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@/hooks';
 
 export interface ToolBadgeProps
@@ -38,7 +37,6 @@ export const ToolBadge = ({ toolApprovalMetadata, isNetwork, status, ...props }:
     isNetwork,
     isGenerateMode: props.metadata?.mode === 'generate',
   });
-  const { onToolOpen } = useTraceHighlight();
   const backgroundTask =
     props.metadata?.mode === 'stream' || props.metadata?.mode === 'generate'
       ? props.metadata.backgroundTasks?.[props.toolCallId]
@@ -48,7 +46,6 @@ export const ToolBadge = ({ toolApprovalMetadata, isNetwork, status, ...props }:
     ...approval,
     toolStatus: status,
     approvalRequired: !!toolApprovalMetadata,
-    onToolOpen,
   };
   if (backgroundTask?.taskId && backgroundTask.startedAt) {
     return <BackgroundToolMessage {...messageProps} backgroundTask={backgroundTask} />;

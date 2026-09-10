@@ -12,7 +12,6 @@ import { toolInteraction } from '../tools/tool-card-kind';
 import { useChatRunning, useChatSend } from './chat-context';
 import { CollectChatToolData } from './connected-tool-data';
 import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
-import { useTraceHighlight } from '@/domains/traces/components/trace-highlight-context';
 import { useToolCall } from '@/services/tool-call-provider';
 
 export function ConnectedChatMessages(
@@ -24,7 +23,6 @@ export function ConnectedChatMessages(
   const navigate = useNavigate();
   const approvals = useToolCall();
   const { data: mcpAppTools = {} } = useMcpAppTools();
-  const { onToolOpen } = useTraceHighlight();
   const dataset = useDatasetSaveContext();
   const [datasetInput, setDatasetInput] = useState('');
   const [datasetOpen, setDatasetOpen] = useState(false);
@@ -73,7 +71,6 @@ export function ConnectedChatMessages(
               onAnswer={(tool, answer) => approvals.approveToolcall(tool.toolCallId, answer)}
               onApprovePlan={(tool, path) => resumePlan(tool, path, 'approved')}
               onRejectPlan={(tool, path) => resumePlan(tool, path, 'rejected')}
-              onToolOpen={onToolOpen}
               onNavigate={navigate}
               onSaveToDataset={dataset?.enabled ? save : undefined}
               onMcpToolCall={async (tool, name, args) => {

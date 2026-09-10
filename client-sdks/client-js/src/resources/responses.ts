@@ -52,7 +52,7 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
   }
 
   if (typeof event === 'object' && event !== null && 'output' in event) {
-    return attachOutputText(event as ResponsePayload);
+    return attachOutputText(event);
   }
 
   if (
@@ -63,7 +63,7 @@ function hydrateStreamEvent(event: ResponsesStreamEvent | ResponsePayload): Resp
   ) {
     return {
       ...event,
-      item: hydrateOutputItem(event.item as ResponseOutputItem),
+      item: hydrateOutputItem(event.item),
     } as ResponsesStreamEvent;
   }
 

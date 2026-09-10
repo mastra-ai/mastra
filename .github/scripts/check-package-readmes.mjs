@@ -13,9 +13,8 @@ export const IGNORE_LIST = [
   'mastra-docs',
   '@mastra/core',
   '@mastra/codemod',
-  'create-mastra',
 ];
-export const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
+export const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra', 'create-factory'];
 
 export const REQUIRED_SECTIONS = ['Installation', 'Usage', 'Documentation', 'Changelog', 'Support'];
 export const SUPPORT_TEXT =
@@ -285,9 +284,9 @@ export function validateReadme({ content, name, relativeDirectory, docsRoutes })
   }
 
   const installation = sections.get('Installation') ?? '';
-  const installCommand = new RegExp(`^\\s*npm install ${escapeRegExp(name)}\\s*$`, 'm');
+  const installCommand = new RegExp(`^\\s*(?:npm install|npx) ${escapeRegExp(name)}(?:@[^\\s]+)?\\s*$`, 'm');
   if (!installCommand.test(installation)) {
-    errors.push(`Installation section must contain the exact command: npm install ${name}`);
+    errors.push(`Installation section must contain the exact command: npm install ${name} or npx ${name}`);
   }
 
   const usage = sections.get('Usage') ?? '';

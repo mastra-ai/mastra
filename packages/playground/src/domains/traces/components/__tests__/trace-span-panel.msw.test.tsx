@@ -95,10 +95,11 @@ describe('TraceSpanPanel', () => {
 
       await screen.findByText('No rain is expected.');
 
-      // Only the text-only user and assistant messages expose the action; tool messages rely on their collapsible.
-      const [userAction, assistantAction] = screen.getAllByRole('button', { name: 'Highlight spans' });
-      if (!userAction || !assistantAction) throw new Error('expected one highlight action per text message');
-      expect(screen.getAllByRole('button', { name: 'Highlight spans' })).toHaveLength(2);
+      // One action per message: user, the two tool calls, and the assistant reply.
+      const actions = screen.getAllByRole('button', { name: 'Highlight spans' });
+      expect(actions).toHaveLength(4);
+      const [userAction, , , assistantAction] = actions;
+      if (!userAction || !assistantAction) throw new Error('expected one highlight action per message');
 
       fireEvent.click(assistantAction);
       expect(onHighlightSpans).toHaveBeenCalledWith(['span-root']);
