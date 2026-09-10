@@ -17,6 +17,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   messageList,
   includeRawChunks,
   experimentalTransform,
+  excludeSignals,
   modelSettings,
   tools,
   _internal,
@@ -170,6 +171,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       processorStates,
       transportRef: internalToUse.transportRef,
       experimentalTransform,
+      excludeSignals,
     },
     initialState: initialStreamState,
   });

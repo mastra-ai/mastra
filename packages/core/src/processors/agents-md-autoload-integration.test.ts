@@ -231,7 +231,12 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       writer,
     });
 
-    expect(chunks).toEqual([]);
+    expect(chunks).toEqual([
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({ type: 'reactive', contents: AGENTS_MD_CONTENT }),
+      }),
+    ]);
   });
 
   it('does not duplicate AGENTS.md when a signal-based reminder already exists', async () => {
@@ -415,7 +420,12 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       expect.objectContaining({ attributes: { type: 'dynamic-agents-md', path: '/repo/packages/core/AGENTS.md' } }),
     );
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-    expect(writer.custom).not.toHaveBeenCalled();
+    expect(writer.custom).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({ type: 'reactive', contents: 'Core package instructions' }),
+      }),
+    );
   });
 
   it('loads directory instructions after a memory processor reclassifies completed tool responses', async () => {

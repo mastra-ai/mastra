@@ -289,6 +289,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       providerOptions: result.providerOptions,
       includeRawChunks: options.includeRawChunks,
       experimentalTransform: options.experimentalTransform,
+      excludeSignals: options.excludeSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {

@@ -16,6 +16,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { AgentSignalType } from './signals';
 import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
@@ -827,19 +828,27 @@ export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
       : { structuredOutput?: never });
 
-export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
-  outputWriter?: OutputWriter;
-  messages: MessageListInput;
-  methodType: AgentMethodType;
-  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
-  model?: MastraLanguageModel;
-  /** Internal: Whether the execution is a resume */
-  resumeContext?: {
-    resumeData: any;
-    snapshot: WorkflowRunState;
-  };
-  toolCallId?: string;
-} & ([NonNullable<OUTPUT>] extends [never]
+/** Caller-local visibility for modern streaming APIs. */
+export type AgentStreamSignalOptions = {
+  /** Signal chunks to omit from this caller's stream. Defaults to none; model context and storage are unchanged. */
+  excludeSignals?: AgentSignalType[];
+};
+
+/** @internal Includes stream-only options for propagation through the execution pipeline. */
+export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
+  AgentStreamSignalOptions & {
+    outputWriter?: OutputWriter;
+    messages: MessageListInput;
+    methodType: AgentMethodType;
+    /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+    model?: MastraLanguageModel;
+    /** Internal: Whether the execution is a resume */
+    resumeContext?: {
+      resumeData: any;
+      snapshot: WorkflowRunState;
+    };
+    toolCallId?: string;
+  } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }

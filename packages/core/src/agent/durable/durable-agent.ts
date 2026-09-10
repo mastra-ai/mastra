@@ -17,14 +17,14 @@ import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
-import type { AgentExecutionOptions } from '../agent.types';
+import type { AgentExecutionOptions, AgentStreamSignalOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
-import type { AgentModelManagerConfig, AgentSubscribeToThreadOptions, ToolsInput } from '../types';
+import type { AgentModelManagerConfig, AgentThreadIdentityOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -150,7 +150,7 @@ const LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
 /**
  * Options for DurableAgent.stream()
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+export interface DurableAgentStreamOptions<OUTPUT = undefined> extends AgentStreamSignalOptions {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
   /** Additional context messages to provide to the agent */
@@ -1726,7 +1726,7 @@ export class DurableAgent<
    * request below, aborting a thread whose active run is durable records an
    * intent nothing reads and lets the run stream on.
    */
-  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
     // Resolve the run before the base call: aborting releases the thread lease,
     // after which the thread no longer has an active run to look up.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
@@ -1995,6 +1995,7 @@ export class DurableAgent<
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      excludeSignals: options?.excludeSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
       requestContext: registryEntry.requestContext,
@@ -2361,6 +2362,7 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: resolvedOptions.onChunk,
       experimentalTransform: resolvedOptions.experimentalTransform,
+      excludeSignals: resolvedOptions.excludeSignals,
       onStepFinish: resolvedOptions.onStepFinish,
       onFinish: resolvedOptions.onFinish,
       onStreamFinished: scheduleAutoCleanup,
@@ -2829,7 +2831,7 @@ export class DurableAgent<
   // @ts-expect-error - Intentionally different signature for durable execution
   async generate(
     messages: MessageListInput,
-    options?: DurableAgentStreamOptions<TOutput>,
+    options?: Omit<DurableAgentStreamOptions<TOutput>, 'excludeSignals'>,
   ): Promise<FullOutput<TOutput>> {
     options = await this.#resolveExecutionOptions(options);
 
@@ -3046,7 +3048,7 @@ export class DurableAgent<
   async resumeGenerate(
     runId: string,
     resumeData: unknown,
-    options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
+    options?: Omit<NonNullable<Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]>, 'excludeSignals'>,
   ): Promise<FullOutput<TOutput>> {
     const result = await this.resume(runId, resumeData, {
       ...(options ?? {}),

@@ -12,7 +12,7 @@ import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { CreatedAgentSignal } from '../agent/signals';
+import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -211,6 +211,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageList: MessageList;
   includeRawChunks?: boolean;
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** @internal Forwarded only to the caller-facing output. */
+  excludeSignals?: AgentSignalType[];
   modelSettings?: MastraModelSettings;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;

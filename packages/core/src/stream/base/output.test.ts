@@ -1412,6 +1412,103 @@ describe('MastraModelOutput', () => {
     });
   });
 
+  describe('caller-local signal exclusions', () => {
+    it('filters after transforms without changing other consumers or aggregates', async () => {
+      const runId = 'signal-exclusion-run';
+      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+      const state: ChunkType = { type: 'data-signal', data: { type: 'state', contents: 'state' } };
+      const seen: ChunkType[] = [];
+      const chunks = [
+        reminder,
+        state,
+        createTextDeltaChunk(runId, 'hello'),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ];
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream(chunks),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          excludeSignals: ['system-reminder'],
+          experimentalTransform: () =>
+            new TransformStream({
+              transform(chunk, controller) {
+                seen.push(chunk);
+                controller.enqueue(chunk);
+              },
+            }),
+        },
+      });
+      const collect = async (stream: ReadableStream<ChunkType>) => {
+        const result: ChunkType[] = [];
+        for await (const chunk of stream) result.push(chunk);
+        return result;
+      };
+      const [caller, shared] = await Promise.all([
+        collect(output.fullStream),
+        collect(output.__getUnfilteredFullStream()),
+      ]);
+      expect(caller).not.toContainEqual(reminder);
+      expect(caller).toContainEqual(state);
+      expect(caller).toContainEqual(createTextDeltaChunk(runId, 'hello'));
+      expect(caller.at(-1)?.type).toBe('finish');
+      expect(shared).toContainEqual(reminder);
+      expect(seen).toContainEqual(reminder);
+      const control = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream(chunks),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await collect(control.fullStream);
+      expect(await output.content).toEqual(await control.content);
+      expect((await output.getFullOutput()).content).toEqual((await control.getFullOutput()).content);
+    });
+
+    it.each(['error', 'abort'] as const)('preserves %s boundaries when every signal is excluded', async type => {
+      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+      const terminal = {
+        type,
+        runId: 'terminal-run',
+        from: ChunkFrom.AGENT,
+        payload: { error: 'failure' },
+      } as ChunkType;
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([reminder, terminal]),
+        messageList: new MessageList(),
+        messageId: 'msg-1',
+        options: { runId: 'terminal-run', excludeSignals: ['reactive', 'user', 'state', 'notification'] },
+      });
+      const chunks = [];
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+      expect(chunks).toEqual([terminal]);
+      await output._waitUntilFinished();
+    });
+
+    it('closes when every chunk is excluded and cancellation leaves another consumer alive', async () => {
+      const reminder: ChunkType = { type: 'data-signal', data: { type: 'reactive', contents: 'remember this' } };
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([reminder]),
+        messageList: new MessageList(),
+        messageId: 'msg-1',
+        options: { runId: 'all-excluded', excludeSignals: ['reactive'] },
+      });
+      const cancelled = output.fullStream;
+      const caller = output.fullStream.getReader();
+      const shared = output.__getUnfilteredFullStream().getReader();
+      await cancelled.cancel();
+      await expect(caller.read()).resolves.toEqual({ done: true, value: undefined });
+      await expect(shared.read()).resolves.toEqual({ done: false, value: reminder });
+      await expect(shared.read()).resolves.toEqual({ done: true, value: undefined });
+    });
+  });
+
   describe('error chunks in the per-chunk output processor pass', () => {
     const runId = 'error-bypass-run';
 
