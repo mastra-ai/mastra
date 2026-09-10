@@ -268,6 +268,17 @@ function TraceThreadRow({
   const overflows = timelineBudget !== null && timeline.height !== null && timeline.height > timelineBudget;
   const isClamped = overflows && !isExpanded;
 
+  // Controlled so a highlight can bring the span tree back: the timeline is unmounted on the
+  // Feedback tab, and a highlight nobody can see is just a no-op.
+  const [tab, setTab] = useState<TraceRowTab>('spans');
+  const highlightSpans = useCallback(
+    (spanIds: string[]) => {
+      setTab('spans');
+      onHighlightSpans(spanIds);
+    },
+    [onHighlightSpans],
+  );
+
   return (
     <div
       className={cn(
@@ -283,11 +294,13 @@ function TraceThreadRow({
       <div className="relative min-h-[240px] min-w-0 pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
         <div ref={messages.ref} className="sticky top-0 py-4" data-testid="trace-row-messages">
-          <TraceThreadItemView traceId={traceId} onHighlightSpans={onHighlightSpans} />
+          <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
         </div>
       </div>
       <Tabs<TraceRowTab>
         defaultTab="spans"
+        value={tab}
+        onValueChange={setTab}
         className={cn(
           'border-border1 min-w-0 overflow-hidden border-b border-l',
           // While collapsed the messages column alone sets the row height: `h-0` keeps this

@@ -491,6 +491,26 @@ describe('ThreadViewByTrace', () => {
       await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
     });
 
+    it('returns to the Spans tab when a message highlights its spans while Feedback is open', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      renderView();
+
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      fireEvent.click(firstRow.getByRole('tab', { name: /Feedback/ }));
+      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).toBeNull());
+
+      fireEvent.click(firstRow.getAllByRole('button', { name: 'Highlight spans' })[0]);
+
+      // The highlight lives in the span tree, so it would be invisible on the Feedback tab.
+      expect(firstRow.getByRole('tab', { name: /Spans/ }).getAttribute('aria-selected')).toBe('true');
+      await waitFor(() => expect(firstRow.queryByTestId('trace-row-timeline')).not.toBeNull());
+      // The user message is backed by the root span only, so the tool span is faded.
+      await waitFor(() =>
+        expect(screen.getByLabelText('View details for span Recipe lookup').className).toContain('opacity-30'),
+      );
+    });
+
     it('marks the Feedback tab only when some feedback still needs review', async () => {
       installHandlers();
       installFeedbackHandlers(
