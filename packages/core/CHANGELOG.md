@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 1.66.0-alpha.3
+
+### Minor Changes
+
+- Added typed `input` and `output` payloads for the spans Mastra records itself: `AGENT_RUN`, `MODEL_GENERATION`, `MODEL_STEP` and `MODEL_INFERENCE`. Every other span type keeps `any`. Stored spans narrow the same way with `isSpanRecordOfType`, which types `attributes`, `input` and `output` without a cast: ([#23141](https://github.com/mastra-ai/mastra/pull/23141))
+
+  ```ts
+  import { SpanType, isSpanRecordOfType } from '@mastra/core/observability';
+
+  if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
+    span.attributes?.usage; // UsageStats | undefined
+    span.input?.messages; // MessageListInput
+  }
+  ```
+
+  A resumed agent run now always records its resume data as an object on the span input, wrapping a primitive or array under `resumeData` the way it already did when the suspended tool was known.
+
+  For rendering, `describeSpanInput` and `describeSpanOutput` return the payload tagged by what it holds (`messages`, `agent-run-resume`, `interrupted`, `model-generation-result`, `json`, ...), so a UI can switch on `type` instead of checking shapes. The tag is derived at read time and never stored. `describeSpanError` returns the span's error info, typed.
+
+### Patch Changes
+
+- Improved suspended run discovery to retain fewer workflow snapshots while processing large sets of suspended runs. ([#23506](https://github.com/mastra-ai/mastra/pull/23506))
+
+- Removed redundant type assertions in workflow execution without changing runtime behavior or public types. ([#23502](https://github.com/mastra-ai/mastra/pull/23502))
+
+- Removed redundant type assertions in storage and channels without changing runtime behavior or public types. ([#23503](https://github.com/mastra-ai/mastra/pull/23503))
+
+- Fixed live agent trajectory scorers to receive extracted trajectories and save their results. ([#23490](https://github.com/mastra-ai/mastra/pull/23490))
+
+- Removed redundant type assertions without changing runtime behavior or public types. ([#23501](https://github.com/mastra-ai/mastra/pull/23501))
+
 ## 1.66.0-alpha.2
 
 ### Minor Changes
