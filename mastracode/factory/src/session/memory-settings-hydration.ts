@@ -1,10 +1,12 @@
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 
 import {
   factoryMemorySettingsUserId,
   type MemorySettingsRecord,
   type MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { seedSessionOrg } from './org-seed.js';
 
@@ -88,6 +90,7 @@ export interface MemorySettingsHydrationDependencies {
   sourceControl: {
     sessions: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   };
+  projects: Pick<FactoryProjectsStorage, 'get'>;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
 }
 
@@ -116,7 +119,7 @@ export interface MemorySettingsHydrationDependencies {
  */
 export async function hydrateSessionMemorySettings(
   session: MemorySettingsHydrationSession,
-  { sourceControl, memorySettings }: MemorySettingsHydrationDependencies,
+  { sourceControl, projects, memorySettings }: MemorySettingsHydrationDependencies,
 ): Promise<void> {
   const state = session.state.get() ?? {};
   const isFactoryRun = Boolean(state.factoryProjectId);
@@ -128,14 +131,20 @@ export async function hydrateSessionMemorySettings(
     // under the local scope — the same bug wearing a different rung.
     await seedSessionOrg(session, record?.orgId);
     if (!record) return;
+    const factoryProjectId = isFactoryRun ? String(state.factoryProjectId) : undefined;
     const settings = await memorySettings.get({
       orgId: record.orgId,
-      userId: isFactoryRun ? factoryMemorySettingsUserId(String(state.factoryProjectId)) : record.userId,
+      userId: factoryProjectId ? factoryMemorySettingsUserId(factoryProjectId) : record.userId,
     });
     // Coordinator hydration applies a provider-aware fallback when no project row
     // exists. Do not replace that fallback with the generic OM default here.
-    if (isFactoryRun && !settings) return;
-    await applyStoredMemorySettings(session, settings);
+    if (factoryProjectId && !settings) return;
+    const project = factoryProjectId ? await projects.get({ orgId: record.orgId, id: factoryProjectId }) : null;
+    const provider = project?.defaultModelId?.split('/')[0];
+    const fallbackOmModelId = provider
+      ? resolveProviderOMDefault(provider, project.defaultModelId ?? undefined).modelId
+      : undefined;
+    await applyStoredMemorySettings(session, settings, fallbackOmModelId);
   } catch (error) {
     console.warn('[Factory memory-settings hydration] Unable to apply stored memory settings.', error);
     // A failed lookup is an unresolved org, not an absent one — unless the seed
