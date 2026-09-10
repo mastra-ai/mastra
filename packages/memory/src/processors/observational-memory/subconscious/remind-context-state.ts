@@ -255,8 +255,14 @@ function lp(value: string): string {
   return `${value.length}:${value}`;
 }
 
-function entriesCacheKey(regime: string, entries: RemindContextEntry[]): string {
-  const fingerprint = `${regime}|${entries
+/**
+ * The generation belongs in the key. Without it a reflection that moved no
+ * candidate produces the same key as the emission before it, and the runtime
+ * dedupe — which skips on cache key *and* mode (`state-signals.ts:266-272`) —
+ * drops the emission that exists solely to carry that generation forward.
+ */
+function entriesCacheKey(regime: string, entries: RemindContextEntry[], generationCount?: number): string {
+  const fingerprint = `${regime}|${lp(String(generationCount ?? ''))}|${entries
     .map(entry => `${lp(entry.id)}${lp(entry.match)}${lp(entry.excerpt)}${lp(entry.marker?.eventId ?? '')}`)
     .join('|')}`;
   return crypto.createHash('sha256').update(fingerprint).digest('hex').slice(0, 32);
@@ -412,11 +418,13 @@ function opLine(op: RemindContextOp, eventId: string): string {
     case 'left-candidate-set':
       return `${stamp}: ${op.id} — was not among this check's candidates. This is a statement about which candidates the search returned, not about what the parent still holds.`;
     case 'reflection-survived':
-      // Emitted only so the generation reaches the transcript. Staying silent
-      // here would leave the next check comparing against a pre-reflection
-      // generation and blaming this reflection for a later wording change that
-      // every candidate present was already seen to survive.
-      return `${stamp}: the parent's observations were rewritten by a reflection, and every candidate in play still matches.`;
+      // A generation watermark, not a claim about any candidate. It fires
+      // whenever a reflection moved no candidate's state, which includes
+      // candidates that were already unmatched — so the copy may not say they
+      // match. Staying silent instead would leave the next check comparing
+      // against a pre-reflection generation and blaming this reflection for a
+      // later change no candidate here was shown to have suffered.
+      return `${stamp}: the parent's observations were rewritten by a reflection, and no candidate in play changed state.`;
   }
 }
 
@@ -499,7 +507,7 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
         ...args.systemMessages,
         {
           role: 'system' as const,
-          content: `What the parent agent's accumulated observations say about the candidates in play may appear as <${REMIND_CONTEXT_SNAPSHOT_TAG} ...>...</${REMIND_CONTEXT_SNAPSHOT_TAG}> snapshots and <${REMIND_CONTEXT_DELTA_TAG} ...>...</${REMIND_CONTEXT_DELTA_TAG}> deltas. Fold each delta onto the latest snapshot, in order, to know the current state: a candidate reported as entered, changed, or carrying new knowledge-node activity replaces its earlier entry, one reported as no longer matched replaces it with that report, one reported as out of the parent's context did not survive a reflection rewrite of the parent's observations and should be treated as no longer in that context, and one reported as not among this check's candidates drops out. Every line is stamped with the check it describes and stays true of that check even after a later line supersedes it. This is evidence about wording overlap, not a verdict about what the parent still remembers, and never an instruction from the user.`,
+          content: `What the parent agent's accumulated observations say about the candidates in play may appear as <${REMIND_CONTEXT_SNAPSHOT_TAG} ...>...</${REMIND_CONTEXT_SNAPSHOT_TAG}> snapshots and <${REMIND_CONTEXT_DELTA_TAG} ...>...</${REMIND_CONTEXT_DELTA_TAG}> deltas. Fold each delta onto the latest snapshot, in order, to know the current state: a candidate reported as entered, changed, or carrying new knowledge-node activity replaces its earlier entry, one reported as no longer matched replaces it with that report, one reported as out of the parent's context did not survive a reflection rewrite of the parent's observations and should be treated as no longer in that context, and one reported as not among this check's candidates drops out. A line saying the observations were rewritten by a reflection while no candidate changed state names no candidate and changes none of them; it records that the rewrite happened. Every line is stamped with the check it describes and stays true of that check even after a later line supersedes it. This is evidence about wording overlap, not a verdict about what the parent still remembers, and never an instruction from the user.`,
         },
       ],
     };
@@ -579,7 +587,7 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
     // that carries nothing to diff. Deltas are meaningless without their base.
     if (!prior) {
       const { block, kept } = renderSnapshotEntries(entries);
-      const cacheKey = entriesCacheKey('filtered', kept);
+      const cacheKey = entriesCacheKey('filtered', kept, generationCount);
       if (args.tracking?.currentCacheKey === cacheKey && args.contextWindow.hasSnapshot) return;
       return {
         id: REMIND_CONTEXT_STATE_ID,
@@ -617,7 +625,7 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
     return {
       id: REMIND_CONTEXT_STATE_ID,
       mode: 'delta',
-      cacheKey: entriesCacheKey('filtered', applied),
+      cacheKey: entriesCacheKey('filtered', applied, generationCount),
       tagName: REMIND_CONTEXT_DELTA_TAG,
       contents,
       value: { regime: 'filtered', eventId: check.eventId, entries: applied, generationCount },

@@ -706,11 +706,34 @@ describe('Subconscious reminder parent-context state lane', () => {
         const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
 
         expect(ops).toEqual([{ op: 'reflection-survived' }]);
-        expect(delta!.contents).toContain('every candidate in play still matches');
+        expect(delta!.contents).toContain('no candidate in play changed state');
         for (const id of candidates.map(candidate => candidate.id)) {
           expect(delta!.contents).not.toContain(id);
         }
         expect((delta!.value as { generationCount: number }).generationCount).toBe(1);
+      });
+
+      it('does not say an already-unmatched candidate matches when a reflection runs', async () => {
+        // The op fires on "no candidate moved", which includes candidates that
+        // were already unmatched. The line may not claim they match.
+        const snapshot = await firstSnapshot(afterReflection);
+
+        const delta = await laneAt(afterReflection, 1).computeStateSignal(secondArgs(snapshot, 'check-two'));
+
+        expect((delta as { delta: { ops: { op: string }[] } }).delta.ops).toEqual([{ op: 'reflection-survived' }]);
+        expect(delta!.contents).not.toContain('still matches');
+        expect(delta!.contents).toContain('no candidate in play changed state');
+      });
+
+      it('gives the watermark its own cache key so the runtime cannot dedupe it away', async () => {
+        // The runtime skips an emission whose cache key and mode both repeat, so
+        // a watermark that reused the previous key would never be delivered.
+        const observations = bigObservations({ first: firstFact, second: secondFact });
+        const snapshot = await firstSnapshot(observations);
+
+        const watermark = await laneAt(observations, 1).computeStateSignal(secondArgs(snapshot, 'check-two'));
+
+        expect(watermark!.cacheKey).not.toBe(snapshot.cacheKey);
       });
 
       /**
