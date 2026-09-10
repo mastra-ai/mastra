@@ -12,12 +12,14 @@ async function createFixture() {
     scopes: [
       { address: 'principal:suggest', name: 'Suggest principal' },
       { address: 'principal:owner', name: 'Owner principal' },
+      { address: 'principal:edit', name: 'Edit principal' },
       {
         address: 'scope:source',
         name: 'Source scope',
         grants: [
           { scopeRefAddress: 'principal:suggest', role: 'readonly', canSuggest: true },
           { scopeRefAddress: 'principal:owner', role: 'owner' },
+          { scopeRefAddress: 'principal:edit', role: 'edit' },
         ],
       },
       {
@@ -118,6 +120,54 @@ describe('Knowledge proposal lifecycle', () => {
     expect(activity.find(event => event.action === 'edit')).toMatchObject({
       contextScopeId: ids['principal:owner'],
     });
+  });
+
+  it('requires owner authority to approve scope promotion without changing memberships', async () => {
+    const { storage, lifecycle, node, ids } = await createFixture();
+    const proposal = await lifecycle.proposeNodeUpdate({
+      mutation: { id: node.id, version: node.version, isScope: true },
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    const before = await storage.getNode(node.id);
+
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:edit']!,
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
+    expect(await storage.getNode(node.id)).toEqual(before);
+    expect(await storage.getProposal(proposal.id)).toMatchObject({ status: 'pending' });
+    expect(proposal.targets).toEqual([expect.objectContaining({ id: node.id, approvalCapability: 'manageAccess' })]);
+
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:owner']!,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).resolves.toMatchObject({ status: 'approved' });
+    expect(await storage.getNode(node.id)).toMatchObject({ isScope: true, version: node.version + 1 });
+    expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:source']]);
+  });
+
+  it('retains edit authority for an ordinary proposed node update', async () => {
+    const { storage, lifecycle, node, ids } = await createFixture();
+    const proposal = await lifecycle.proposeNodeUpdate({
+      mutation: { id: node.id, version: node.version, name: 'Editor approved' },
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:edit']!,
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).resolves.toMatchObject({ status: 'approved' });
+    expect(await storage.getNode(node.id)).toMatchObject({ name: 'Editor approved', version: node.version + 1 });
   });
 
   it('conflicts stale proposals and requires a replacement proposal for re-review', async () => {
