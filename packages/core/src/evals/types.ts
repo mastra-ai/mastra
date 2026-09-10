@@ -676,13 +676,19 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
             : rawResult != null
               ? { value: rawResult }
               : undefined;
+        const isErrorResult =
+          rawResult != null &&
+          typeof rawResult === 'object' &&
+          !Array.isArray(rawResult) &&
+          'error' in rawResult &&
+          rawResult.error === true;
 
         steps.push({
           stepType: 'tool_call',
           name: invocation.toolName,
           toolArgs,
           toolResult,
-          success: invocation.state === 'result',
+          success: invocation.state === 'result' && !isErrorResult,
         });
       }
     }

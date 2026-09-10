@@ -8,10 +8,17 @@ import type {
   UIMessageWithMetadata,
 } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
-import { MastraError } from '../../error';
+import type { SerializableError } from '../../error';
+import { getErrorFromUnknown, MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
-import { EntityType, resolveObservabilityContext } from '../../observability';
+import {
+  createObservabilityContext,
+  EntityType,
+  getOrCreateSpan,
+  resolveObservabilityContext,
+  SpanType,
+} from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage';
 import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows/types';
@@ -57,7 +64,7 @@ export type EvalTurn = {
   scorers?: ScorerEntry[];
 };
 
-type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
+export type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
   ?
       | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
       | (RunEvalsDataItemBase & {
@@ -118,6 +125,30 @@ export type GateResult = {
 /** Verdict of an eval run. */
 export type EvalVerdict = 'passed' | 'scored' | 'failed';
 
+/** Outcome of evaluating one input item. */
+export type RunEvalsItemResult<TItem = RunEvalsDataItem<any>, TScorerResults = Record<string, unknown>> =
+  | {
+      status: 'success';
+      item: TItem;
+      traceId?: string;
+      spanId?: string;
+      scorerResults: TScorerResults;
+    }
+  | {
+      status: 'failed';
+      item: TItem;
+      traceId?: string;
+      spanId?: string;
+      phase: 'target' | 'scoring' | 'completion';
+      error: SerializableError;
+    };
+
+type RunEvalsItemCompletion<TItem, TTargetResult, TScorerResults> =
+  | (Extract<RunEvalsItemResult<TItem, TScorerResults>, { status: 'success' }> & {
+      targetResult: TTargetResult;
+    })
+  | Extract<RunEvalsItemResult<TItem, TScorerResults>, { status: 'failed' }>;
+
 /** Per-turn assertion results, aggregated by turn index across data items. */
 export type TurnResult = {
   /** Zero-based turn index within the conversation. */
@@ -139,12 +170,15 @@ type ScoredTurn = {
 };
 type ItemTurnResults = ScoredTurn[];
 
-export type RunEvalsResult = {
+export type RunEvalsResult<TItem = RunEvalsDataItem<any>> = {
   scores: Record<string, any>;
+  items: RunEvalsItemResult<TItem>[];
   summary: {
     totalItems: number;
+    succeededItems: number;
+    failedItems: number;
   };
-  /** Present when `gates` or threshold-bearing scorers (top-level or per-turn) are provided. */
+  /** Present when an item fails or when gates or threshold-bearing scorers are provided. */
   verdict?: EvalVerdict;
   /** Per-gate results (averaged across all data items). */
   gateResults?: GateResult[];
@@ -176,11 +210,9 @@ type RunEvalsAgentOptions = Omit<
 type RunEvalsBaseConfig<TTarget> = {
   data: RunEvalsDataItem<TTarget>[];
   gates?: MastraScorer<any, any, any, any>[];
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TTarget>;
-    targetResult: any;
-    scorerResults: any;
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<RunEvalsDataItem<TTarget>, any, Record<string, any>>,
+  ) => void | Promise<void>;
   concurrency?: number;
 };
 
@@ -207,11 +239,9 @@ type RunEvalsAnyConfig = {
   target: Agent | Workflow;
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<any>;
-    targetResult: any;
-    scorerResults: any;
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<RunEvalsDataItem<any>, any, Record<string, any>>,
+  ) => void | Promise<void>;
   concurrency?: number;
 };
 
@@ -223,11 +253,13 @@ export function runEvals<TAgent extends Agent>(config: {
   scorers?: ScorerEntry[];
   target: TAgent;
   targetOptions?: RunEvalsAgentOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generate']>>;
-    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<
+      RunEvalsDataItem<TAgent>,
+      Awaited<ReturnType<Agent['generate']>>,
+      Record<string, any>
+    >,
+  ) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
@@ -239,11 +271,13 @@ export function runEvals<TAgent extends Agent>(config: {
   /** Gates: scorers that must score 1.0 for the run to pass. */
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: RunEvalsAgentOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generate']>>;
-    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<
+      RunEvalsDataItem<TAgent>,
+      Awaited<ReturnType<Agent['generate']>>,
+      Record<string, any>
+    >,
+  ) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
@@ -255,11 +289,13 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   /** Gates: scorers that must score 1.0 for the run to pass. */
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TWorkflow>;
-    targetResult: WorkflowResult<any, any, any, any>;
-    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<
+      RunEvalsDataItem<TWorkflow>,
+      WorkflowResult<any, any, any, any>,
+      Record<string, any>
+    >,
+  ) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
@@ -271,15 +307,17 @@ export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   /** Gates: scorers that must score 1.0 for the run to pass. */
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: WorkflowRunOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TWorkflow>;
-    targetResult: WorkflowResult<any, any, any, any>;
-    scorerResults: {
-      workflow?: Record<string, any>;
-      steps?: Record<string, Record<string, any>>;
-      trajectory?: Record<string, any>;
-    };
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<
+      RunEvalsDataItem<TWorkflow>,
+      WorkflowResult<any, any, any, any>,
+      {
+        workflow?: Record<string, any>;
+        steps?: Record<string, Record<string, any>>;
+        trajectory?: Record<string, any>;
+      }
+    >,
+  ) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
@@ -291,14 +329,16 @@ export function runEvals<TAgent extends Agent>(config: {
   /** Gates: scorers that must score 1.0 for the run to pass. */
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: RunEvalsAgentOptions;
-  onItemComplete?: (params: {
-    item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generate']>>;
-    scorerResults: {
-      agent?: Record<string, any>;
-      trajectory?: Record<string, any>;
-    };
-  }) => void | Promise<void>;
+  onItemComplete?: (
+    outcome: RunEvalsItemCompletion<
+      RunEvalsDataItem<TAgent>,
+      Awaited<ReturnType<Agent['generate']>>,
+      {
+        agent?: Record<string, any>;
+        trajectory?: Record<string, any>;
+      }
+    >,
+  ) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
@@ -310,10 +350,9 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
 
   validateEvalsInputs(data, bareScorers, target, gates);
 
-  let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
 
-  // Track gate scores per gate across all items
+  // Track gate scores per gate across all successfully completed items
   const gateScoresByGateId: Record<string, number[]> = {};
   if (gates) {
     for (const gate of gates) {
@@ -321,7 +360,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     }
   }
 
-  // Track threshold scorer scores across items
+  // Track threshold scorer scores across successfully completed items
   const thresholdScoresByScorerID: Record<string, number[]> = {};
   for (const scorerId of thresholdMap.keys()) {
     thresholdScoresByScorerID[scorerId] = [];
@@ -336,31 +375,78 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   const storage = mastra?.getStorage();
 
   const pMap = (await import('p-map')).default;
-  await pMap(
+  const processedItems = await pMap(
     data,
-    async (item: RunEvalsDataItem<any>) => {
-      const targetResult = await executeTarget(target, item, targetOptions);
+    async (item: RunEvalsDataItem<any>, itemIndex) => {
+      const parentObservabilityContext = resolveObservabilityContext(item);
+      const itemSpan = getOrCreateSpan({
+        type: SpanType.GENERIC,
+        name: `eval item: '${target.id}'`,
+        entityType: isWorkflow(target) ? EntityType.WORKFLOW_RUN : EntityType.AGENT,
+        entityId: target.id,
+        input: item.input,
+        metadata: { evalItemIndex: itemIndex },
+        tracingContext: parentObservabilityContext.tracingContext,
+        requestContext: item.requestContext,
+        mastra,
+      });
+      const itemObservabilityContext = itemSpan
+        ? createObservabilityContext({ currentSpan: itemSpan })
+        : parentObservabilityContext;
+      const itemTrace = itemSpan?.isValid ? { traceId: itemSpan.traceId, spanId: itemSpan.id } : {};
+      const executionItem = { ...item, ...itemObservabilityContext };
 
-      // Run gates first
-      if (gates) {
-        // A scorer created with `type: 'trajectory'` is typed by
-        // `ScorerTypeShortcuts` as receiving `output: Trajectory`, and the
-        // `scorers.trajectory` branch below honours that. Gates must too, or a
-        // trajectory scorer used as a gate is handed a shape its own type says
-        // it will not receive. Extract once per item, only when needed.
-        const gateTrajectory = gates.some(gate => gate.type === 'trajectory')
-          ? await resolveTrajectory(
-              storage,
-              targetResult.traceId,
-              targetResult.spanId,
-              targetResult.scoringData,
-              isWorkflow(target),
-            )
-          : undefined;
-
-        for (const gate of gates) {
-          const isTrajectoryGate = gate.type === 'trajectory';
+      const failItem = async (
+        phase: Extract<RunEvalsItemResult, { status: 'failed' }>['phase'],
+        error: unknown,
+        notify = true,
+      ) => {
+        const serializedError = getErrorFromUnknown(error, { serializeStack: false });
+        itemSpan?.error({ error: serializedError, endSpan: true });
+        const result = {
+          status: 'failed' as const,
+          item,
+          ...itemTrace,
+          phase,
+          error: serializedError,
+        };
+        if (notify && onItemComplete) {
           try {
+            await onItemComplete(result);
+          } catch {
+            // Preserve the original item failure when reporting it also fails.
+          }
+        }
+        return { result };
+      };
+
+      let targetResult: Awaited<ReturnType<typeof executeTarget>>;
+      try {
+        targetResult = await executeTarget(target, executionItem, targetOptions);
+      } catch (error) {
+        return failItem('target', error);
+      }
+
+      const itemGateScores: Record<string, number> = {};
+      let scorerResults: Record<string, any>;
+      let itemTurnResults: ItemTurnResults | undefined;
+      let failurePhase: 'scoring' | 'completion' = 'scoring';
+      try {
+        // Run gates first
+        if (gates) {
+          // Trajectory gates receive the same trace-first trajectory shape as trajectory scorers.
+          const gateTrajectory = gates.some(gate => gate.type === 'trajectory')
+            ? await resolveTrajectory(
+                storage,
+                targetResult.traceId,
+                targetResult.spanId,
+                targetResult.scoringData,
+                isWorkflow(target),
+              )
+            : undefined;
+
+          for (const gate of gates) {
+            const isTrajectoryGate = gate.type === 'trajectory';
             const gateScore = await gate.run({
               input: targetResult.scoringData?.input,
               output: isTrajectoryGate ? gateTrajectory : targetResult.scoringData?.output,
@@ -373,90 +459,111 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
             });
-            gateScoresByGateId[gate.id]!.push(gateScore.score as number);
-          } catch (error) {
-            // Gate failure = score 0. The contract stays, but the cause is
-            // logged so a broken scorer is distinguishable from a real 0.
-            warnGateFailure(mastra, gate.id, error);
-            gateScoresByGateId[gate.id]!.push(0);
+            itemGateScores[gate.id] = gateScore.score as number;
           }
         }
-      }
 
-      const scorerResults = await runScorers(bareScorers, targetResult, item, storage);
-      scoreAccumulator.addScores(scorerResults);
+        scorerResults = await runScorers(bareScorers, targetResult, item, storage);
 
-      // Track threshold scores
-      for (const [scorerId] of thresholdMap) {
-        const result = scorerResults[scorerId];
-        if (result && typeof result === 'object' && 'score' in result) {
-          thresholdScoresByScorerID[scorerId]!.push(result.score);
-        }
-      }
+        // Run per-turn gates/scorers against each turn's own input/output.
+        const perTurn = (targetResult as { perTurn?: PerTurnRecord[] }).perTurn;
+        const turns = (item as { turns?: EvalTurn[] }).turns;
+        if (Array.isArray(perTurn) && Array.isArray(turns)) {
+          itemTurnResults = [];
+          for (let ti = 0; ti < turns.length; ti++) {
+            const record = perTurn[ti];
+            if (!record) continue;
+            const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item, storage);
+            itemTurnResults.push({ index: ti, ...scored });
 
-      // Run per-turn gates/scorers against each turn's own input/output.
-      const perTurn = (targetResult as { perTurn?: PerTurnRecord[] }).perTurn;
-      const turns = (item as { turns?: EvalTurn[] }).turns;
-      if (Array.isArray(perTurn) && Array.isArray(turns)) {
-        const itemTurnResults: ItemTurnResults = [];
-        for (let ti = 0; ti < turns.length; ti++) {
-          const record = perTurn[ti];
-          if (!record) continue;
-          const { rawResults, ...scored } = await scoreTurn(turns[ti]!, record, item, storage, mastra);
-          itemTurnResults.push({ index: ti, ...scored });
-
-          if (storage) {
-            for (const [scorerId, scoreResult] of Object.entries(rawResults)) {
-              await saveSingleScore({
-                storage,
-                scoreResult,
-                scorerId,
-                entityId: target.id,
-                entityType: 'AGENT',
-                mastra,
-                target,
-                item,
-                turn: {
-                  index: ti,
-                  traceId: record.traceId,
-                  spanId: record.spanId,
-                  threadId: record.threadId,
-                },
-              });
+            if (storage) {
+              failurePhase = 'completion';
+              for (const [scorerId, scoreResult] of Object.entries(rawResults)) {
+                await saveSingleScore({
+                  storage,
+                  scoreResult,
+                  scorerId,
+                  entityId: target.id,
+                  entityType: 'AGENT',
+                  mastra,
+                  target,
+                  item,
+                  turn: {
+                    index: ti,
+                    traceId: record.traceId,
+                    spanId: record.spanId,
+                    threadId: record.threadId,
+                  },
+                });
+              }
+              failurePhase = 'scoring';
             }
           }
         }
-        perItemTurnResults.push(itemTurnResults);
+      } catch (error) {
+        return failItem(failurePhase, error);
       }
 
-      // Save scores to storage if available
       if (storage) {
-        await saveScoresToStorage({
-          storage,
-          scorerResults,
-          target,
-          item,
-          mastra,
-        });
+        try {
+          await saveScoresToStorage({
+            storage,
+            scorerResults,
+            target,
+            item,
+            mastra,
+          });
+        } catch (error) {
+          return failItem('completion', error);
+        }
       }
 
+      const result = {
+        status: 'success' as const,
+        item,
+        ...itemTrace,
+        scorerResults,
+      };
       if (onItemComplete) {
-        await onItemComplete({
-          item,
-          targetResult: targetResult as any,
-          scorerResults: scorerResults as any,
-        });
+        try {
+          await onItemComplete({ ...result, targetResult: targetResult as any });
+        } catch (error) {
+          return failItem('completion', error, false);
+        }
       }
-
-      totalItems++;
+      itemSpan?.end({ output: { status: 'success' } });
+      return { result, scorerResults, itemGateScores, itemTurnResults };
     },
     { concurrency },
   );
 
+  for (const processed of processedItems) {
+    if (!('scorerResults' in processed)) continue;
+
+    scoreAccumulator.addScores(processed.scorerResults);
+    for (const [gateId, score] of Object.entries(processed.itemGateScores)) {
+      gateScoresByGateId[gateId]!.push(score);
+    }
+    for (const [scorerId] of thresholdMap) {
+      const scorerResult = processed.scorerResults[scorerId];
+      if (scorerResult && typeof scorerResult === 'object' && 'score' in scorerResult) {
+        thresholdScoresByScorerID[scorerId]!.push(scorerResult.score);
+      }
+    }
+    if (processed.itemTurnResults) {
+      perItemTurnResults.push(processed.itemTurnResults);
+    }
+  }
+
+  const items = processedItems.map(processed => processed.result);
+  const failedItems = items.filter(item => item.status === 'failed').length;
   const result: RunEvalsResult = {
     scores: scoreAccumulator.getAverageScores(),
+    items,
     summary: {
-      totalItems,
+      totalItems: data.length,
+      succeededItems: data.length - failedItems,
+      failedItems,
     },
   };
 
@@ -466,13 +573,13 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     result.turnResults = turnAggregate.turnResults;
   }
 
-  // Compute verdict if gates or thresholds are present (top-level or per-turn)
+  // Compute verdict if any item failed or gates or thresholds are present (top-level or per-turn)
   const hasGates = !!gates && gates.length > 0;
   const hasThresholds = thresholdMap.size > 0;
   const hasTurnGates = turnAggregate?.hasTurnGates ?? false;
   const hasTurnThresholds = turnAggregate?.hasTurnThresholds ?? false;
 
-  if (hasGates || hasThresholds || hasTurnGates || hasTurnThresholds) {
+  if (failedItems > 0 || hasGates || hasThresholds || hasTurnGates || hasTurnThresholds) {
     // Compute gate results
     let allGatesPassed = true;
     if (hasGates) {
@@ -506,7 +613,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     }
 
     // Determine verdict
-    if (!allGatesPassed) {
+    if (failedItems > 0 || !allGatesPassed) {
       result.verdict = 'failed';
     } else if (!allThresholdsPassed) {
       result.verdict = 'scored';
@@ -546,29 +653,16 @@ async function resolveTrajectory(
   return rawOutput ? extractTrajectory(rawOutput) : { steps: [] };
 }
 
-/**
- * A gate that throws still scores 0 — that contract is deliberate and pinned by
- * tests. Logging the cause is what makes a broken or misconfigured scorer
- * distinguishable from a gate that legitimately scored 0.
- */
-function warnGateFailure(mastra: any, gateId: string, error: unknown): void {
-  mastra?.getLogger?.()?.warn?.(`Gate "${gateId}" threw and was scored 0:`, error);
-}
-
 function average(scores: number[]): number {
   return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 }
 
-/**
- * Scores a single turn against only its own input/output. Gates that throw score 0
- * (consistent with top-level gate handling); per-turn scorer errors propagate.
- */
+/** Scores a single turn against only its own input/output. */
 async function scoreTurn(
   turn: EvalTurn,
   record: PerTurnRecord,
   item: RunEvalsDataItem<any>,
   storage?: MastraCompositeStore,
-  mastra?: any,
 ): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any> }> {
   const gates: Array<{ id: string; score: number }> = [];
   const thresholds: Array<{ id: string; score: number; threshold: ThresholdConfig }> = [];
@@ -585,26 +679,20 @@ async function scoreTurn(
 
     for (const gate of turn.gates) {
       const isTrajectoryGate = gate.type === 'trajectory';
-      let score = 0;
-      try {
-        const gateScore = await gate.run({
-          input: record.input,
-          output: isTrajectoryGate ? gateTrajectory : record.output,
-          groundTruth: item.groundTruth,
-          ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
-          requestContext: item.requestContext,
-          scoreSource: 'experiment',
-          targetScope: isTrajectoryGate ? 'trajectory' : 'span',
-          targetEntityType: record.entityType,
-          targetTraceId: record.traceId,
-          targetSpanId: record.spanId,
-        });
-        score = gateScore.score as number;
-        rawResults[gate.id] = gateScore;
-      } catch (error) {
-        warnGateFailure(mastra, gate.id, error);
-        score = 0;
-      }
+      const gateScore = await gate.run({
+        input: record.input,
+        output: isTrajectoryGate ? gateTrajectory : record.output,
+        groundTruth: item.groundTruth,
+        ...(isTrajectoryGate ? { expectedTrajectory: item.expectedTrajectory } : {}),
+        requestContext: item.requestContext,
+        scoreSource: 'experiment',
+        targetScope: isTrajectoryGate ? 'trajectory' : 'span',
+        targetEntityType: record.entityType,
+        targetTraceId: record.traceId,
+        targetSpanId: record.spanId,
+      });
+      const score = gateScore.score as number;
+      rawResults[gate.id] = gateScore;
       gates.push({ id: gate.id, score });
     }
   }
@@ -922,29 +1010,14 @@ async function executeTarget(
   item: RunEvalsDataItem<any>,
   targetOptions?: RunEvalsAgentOptions | WorkflowRunOptions,
 ) {
-  try {
-    if (isWorkflow(target)) {
-      return await executeWorkflow(target, item, targetOptions as WorkflowRunOptions);
-    } else if (item.turns && Array.isArray(item.turns) && item.turns.length > 0) {
-      return await executeAgentTurns(target, item, targetOptions as RunEvalsAgentOptions);
-    } else if (item.inputs && Array.isArray(item.inputs) && item.inputs.length > 0) {
-      return await executeAgentMultiTurn(target, item, targetOptions as RunEvalsAgentOptions);
-    } else {
-      return await executeAgent(target, item, targetOptions as RunEvalsAgentOptions);
-    }
-  } catch (error) {
-    throw new MastraError(
-      {
-        domain: 'SCORER',
-        id: 'RUN_EXPERIMENT_TARGET_FAILED_TO_GENERATE_RESULT',
-        category: 'USER',
-        text: 'Failed to run experiment: Error generating result from target',
-        details: {
-          item: JSON.stringify(item),
-        },
-      },
-      error,
-    );
+  if (isWorkflow(target)) {
+    return executeWorkflow(target, item, targetOptions as WorkflowRunOptions);
+  } else if (item.turns && Array.isArray(item.turns) && item.turns.length > 0) {
+    return executeAgentTurns(target, item, targetOptions as RunEvalsAgentOptions);
+  } else if (item.inputs && Array.isArray(item.inputs) && item.inputs.length > 0) {
+    return executeAgentMultiTurn(target, item, targetOptions as RunEvalsAgentOptions);
+  } else {
+    return executeAgent(target, item, targetOptions as RunEvalsAgentOptions);
   }
 }
 
