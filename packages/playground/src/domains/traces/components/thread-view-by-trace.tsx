@@ -155,7 +155,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
       )}
     >
       <div ref={listRef} className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
-        <div className="relative min-h-full py-4">
+        <div className="relative min-h-full pb-4">
           {/* Same rail as the chat page: one stop per turn, pinned mid-height while the page scrolls. */}
           <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
             <ThreadRail
@@ -174,7 +174,6 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
               key={trace.traceId}
               traceId={trace.traceId}
               isFirst={index === 0}
-              isLast={index === traces.length - 1}
               selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
               revealSpanId={highlight?.traceId === trace.traceId ? highlight.spanIds.at(-1) : undefined}
@@ -210,10 +209,8 @@ interface TraceThreadRowProps {
   revealSpanId?: string;
   isCurrent: boolean;
   isExpanded: boolean;
-  /** The oldest trace; its timeline column gets the rounded top edge of the list. */
+  /** The oldest trace; its timeline column gets the top border of the list. */
   isFirst: boolean;
-  /** The newest trace; its timeline column gets the rounded bottom edge. Can be the same row as `isFirst`. */
-  isLast: boolean;
   /** The row the reader came from via "View full thread"; scrolled into view once it mounts. */
   isAnchor: boolean;
   onExpandedChange: (expanded: boolean) => void;
@@ -234,7 +231,6 @@ function TraceThreadRow({
   isCurrent,
   isExpanded,
   isFirst,
-  isLast,
   isAnchor,
   onExpandedChange,
   onSpanSelect,
@@ -290,8 +286,8 @@ function TraceThreadRow({
       ref={isAnchor ? scrollIntoViewOnMount : undefined}
     >
       {/* The messages column has no borders so consecutive turns read as one continuous
-          conversation; the timeline column carries the divider and the bottom border. */}
-      <div className="relative min-h-[240px] min-w-0 pr-4">
+          conversation; the timeline column carries the borders. */}
+      <div className="relative min-w-0 pr-4">
         {/* Sticky within the row, so a long trace on the right never scrolls its messages away. */}
         <div ref={messages.ref} className="sticky top-0 py-4" data-testid="trace-row-messages">
           <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
@@ -302,13 +298,12 @@ function TraceThreadRow({
         value={tab}
         onValueChange={setTab}
         className={cn(
-          'border-border1 min-w-0 overflow-hidden border-b border-l',
+          'border-border1 min-w-0 overflow-hidden border-x border-b group-last:rounded-b-xl',
           // While collapsed the messages column alone sets the row height: `h-0` keeps this
           // cell out of the grid's row sizing (so measurement rounding can't nudge the row by
           // a pixel between tabs) and `min-h-full` stretches it back to the row afterwards.
           !isExpanded && 'h-0 min-h-full',
-          isFirst && 'rounded-tl-xl border-t',
-          isLast && 'rounded-bl-xl',
+          isFirst && 'rounded-t-xl border-t',
         )}
       >
         {/* Same header/tab layout as the traces page so both surfaces read identically. */}
@@ -392,15 +387,17 @@ function ThreadSpanPanel({ traceId, spanId, onSpanSelect }: ThreadSpanPanelProps
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(traceData?.spans, spanId, onSpanSelect);
 
   return (
-    <SpanDataPanelView
-      className="border-border1 h-full rounded-none border-0 border-l"
-      traceId={traceId}
-      spanId={spanId}
-      span={spanDetailData?.span}
-      isLoading={isLoading}
-      onClose={() => onSpanSelect(undefined)}
-      onPrevious={handlePreviousSpan}
-      onNext={handleNextSpan}
-    />
+    <div className="min-h-0 min-w-0 pr-4 pb-4">
+      <SpanDataPanelView
+        className="h-full"
+        traceId={traceId}
+        spanId={spanId}
+        span={spanDetailData?.span}
+        isLoading={isLoading}
+        onClose={() => onSpanSelect(undefined)}
+        onPrevious={handlePreviousSpan}
+        onNext={handleNextSpan}
+      />
+    </div>
   );
 }

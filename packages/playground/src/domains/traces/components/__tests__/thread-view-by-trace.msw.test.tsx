@@ -150,7 +150,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('rounds the top of the timeline column on the first trace only', async () => {
+  it('frames the timeline columns with rounded outer corners', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -161,11 +161,14 @@ describe('ThreadViewByTrace', () => {
     const [first, second] = screen
       .getAllByTestId('trace-row-timeline')
       .map(el => el.closest<HTMLElement>('[data-trace-id]')!.children[1] as HTMLElement);
-    expect(first.className).toContain('rounded-tl-xl');
     expect(first.className).toContain('border-t');
-    expect(first.className).not.toContain('rounded-bl-xl');
-    expect(second.className).not.toContain('rounded-tl-xl');
-    expect(second.className).toContain('rounded-bl-xl');
+    expect(first.className).toContain('rounded-t-xl');
+    expect(second.className).not.toContain('rounded-t-xl');
+    for (const column of [first, second]) {
+      expect(column.className).toContain('border-x');
+      expect(column.className).toContain('border-b');
+      expect(column.className).toContain('group-last:rounded-b-xl');
+    }
   });
 
   it('shows an empty state when the thread has no traces', async () => {
