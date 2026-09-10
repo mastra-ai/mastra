@@ -7,6 +7,7 @@ export {
   ScheduleInputSchema,
   ScheduleOutputSchema,
   type ScheduleInput,
+  type ScheduleStreamOptions,
   type ScheduleOutput,
   type ScheduleRunStatus,
   type ScheduleHooks,
