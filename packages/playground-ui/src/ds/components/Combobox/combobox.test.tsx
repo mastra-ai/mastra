@@ -105,6 +105,34 @@ describe('Combobox', () => {
     });
   });
 
+  it('clears a multi-selection from the popup footer', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        multiple
+        options={options}
+        value={['openai', 'anthropic']}
+        onValueChange={onValueChange}
+        clearLabel="Clear"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it('shows the clear action only when a selected multi-combobox provides its label', async () => {
+    const { rerender } = render(<Combobox multiple options={options} value={[]} clearLabel="Clear" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+
+    rerender(<Combobox multiple options={options} value={['openai']} />);
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  });
+
   it('selects the first filtered item when pressing Enter after searching', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange });

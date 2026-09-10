@@ -1,7 +1,7 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { TabListContext, TabsContext } from './tabs-context';
@@ -66,7 +66,8 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
         existing.width === tab.width &&
         existing.label === tab.label &&
         existing.disabled === tab.disabled &&
-        existing.onClick === tab.onClick
+        existing.onClick === tab.onClick &&
+        existing.onClose === tab.onClose
       )
         return previous;
       const next = existing ? previous.map(item => (item.value === tab.value ? tab : item)) : [...previous, tab];
@@ -174,7 +175,29 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
                       tab.onClick?.();
                     }}
                   >
-                    {tab.label}
+                    <span className="min-w-0 flex-1">{tab.label}</span>
+                    {tab.onClose ? (
+                      <button
+                        type="button"
+                        aria-label="Close tab"
+                        className={cn(
+                          'ml-auto',
+                          'shrink-0',
+                          'rounded',
+                          'p-0.5',
+                          'text-neutral3',
+                          'transition-colors',
+                          'hover:bg-surface5',
+                          'hover:text-neutral5',
+                        )}
+                        onClick={event => {
+                          event.stopPropagation();
+                          tab.onClose?.();
+                        }}
+                      >
+                        <X aria-hidden="true" className="size-3" />
+                      </button>
+                    ) : null}
                   </DropdownMenu.Item>
                 ))}
               </DropdownMenu.Content>

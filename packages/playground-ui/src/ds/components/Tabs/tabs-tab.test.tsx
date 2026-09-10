@@ -8,6 +8,7 @@ import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
 
 beforeEach(() => {
+  vi.stubGlobal('PointerEvent', window.MouseEvent);
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -127,6 +128,32 @@ describe('Tab', () => {
     expect(screen.queryByRole('tab', { name: 'Second' })).toBeNull();
   });
 
+  it('closes an overflowed tab without selecting it', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    const onClose = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second" onClose={onClose} onClick={onClick}>
+            Second
+          </Tab>
+        </TabList>
+        <TabContent value="first">First panel</TabContent>
+        <TabContent value="second">Second panel</TabContent>
+      </Tabs>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close tab' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: 'First' }).getAttribute('aria-selected')).toBe('true');
+  });
+
   it('restores overflowed tabs when the container grows', () => {
     const callbacks = new Set<() => void>();
     vi.stubGlobal(
@@ -178,6 +205,60 @@ describe('Tab', () => {
     expect(screen.getByRole('tab', { name: 'First' }).getAttribute('aria-selected')).toBe('true');
     rerender(content('second'));
     expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  describe('keepMounted panels', () => {
+    const renderTabs = () => (
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+        <TabContent value="first" keepMounted>
+          <input aria-label="First field" />
+        </TabContent>
+        <TabContent value="second" keepMounted>
+          <input aria-label="Second field" />
+        </TabContent>
+      </Tabs>
+    );
+
+    it('mounts a panel on first visit, not upfront', () => {
+      render(renderTabs());
+      expect(screen.getByLabelText('First field')).toBeTruthy();
+      expect(screen.queryByLabelText('Second field')).toBeNull();
+    });
+
+    it('preserves panel state across tab switches', () => {
+      render(renderTabs());
+      const first = screen.getByLabelText<HTMLInputElement>('First field');
+      fireEvent.change(first, { target: { value: 'kept' } });
+      fireEvent.click(screen.getByRole('tab', { name: 'Second' }));
+      expect(screen.getByLabelText('Second field')).toBeTruthy();
+      fireEvent.click(screen.getByRole('tab', { name: 'First' }));
+      expect(screen.getByLabelText<HTMLInputElement>('First field').value).toBe('kept');
+    });
+  });
+
+  it('unmounts non-keepMounted panels and leaves them unflushed by default', () => {
+    render(
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+        <TabContent value="first">
+          <input aria-label="First field" />
+        </TabContent>
+        <TabContent value="second">
+          <input aria-label="Second field" />
+        </TabContent>
+      </Tabs>,
+    );
+    const panel = screen.getByLabelText('First field').closest('[data-slot="tabs-content"]');
+    expect(panel?.hasAttribute('data-flush')).toBe(false);
+    fireEvent.click(screen.getByRole('tab', { name: 'Second' }));
+    expect(screen.queryByLabelText('First field')).toBeNull();
   });
 
   describe('when tabs use the contained appearance', () => {
@@ -253,12 +334,37 @@ describe('Tab', () => {
         </Tabs>,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Close tab' }));
+      const closeButton = screen.getByRole('button', { name: 'Close tab' });
+      expect(closeButton.closest('[role="tab"]')?.tagName).toBe('DIV');
+      fireEvent.click(closeButton);
 
       expect(onClose).toHaveBeenCalledTimes(1);
       // The click must not bubble into the tab underneath it.
       expect(onClick).not.toHaveBeenCalled();
       expect(screen.getByRole('tab', { name: /First/ }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('keeps keyboard activation when a close affordance is present', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList>
+            <Tab value="first">First</Tab>
+            <Tab value="second" onClose={() => {}}>
+              Second
+            </Tab>
+          </TabList>
+          <TabContent value="first">First content</TabContent>
+          <TabContent value="second">Second content</TabContent>
+        </Tabs>,
+      );
+
+      const secondTab = screen.getByRole('tab', { name: /Second/ });
+      secondTab.focus();
+      fireEvent.keyDown(secondTab, { key: 'Enter', code: 'Enter' });
+      fireEvent.keyUp(secondTab, { key: 'Enter', code: 'Enter' });
+
+      expect(secondTab.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByText('Second content')).toBeTruthy();
     });
 
     it('offers no close affordance without a close handler', () => {

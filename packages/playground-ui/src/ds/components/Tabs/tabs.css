@@ -20,6 +20,9 @@
   }
 
   &[data-appearance='contained'] {
+    display: flex;
+    flex-direction: column;
+
     --tab-frame-radius: var(--radius-xl);
     --tab-inset: 4px;
     --tab-inner-radius: calc(var(--tab-frame-radius) - var(--tab-inset));
@@ -28,6 +31,7 @@
     [data-slot='tabs-list-scroll'] {
       position: relative;
       z-index: 10;
+      flex-shrink: 0;
       scrollbar-width: none;
     }
 
@@ -87,6 +91,14 @@
     }
 
     &[data-frame='stroke'] {
+      [data-slot='tabs-content'][data-flush] {
+        padding: var(--tab-inset);
+        grid-template-rows: minmax(0, 1fr);
+        overflow: hidden;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
       [data-slot='tabs-list-scroll'] {
         padding-bottom: 10px;
         margin-bottom: -10px;
@@ -179,6 +191,18 @@
         background: var(--surface4);
         padding: var(--tab-inset);
       }
+      [data-slot='tabs-content'][data-flush] {
+        padding: 0;
+        grid-template-rows: minmax(0, 1fr);
+        overflow: hidden;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      [data-slot='tabs-content'][data-flush] [data-slot='tabs-content-body'] {
+        display: contents;
+        background: none;
+        padding: 0;
+      }
       [data-slot='tabs-content-body'] {
         display: block;
         min-width: 0;
@@ -242,6 +266,18 @@
       visibility: hidden;
       width: max-content;
       pointer-events: none;
+    }
+
+    &[data-frame='inset']:has([data-slot='tabs-content'][data-flush]:not([hidden])) {
+      [data-slot='tabs-indicator'] {
+        height: var(--active-tab-height);
+        border-radius: var(--tab-inner-radius);
+      }
+
+      [data-slot='tabs-indicator']::before,
+      [data-slot='tabs-indicator']::after {
+        display: none;
+      }
     }
 
     @media (pointer: coarse) {

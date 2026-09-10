@@ -28,7 +28,7 @@ export const Tab = ({
   className,
 }: TabProps) => {
   const list = useContext(TabListContext);
-  const ref = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const register = list?.register;
   const unregister = list?.unregister;
   const overflowed = list?.hiddenValues.has(value) ?? false;
@@ -43,16 +43,19 @@ export const Tab = ({
         width: element.getBoundingClientRect().width,
         element,
         onClick,
+        onClose,
       });
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     measure();
     return () => observer.disconnect();
-  }, [register, value, children, disabled, onClick]);
+  }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
   const tab = (
     <BaseTabs.Tab
       ref={ref}
+      render={<div />}
+      nativeButton={false}
       data-overflowed={overflowed || undefined}
       aria-hidden={overflowed || undefined}
       value={value}
