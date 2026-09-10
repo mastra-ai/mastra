@@ -7,7 +7,9 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import type { TraceViewMastraDBMessage } from './format-trace-thread-messages';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
+import { ToolCallTrailingSlotContext } from '@/lib/ai-ui/tools/badges/tool-call-trailing-slot';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 
 export interface TraceThreadItemViewProps {
@@ -18,6 +20,9 @@ export interface TraceThreadItemViewProps {
 }
 
 const noop = () => {};
+
+const isToolMessage = (message: TraceViewMastraDBMessage) =>
+  message.content.parts.some(part => part.type === 'tool-invocation');
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
@@ -64,21 +69,32 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
           toolCallApprovals={{}}
           networkToolCallApprovals={{}}
         >
-          {messages.map(message => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              readOnly
-              footer={
-                onHighlightSpans && message.traceSpanIds.length > 0 ? (
-                  <Button variant="ghost" size="xs" onClick={() => onHighlightSpans(message.traceSpanIds)}>
-                    <ListTreeIcon />
-                    Highlight spans
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
+          {messages.map(message => {
+            const action =
+              onHighlightSpans && message.traceSpanIds.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  tooltip="Highlight spans"
+                  aria-label="Highlight spans"
+                  onClick={() => onHighlightSpans(message.traceSpanIds)}
+                >
+                  <ListTreeIcon />
+                </Button>
+              ) : null;
+
+            // A tool message carries a single tool part: put the action on the badge header line.
+            if (isToolMessage(message)) {
+              return (
+                <ToolCallTrailingSlotContext.Provider key={message.id} value={action}>
+                  <MessageRow message={message} readOnly />
+                </ToolCallTrailingSlotContext.Provider>
+              );
+            }
+
+            // Text messages: the action joins the hover-revealed action bar, next to Copy.
+            return <MessageRow key={message.id} message={message} readOnly footer={action ?? undefined} />;
+          })}
         </ToolCallProvider>
       </div>
     </div>
