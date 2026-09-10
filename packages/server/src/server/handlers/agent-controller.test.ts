@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -1035,6 +1035,41 @@ describe('agent-controller routes', () => {
         } as any);
 
         expect(res).toEqual({ runs: [{ runId: 'run-1', resourceId: 'workspace-a', threadId: 'thread-a' }] });
+        expect(createSession).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+        createSession.mockRestore();
+      }
+    });
+
+    it.each([
+      { resourceId: 'workspace-a', threadId: undefined, expected: ['run-a1', 'run-a2'] },
+      { resourceId: 'workspace-b', threadId: undefined, expected: ['run-b'] },
+      { resourceId: 'missing', threadId: undefined, expected: [] },
+      { resourceId: 'workspace-a', threadId: 'thread-a1', expected: ['run-a1'] },
+      { resourceId: 'workspace-a', threadId: 'thread-b', expected: [] },
+      { resourceId: undefined, threadId: 'thread-a1', expected: ['run-a1'] },
+    ])('scopes active runs to native identity ($resourceId, $threadId)', async ({ resourceId, threadId, expected }) => {
+      const controller = mastra.getAgentController('code')!;
+      const createSession = vi.spyOn(controller, 'createSession');
+      const runs = [
+        { runId: 'run-a1', resourceId: 'workspace-a', threadId: 'thread-a1' },
+        { runId: 'run-a2', resourceId: 'workspace-a', threadId: 'thread-a2' },
+        { runId: 'run-b', resourceId: 'workspace-b', threadId: 'thread-b' },
+        { runId: 'ownerless', threadId: 'shared-thread' },
+      ];
+      const spy = vi.spyOn(Agent.prototype, 'listActiveThreadRuns').mockReturnValue(runs);
+      const requestContext = new RequestContext();
+      if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+      requestContext.set('resourceId', 'workspace-b');
+      try {
+        const res = await LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          requestContext,
+        } as any);
+        expect(res).toEqual({ runs: runs.filter(run => expected.includes(run.runId)) });
         expect(createSession).not.toHaveBeenCalled();
       } finally {
         spy.mockRestore();
