@@ -849,7 +849,6 @@ export const useChat = ({
       _streamAbortRef.current?.abort();
     }
     const internalAbort = new AbortController();
-    _streamAbortRef.current = internalAbort;
 
     if (signal) {
       if (signal.aborted) internalAbort.abort();
@@ -864,6 +863,7 @@ export const useChat = ({
     const agent = clientWithAbort.getAgent(agentId);
 
     const streamWithLegacyRoute = async () => {
+      _streamAbortRef.current = internalAbort;
       const runId = uuid();
       const response = await agent.stream(coreUserMessages, {
         model,
@@ -974,7 +974,10 @@ export const useChat = ({
                   ...message.content.metadata,
                   deliveryState,
                   deliveryRunId: result.runId,
-                  status: deliveryState === 'failed' ? undefined : message.content.metadata?.status,
+                  status:
+                    deliveryState === 'failed' || finishedRuns.current.has(result.runId)
+                      ? undefined
+                      : message.content.metadata?.status,
                 },
               },
             };
@@ -1417,7 +1420,8 @@ export const useChat = ({
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
       if (!isRunning) setIsRunning(false);
-      if (clientMessageId) {
+      // An aborted acceptance request has an unknown outcome; a later echo can still confirm it.
+      if (clientMessageId && !isAbortError(error)) {
         setMessages(prev =>
           prev.map(message =>
             message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId

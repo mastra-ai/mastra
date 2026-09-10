@@ -352,7 +352,10 @@ export const useChatSendHandler = ({
   );
 
   const cancel = useCallback(async () => {
-    abortControllerRef.current?.abort();
+    // Stream runs are stopped by the SDK; their separate send/queue acceptance must still settle.
+    if (sendDepsRef.current.chatWithGenerate || sendDepsRef.current.chatWithNetwork) {
+      abortControllerRef.current?.abort();
+    }
     abortControllerRef.current = null;
     resetObservationalMemoryStreamState();
     cancelRun?.();

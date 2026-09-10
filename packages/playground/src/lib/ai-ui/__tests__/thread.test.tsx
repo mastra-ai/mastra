@@ -261,6 +261,57 @@ describe('Thread', () => {
       await screen.findByText('Answer SECOND');
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel', exact: true })).toBeNull());
     });
+    it.each(['queue', 'steer'] as const)(
+      'preserves the %s acceptance response when Stop is clicked while it is pending',
+      async delivery => {
+        server.use(http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => HttpResponse.json(abortedThread)));
+        renderThread([]);
+        await screen.findByRole('button', { name: 'Send', exact: true });
+        sendText('FIRST');
+        await screen.findByRole('button', { name: 'Queue', exact: true });
+        if (delivery === 'steer') {
+          fireEvent.click(screen.getByRole('button', { name: 'Choose send behavior' }));
+          fireEvent.click(await screen.findByRole('menuitemradio', { name: /Steer/ }));
+        }
+        let release = () => {};
+        const responseGate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        let requestStarted = false;
+        let requestAborted = false;
+        server.use(
+          http.post(
+            `${BASE_URL}/api/agents/:agentId/${delivery === 'queue' ? 'queue-message' : 'send-message'}`,
+            async ({ request }) => {
+              requestStarted = true;
+              request.signal.addEventListener('abort', () => {
+                requestAborted = true;
+              });
+              await responseGate;
+              return HttpResponse.json(acceptedMessage(delivery === 'queue' ? 'queued-second' : 'first'));
+            },
+          ),
+        );
+        sendText('SECOND');
+        await waitFor(() => expect(requestStarted).toBe(true));
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+          release();
+        });
+        expect(requestAborted).toBe(false);
+        if (delivery === 'queue') await screen.findByText('Queued');
+        await waitFor(() =>
+          expect(
+            screen
+              .getByText('SECOND', { selector: 'p' })
+              .closest('[data-message-id]')
+              ?.getAttribute('data-message-pending'),
+          ).not.toBe('true'),
+        );
+        expect(screen.queryByText('Not sent')).toBeNull();
+        expect(screen.queryByText('Sent to current run')).toBeNull();
+      },
+    );
     it('keeps each streamed answer with its turn while later messages wait', async () => {
       const { rerender } = renderThread([]);
       await screen.findByRole('button', { name: 'Send', exact: true });
