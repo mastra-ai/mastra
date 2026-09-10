@@ -3,7 +3,7 @@
  * including User Sessions. The first unread-dot commit only wired Work /
  * Review rows; this suite pins the user list to the same receipt.
  */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -125,5 +125,33 @@ describe('User sessions sidebar unread marker', () => {
 
     await screen.findByRole('button', { name: 'Draft chat' });
     expect(screen.queryByRole('img', { name: 'Unread attention in Draft chat' })).toBeNull();
+  });
+
+  /**
+   * The dot clears on the receipt, but the park itself outlives it: the agent
+   * is still waiting, so the row keeps saying so through its activity belt.
+   * That split is the whole reason read-on-open is safe.
+   */
+  it('clears the dot on the read receipt while the park keeps its belt', async () => {
+    let read = false;
+    stubSidebar([]);
+    // Registered after the base stub, so this mutable page wins.
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/attention`, () => {
+        const items = [waitingOn(waitingSession.sessionId, read)];
+        return HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false });
+      }),
+    );
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+    await screen.findByRole('img', { name: 'Unread attention in Draft chat' });
+
+    read = true;
+    await client.invalidateQueries();
+    await waitForMutationsIdle(client);
+
+    await waitFor(() => expect(screen.queryByRole('img', { name: 'Unread attention in Draft chat' })).toBeNull());
+    await screen.findByRole('status', { name: 'Draft chat waiting on you' });
   });
 });

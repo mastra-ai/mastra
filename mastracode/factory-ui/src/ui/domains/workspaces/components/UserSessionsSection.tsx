@@ -24,6 +24,7 @@ import { EMPTY_USER_SESSION_FILTERS, filterUserSessions } from '../services/sess
 import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import { parkedSessionIdsFrom } from '../services/parkedSessions';
 import { sessionRowStatus } from '../services/sessionStatus';
 import { unreadSessionIds } from '../services/unreadSessions';
 import { UserSessionFilters } from './UserSessionFilters';
@@ -42,6 +43,10 @@ export function UserSessionsSection() {
   // row without a second poll of the inbox endpoint.
   const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const unreadSessions = unreadSessionIds(attention.data?.items ?? []);
+  // The board's parked set only covers sessions a work item names, so a user
+  // session bound to no card is absent from it — take the park from the same
+  // attention page instead, which lists those aimed at this list.
+  const parkedSessions = parkedSessionIdsFrom(attention.data?.items ?? []);
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
@@ -180,6 +185,7 @@ export function UserSessionsSection() {
             const status = sessionRowStatus({
               running: runningBySessionId[session.sessionId] === true,
               initializing: !session.materializedAt,
+              attention: parkedSessions.has(session.sessionId),
             });
             return (
               <SessionNavRow

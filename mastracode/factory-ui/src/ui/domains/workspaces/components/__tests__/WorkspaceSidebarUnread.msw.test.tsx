@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -143,5 +143,33 @@ describe('Workspace sidebar unread marker', () => {
 
     await screen.findByRole('status', { name: `Agent working in ${workSession.title}` });
     await screen.findByRole('img', { name: 'Unread attention in Implement loader' });
+  });
+
+  /**
+   * The receipt is the only thing that clears the dot, so pin the step the
+   * session route now performs: once the read lands, the next attention page
+   * reports the item read and the row goes quiet. Opening the session is what
+   * posts that receipt (`ThreadPageAttentionRead.msw.test.tsx`).
+   */
+  it('clears the mark once the read receipt has landed', async () => {
+    let read = false;
+    stubSidebar();
+    // Registered after the base stub, so this mutable page wins.
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/attention`, () => {
+        const items = [waitingOn(workSession.sessionId, read)];
+        return HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false });
+      }),
+    );
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+    await screen.findByRole('img', { name: 'Unread attention in Implement loader' });
+
+    read = true;
+    await client.invalidateQueries();
+    await waitForMutationsIdle(client);
+
+    await waitFor(() => expect(screen.queryByRole('img', { name: 'Unread attention in Implement loader' })).toBeNull());
   });
 });

@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
+import { useMarkSessionAttentionRead } from '../../hooks/useMarkSessionAttentionRead';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { Sidebar } from '../Sidebar';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
@@ -51,7 +52,11 @@ export function ThreadPage() {
           <ChatSessionBoundary threadId={threadId}>
             <PageTitle />
             <WorkspaceFilesProvider>
-              <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
+              <ThreadPageMain
+                factoryId={factoryId}
+                workspacePath={workspace.workspacePath}
+                threadId={workspace.threadId}
+              />
             </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
@@ -77,15 +82,21 @@ function ResolvingSessionMain() {
 }
 
 function ThreadPageMain({
+  factoryId,
   workspacePath,
   threadId,
 }: {
+  factoryId: string | undefined;
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
   useGlobalShortcuts();
   useRouteThreadSync();
   useHandoffPrompt();
+  // Keyed on the resolved workspace, not the route's `:threadId`: a user thread
+  // resolves its session asynchronously, and only this subtree renders once it
+  // has. Opening the session is what clears its unread dot.
+  useMarkSessionAttentionRead(factoryId, workspacePath);
   const railBoxRef = useRef<HTMLDivElement>(null);
   const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
