@@ -18,10 +18,9 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { MessageSquareIcon, Trash2Icon } from 'lucide-react';
+import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -224,11 +223,9 @@ export function FeedbackThread({
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <EmptyState
-            iconSlot={<MessageSquareIcon />}
-            titleSlot="No feedback yet"
-            descriptionSlot="Leave feedback on this trace to see it here."
-          />
+          <Txt variant="ui-md" className="text-neutral3">
+            No feedback yet
+          </Txt>
         ) : (
           <FeedbackItems
             variant={variant}

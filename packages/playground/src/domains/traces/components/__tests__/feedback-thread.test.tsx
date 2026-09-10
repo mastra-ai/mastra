@@ -86,8 +86,7 @@ describe('FeedbackThread', () => {
   it('shows an empty state when there is no feedback', () => {
     render(<FeedbackThread onSubmit={vi.fn()} />);
 
-    expect(screen.getByRole('heading', { name: 'No feedback yet' })).toBeTruthy();
-    expect(screen.getByText('Leave feedback on this trace to see it here.')).toBeTruthy();
+    expect(screen.getByText('No feedback yet')).toBeTruthy();
   });
 
   it('places the composer above the feedback list', () => {
