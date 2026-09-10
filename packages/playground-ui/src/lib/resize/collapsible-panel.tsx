@@ -10,12 +10,12 @@ import { cn } from '@/lib/utils';
 export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
   /**
-   * Controlled collapsed state. When provided, the panel collapses/expands to
-   * match, and `onCollapsedChange` reports changes coming from the panel itself
-   * (the expand button, a persisted layout, dragging past the collapsed size).
+   * Controlled collapsed state. The panel collapses/expands to match, and
+   * `onCollapsedChange` reports changes coming from the panel itself (the
+   * expand button, a persisted layout, dragging past the collapsed size).
    */
-  collapsed?: boolean;
-  onCollapsedChange?: (collapsed: boolean) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
 export const CollapsiblePanel = ({
@@ -28,11 +28,13 @@ export const CollapsiblePanel = ({
   minSize,
   defaultSize,
   panelRef: externalPanelRef,
-  collapsed: controlledCollapsed,
+  collapsed,
   onCollapsedChange,
   ...props
 }: CollapsiblePanelProps) => {
-  const [collapsed, setCollapsed] = useState(false);
+  // Physical state of the panel, as reported by onResize. It lags behind the
+  // `collapsed` prop while the panel animates and drives what is rendered.
+  const [isCollapsed, setIsCollapsed] = useState(false);
   // Width the panel had right before we collapsed it. The library's `expand()`
   // relies on its own "most recent size", which is unreliable when the panel
   // mounts already collapsed from a persisted layout (it opens at `minSize`).
@@ -40,41 +42,25 @@ export const CollapsiblePanel = ({
   const internalPanelRef = usePanelRef();
   const panelRef = externalPanelRef ?? internalPanelRef;
 
-  const expand = () => {
+  // Apply the controlled value. `isCollapsed` tells us whether the panel
+  // already matches, which also covers changes we reported ourselves.
+  useEffect(() => {
+    if (collapsed === isCollapsed) return;
     const panel = panelRef.current;
     if (!panel) return;
+    if (collapsed) {
+      sizeBeforeCollapseRef.current = panel.getSize().inPixels;
+      panel.collapse();
+      return;
+    }
     const target = sizeBeforeCollapseRef.current ?? defaultSize;
     if (target === undefined) {
       panel.expand();
       return;
     }
     panel.resize(target);
-  };
-
-  const isControlled = controlledCollapsed !== undefined;
-
-  // Apply the controlled value. `collapsed` (from onResize) tells us whether
-  // the panel already matches, which also covers changes we reported ourselves.
-  useEffect(() => {
-    if (!isControlled || controlledCollapsed === collapsed) return;
-    const panel = panelRef.current;
-    if (!panel) return;
-    if (controlledCollapsed) {
-      sizeBeforeCollapseRef.current = panel.getSize().inPixels;
-      panel.collapse();
-    } else {
-      expand();
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- react to the controlled value only
-  }, [controlledCollapsed]);
-
-  const requestExpand = () => {
-    if (isControlled) {
-      onCollapsedChange?.(false);
-      return;
-    }
-    expand();
-  };
+  }, [collapsed]);
 
   const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
@@ -88,7 +74,7 @@ export const CollapsiblePanel = ({
       style={
         {
           // The expand button must remain visible once the panel is at zero width.
-          overflow: collapsed ? 'visible' : 'hidden',
+          overflow: isCollapsed ? 'visible' : 'hidden',
           '--panel-min-w': numericMinSize ? `${numericMinSize}px` : undefined,
           ...style,
         } as CSSProperties
@@ -98,23 +84,23 @@ export const CollapsiblePanel = ({
         onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
         const next = size.inPixels <= collapsedSize;
-        setCollapsed(next);
-        if (next !== (isControlled ? controlledCollapsed : collapsed)) onCollapsedChange?.(next);
+        setIsCollapsed(next);
+        if (next !== collapsed) onCollapsedChange(next);
       }}
     >
       <div
-        hidden={collapsed}
+        hidden={isCollapsed}
         style={{ minWidth: 'var(--panel-min-w)' }}
         className={cn('absolute inset-y-0 w-full overflow-hidden', direction === 'left' ? 'left-0' : 'right-0')}
       >
         {children}
       </div>
 
-      {collapsed && (
+      {isCollapsed && (
         <button
           type="button"
           aria-label="Expand panel"
-          onClick={requestExpand}
+          onClick={() => onCollapsedChange(false)}
           className={cn(
             panelIconButtonClass,
             'absolute top-2 z-10',

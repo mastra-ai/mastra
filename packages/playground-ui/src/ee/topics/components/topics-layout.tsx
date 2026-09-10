@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Panel } from 'react-resizable-panels';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { PanelGroup } from '@/lib/resize/panel-group';
@@ -12,6 +13,7 @@ export interface TopicsLayoutProps {
 
 export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = true }: TopicsLayoutProps) {
   const hasContent = Boolean(children || tracePanel);
+  const [traceCollapsed, setTraceCollapsed] = useState(false);
 
   return (
     <div className="bg-surface2 text-neutral4 flex h-full min-h-0">
@@ -35,6 +37,8 @@ export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = t
                   defaultSize={children ? '40%' : '100%'}
                   collapsedSize={60}
                   collapsible
+                  collapsed={traceCollapsed}
+                  onCollapsedChange={setTraceCollapsed}
                   className="min-w-0 pl-2"
                 >
                   {tracePanel}

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { CSSProperties, ReactNode, RefObject } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode, RefObject } from 'react';
+import { useState } from 'react';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -60,12 +61,28 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-const renderPanel = (direction: 'left' | 'right' = 'left') =>
-  render(
-    <CollapsiblePanel collapsedSize={0} direction={direction} minSize={280}>
-      <div data-testid="panel-content">Panel content</div>
-    </CollapsiblePanel>,
+type HarnessProps = Partial<ComponentProps<typeof CollapsiblePanel>> & { initialCollapsed?: boolean };
+
+// Stateful owner, the way real callers use the panel.
+const Harness = ({ initialCollapsed = false, children, onCollapsedChange, ...props }: HarnessProps) => {
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+  return (
+    <CollapsiblePanel
+      collapsedSize={0}
+      direction="left"
+      collapsed={collapsed}
+      onCollapsedChange={next => {
+        onCollapsedChange?.(next);
+        setCollapsed(next);
+      }}
+      {...props}
+    >
+      {children ?? <div data-testid="panel-content">Panel content</div>}
+    </CollapsiblePanel>
   );
+};
+
+const renderPanel = (direction: 'left' | 'right' = 'left') => render(<Harness direction={direction} minSize={280} />);
 
 describe('CollapsiblePanel', () => {
   beforeEach(() => {
@@ -89,7 +106,7 @@ describe('CollapsiblePanel', () => {
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
   });
 
-  it('shows collapsed affordances and expands through the panel ref', () => {
+  it('shows collapsed affordances once the panel reports itself collapsed', () => {
     renderPanel();
 
     fireEvent.click(screen.getByTestId('resize-collapsed'));
@@ -97,36 +114,26 @@ describe('CollapsiblePanel', () => {
     const contentWrapper = screen.getByTestId('panel-content').parentElement;
     expect(screen.getByTestId('panel').style.overflow).toBe('visible');
     expect(contentWrapper?.getAttribute('hidden')).toBe('');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
-
-    expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
   });
 
-  it("expands through the caller's panelRef when one is provided", () => {
-    const externalExpand = vi.fn();
-    const externalRef = { current: { expand: externalExpand } } as unknown as RefObject<PanelImperativeHandle | null>;
+  it("drives the caller's panelRef when one is provided", () => {
+    const externalResize = vi.fn();
+    const externalRef = {
+      current: { resize: externalResize, getSize: () => ({ inPixels: 300 }) },
+    } as unknown as RefObject<PanelImperativeHandle | null>;
 
-    render(
-      <CollapsiblePanel collapsedSize={0} direction="left" minSize={280} panelRef={externalRef}>
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness minSize={280} defaultSize={300} panelRef={externalRef} />);
     fireEvent.click(screen.getByTestId('resize-collapsed'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    expect(externalExpand).toHaveBeenCalledTimes(1);
-    expect(panelMocks.handle.expand).not.toHaveBeenCalled();
+    expect(externalResize).toHaveBeenCalledWith(300);
+    expect(panelMocks.handle.resize).not.toHaveBeenCalled();
   });
 
-  describe('uncontrolled expand button', () => {
+  describe('expand button', () => {
     it('opens at the default size when the panel mounted collapsed (e.g. after a reload)', () => {
-      render(
-        <CollapsiblePanel collapsedSize={0} direction="left" minSize={280} defaultSize={300}>
-          <div />
-        </CollapsiblePanel>,
-      );
+      render(<Harness minSize={280} defaultSize={300} />);
       fireEvent.click(screen.getByTestId('resize-collapsed'));
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
@@ -146,7 +153,7 @@ describe('CollapsiblePanel', () => {
     });
   });
 
-  describe('controlled `collapsed`', () => {
+  describe('`collapsed` prop', () => {
     const renderControlled = (collapsed: boolean, onCollapsedChange = vi.fn()) => {
       const ui = (value: boolean) => (
         <CollapsiblePanel
@@ -286,21 +293,13 @@ describe('CollapsiblePanel — the panel box', () => {
   });
 
   it('sets no minimum width when the caller gave none in pixels', () => {
-    render(
-      <CollapsiblePanel collapsedSize={0} direction="left">
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness />);
 
     expect(screen.getByTestId('panel').style.getPropertyValue('--panel-min-w')).toBe('');
   });
 
   it('keeps a caller style and class alongside its own', () => {
-    render(
-      <CollapsiblePanel collapsedSize={0} direction="left" className="my-own-class" style={{ zIndex: 5 }}>
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness className="my-own-class" style={{ zIndex: 5 }} />);
 
     const panel = screen.getByTestId('panel');
     expect(panel.classList.contains('my-own-class')).toBe(true);
@@ -322,11 +321,7 @@ describe('CollapsiblePanel — the panel box', () => {
 describe('CollapsiblePanel — collapsing', () => {
   it('tells the caller about a resize before deciding anything itself', () => {
     const onResize = vi.fn();
-    render(
-      <CollapsiblePanel collapsedSize={0} direction="left" onResize={onResize}>
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness onResize={onResize} />);
 
     collapse();
 
@@ -334,11 +329,7 @@ describe('CollapsiblePanel — collapsing', () => {
   });
 
   it('never collapses when no collapsed size was set', () => {
-    render(
-      <CollapsiblePanel direction="left">
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness collapsedSize={undefined} />);
 
     collapse();
 
@@ -346,17 +337,10 @@ describe('CollapsiblePanel — collapsing', () => {
   });
 
   it('collapses at exactly the collapsed size', () => {
-    render(
-      <CollapsiblePanel collapsedSize={0} direction="left">
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>,
-    );
+    render(<Harness />);
 
     collapse();
 
     expect(screen.getByRole('button', { name: 'Expand panel' })).toBeTruthy();
   });
 });
-
-const stripElement = () => screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
-const pillElement = () => stripElement().firstElementChild as HTMLElement;

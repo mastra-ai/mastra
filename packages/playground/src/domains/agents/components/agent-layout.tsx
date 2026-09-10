@@ -3,7 +3,7 @@ import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useMemoryTimeline } from '../context/memory-timeline-context';
@@ -12,7 +12,10 @@ export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
-  /** Controlled collapsed state of the left panel (e.g. "Hide threads panel"). */
+  /**
+   * Collapsed state of the left panel (e.g. "Hide threads panel"). Callers that
+   * don't need to drive it can omit both and the layout keeps its own state.
+   */
   leftCollapsed?: boolean;
   onLeftCollapsedChange?: (collapsed: boolean) => void;
   rightSlot?: React.ReactNode;
@@ -39,6 +42,7 @@ export const AgentLayout = ({
   const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const [localLeftCollapsed, setLocalLeftCollapsed] = useState(false);
   const wasMemoryTimelineOpen = useRef(false);
   const sizeBeforeMemoryDetail = useRef<string | null>(null);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
@@ -99,8 +103,8 @@ export const AgentLayout = ({
             id="left-slot"
             direction="left"
             panelRef={leftPanelRef}
-            collapsed={leftCollapsed}
-            onCollapsedChange={onLeftCollapsedChange}
+            collapsed={leftCollapsed ?? localLeftCollapsed}
+            onCollapsedChange={onLeftCollapsedChange ?? setLocalLeftCollapsed}
             collapsible
             collapsedSize={0}
             minSize={256}
