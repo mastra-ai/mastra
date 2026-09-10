@@ -95,7 +95,7 @@ function runCli(rootDir, ...arguments_) {
 }
 
 test('matches the canonical package eligibility rules', () => {
-  assert.equal(shouldCheckPackage({ name: '@mastra/core' }), true);
+  assert.equal(shouldCheckPackage({ name: '@mastra/core' }), false);
   assert.equal(shouldCheckPackage({ name: 'mastra' }), true);
   assert.equal(shouldCheckPackage({ name: 'create-mastra-app' }), true);
   assert.equal(shouldCheckPackage({ name: '@internal/test' }), false);
@@ -174,6 +174,35 @@ test('parses README headings with CRLF line endings', () => {
 
   assert.equal(result.status, 0, result.stderr);
 });
+
+for (const name of ['create-mastra', 'create-factory', '@mastra/test']) {
+  test(`accepts npm install or npx for ${name}`, () => {
+    const commands = ['npm install', 'npx'].flatMap(command =>
+      ['', '@latest', '@1.2.3', '@1.2.3-beta.1', '@^1.2.3'].map(version => `${command} ${name}${version}`),
+    );
+    for (const command of commands) {
+      const relativeDirectory = `packages/${name}`;
+      const errors = validateReadme({
+        content: validReadme(name, relativeDirectory).replace(`npm install ${name}`, command),
+        name,
+        relativeDirectory,
+        docsRoutes: new Map(),
+      });
+      assert.deepEqual(errors, []);
+    }
+  });
+
+  test(`rejects npx for a different package than ${name}`, () => {
+    const relativeDirectory = `packages/${name}`;
+    const errors = validateReadme({
+      content: validReadme(name, relativeDirectory).replace(`npm install ${name}`, `npx ${name}-other`),
+      name,
+      relativeDirectory,
+      docsRoutes: new Map(),
+    });
+    assert.ok(errors.some(error => error.includes(`npm install ${name} or npx ${name}`)));
+  });
+}
 
 test('requires the exact package installation command', () => {
   const rootDir = createFixture();
