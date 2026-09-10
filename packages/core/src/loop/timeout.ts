@@ -129,7 +129,7 @@ export function guardStreamWithAbort<T>(
       new TransformStream<T, T>({
         flush: () => onSettled(),
       }) as any,
-    ) as ReadableStream<T>;
+    );
   }
 
   const reader = stream.getReader();
