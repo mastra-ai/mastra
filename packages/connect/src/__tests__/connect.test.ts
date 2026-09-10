@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Agent } from '@mastra/core/agent';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration } from '../registry.js';
@@ -53,6 +54,13 @@ afterEach(() => {
 });
 
 describe('connect', () => {
+  it('is assignable to an Agent dynamic tools argument', () => {
+    type AgentTools = NonNullable<ConstructorParameters<typeof Agent>[0]['tools']>;
+    const tools = connect({ projectId: 'proj_1', client: { accessToken: TOKEN } });
+
+    expectTypeOf(tools).toExtend<AgentTools>();
+  });
+
   it('throws missing_project_id synchronously without a project id', () => {
     installProvider();
     vi.stubEnv('MASTRA_PROJECT_ID', '');
@@ -90,7 +98,7 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    expect(tools).toEqual({ linear: fakeTools });
+    expect(tools).toEqual(fakeTools);
     expect(createTools).toHaveBeenCalledWith(
       expect.objectContaining({ connectionId: 'c_lin1', allowTools: undefined }),
     );
@@ -248,6 +256,9 @@ describe('connect', () => {
       projectId: 'proj_1',
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    expect(tools).toEqual({ linear: fakeTools, notion: notionTools });
+    expect(tools).toEqual({
+      linear_fake_tool: { id: 'linear_fake_tool' },
+      notion_fake: { id: 'notion_fake' },
+    });
   });
 });

@@ -8,9 +8,9 @@ import type { ProviderToolsOptions } from './toolset.js';
  * `packages/connect/src/providers/<integrationId>/` by the maintainer-only
  * `pnpm --filter @mastra/connect add-provider` command.
  *
- * `integrationId` is the Platform catalog id, the directory name, and the
- * toolset key returned by `connect()`. Provider matching against project
- * connections is by `integrationId` only.
+ * `integrationId` is the Platform catalog id and the provider directory name.
+ * Provider matching against project connections is by `integrationId` only;
+ * `connect()` merges each matching provider's tools into one flat record.
  *
  * `envVar` is the fallback connection-id env var read at execute time when
  * no `connectionId` override is given and more than one active connection
@@ -26,7 +26,7 @@ export interface ProviderRegistration {
  * Providers with shipped toolsets. The list is assembled declaratively in the
  * generated `src/providers/index.ts` barrel — each generated provider module
  * exports a `ProviderRegistration` const, and the barrel collects them.
- * `connect()` reads this list and exposes one toolset per matching Platform
+ * `connect()` reads this list and merges tools from every matching Platform
  * connection on the project. Providers with no matching connection yet are
  * kept and warned about once, so tools appear automatically once a connection
  * is attached.

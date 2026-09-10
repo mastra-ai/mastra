@@ -75,12 +75,12 @@ describe('connect resolver caching and liveness', () => {
     expect(typeof tools.refresh).toBe('function');
   });
 
-  it('resolves toolsets from the project connections on first resolution', async () => {
+  it('resolves tools from the project connections on first resolution', async () => {
     const linear = installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
     const tools = connect(options);
     const result = await tools({ requestContext: {} });
-    expect(Object.keys(result)).toEqual(['linear']);
+    expect(Object.keys(result)).toEqual(['linear_fake_tool']);
     expect(linear.createToolsSpy).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin1' }));
   });
 
@@ -98,7 +98,7 @@ describe('connect resolver caching and liveness', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('serves stale toolsets immediately after TTL and picks up an attached integration on the next resolution', async () => {
+  it('serves stale tools immediately after TTL and picks up an attached integration on the next resolution', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
@@ -108,17 +108,17 @@ describe('connect resolver caching and liveness', () => {
 
     const start = Date.now();
     const first = await tools();
-    expect(Object.keys(first)).toEqual(['linear']);
+    expect(Object.keys(first)).toEqual(['linear_fake_tool']);
 
     connections = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion' })];
     vi.setSystemTime(start + 1_001);
 
     const stale = await tools();
-    expect(Object.keys(stale)).toEqual(['linear']);
+    expect(Object.keys(stale)).toEqual(['linear_fake_tool']);
     await flush();
 
     const fresh = await tools();
-    expect(Object.keys(fresh).sort()).toEqual(['linear', 'notion']);
+    expect(Object.keys(fresh).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -138,7 +138,7 @@ describe('connect resolver caching and liveness', () => {
     await flush();
 
     const fresh = await tools();
-    expect(Object.keys(fresh)).toEqual(['linear']);
+    expect(Object.keys(fresh)).toEqual(['linear_fake_tool']);
   });
 
   it('keeps the stale snapshot and warns when a background refresh fails', async () => {
@@ -162,12 +162,12 @@ describe('connect resolver caching and liveness', () => {
     vi.setSystemTime(start + 1_001);
 
     const result = await tools();
-    expect(Object.keys(result)).toEqual(['linear']);
+    expect(Object.keys(result)).toEqual(['linear_fake_tool']);
     await flush();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('platform refresh failed'));
 
     const again = await tools();
-    expect(Object.keys(again)).toEqual(['linear']);
+    expect(Object.keys(again)).toEqual(['linear_fake_tool']);
   });
 
   it('applies a cooldown after a failed background refresh instead of refetching every resolution', async () => {
@@ -226,7 +226,7 @@ describe('connect resolver caching and liveness', () => {
     await expect(tools.refresh()).rejects.toThrow('network down');
 
     // The cached snapshot stays available for plain resolutions.
-    await expect(tools()).resolves.toHaveProperty('linear');
+    await expect(tools()).resolves.toHaveProperty('linear_fake_tool');
   });
 
   it('rejects when the platform is unreachable and nothing is cached', async () => {
@@ -258,7 +258,7 @@ describe('connect resolver caching and liveness', () => {
     resolveFetch(Response.json({ connections: [makeConnection()] }));
     const [r1, r2] = await Promise.all([p1, p2]);
 
-    expect(Object.keys(r1)).toEqual(['linear']);
+    expect(Object.keys(r1)).toEqual(['linear_fake_tool']);
     expect(r2).toBe(r1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -286,7 +286,7 @@ describe('connect resolver caching and liveness', () => {
     await tools();
     connections = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion' })];
     const fresh = await tools.refresh();
-    expect(Object.keys(fresh).sort()).toEqual(['linear', 'notion']);
+    expect(Object.keys(fresh).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
 
     const next = await tools();
     expect(next).toBe(fresh);
@@ -304,7 +304,7 @@ describe('connect resolver caching and liveness', () => {
 
     const start = Date.now();
     const first = await tools();
-    expect(Object.keys(first)).toEqual(['notion']);
+    expect(Object.keys(first)).toEqual(['notion_fake_tool']);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will appear automatically'));
 
     vi.setSystemTime(start + 1_001);
@@ -317,7 +317,7 @@ describe('connect resolver caching and liveness', () => {
 
     connections = [notionConnection, makeConnection()];
     const after = await tools.refresh();
-    expect(Object.keys(after).sort()).toEqual(['linear', 'notion']);
+    expect(Object.keys(after).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
   });
 
   it('warns and skips a provider whose builder throws instead of rejecting', async () => {

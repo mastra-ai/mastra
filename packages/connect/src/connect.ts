@@ -26,18 +26,18 @@ export interface ConnectOptions {
 }
 
 /**
- * Live toolset resolver returned by `connect()`. Pass it straight to an
- * agent's dynamic `tools` argument: Mastra calls it per generate/stream, so
- * project integrations attached or detached on the platform are reflected
- * without restarting the server. Call it directly (`await tools()`) when you
- * need a plain toolsets record, e.g. for an agent's `toolsets` option.
+ * Live tool resolver returned by `connect()`. Pass it straight to an agent's
+ * dynamic `tools` argument: Mastra calls it per generate/stream, so project
+ * integrations attached or detached on the platform are reflected without
+ * restarting the server. Call it directly (`await tools()`) when you need the
+ * current flat tool record.
  */
 export interface ConnectTools {
-  (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<Record<string, ToolsInput>>;
+  (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<ToolsInput>;
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
-  /** Fetches toolsets from the platform now and updates the cache. Rejects if the platform fetch fails. */
-  refresh(): Promise<Record<string, ToolsInput>>;
+  /** Fetches tools from the platform now and updates the cache. Rejects if the platform fetch fails. */
+  refresh(): Promise<ToolsInput>;
 }
 
 interface NormalizedRequest {
@@ -51,9 +51,9 @@ const FAILURE_COOLDOWN_MS = 30_000;
 
 /**
  * Returns a live toolset resolver over the project's Platform connections.
- * Providers are discovered from the shipped `PROVIDERS` registry — one
- * toolset per registered provider that has a matching project connection
- * (matched by `integrationId`). The resolver serves a cached snapshot,
+ * Providers are discovered from the shipped `PROVIDERS` registry. Tools from
+ * every registered provider with a matching project connection are merged into
+ * one flat record (matched by `integrationId`). The resolver serves a cached snapshot,
  * revalidating from the platform every `ttlMs`, so integrations attached
  * to (or detached from) the project are picked up (or dropped) without a
  * restart.
@@ -81,17 +81,17 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   const requests = buildRequests(options.integrations);
 
   const warnedMissing = new Set<string>();
-  let cache: { snapshot: Record<string, ToolsInput>; fetchedAt: number } | undefined;
-  let inflight: Promise<Record<string, ToolsInput>> | undefined;
+  let cache: { snapshot: ToolsInput; fetchedAt: number } | undefined;
+  let inflight: Promise<ToolsInput> | undefined;
   let lastFailureAt: number | undefined;
 
   /** Fetches a fresh snapshot, deduplicating concurrent calls. Rejects on failure. */
-  const refresh = (): Promise<Record<string, ToolsInput>> => {
+  const refresh = (): Promise<ToolsInput> => {
     if (!inflight) {
       inflight = (async () => {
         try {
           const connections = await listProjectConnections(client, projectId);
-          const snapshot = mapToolsets(connections, requests, options, warnedMissing);
+          const snapshot = mapTools(connections, requests, options, warnedMissing);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
           return snapshot;
@@ -106,7 +106,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
     return inflight;
   };
 
-  const resolve = async (): Promise<Record<string, ToolsInput>> => {
+  const resolve = async (): Promise<ToolsInput> => {
     if (cache && Date.now() - cache.fetchedAt < ttlMs) {
       return cache.snapshot;
     }
@@ -121,7 +121,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
         const staleFetchedAt = cache.fetchedAt;
         void refresh().catch((error: unknown) => {
           console.warn(
-            `[@mastra/connect] Keeping cached toolsets (fetched ${Date.now() - staleFetchedAt}ms ago); platform refresh failed: ${
+            `[@mastra/connect] Keeping cached tools (fetched ${Date.now() - staleFetchedAt}ms ago); platform refresh failed: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
@@ -161,16 +161,16 @@ function buildRequests(integrations: ConnectOptions['integrations']): Normalized
   return requests;
 }
 
-/** Maps one platform connection list snapshot to toolsets, downgrading every per-provider failure to warn+skip. */
-function mapToolsets(
+/** Maps one platform connection list snapshot to a flat tool record, downgrading per-provider failures to warn+skip. */
+function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
   options: ConnectOptions,
   warnedMissing: Set<string>,
-): Record<string, ToolsInput> {
+): ToolsInput {
   const byIntegrationId = groupByIntegrationId(connections);
 
-  const result: Record<string, ToolsInput> = {};
+  const result: ToolsInput = {};
   for (const request of requests) {
     const integrationId = request.registration.integrationId;
     try {
@@ -186,11 +186,14 @@ function mapToolsets(
       }
       const connectionId = resolveProviderConnection(request, candidates);
       if (!connectionId) continue; // warned + skipped
-      result[integrationId] = request.registration.createTools({
-        connectionId,
-        allowTools: request.options.allowTools,
-        client: options.client,
-      });
+      Object.assign(
+        result,
+        request.registration.createTools({
+          connectionId,
+          allowTools: request.options.allowTools,
+          client: options.client,
+        }),
+      );
     } catch (error) {
       console.warn(
         `[@mastra/connect] Skipping ${integrationId}: ${error instanceof Error ? error.message : String(error)}`,
