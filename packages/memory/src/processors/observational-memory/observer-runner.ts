@@ -350,7 +350,10 @@ export class ObserverRunner {
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM observer provider call failed', {
                     diagnostic: formatOmError(error),
-                    model: this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    model:
+                      typeof resolvedModel.model === 'function'
+                        ? '(dynamic-model)'
+                        : this.extractModelRouterId(resolvedModel.model, internalRequestContext),
                     inputTokens,
                     threadId: messagesToObserve[0]?.threadId,
                     observedMessageCount: messagesToObserve.length,
@@ -537,7 +540,10 @@ export class ObserverRunner {
         this.mastra?.getLogger?.().error('OM multi-thread observer model resolution failed', {
           diagnostic: formatOmError(error),
           inputTokens,
-          threadIds: threadOrder,
+          threadIds: {
+            sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
+            total: threadOrder.length,
+          },
           hasRequestContext: Boolean(requestContext),
         });
         throw error;
@@ -653,9 +659,15 @@ export class ObserverRunner {
                 } catch (error) {
                   this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
                     diagnostic: formatOmError(error),
-                    model: this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    model:
+                      typeof resolvedModel.model === 'function'
+                        ? '(dynamic-model)'
+                        : this.extractModelRouterId(resolvedModel.model, internalRequestContext),
                     inputTokens,
-                    threadIds: threadOrder,
+                    threadIds: {
+                      sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
+                      total: threadOrder.length,
+                    },
                     providerOptionProviders: Object.keys(this.observationConfig.providerOptions ?? {}),
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
