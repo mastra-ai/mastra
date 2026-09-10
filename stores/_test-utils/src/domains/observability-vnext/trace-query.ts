@@ -5,6 +5,7 @@ import {
   planTraceQuery,
   type NormalizedTraceQueryRequest,
   type TraceQueryGroupResponse,
+  type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
   type TraceQueryTrace,
@@ -53,9 +54,26 @@ export interface RawTraceQueryScore {
   rootEntityVersionId: string | null;
 }
 
+export interface RawTraceQueryFeedback {
+  cursorId: number;
+  feedbackId: string;
+  traceId: string | null;
+  timestamp: string;
+  feedbackType: string;
+  feedbackSource: string;
+  feedbackUserId: string | null;
+  sourceId: string | null;
+  value: string | number;
+  comment: string | null;
+  entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
+}
+
 export interface TraceQueryFixtureData {
   spans: RawTraceQuerySpan[];
   scores: RawTraceQueryScore[];
+  feedback: RawTraceQueryFeedback[];
 }
 
 const span = (
@@ -110,6 +128,506 @@ const scoreRecord = (
   rootEntityVersionId: null,
   ...overrides,
 });
+
+const feedbackRecord = (
+  cursorId: number,
+  feedbackId: string,
+  traceId: string | null,
+  feedbackType: string,
+  feedbackSource: string,
+  value: string | number,
+  overrides: Partial<RawTraceQueryFeedback> = {},
+): RawTraceQueryFeedback => ({
+  cursorId,
+  feedbackId,
+  traceId,
+  timestamp: '2026-08-10T00:00:00.000Z',
+  feedbackType,
+  feedbackSource,
+  feedbackUserId: null,
+  sourceId: null,
+  value,
+  comment: null,
+  entityVersionId: null,
+  parentEntityVersionId: null,
+  rootEntityVersionId: null,
+  ...overrides,
+});
+
+export interface TraceQueryFeedbackReplacementWrite {
+  method: 'create' | 'batch';
+  feedback: RawTraceQueryFeedback[];
+}
+
+export interface TraceQueryFeedbackReplacementAssertion {
+  name: string;
+  request: TraceQueryRequest;
+  expected: Array<{ traceId: string }>;
+}
+
+export interface TraceQueryFeedbackReplacementScenario {
+  name: string;
+  fixture: TraceQueryFixtureData;
+  writes: TraceQueryFeedbackReplacementWrite[];
+  assertions: TraceQueryFeedbackReplacementAssertion[];
+}
+
+const feedbackReplacementRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+const feedbackReplacementWideRange = { from: '2026-07-01T00:00:00Z', to: '2026-08-01T00:00:00Z' };
+
+const feedbackReplacementRoot = (traceId: string, startedAt: string): RawTraceQuerySpan =>
+  span(1, traceId, `root-${traceId}`, {
+    startedAt,
+    endedAt: new Date(new Date(startedAt).getTime() + 1000).toISOString(),
+  });
+
+const feedbackReplacementRequest = (
+  traceId: string,
+  quantifier: 'some' | 'none',
+  predicate: TraceQueryPredicate,
+  timeRange = feedbackReplacementRange,
+): TraceQueryRequest => ({
+  timeRange,
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'traceId' }, right: { literal: traceId } },
+      { feedback: { [quantifier]: predicate } },
+    ],
+  },
+});
+
+const feedbackReplacementAssertions = (args: {
+  oldPredicate: TraceQueryPredicate;
+  currentPredicate: TraceQueryPredicate;
+  oldTraceId?: string;
+  currentTraceId?: string;
+  currentIsCorrelated?: boolean;
+  currentTimeRange?: { from: string; to: string };
+}): TraceQueryFeedbackReplacementAssertion[] => {
+  const oldTraceId = args.oldTraceId ?? 'feedback-replacement-a';
+  const currentTraceId = args.currentTraceId ?? oldTraceId;
+  const currentIsCorrelated = args.currentIsCorrelated ?? true;
+  return [
+    {
+      name: 'old predicate does not satisfy some',
+      request: feedbackReplacementRequest(oldTraceId, 'some', args.oldPredicate),
+      expected: [],
+    },
+    {
+      name: 'old predicate satisfies none',
+      request: feedbackReplacementRequest(oldTraceId, 'none', args.oldPredicate),
+      expected: [{ traceId: oldTraceId }],
+    },
+    {
+      name: 'current predicate satisfies some',
+      request: feedbackReplacementRequest(
+        currentTraceId,
+        'some',
+        args.currentPredicate,
+        args.currentTimeRange ?? feedbackReplacementRange,
+      ),
+      expected: currentIsCorrelated ? [{ traceId: currentTraceId }] : [],
+    },
+    {
+      name: 'current predicate does not satisfy none',
+      request: feedbackReplacementRequest(
+        currentTraceId,
+        'none',
+        args.currentPredicate,
+        args.currentTimeRange ?? feedbackReplacementRange,
+      ),
+      expected: currentIsCorrelated ? [] : [{ traceId: currentTraceId }],
+    },
+  ];
+};
+
+const feedbackSourcePredicate = (value: string): TraceQueryPredicate => ({
+  op: 'eq',
+  left: { path: 'feedbackSource' },
+  right: { literal: value },
+});
+
+const feedbackValuePredicate = (value: string | number): TraceQueryPredicate => ({
+  op: 'eq',
+  left: { path: 'value' },
+  right: { literal: value },
+});
+
+const feedbackReplacementScenario = (args: {
+  name: string;
+  roots?: RawTraceQuerySpan[];
+  writes: TraceQueryFeedbackReplacementWrite[];
+  assertions: TraceQueryFeedbackReplacementAssertion[];
+}): TraceQueryFeedbackReplacementScenario => ({
+  name: args.name,
+  fixture: {
+    spans: args.roots ?? [feedbackReplacementRoot('feedback-replacement-a', '2026-08-10T00:00:00.000Z')],
+    scores: [],
+    feedback: args.writes.flatMap(write => write.feedback),
+  },
+  writes: args.writes,
+  assertions: args.assertions,
+});
+
+const sequentialFeedbackWrites = (
+  oldRecord: RawTraceQueryFeedback,
+  currentRecord: RawTraceQueryFeedback,
+): TraceQueryFeedbackReplacementWrite[] => [
+  { method: 'create', feedback: [oldRecord] },
+  { method: 'create', feedback: [currentRecord] },
+];
+
+/**
+ * Feedback replacement contract:
+ * - feedbackId alone is the logical identity;
+ * - the last accepted sequential write, or last matching entry in one batch, is current;
+ * - caller timestamps do not define replacement order;
+ * - current selection happens globally before trace correlation and some/none evaluation;
+ * - exact retries are idempotent;
+ * - concurrent writes without an observable acceptance order are outside this deterministic contract.
+ */
+export const TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS: TraceQueryFeedbackReplacementScenario[] = [
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-later-timestamp',
+      'feedback-replacement-a',
+      'rating',
+      'old-later-timestamp',
+      1,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-later-timestamp',
+      2,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with a later timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-backdated',
+      'feedback-replacement-a',
+      'rating',
+      'old-backdated',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-backdated',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with an earlier timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-same-timestamp',
+      'feedback-replacement-a',
+      'rating',
+      'old-same-timestamp',
+      1,
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-same-timestamp',
+      2,
+    );
+    return feedbackReplacementScenario({
+      name: 'sequential replacement with the same timestamp',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const record = feedbackRecord(
+      1,
+      'feedback-replacement-exact-retry',
+      'feedback-replacement-a',
+      'rating',
+      'exact-retry',
+      1,
+    );
+    const retry = { ...record, cursorId: 2 };
+    return feedbackReplacementScenario({
+      name: 'exact retry with the same timestamp and payload',
+      writes: sequentialFeedbackWrites(record, retry),
+      assertions: [
+        {
+          name: 'retried predicate satisfies some',
+          request: feedbackReplacementRequest(
+            'feedback-replacement-a',
+            'some',
+            feedbackSourcePredicate(record.feedbackSource),
+          ),
+          expected: [{ traceId: 'feedback-replacement-a' }],
+        },
+        {
+          name: 'retried predicate does not satisfy none',
+          request: feedbackReplacementRequest(
+            'feedback-replacement-a',
+            'none',
+            feedbackSourcePredicate(record.feedbackSource),
+          ),
+          expected: [],
+        },
+      ],
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-one-batch',
+      'feedback-replacement-a',
+      'rating',
+      'old-one-batch',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-one-batch',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'repeated feedbackId in one batch uses the last entry',
+      writes: [{ method: 'batch', feedback: [oldRecord, currentRecord] }],
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-across-batches',
+      'feedback-replacement-a',
+      'rating',
+      'old-across-batches',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-across-batches',
+      2,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'repeated feedbackId across batches uses the backdated final write',
+      writes: [
+        { method: 'batch', feedback: [oldRecord] },
+        { method: 'batch', feedback: [currentRecord] },
+      ],
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-number-to-text',
+      'feedback-replacement-a',
+      'rating',
+      'number-to-text',
+      7,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'number-to-text',
+      'current-text',
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'numeric value replaced by a textual value',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackValuePredicate(oldRecord.value),
+        currentPredicate: feedbackValuePredicate(currentRecord.value),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-text-to-number',
+      'feedback-replacement-a',
+      'rating',
+      'text-to-number',
+      'old-text',
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'text-to-number',
+      8,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'textual value replaced by a numeric value',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackValuePredicate(oldRecord.value),
+        currentPredicate: feedbackValuePredicate(currentRecord.value),
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-comment',
+      'feedback-replacement-a',
+      'rating',
+      'comment-transition',
+      1,
+      { comment: 'old comment', timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'comment-transition',
+      2,
+      { comment: null, timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'present comment replaced by a missing comment',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: { op: 'exists', path: 'comment' },
+        currentPredicate: { op: 'notExists', path: 'comment' },
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-moved-trace',
+      'feedback-replacement-a',
+      'rating',
+      'old-moved-trace',
+      1,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-b',
+      'rating',
+      'current-moved-trace',
+      2,
+      { timestamp: '2026-08-10T03:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'feedback moved from trace A to trace B outside the selected root range',
+      roots: [
+        feedbackReplacementRoot('feedback-replacement-a', '2026-08-10T00:00:00.000Z'),
+        feedbackReplacementRoot('feedback-replacement-b', '2026-07-10T00:00:00.000Z'),
+      ],
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+        currentTraceId: 'feedback-replacement-b',
+        currentTimeRange: feedbackReplacementWideRange,
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(
+      1,
+      'feedback-replacement-trace-to-null',
+      'feedback-replacement-a',
+      'rating',
+      'old-trace-to-null',
+      1,
+      { timestamp: '2026-08-10T01:00:00.000Z' },
+    );
+    const currentRecord = feedbackRecord(2, oldRecord.feedbackId, null, 'rating', 'current-trace-to-null', 2, {
+      timestamp: '2026-08-10T02:00:00.000Z',
+    });
+    return feedbackReplacementScenario({
+      name: 'feedback moved from trace A to a null trace',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+        currentIsCorrelated: false,
+      }),
+    });
+  })(),
+  (() => {
+    const oldRecord = feedbackRecord(1, 'feedback-replacement-null-to-trace', null, 'rating', 'old-null-to-trace', 1, {
+      timestamp: '2026-08-10T01:00:00.000Z',
+    });
+    const currentRecord = feedbackRecord(
+      2,
+      oldRecord.feedbackId,
+      'feedback-replacement-a',
+      'rating',
+      'current-null-to-trace',
+      2,
+      { timestamp: '2026-08-10T02:00:00.000Z' },
+    );
+    return feedbackReplacementScenario({
+      name: 'feedback moved from a null trace to trace A',
+      writes: sequentialFeedbackWrites(oldRecord, currentRecord),
+      assertions: feedbackReplacementAssertions({
+        oldPredicate: feedbackSourcePredicate(oldRecord.feedbackSource),
+        currentPredicate: feedbackSourcePredicate(currentRecord.feedbackSource),
+      }),
+    });
+  })(),
+];
 
 export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -309,6 +827,41 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       scoreSource: 'automated',
     }),
   ],
+  feedback: [
+    feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'superseded-patient', -1, {
+      timestamp: '2026-07-14T10:00:00.000Z',
+      feedbackUserId: 'patient-1',
+      sourceId: 'survey-result-1',
+      comment: 'Needs improvement',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    feedbackRecord(2, 'feedback-a-rating', 'trace-a', 'rating', 'patient', -1, {
+      timestamp: '2026-07-15T10:00:00.000Z',
+      feedbackUserId: 'patient-1',
+      sourceId: 'survey-result-1',
+      comment: 'Needs improvement',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    feedbackRecord(3, 'feedback-a-correction', 'trace-a', 'clinician-correction', 'clinician', 'Use 20 mg', {
+      timestamp: '2026-08-12T10:00:00.000Z',
+      feedbackUserId: 'clinician-1',
+    }),
+    feedbackRecord(4, 'feedback-b-review-type', 'trace-b', 'clinical-review', 'patient', 'reviewed'),
+    feedbackRecord(5, 'feedback-b-review-source', 'trace-b', 'rating', 'clinician', 3, {
+      timestamp: '2026-08-20T10:00:00.000Z',
+      sourceId: 'app-result-1',
+    }),
+    feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
+    feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
+      comment: 'Reviewed',
+    }),
+    feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
+    feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
+  ],
 };
 
 const tiedStartedAt = '2026-08-20T10:00:00.000Z';
@@ -323,6 +876,7 @@ export const TRACE_QUERY_ORDINAL_FIXTURE_DATA: TraceQueryFixtureData = {
     span(204, 'Ω', 'root-omega', { threadId: 'Ω', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
   ],
   scores: [],
+  feedback: [],
 };
 
 export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -359,6 +913,7 @@ export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
     scoreRecord(100, 'score-tied', 'trace-tied', 'factuality', 0.9, { timestamp: tiedScoreTimestamp }),
     scoreRecord(101, 'score-tied', 'trace-tied', 'factuality', 0.2, { timestamp: tiedScoreTimestamp }),
   ],
+  feedback: [],
 };
 
 const fullRange = {
@@ -370,6 +925,7 @@ export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
   expected: Array<{ traceId: string } | { threadId: string }>;
+  requiresStrictFeedbackValueTypes?: boolean;
 }
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
@@ -898,6 +1454,200 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-d' }],
   },
   {
+    name: 'matches negative numeric patient feedback outside the root time range',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches clinician correction feedback',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinician-correction' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'anti-matches clinician review with same-record binding and includes traces without feedback',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          none: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches feedback with comments',
+    request: { timeRange: fullRange, where: { feedback: { some: { op: 'exists', path: 'comment' } } } },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches feedback without comments',
+    request: { timeRange: fullRange, where: { feedback: { some: { op: 'notExists', path: 'comment' } } } },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches application-defined feedback sources in an independent feedback time range',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+              { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-08-15T00:00:00Z' } },
+              { op: 'lt', left: { path: 'timestamp' }, right: { literal: '2026-09-01T00:00:00Z' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'uses only the latest feedback record when its timestamp changes',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'eq',
+            left: { path: 'feedbackSource' },
+            right: { literal: 'superseded-patient' },
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'applies feedback none to only the latest record when its timestamp changes',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          none: {
+            op: 'eq',
+            left: { path: 'feedbackSource' },
+            right: { literal: 'superseded-patient' },
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'preserves string feedback values without numeric coercion',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'eq', left: { path: 'value' }, right: { literal: '3' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not coerce textual feedback values to numbers',
+    requiresStrictFeedbackValueTypes: true,
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'eq', left: { path: 'value' }, right: { literal: 3 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'treats textual feedback as unequal to a numeric literal',
+    requiresStrictFeedbackValueTypes: true,
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'ne', left: { path: 'value' }, right: { literal: 3 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches feedback lineage, user, and source fields',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackUserId' }, right: { literal: 'patient-1' } },
+              { op: 'eq', left: { path: 'sourceId' }, right: { literal: 'survey-result-1' } },
+              { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+              { op: 'eq', left: { path: 'parentEntityVersionId' }, right: { literal: 'parent-v2' } },
+              { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'root-v1' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
     name: 'returns distinct non-null thread groups',
     request: { timeRange: fullRange, group: { by: ['threadId'] } },
     expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
@@ -907,10 +1657,11 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
 export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
   const spans = currentSpans(data.spans);
   const scores = currentScores(data.scores);
+  const feedback = currentFeedback(data.feedback);
   const roots = currentRoots(data.spans)
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores));
+    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -1007,14 +1758,25 @@ function currentScores(scores: RawTraceQueryScore[]): RawTraceQueryScore[] {
   return [...records.values()];
 }
 
+function currentFeedback(feedback: RawTraceQueryFeedback[]): RawTraceQueryFeedback[] {
+  const records = new Map<string, RawTraceQueryFeedback>();
+  for (const candidate of feedback) {
+    const current = records.get(candidate.feedbackId);
+    if (!current || candidate.cursorId > current.cursorId) records.set(candidate.feedbackId, candidate);
+  }
+  return [...records.values()];
+}
+
 function evaluateTracePredicate(
   predicate: TrustedTraceQueryPredicate,
   root: RawTraceQuerySpan,
   spans: RawTraceQuerySpan[],
   scores: RawTraceQueryScore[],
+  feedback: RawTraceQueryFeedback[],
 ): boolean {
   if (predicate.type === 'relation') {
-    const records = (predicate.collection === 'spans' ? spans : scores).filter(
+    const collection = predicate.collection === 'spans' ? spans : predicate.collection === 'scores' ? scores : feedback;
+    const records = collection.filter(
       record => root.traceId !== null && record.traceId !== null && record.traceId === root.traceId,
     );
     const matched = records.some(record =>
@@ -1027,16 +1789,16 @@ function evaluateTracePredicate(
   }
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
-      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores))
-      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores));
+      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores, feedback))
+      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores, feedback));
   }
-  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores);
+  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores, feedback);
   return evaluateScalarPredicate(predicate, traceValues(root));
 }
 
 function evaluateScalarPredicate(
   predicate: TrustedTraceQueryScalarPredicate,
-  record: RawTraceQuerySpan | RawTraceQueryScore | Record<string, unknown>,
+  record: RawTraceQuerySpan | RawTraceQueryScore | RawTraceQueryFeedback | Record<string, unknown>,
 ): boolean {
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
@@ -1053,6 +1815,7 @@ function evaluateScalarPredicate(
     return predicate.operator === 'in' ? included : !included;
   }
   if (missing) return predicate.operator === 'ne';
+  if (typeof value !== typeof predicate.value) return predicate.operator === 'ne';
   switch (predicate.operator) {
     case 'eq':
       return value === predicate.value;

@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.17-alpha.3
+
+### Patch Changes
+
+- Improved the README with direct CLI installation commands and platform setup guidance. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+- Updated dependencies:
+  - mastra@1.28.1-alpha.3
+
 ## 0.1.17-alpha.2
 
 ### Patch Changes

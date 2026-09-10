@@ -184,6 +184,139 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('should extract a trajectory from live agent output for trajectory scorers', async () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-1',
+              toolName: 'weatherTool',
+              args: { city: 'London' },
+              result: { temperature: 18 },
+            },
+          ],
+          parts: [],
+        },
+      },
+    ];
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'trajectory-scorer' },
+      input: [{ role: 'user', content: 'What is the weather?' }],
+      output,
+      source: 'LIVE' as const,
+      entity: { id: 'test-agent' },
+      entityType: 'AGENT' as const,
+    };
+    const mockScorer = {
+      id: 'trajectory-scorer',
+      name: 'Trajectory scorer',
+      type: 'trajectory',
+      run: vi.fn(({ output: trajectory }) => {
+        if (!trajectory.steps) throw new Error('Expected trajectory output');
+        return Promise.resolve({ score: trajectory.steps.length === 1 ? 1 : 0 });
+      }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ trajectory: { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: {
+          steps: [
+            {
+              stepType: 'tool_call',
+              name: 'weatherTool',
+              toolArgs: { city: 'London' },
+              toolResult: { temperature: 18 },
+              success: true,
+            },
+          ],
+          rawOutput: output,
+        },
+      }),
+    );
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['agent', undefined])('should preserve live agent output for scorer type %s', async type => {
+    const output = [{ role: 'assistant', content: { content: 'Done' } }];
+    const mockScorer = {
+      id: 'message-scorer',
+      name: 'Message scorer',
+      type,
+      run: vi.fn().mockResolvedValue({ score: 1 }),
+    };
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output,
+      source: 'LIVE',
+      entity: { id: 'test-agent' },
+      entityType: 'AGENT',
+    });
+
+    expect(mockScorer.run.mock.calls[0][0].output).toBe(output);
+  });
+
+  it('should preserve an existing trajectory for live agent scoring', async () => {
+    const output = { steps: [{ stepType: 'tool_call', name: 'weatherTool', success: true }] };
+    const mockScorer = {
+      id: 'trajectory-scorer',
+      name: 'Trajectory scorer',
+      type: 'trajectory',
+      run: vi.fn().mockResolvedValue({ score: 1 }),
+    };
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output,
+      source: 'LIVE',
+      entity: { id: 'test-agent' },
+      entityType: 'AGENT',
+    });
+
+    expect(mockScorer.run.mock.calls[0][0].output).toBe(output);
+  });
+
+  it('should preserve array output for live workflow trajectory scorers', async () => {
+    const output = [{ value: 'step-result' }];
+    const mockScorer = {
+      id: 'trajectory-scorer',
+      name: 'Trajectory scorer',
+      type: 'trajectory',
+      run: vi.fn().mockResolvedValue({ score: 1 }),
+    };
+    mockMastra.getWorkflowById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ trajectory: { scorer: mockScorer } }),
+    });
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output,
+      source: 'LIVE',
+      entity: { id: 'test-workflow' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockScorer.run.mock.calls[0][0].output).toBe(output);
+  });
+
   it('should pass live span correlation context and metadata into scorer.run', async () => {
     const correlationContext = {
       traceId: 'trace-live',
