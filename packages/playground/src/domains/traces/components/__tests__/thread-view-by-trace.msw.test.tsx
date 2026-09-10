@@ -429,7 +429,9 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      // The clamp stays on so the cell never grows past the messages column while the
+      // timeline remeasures after a tab switch; a shorter timeline is unaffected by it.
+      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
     });
 
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
