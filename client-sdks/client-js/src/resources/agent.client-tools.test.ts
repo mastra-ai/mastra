@@ -1,4 +1,5 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import type { ToolsInput } from '@mastra/core/agent';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
@@ -175,7 +176,10 @@ describe('Agent client-side tools', () => {
       inputSchema: z.object({}),
       execute: async () => ({ success: true }),
     });
-    const clientToolsResolver = vi.fn(() => ({ finalizeTool }));
+    // Stateful resolver: offers checkpointTool on the initial request, finalizeTool on the
+    // continuation. The resolver takes precedence over static clientTools at every request.
+    let round = 0;
+    const clientToolsResolver = vi.fn((): ToolsInput => (round++ === 0 ? { checkpointTool } : { finalizeTool }));
 
     const resp = await agent.stream('build', {
       clientTools: { checkpointTool },
@@ -184,11 +188,51 @@ describe('Agent client-side tools', () => {
     await resp.processDataStream({ onChunk: async () => {} });
 
     expect(executeCheckpoint).toHaveBeenCalledTimes(1);
-    expect(clientToolsResolver).toHaveBeenCalledTimes(1);
+    expect(clientToolsResolver).toHaveBeenCalledTimes(2);
     const firstCallBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
     expect(Object.keys(firstCallBody.clientTools)).toEqual(['checkpointTool']);
     expect(Object.keys(secondCallBody.clientTools)).toEqual(['finalizeTool']);
+  });
+
+  it('stream: resolver-only usage declares tools on the initial request and executes them', async () => {
+    // Regression test: with only `clientToolsResolver` (no static `clientTools`), the first
+    // request must still carry the resolved tool declarations — otherwise the model can never
+    // emit a tool call and the resolver is a silent no-op.
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Sunny in NYC' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeWeather = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeWeather,
+    });
+
+    const resp = await agent.stream('weather?', { clientToolsResolver: () => ({ weatherTool }) });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    const firstCallBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(Object.keys(firstCallBody.clientTools)).toEqual(['weatherTool']);
+    expect(firstCallBody).not.toHaveProperty('clientToolsResolver');
+    expect(executeWeather).toHaveBeenCalledTimes(1);
   });
 
   it('stream: preserves tool-call providerMetadata at the part level in the recursive call', async () => {

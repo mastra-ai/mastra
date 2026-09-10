@@ -1145,7 +1145,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
@@ -1241,7 +1241,7 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
@@ -1677,7 +1677,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
     };
 
     // Create a readable stream that will handle the response processing
@@ -2687,7 +2687,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -2809,7 +2809,7 @@ export class Agent extends BaseResource {
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
-      clientTools: processClientTools(params.clientTools),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
       structuredOutput,
     };
 
@@ -3098,7 +3098,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3220,7 +3220,7 @@ export class Agent extends BaseResource {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientTools),
+      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
