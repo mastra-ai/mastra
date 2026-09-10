@@ -245,6 +245,31 @@ function retentionEntryMatches(createQuery: string | undefined, entry: Retention
   return current?.column === entry.column && current.days === entry.days;
 }
 
+async function retentionEntryMatchesEveryClusterHost(
+  client: ClickHouseClient,
+  entry: RetentionEntry,
+  cluster: string,
+): Promise<boolean> {
+  const hostCountResult = await client.query({
+    query: `SELECT count() AS host_count FROM system.clusters WHERE cluster = {cluster:String}`,
+    query_params: { cluster },
+    format: 'JSONEachRow',
+  });
+  const [{ host_count: hostCountValue } = { host_count: 0 }] = (await hostCountResult.json()) as Array<{
+    host_count: number | string;
+  }>;
+  const hostCount = Number(hostCountValue);
+  if (!Number.isInteger(hostCount) || hostCount <= 0) return false;
+
+  const createQueriesResult = await client.query({
+    query: `SELECT name, create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name = {table:String}`,
+    query_params: { cluster, table: entry.table },
+    format: 'JSONEachRow',
+  });
+  const rows = (await createQueriesResult.json()) as Array<{ name: string; create_table_query: string }>;
+  return rows.length === hostCount && rows.every(row => retentionEntryMatches(row.create_table_query, entry));
+}
+
 /**
  * Returns retention entries whose `MODIFY TTL` would actually change the
  * table's TTL. Falls back to running every entry if introspection fails.
@@ -280,10 +305,14 @@ export async function applyClickHouseRetention(args: {
       await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
     } catch (error) {
       try {
-        const createQueries = await readRetentionCreateQueries(args.client, [entry.table]);
-        if (retentionEntryMatches(createQueries.get(entry.table), entry)) {
-          continue;
-        }
+        const cluster = args.replication?.cluster?.trim();
+        const installed = cluster
+          ? await retentionEntryMatchesEveryClusterHost(args.client, entry, cluster)
+          : retentionEntryMatches(
+              (await readRetentionCreateQueries(args.client, [entry.table])).get(entry.table),
+              entry,
+            );
+        if (installed) continue;
       } catch {
         // Preserve the ALTER error when the reconciliation check also fails.
       }
