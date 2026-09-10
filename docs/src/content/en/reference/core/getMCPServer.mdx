@@ -115,7 +115,7 @@ Invalid input, context, output, or control throws before a result is returned. A
 
 `MCPToolExecutionContextV2` contains the trusted application `requestContext`, an optional registered `mastra` instance, observability context, and a separate `request: MCPRequestContextV2`. It doesn't inherit the legacy `context.mcp` API.
 
-The request contains `protocolVersion: '2026-07-28'`, `requestId`, `signal`, optional `metadata`, current-round `inputResponses`, optional `requestState`, and request-scoped `log(level, data, logger?)` and `progress(progress, total?, message?)` functions. Transport implementations supply these fields. Cancellation is checked before execution and before returning the outcome.
+The request contains `protocolVersion: '2026-07-28'`, `requestId`, `signal`, optional `metadata`, current-round `inputResponses`, optional `requestState` (the raw echoed string, or the verified payload when the server configures a verify hook), and request-scoped `log(level, data, logger?)` and `progress(progress, total?, message?)` functions. Transport implementations supply these fields. Cancellation is checked before execution and before returning the outcome.
 
 Input responses replace the previous round's responses, and handlers choose explicit phases without framework replay. Echoed request state is untrusted: verify its integrity before using it for business decisions. Each round requires authorization, and writes need domain-owned idempotency even when state verification succeeds.
 
