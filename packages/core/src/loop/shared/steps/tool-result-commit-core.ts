@@ -114,7 +114,8 @@ export function commitToolResult(deps: {
    * round-trips on recall (denied outcomes carry their own decision). */
   approval?: { id: string; approved: boolean; reason?: string };
   /** Fully-merged metadata for the commit. Engines own the merging: main
-   * layers transform metadata on top (L18b — not plumbed into durable). */
+   * layers transform metadata on top from the live chunk; durable layers it
+   * from the `transformMetadata` carried on the serialized step output (L18b). */
   providerMetadata?: ProviderMetadata;
   fallbackAppend?: boolean;
 }): boolean {

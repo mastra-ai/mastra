@@ -24,6 +24,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
+import type { ToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import type {
   CoreTool,
   MCPToolExecutionContext,
@@ -402,6 +403,16 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
     data?: unknown;
     messageId?: string;
   }>;
+  /**
+   * Chunk-level `mastra.toolPayloadTransform` metadata computed when the
+   * tool-result/tool-error chunk was emitted (L18b). The tool-call step's
+   * messageList is a local copy, so the metadata travels here across the
+   * serialization boundary and is layered into the persisted providerMetadata
+   * by the mapping step — matching the main loop's llm-mapping, which reads it
+   * off the live chunk. Without it, transcript-target transforms would not
+   * apply to the persisted args/result on recall.
+   */
+  transformMetadata?: { mastra?: { toolPayloadTransform?: ToolPayloadTransformMetadata } };
   /** Error if tool execution failed */
   error?: {
     name: string;

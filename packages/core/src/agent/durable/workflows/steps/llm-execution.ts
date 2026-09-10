@@ -1436,11 +1436,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // (including empty spans with providerMetadata carrying
                 // OpenAI itemIds) are required to correctly reconstruct the
                 // assistant message and preserve pairing with subsequent
-                // tool-calls (#19365).
+                // tool-calls (#19365). The payload always comes from the raw
+                // chunk (internal state is never affected by display-layer
+                // transforms), but the metadata comes from the client chunk:
+                // the payload transform is purely additive metadata
+                // (`mastra.toolPayloadTransform`), and buildMessagesFromChunks
+                // layers it into the persisted providerMetadata so transcript
+                // targets apply on recall (L18b). When no transform is
+                // configured the client chunk IS the raw chunk.
                 collectedChunks.push({
                   type: rawChunk.type,
                   payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
-                  metadata: (rawChunk as { metadata?: Record<string, unknown> }).metadata,
+                  metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
                 });
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {

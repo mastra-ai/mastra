@@ -8,6 +8,7 @@ import type { Mastra } from '../../../../mastra';
 import { SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
+import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
@@ -210,6 +211,20 @@ export function createDurableLLMMappingStep() {
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
               },
             });
+          }
+
+          // Layer the tool-payload-transform metadata captured at emission time
+          // on top (L18b). The tool-call step's messageList is a local copy, so
+          // the chunk-level metadata travels on the output record and is merged
+          // into the persisted providerMetadata here — matching the main loop's
+          // llm-mapping, which reads it off the live chunk. Without it,
+          // transcript-target transforms would not apply to the persisted
+          // args/result on recall.
+          if (toolResult.transformMetadata) {
+            providerMetadata = withToolPayloadTransformProviderMetadata(
+              providerMetadata,
+              toolResult.transformMetadata,
+            ) as Record<string, unknown> | undefined;
           }
 
           // A tool error must be recorded as `output-error` with the message in

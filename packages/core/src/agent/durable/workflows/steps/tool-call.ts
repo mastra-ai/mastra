@@ -31,6 +31,7 @@ import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
+  DurableToolCallOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
@@ -1438,6 +1439,7 @@ export function createDurableToolCallStep() {
         // the suspend call and tool.execute() returns undefined. Emitting a
         // tool-result with undefined would produce a spurious entry that
         // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
+        let transformMetadata: DurableToolCallOutput['transformMetadata'];
         if (pubsub && !wasSuspended) {
           try {
             const resultChunk = await applyToolPayloadTransformToChunk(
@@ -1453,6 +1455,11 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
+            // Capture the transform metadata for the step output (L18b) —
+            // this step's messageList is a local copy, so llm-mapping layers
+            // it into the persisted providerMetadata from the output record.
+            transformMetadata = (resultChunk as { metadata?: Record<string, any> })
+              .metadata as DurableToolCallOutput['transformMetadata'];
             // Runs through output processors (tripwire/blocking/redaction) and emits
             await processChunkThroughOutputProcessors(
               resultChunk,
@@ -1477,6 +1484,7 @@ export function createDurableToolCallStep() {
           modelOutputComputed,
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
+          ...(transformMetadata ? { transformMetadata } : {}),
         };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them —
@@ -1489,6 +1497,7 @@ export function createDurableToolCallStep() {
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
+        let errorTransformMetadata: DurableToolCallOutput['transformMetadata'];
         if (pubsub && !wasSuspended) {
           try {
             const errorChunk = await applyToolPayloadTransformToChunk(
@@ -1504,6 +1513,10 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
+            // Capture the transform metadata for the step output (L18b) — see
+            // the tool-result path above.
+            errorTransformMetadata = (errorChunk as { metadata?: Record<string, any> })
+              .metadata as DurableToolCallOutput['transformMetadata'];
             // Runs through output processors (tripwire/blocking/redaction) and emits
             await processChunkThroughOutputProcessors(
               errorChunk,
@@ -1526,6 +1539,7 @@ export function createDurableToolCallStep() {
           error: toolError,
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
+          ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
         };
       }
     },
