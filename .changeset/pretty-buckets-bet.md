@@ -14,8 +14,7 @@ Added client SDK support for streaming agents from custom endpoints with client-
 // Stream an agent from a custom endpoint, resolving client tools at call time
 const agent = client.getAgent('my-agent', undefined, { stream: '/custom/stream' });
 
-await agent.stream({
-  messages: [{ role: 'user', content: 'Hello' }],
+await agent.stream('Hello', {
   clientToolsResolver: () => getMyCurrentTools(),
 });
 ```
