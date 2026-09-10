@@ -10,6 +10,26 @@ const invocation = (fields: Partial<ToolInvocationPart['toolInvocation']>): Tool
   }) as never;
 
 describe('readToolPart', () => {
+  describe('when a legacy result carries protocol error metadata', () => {
+    it.each([
+      { isError: true, state: 'output-error' },
+      { isError: false, state: 'result' },
+      { isError: undefined, state: 'result' },
+    ])('uses the explicit $isError flag rather than interpreting result fields', ({ isError, state }) => {
+      const part = invocation({ state: 'result', args: {}, result: { success: false, isError: true } });
+      const marked = { ...part, toolInvocation: { ...part.toolInvocation, isError } };
+      expect(readToolPart(marked)).toMatchObject({ state, output: { success: false, isError: true } });
+    });
+  });
+
+  describe('when a legacy call has not produced a result', () => {
+    it('does not promote an error marker to a terminal outcome', () => {
+      const part = invocation({ state: 'call', args: {} });
+      const marked = { ...part, toolInvocation: { ...part.toolInvocation, isError: true } };
+      expect(readToolPart(marked).state).toBe('call');
+    });
+  });
+
   it('reads a persisted v4 invocation as input and output', () => {
     expect(readToolPart(invocation({ state: 'result', args: { path: 'a.ts' }, result: { ok: true } }))).toEqual({
       toolName: 'view',

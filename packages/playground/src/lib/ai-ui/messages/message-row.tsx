@@ -3,6 +3,7 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -15,7 +16,7 @@ import { useChatRunning } from '../chat/chat-context';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
-import { badgeStatus } from '../tools/tool-card-kind';
+import { badgeStatus, isSettledState } from '../tools/tool-card-kind';
 import type { ToolCardContext } from '../tools/tool-card-kind';
 import { collectToolGroups } from '../tools/tool-groups';
 import { DatasetSaveAction } from './dataset-save-action';
@@ -258,17 +259,29 @@ export const MessageRow = memo(function MessageRow({
                   toolName: member.toolName,
                   args: member.input,
                   status: badgeStatus(member.state, isRunning),
+                  hasResult: isSettledState(member.state),
                 }))}
               >
-                {members.map(member => (
-                  <ToolCard
-                    key={member.toolCallId}
-                    {...member}
-                    metadata={metadata}
-                    dataParts={dataParts}
-                    readOnly={readOnly}
-                  />
-                ))}
+                {members.map(member => {
+                  const incomplete = !isRunning && !isSettledState(member.state) && member.state !== 'output-error';
+                  return (
+                    <div
+                      key={member.toolCallId}
+                      role="group"
+                      aria-label={member.toolName}
+                      className="flex items-start gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <ToolCard {...member} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
+                      </div>
+                      {incomplete && (
+                        <Txt as="span" variant="ui-xs" className="mt-1 shrink-0">
+                          Incomplete
+                        </Txt>
+                      )}
+                    </div>
+                  );
+                })}
               </ToolCallGroup>
             </Arriving>
           </>
