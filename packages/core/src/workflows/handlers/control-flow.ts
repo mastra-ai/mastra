@@ -69,11 +69,13 @@ export function getControlFlowIdentityAttributes(entry: {
   metadata?: Record<string, any>;
 }): Record<string, any> {
   const attributes: Record<string, any> = {};
-  if (typeof entry.id === 'string' && entry.id.trim()) {
-    attributes.entryId = entry.id;
+  const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+  if (id) {
+    attributes.entryId = id;
   }
-  if (typeof entry.description === 'string' && entry.description.trim()) {
-    attributes.entryDescription = entry.description;
+  const description = typeof entry.description === 'string' ? entry.description.trim() : '';
+  if (description) {
+    attributes.entryDescription = description;
   }
   if (entry.metadata && typeof entry.metadata === 'object') {
     attributes.entryMetadata = entry.metadata;
