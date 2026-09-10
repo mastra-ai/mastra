@@ -256,29 +256,65 @@ describe('hydrateSessionMemorySettings', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
   });
 
-  it('seeds the org on a tagged session that never went through the coordinator', async () => {
-    // A web chat session persists `factoryProjectId` from its browser seed, so on
-    // resume it carries the tag with no org. Skipping on the tag alone would leave
-    // it mis-scoped forever. Settings still belong to the coordinator.
+  it('applies project-scoped settings to a tagged web session that never went through the coordinator', async () => {
     const session = createSession({ factoryProjectId: 'project-1' });
-    const dependencies = createDependencies();
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ factoryOrgId: 'org-1' });
-    expect(dependencies.memorySettings.get).not.toHaveBeenCalled();
-    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
   });
 
-  it('skips fully hydrated factory-run sessions, which the start coordinator owns', async () => {
-    const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: 'org-1' });
-    const dependencies = createDependencies();
+  it('repairs a tagged web session whose org was previously seeded without project settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'openai/gpt-5.4-mini', reflector: 'openai/gpt-5.4-mini' },
+    );
+    const dependencies = createDependencies({
+      settings: memorySettingsRow({
+        userId: 'factory-project:project-1',
+        observerModelId: 'openai/gpt-5.6-sol',
+        reflectorModelId: 'openai/gpt-5.6-sol',
+      }),
+    });
 
     await hydrateSessionMemorySettings(session, dependencies);
 
-    expect(dependencies.sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
-    expect(session.state.set).not.toHaveBeenCalled();
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
+    expect(session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+    expect(session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({ modelId: 'openai/gpt-5.6-sol' });
+  });
+
+  it('preserves a coordinator-hydrated provider fallback when the project has no stored settings', async () => {
+    const session = createSession(
+      { factoryProjectId: 'project-1', factoryOrgId: 'org-1' },
+      { observer: 'anthropic/claude-haiku-4-5', reflector: 'anthropic/claude-haiku-4-5' },
+    );
+    const dependencies = createDependencies({ settings: null });
+
+    await hydrateSessionMemorySettings(session, dependencies);
+
+    expect(dependencies.memorySettings.get).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      userId: 'factory-project:project-1',
+    });
     expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
   it('skips sessions without a source-control row', async () => {
