@@ -227,9 +227,13 @@ function gitlabMergeRequestUpdated(context: FactoryGitlabRuleContext) {
   if (context.mergeRequest.merged || context.mergeRequest.state !== 'open') return;
   // A title edit or label change is not new code to review.
   if (!context.mergeRequest.headChanged) return;
-  // A card that already finished its pass re-enters Review through the board's
-  // `updated` outcome, which routes it to the re-review skill.
-  if (!context.item.stages.some(stage => stage === 'done')) return;
+  // A push to a card whose pass has not started is just more of the code the
+  // first pass will read. A card mid-pass is different: the push invalidates
+  // whatever that pass is reading, so the stage has to be re-entered to
+  // supersede it. A card that finished its pass re-enters Review through the
+  // board's `updated` outcome, which routes it to the re-review skill.
+  const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
+  if (!alreadyReviewing && !context.item.stages.some(stage => stage === 'done')) return;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:merge-request-updated`,
@@ -238,6 +242,10 @@ function gitlabMergeRequestUpdated(context: FactoryGitlabRuleContext) {
     message: {
       text: `Merge request ${context.project.pathWithNamespace}!${context.mergeRequest.iid} was updated after review; re-reviewing.`,
     },
+    // Re-entry is the point when the card is already Reviewing: without it a
+    // same-stage transition is inert (resolve.ts resolves it to zero rules), so
+    // the entry rule never fires and the stale pass is never canceled.
+    ...(alreadyReviewing ? { reenter: true } : {}),
   } as const;
 }
 

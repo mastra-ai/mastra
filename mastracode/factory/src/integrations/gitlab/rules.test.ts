@@ -630,6 +630,75 @@ describe('merge requests on the review board', () => {
     expect((await h.cards())[0]?.stages).toEqual(['review']);
   });
 
+  it('supersedes the pass in flight when a push lands on a card still in Review', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    // A card mid-pass, as if the review started on the previous head is running.
+    await h.workItems.upsert({
+      orgId: ORG,
+      userId: 'user_1',
+      factoryProjectId: h.project.id,
+      input: {
+        externalSource: {
+          integrationId: 'gitlab',
+          type: 'merge-request',
+          externalId: '42!12',
+          url: 'https://gitlab.com/acme/widgets/-/merge_requests/12',
+        },
+        title: 'acme/widgets!12: Add the widget',
+        stages: ['review'],
+        sessions: {},
+        metadata: { iid: 12, headBranch: 'feat/widget', baseBranch: 'main', authorTrusted: true },
+      },
+    });
+
+    // The push invalidates whatever the running pass is reading, so it has to
+    // start over on the new head. Re-entering the stage is how that pass gets
+    // cancelled; dropping the push would strand the review on stale code.
+    await expect(
+      h.deliver(mrDelivery({ action: 'update', oldrev: 'abc123', updated_at: '2026-02-04T00:00:00Z' })),
+    ).resolves.toEqual({ status: 'committed' });
+
+    expect((await h.cards())[0]?.stages).toEqual(['review']);
+    const decisions = await h.workItems.listDeferredDecisions(ORG, h.project.id);
+    const transitions = decisions.filter(entry => entry.decision.type === 'transition');
+    // Without the re-entry flag a same-stage transition is inert and the
+    // in-flight pass is never superseded.
+    expect(transitions.at(-1)!.decision).toMatchObject({ board: 'review', stage: 'review', reenter: true });
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations.at(-1)!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-review',
+      role: 'review',
+      cancelInFlight: true,
+    });
+  });
+
+  it('still re-enters Review from a done card on a push, without superseding anything', async () => {
+    const h = await harness();
+    await h.bind('42', {});
+    await h.deliver(mrDelivery());
+    await h.deliver(mrDelivery({ action: 'merge', state: 'merged' }));
+    expect((await h.cards())[0]?.stages).toEqual(['done']);
+
+    await h.deliver(mrDelivery({ action: 'update', oldrev: 'abc123', updated_at: '2026-02-05T00:00:00Z' }));
+    expect((await h.cards())[0]?.stages).toEqual(['review']);
+
+    const decisions = await h.workItems.listDeferredDecisions(ORG, h.project.id);
+    const transitions = decisions.filter(entry => entry.decision.type === 'transition');
+    // From `done` the transition is a real stage move, so the re-entry flag is
+    // unnecessary; the review entry rule dispatches a re-review of the new head.
+    expect(transitions.at(-1)!.decision).toMatchObject({ board: 'review', stage: 'review' });
+    expect(transitions.at(-1)!.decision).not.toHaveProperty('reenter');
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations.at(-1)!.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-rereview',
+      role: 'review',
+    });
+    expect(invocations.at(-1)!.decision).not.toHaveProperty('cancelInFlight');
+  });
+
   it('leaves a merged card alone on a redelivery of the same merge', async () => {
     const h = await harness();
     await h.bind('42', {});
