@@ -84,13 +84,6 @@ interface LoadedThreadViewByTraceProps {
   setEndOfListElement: (node: HTMLDivElement | null) => void;
 }
 
-// The anchor row starts expanded so the reader lands on the trace they came from. A lone trace also
-// starts expanded: with nothing else on the page to stay proportional with, clamping only hides spans.
-function initiallyExpandedTraceIds(traces: LightSpanRecord[], anchorTraceId: string | null): string[] {
-  if (anchorTraceId) return [anchorTraceId];
-  return traces.length === 1 ? [traces[0].traceId] : [];
-}
-
 /** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
 function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
@@ -122,7 +115,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
   // Rows whose timeline is shown in full rather than clamped to the messages column. Selecting a
   // span expands its row and it stays expanded until the reader collapses it with "Show less".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(
-    () => new Set(initiallyExpandedTraceIds(traces, anchorTraceId)),
+    () => new Set(anchorTraceId ? [anchorTraceId] : []),
   );
 
   const setTraceExpanded = (traceId: string, expanded: boolean) => {
