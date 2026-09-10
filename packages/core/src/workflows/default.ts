@@ -324,6 +324,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       input?: unknown;
       entityType?: string;
       entityId?: string;
+      attributes?: Record<string, unknown>;
       tracingPolicy?: TracingPolicy;
       requestContext?: RequestContext;
     };
