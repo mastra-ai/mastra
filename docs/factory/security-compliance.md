@@ -25,9 +25,13 @@ Several business rules exist specifically to prevent an untrusted or unreviewed 
 
 `audit_events` (`storage/domains/audit/base.ts`) is append-only — no update/delete API — and is the local source of truth even when an optional WorkOS Audit Logs export mirror is unavailable. Agent-driven actions are distinguished (`actor_type = 'agent'`, `actor_id = 'agent:<threadId>'`) and always chain back to the human who started the run via `metadata.startedBy`, so "an agent did X" is never dead-ended — it traces to the person whose message triggered it. Rule evaluations separately carry a `causalChain` (capped at `MAX_FACTORY_RULE_CAUSAL_DEPTH`) tracing a decision back through the ingress events that produced it, and are idempotent per `ingress` identity so a replayed webhook delivery cannot double-record or double-act.
 
-## GitHub/Linear integration credential handling
+## Integration credential handling (GitHub/GitLab/Linear)
 
 Per `integrations/base.ts`'s design: integration credentials are read once by the host's deploy entry and passed explicitly into the integration's constructor — no system code, factory or otherwise, reads an integration's env vars or imports its free functions. This keeps a credential's blast radius to the one construction site and makes an absent integration a safe no-op rather than a code path that might read a stale or wrong env value.
+
+`GitLabIntegration` additionally **requires** a non-empty `webhookSecret` and throws at construction without one. Its webhook route is always mounted and moves cards, and — unlike a session-authenticated route — has no other caller authentication, so the shared secret compared against the `X-Gitlab-Token` header is the only thing standing between an unauthenticated request and a board transition. Failing at construction keeps that from degrading into an open, card-moving endpoint at runtime.
+
+GitLab intake is also gated differently from GitHub on author trust: GitLab's webhook payload carries no write-access signal and its connection is org-wide rather than scoped to the acting user, so no code stamps `authorTrusted` for GitLab. Every non-Factory GitLab card therefore stays externally-authored (fails closed) rather than being waved through — see `business-rules.md` rules 3–4.
 
 ## Provenance, not access control
 

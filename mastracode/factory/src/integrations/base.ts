@@ -103,8 +103,9 @@ export interface IntegrationContext {
     generic: IntegrationStorageHandle;
     sourceControl: SourceControlStorageHandle;
     /**
-     * The factory's source-control-owning integration's storage handle
-     * (today: GitHub when registered; the handle carries its own
+     * The factory's source-control-owning integration's storage handle —
+     * whichever registered integration `sourceControlOwner()` resolves to
+     * (GitHub keeps precedence over GitLab; the handle carries its own
      * `integrationId`). Channel integrations use it to make sessions
      * repo-backed without the entry hand-wiring a source-control slice.
      * Absent when no source-control owner is registered.

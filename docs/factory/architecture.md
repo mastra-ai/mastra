@@ -19,7 +19,7 @@ mastracode/sdk                 →  @mastra/code-sdk: agent-controller mount sha
 |---|---|
 | `boards/` | Board definitions (`define-board.ts`, `work.ts`, `review.ts`), registry, transition policy, phase semantics |
 | `rules/` | Dispatcher (poll/lease/run agents), transition service, tool-result rules, validation, causal-chain types (`types.ts`) |
-| `integrations/` | `FactoryIntegration` contract (`base.ts`) + GitHub, Linear, Slack, WorkOS, Platform-flavored implementations |
+| `integrations/` | `FactoryIntegration` contract (`base.ts`) + GitHub, GitLab, Linear, Slack, WorkOS, Platform-flavored implementations |
 | `storage/domains/` | One storage class per bounded concern: `work-items`, `projects`, `documents`, `audit`, `intake`, `comments`, `channel-identity`, `credentials`, `custom-providers`, `filesystem`, `memory-settings`, `model-packs`, `queue-health`, `source-control` |
 | `routes/` | HTTP contracts (`contracts.ts`) and route assembly (`surface.ts`, `projects.ts`, `tenant-credentials.ts`, `custom-provider-source.ts`) |
 | `capabilities/` | Provider-neutral interfaces integrations implement: `intake.ts` (issues/comments), `version-control.ts` (PRs/reviews), `connection.ts` |
@@ -46,7 +46,7 @@ Work and Review are built-in boards installed by default; `createBoardRegistry()
 
 ## Integrations
 
-`integrations/base.ts` defines `FactoryIntegration` as the shared contract: a deploy entry constructs concrete instances (GitHub, Linear, Slack, WorkOS, or third-party) with explicit credentials and passes them via `MastraFactoryConfig.integrations`. The factory hands each instance an `IntegrationContext` — auth, sandbox config, scoped storage handles (`generic`, `sourceControl`, `projects`, `memorySettings`, `intake`, `channelIdentity`), and once work items are ready, a `runtime` slice (`configVersion`, `workItems`, `boards`) so integrations can read phase semantics instead of pattern-matching board names. An absent integration means its routes never mount and its tools never register — the server still boots. Two capability interfaces (`capabilities/intake.ts`, `capabilities/version-control.ts`) let an integration declare what it can do (list issues, create PR reviews, etc.) without the core depending on any specific provider's SDK.
+`integrations/base.ts` defines `FactoryIntegration` as the shared contract: a deploy entry constructs concrete instances (GitHub, GitLab, Linear, Slack, WorkOS, or third-party) with explicit credentials and passes them via `MastraFactoryConfig.integrations`. The factory hands each instance an `IntegrationContext` — auth, sandbox config, scoped storage handles (`generic`, `sourceControl`, `projects`, `memorySettings`, `intake`, `channelIdentity`), and once work items are ready, a `runtime` slice (`configVersion`, `workItems`, `boards`) so integrations can read phase semantics instead of pattern-matching board names. An absent integration means its routes never mount and its tools never register — the server still boots. Two capability interfaces (`capabilities/intake.ts`, `capabilities/version-control.ts`) let an integration declare what it can do (list issues, create PR reviews, etc.) without the core depending on any specific provider's SDK. GitHub and GitLab both implement the pair — GitLab maps merge requests onto the same `VersionControl` shape, so boards address `gitlab-mr` cards through provider-neutral rules rather than GitLab-specific branches.
 
 ## Documents subsystem
 
