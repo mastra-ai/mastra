@@ -1,45 +1,44 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { CSSProperties, MutableRefObject, ReactNode, Ref } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
+import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CollapsiblePanel } from './collapsible-panel';
 
-const panelMocks = vi.hoisted(() => ({
-  expand: vi.fn(),
-}));
+const panelMocks = vi.hoisted(() => {
+  const state = { size: 300, collapsed: false };
+  return {
+    state,
+    handle: {
+      expand: vi.fn(),
+      collapse: vi.fn(),
+      resize: vi.fn(),
+      getSize: vi.fn(() => ({ inPixels: state.size, asPercentage: 0 })),
+      isCollapsed: vi.fn(() => state.collapsed),
+    },
+  };
+});
 
 type MockPanelSize = { inPixels: number };
 
 vi.mock('react-resizable-panels', () => ({
-  usePanelRef: () => ({ current: { expand: panelMocks.expand } }),
+  usePanelRef: () => ({ current: panelMocks.handle }),
   Panel: ({
     children,
     className,
     collapsedSize,
-    elementRef,
     onResize,
     style,
   }: {
     children: ReactNode;
     className?: string;
     collapsedSize?: number;
-    elementRef?: Ref<HTMLDivElement>;
     onResize?: (size: MockPanelSize, id: string | number | undefined, previousSize: MockPanelSize | undefined) => void;
     style?: CSSProperties;
   }) => {
-    const assignRef = (node: HTMLDivElement | null) => {
-      if (!elementRef) return;
-      if (typeof elementRef === 'function') {
-        elementRef(node);
-        return;
-      }
-
-      (elementRef as MutableRefObject<HTMLDivElement | null>).current = node;
-    };
-
     return (
-      <section data-panel data-testid="panel" ref={assignRef} className={className} style={style}>
+      <section data-panel data-testid="panel" className={className} style={style}>
         <button
           type="button"
           data-testid="resize-collapsed"
@@ -50,56 +49,31 @@ vi.mock('react-resizable-panels', () => ({
           data-testid="resize-open"
           onClick={() => onResize?.({ inPixels: 320 }, undefined, { inPixels: collapsedSize ?? 0 })}
         />
+        <button
+          type="button"
+          data-testid="resize-shrinking"
+          onClick={() => onResize?.({ inPixels: 290 }, undefined, { inPixels: 320 })}
+        />
         {children}
       </section>
     );
   },
 }));
 
-const mockRect = (element: HTMLElement, rect: Partial<DOMRect>) => {
-  element.getBoundingClientRect = vi.fn(
-    () =>
-      ({
-        bottom: 100,
-        height: 100,
-        left: 0,
-        right: 16,
-        top: 0,
-        width: 16,
-        x: 0,
-        y: 0,
-        toJSON: () => {},
-        ...rect,
-      }) as DOMRect,
-  );
-};
-
-// jsdom has no PointerEvent constructor; the production handlers only read
-// MouseEvent fields, so a MouseEvent with a pointer event type is sufficient.
-const pointerEvent = (type: string, init: MouseEventInit) => new MouseEvent(type, { bubbles: true, ...init });
-
 const renderPanel = (direction: 'left' | 'right' = 'left') =>
   render(
-    <div>
-      {direction === 'right' && <div data-separator data-testid="separator" />}
-      <CollapsiblePanel collapsedSize={0} direction={direction} minSize={280}>
-        <div data-testid="panel-content">Panel content</div>
-      </CollapsiblePanel>
-      {direction === 'left' && <div data-separator data-testid="separator" />}
-    </div>,
+    <CollapsiblePanel collapsedSize={0} direction={direction} minSize={280}>
+      <div data-testid="panel-content">Panel content</div>
+    </CollapsiblePanel>,
   );
 
 describe('CollapsiblePanel', () => {
   beforeEach(() => {
-    panelMocks.expand.mockReset();
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: vi.fn((callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
-      }),
-    });
+    panelMocks.state.size = 300;
+    panelMocks.state.collapsed = false;
+    panelMocks.handle.expand.mockClear();
+    panelMocks.handle.collapse.mockClear();
+    panelMocks.handle.resize.mockClear();
   });
 
   afterEach(() => {
@@ -108,12 +82,11 @@ describe('CollapsiblePanel', () => {
   });
 
   it('renders expanded content without collapsed affordances before resize', () => {
-    const { container } = renderPanel();
+    renderPanel();
 
     expect(screen.getByTestId('panel').style.overflow).toBe('hidden');
     expect(screen.getByTestId('panel-content').parentElement?.hasAttribute('hidden')).toBe(false);
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
-    expect(container.querySelector('button[aria-hidden="true"]')).toBeNull();
   });
 
   it('shows collapsed affordances and expands through the panel ref', () => {
@@ -127,169 +100,81 @@ describe('CollapsiblePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    expect(panelMocks.expand).toHaveBeenCalledTimes(1);
+    expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
   });
 
-  it('clamps the expand pill position inside the collapsed strip', () => {
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
+  describe('the panelRef handed to the caller', () => {
+    const renderWithRef = (defaultSize?: number) => {
+      const ref: RefObject<PanelImperativeHandle | null> = { current: null };
+      render(
+        <CollapsiblePanel collapsedSize={0} direction="left" minSize={280} defaultSize={defaultSize} panelRef={ref}>
+          <div data-testid="panel-content">Panel content</div>
+        </CollapsiblePanel>,
+      );
+      return ref;
+    };
 
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    mockRect(strip, { top: 10, height: 100 });
+    it('drives the underlying panel', () => {
+      const ref = renderWithRef();
+      panelMocks.state.size = 310;
 
-    fireEvent(strip, pointerEvent('pointermove', { clientY: 5 }));
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('22px');
+      ref.current?.collapse();
+      ref.current?.expand();
+      ref.current?.resize(400);
 
-    fireEvent(strip, pointerEvent('pointermove', { clientY: 200 }));
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('78px');
-  });
-
-  it('brings the pill to the pointer when it arrives on the strip itself', () => {
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    mockRect(strip, { top: 10, height: 100 });
-
-    // React turns a pointerover into the onPointerEnter the strip listens for.
-    fireEvent(strip, pointerEvent('pointerover', { clientY: 44 }));
-
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('34px');
-  });
-
-  it('mirrors separator hover state onto the collapsed controls', () => {
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    mockRect(strip, { top: 10, height: 100 });
-
-    const separator = screen.getByTestId('separator');
-    const expandButton = screen.getByRole('button', { name: 'Expand panel' });
-    const pill = strip.querySelector('span');
-    if (!(pill instanceof HTMLElement)) throw new Error('expand pill not rendered');
-
-    fireEvent(separator, pointerEvent('pointerenter', { clientY: 44 }));
-
-    expect(expandButton.dataset.edgeHovered).toBe('true');
-    expect(pill.dataset.edgeHovered).toBe('true');
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('34px');
-
-    fireEvent(separator, pointerEvent('pointerleave', {}));
-
-    expect(expandButton.dataset.edgeHovered).toBe('false');
-    expect(pill.dataset.edgeHovered).toBe('false');
-  });
-
-  it('follows the pointer along the separator', () => {
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    mockRect(strip, { top: 10, height: 100 });
-
-    const separator = screen.getByTestId('separator');
-    fireEvent(separator, pointerEvent('pointerenter', { clientY: 44 }));
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('34px');
-
-    fireEvent(separator, pointerEvent('pointermove', { clientY: 70 }));
-
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('60px');
-  });
-
-  it('measures the strip afresh the next time the pointer arrives', () => {
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    const separator = screen.getByTestId('separator');
-
-    mockRect(strip, { top: 10, height: 100 });
-    fireEvent(separator, pointerEvent('pointerenter', { clientY: 44 }));
-    fireEvent(separator, pointerEvent('pointerleave', {}));
-
-    // The panel moved while the pointer was away.
-    mockRect(strip, { top: 0, height: 100 });
-    fireEvent(strip, pointerEvent('pointermove', { clientY: 44 }));
-
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('44px');
-  });
-
-  it('lets the pill appear where the pointer is, then travel with it', () => {
-    const frames: FrameRequestCallback[] = [];
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      configurable: true,
-      writable: true,
-      value: (callback: FrameRequestCallback) => {
-        frames.push(callback);
-        return frames.length;
-      },
+      expect(panelMocks.handle.collapse).toHaveBeenCalledTimes(1);
+      expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
+      expect(panelMocks.handle.resize).toHaveBeenCalledWith(400);
+      expect(ref.current?.getSize().inPixels).toBe(310);
+      expect(ref.current?.isCollapsed()).toBe(false);
     });
 
-    const { container } = renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
+    it('reopens at the exact width the panel had when collapse() was called', () => {
+      const ref = renderWithRef(300);
+      panelMocks.state.size = 280; // user dragged the panel narrower than the default
+      ref.current?.collapse();
+      fireEvent.click(screen.getByTestId('resize-shrinking')); // the collapse animation streams widths
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    const pill = strip.querySelector('span');
-    if (!(pill instanceof HTMLElement)) throw new Error('expand pill not rendered');
-    mockRect(strip, { top: 10, height: 100 });
+      fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    fireEvent(screen.getByTestId('separator'), pointerEvent('pointerenter', { clientY: 44 }));
+      expect(panelMocks.handle.resize).toHaveBeenCalledWith(280);
+      expect(panelMocks.handle.expand).not.toHaveBeenCalled();
+    });
 
-    // It fades in where the pointer already is, rather than sliding over.
-    expect(pill.style.transitionProperty).toBe('opacity, translate');
+    it('keeps the width of the first collapse when collapse() is called again while closed', () => {
+      const ref = renderWithRef(300);
+      panelMocks.state.size = 330;
+      ref.current?.collapse();
+      panelMocks.state.collapsed = true;
+      panelMocks.state.size = 0;
+      ref.current?.collapse();
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-    frames.forEach(frame => frame(0));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    expect(pill.style.transitionProperty).toBe('');
-  });
+      expect(panelMocks.handle.resize).toHaveBeenCalledWith(330);
+    });
 
-  it('lets go of the separator once the panel opens again', () => {
-    renderPanel();
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
+    it('opens at the default size when the panel mounted collapsed (e.g. after a reload)', () => {
+      renderWithRef(300);
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-    const separator = screen.getByTestId('separator');
-    const removeEventListener = vi.spyOn(separator, 'removeEventListener');
+      fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    fireEvent.click(screen.getByTestId('resize-open'));
+      expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+      expect(panelMocks.handle.expand).not.toHaveBeenCalled();
+    });
 
-    const events = removeEventListener.mock.calls.map(([type]) => type);
-    expect(events).toEqual(expect.arrayContaining(['pointerenter', 'pointerleave', 'pointermove']));
-  });
+    it('falls back to the library expand when nothing better is known', () => {
+      renderWithRef();
+      fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-  it('forgets the edge it was watching when the panel changes sides', () => {
-    const panelBetweenSeparators = (direction: 'left' | 'right') => (
-      <div>
-        <div data-separator data-testid="separator-before" />
-        <CollapsiblePanel collapsedSize={0} direction={direction} minSize={280}>
-          <div data-testid="panel-content">Panel content</div>
-        </CollapsiblePanel>
-        <div data-separator data-testid="separator-after" />
-      </div>
-    );
+      fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
-    const { rerender } = render(panelBetweenSeparators('left'));
-    fireEvent.click(screen.getByTestId('resize-collapsed'));
-
-    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
-    mockRect(strip, { top: 10, height: 100 });
-    fireEvent(screen.getByTestId('separator-after'), pointerEvent('pointerenter', { clientY: 44 }));
-    expect(screen.getByRole('button', { name: 'Expand panel' }).dataset.edgeHovered).toBe('true');
-
-    rerender(panelBetweenSeparators('right'));
-
-    expect(screen.getByRole('button', { name: 'Expand panel' }).dataset.edgeHovered).toBe('false');
-
-    // And it takes a fresh measurement rather than trusting the old one.
-    mockRect(strip, { top: 0, height: 100 });
-    fireEvent(strip, pointerEvent('pointermove', { clientY: 44 }));
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('44px');
+      expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
+      expect(panelMocks.handle.resize).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -310,20 +195,6 @@ describe('CollapsiblePanel — which edge it sits on', () => {
     expect(screen.getByRole('button', { name: 'Expand panel' }).classList.contains('left-2')).toBe(true);
   });
 
-  it('watches the separator on the side it sits on', () => {
-    const { container } = renderPanel('right');
-    collapse();
-
-    const strip = container.querySelector('button[aria-hidden="true"]');
-    if (!(strip instanceof HTMLElement)) throw new Error('collapsed strip not rendered');
-    mockRect(strip, { top: 10, height: 100 });
-
-    fireEvent(screen.getByTestId('separator'), pointerEvent('pointerenter', { clientY: 44 }));
-
-    expect(screen.getByRole('button', { name: 'Expand panel' }).dataset.edgeHovered).toBe('true');
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('34px');
-  });
-
   it('puts a right panel’s content and controls on the right', () => {
     renderPanel('right');
     const content = screen.getByTestId('panel-content').parentElement;
@@ -337,7 +208,7 @@ describe('CollapsiblePanel — which edge it sits on', () => {
 });
 
 describe('CollapsiblePanel — the panel box', () => {
-  it('clips its content while open and lets the pill out once collapsed', () => {
+  it('clips its content while open and lets the expand button out once collapsed', () => {
     renderPanel();
     const panel = screen.getByTestId('panel');
     expect(panel.style.overflow).toBe('hidden');
@@ -440,58 +311,3 @@ describe('CollapsiblePanel — collapsing', () => {
 
 const stripElement = () => screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
 const pillElement = () => stripElement().firstElementChild as HTMLElement;
-
-describe('CollapsiblePanel — the collapsed strip', () => {
-  it('keeps the strip out of the tab order and the accessibility tree', () => {
-    renderPanel();
-    collapse();
-
-    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
-    expect(strip.getAttribute('tabindex')).toBe('-1');
-    expect(strip.getAttribute('aria-hidden')).toBe('true');
-  });
-
-  it('opens the panel from the strip as well as the button', () => {
-    renderPanel();
-    collapse();
-
-    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
-    fireEvent.click(strip);
-
-    expect(panelMocks.expand).toHaveBeenCalledTimes(1);
-  });
-
-  it('parks the pill mid-strip until the pointer says otherwise', () => {
-    renderPanel();
-    collapse();
-
-    const strip = screen.getByRole('button', { name: 'Expand panel' }).nextElementSibling as HTMLElement;
-    expect(strip.style.getPropertyValue('--pill-y')).toBe('50%');
-  });
-
-  it('points the pill back towards the content it would reveal', () => {
-    renderPanel('left');
-    collapse();
-    const leftStrip = stripElement();
-    expect(leftStrip.firstElementChild?.classList.contains('left-0.5')).toBe(true);
-    // The strip hugs the same edge as the panel it opens.
-    expect(leftStrip.classList.contains('left-1')).toBe(true);
-    expect(leftStrip.querySelector('svg')?.classList.contains('lucide-chevron-right')).toBe(true);
-
-    cleanup();
-
-    renderPanel('right');
-    collapse();
-    const rightStrip = stripElement();
-    expect(rightStrip.firstElementChild?.classList.contains('right-0.5')).toBe(true);
-    expect(rightStrip.classList.contains('right-1')).toBe(true);
-    expect(rightStrip.querySelector('svg')?.classList.contains('lucide-chevron-left')).toBe(true);
-  });
-
-  it('rides the pill up and down on a custom property', () => {
-    renderPanel();
-    collapse();
-
-    expect(pillElement().style.top).toBe('var(--pill-y)');
-  });
-});

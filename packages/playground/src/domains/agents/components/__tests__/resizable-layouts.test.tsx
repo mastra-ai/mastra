@@ -72,13 +72,33 @@ vi.mock('../../context/memory-timeline-context', async () => {
   };
 });
 
-vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
-  CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
-    <aside data-testid={`collapsible-${id}`} className={className}>
-      {children}
-    </aside>
-  ),
-}));
+vi.mock('@mastra/playground-ui/resize/collapsible-panel', async () => {
+  const { Panel } = await import('react-resizable-panels');
+
+  return {
+    CollapsiblePanel: ({
+      direction,
+      collapsible,
+      collapsedSize,
+      ...props
+    }: {
+      direction: 'left' | 'right';
+      collapsible?: boolean;
+      collapsedSize?: number;
+      [key: string]: unknown;
+    }) => (
+      <aside
+        data-testid={`collapsible-${props.id}`}
+        data-direction={direction}
+        data-collapsible={collapsible}
+        data-collapsed-size={collapsedSize}
+        className={props.className as string}
+      >
+        <Panel {...(props as Parameters<typeof Panel>[0])} />
+      </aside>
+    ),
+  };
+});
 
 vi.mock('@mastra/playground-ui/resize/separator', () => ({
   PanelSeparator: () => <div data-testid="panel-separator" />,
@@ -112,7 +132,7 @@ function expectMainPanelContract(mainPanelClassNames: string[]) {
 }
 
 describe('resizable service layouts', () => {
-  it('renders the agent layout as a two-panel group with a non-collapsible left slot', () => {
+  it('renders the agent layout as a two-panel group with a collapsible left slot', () => {
     render(
       <AgentLayout agentId="chef-agent" leftSlot={<div>threads</div>}>
         <div>chat</div>
@@ -122,12 +142,29 @@ describe('resizable service layouts', () => {
     expectPanelGroupsShrinkable();
     expectMainPanelContract(['grid', 'overflow-y-auto']);
 
-    // The left slot is a plain resizable panel (no collapse affordance) …
-    expect(screen.getByTestId('panel-left-slot').className).toContain('min-w-0');
-    expect(screen.queryByTestId('collapsible-left-slot')).toBeNull();
+    // The left slot can be hidden entirely (collapsed to 0) and restored from its edge …
+    const leftSlot = screen.getByTestId('collapsible-left-slot');
+    expect(leftSlot.className).toContain('min-w-0');
+    expect(leftSlot.getAttribute('data-direction')).toBe('left');
+    expect(leftSlot.getAttribute('data-collapsible')).toBe('true');
+    expect(leftSlot.getAttribute('data-collapsed-size')).toBe('0');
+    expect(leftSlot.textContent).toContain('threads');
 
     // … and the right slot only appears when a rightSlot is provided.
     expect(screen.queryByTestId('panel-right-slot')).toBeNull();
+  });
+
+  it('drives the left slot through the panelRef supplied by the parent', () => {
+    const leftPanelRef = { current: null as null | { resize: (size: string) => void } };
+
+    render(
+      <AgentLayout agentId="chef-agent" leftPanelRef={leftPanelRef} leftSlot={<div>threads</div>}>
+        <div>chat</div>
+      </AgentLayout>,
+    );
+
+    leftPanelRef.current?.resize('0px');
+    expect(resizeLeftPanel).toHaveBeenCalledWith('0px');
   });
 
   it('expands the single left slot to 50% when observational memory opens and restores it on close', async () => {

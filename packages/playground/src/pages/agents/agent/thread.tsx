@@ -2,8 +2,10 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMemo } from 'react';
+import { usePanelRef } from 'react-resizable-panels';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -32,6 +34,8 @@ function AgentThread() {
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const leftPanelRef = usePanelRef();
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
@@ -127,11 +131,18 @@ function AgentThread() {
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
                     <AgentLayout
                       agentId={agentId!}
+                      leftPanelRef={leftPanelRef}
                       leftSlot={
                         isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
                         ) : (
-                          <AgentSidebar agentId={agentId!} threadId={actualThreadId} threads={sidebarThreads} />
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={actualThreadId}
+                            threads={sidebarThreads}
+                            // The mobile drawer has its own close control, so no hide button there.
+                            onHidePanel={isMobile ? undefined : () => leftPanelRef.current?.collapse()}
+                          />
                         )
                       }
                       leftDrawerLabel="Threads"
