@@ -597,6 +597,23 @@ export class DsqlDB extends MastraBase {
         }
       }
 
+      // The startedAtZ column may have been added with DEFAULT NOW(), which assigns migration time to legacy rows.
+      // Reconcile it in bounded transactions from the original startedAt value so retention preserves each span's age.
+      const backfillBatchSize = 1000;
+      let backfilled: number;
+      do {
+        const result = await this.client.query(`
+          UPDATE ${fullTableName}
+          SET "startedAtZ" = "startedAt"
+          WHERE ("traceId", "spanId") IN (
+            SELECT "traceId", "spanId" FROM ${fullTableName}
+            WHERE "startedAtZ" IS DISTINCT FROM "startedAt"
+            LIMIT ${backfillBatchSize}
+          )
+        `);
+        backfilled = result.rowCount ?? 0;
+      } while (backfilled === backfillBatchSize);
+
       this.logger?.info?.(`Migration completed for ${fullTableName}`);
     } catch (error) {
       // Log warning but don't fail - migrations should be best-effort

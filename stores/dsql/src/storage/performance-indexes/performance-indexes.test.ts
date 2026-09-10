@@ -89,9 +89,15 @@ describe('DSQLStore Domain Performance Indexes', () => {
 
       const indexes = observability.getDefaultIndexDefinitions();
 
-      // DSQL has 7 indexes (vs PG's 4) because it adds entity/org indexes
+      // DSQL adds a retention anchor index and entity/org indexes,
       // but omits partial indexes and GIN indexes which DSQL doesn't support
-      expect(indexes.length).toBe(7);
+      expect(indexes.length).toBe(8);
+
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_startedatz_idx',
+        table: 'mastra_ai_spans',
+        columns: ['startedAtZ'],
+      });
 
       // Core trace/span indexes (without DESC)
       expect(indexes).toContainEqual({
@@ -154,7 +160,7 @@ describe('DSQLStore Domain Performance Indexes', () => {
   });
 
   describe('Total index count across all domains', () => {
-    it('should define 10 indexes total (2 memory + 1 scores + 7 observability)', () => {
+    it('should define 11 indexes total (2 memory + 1 scores + 8 observability)', () => {
       const memory = new MemoryDSQL({ client: mockClient as any });
       const scores = new ScoresDSQL({ client: mockClient as any });
       const observability = new ObservabilityDSQL({ client: mockClient as any });
@@ -164,7 +170,7 @@ describe('DSQLStore Domain Performance Indexes', () => {
         scores.getDefaultIndexDefinitions().length +
         observability.getDefaultIndexDefinitions().length;
 
-      expect(totalIndexes).toBe(10);
+      expect(totalIndexes).toBe(11);
     });
   });
 });

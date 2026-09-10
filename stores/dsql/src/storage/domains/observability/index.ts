@@ -91,6 +91,11 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     return [
       {
+        name: `${schemaPrefix}mastra_ai_spans_startedatz_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAtZ'],
+      },
+      {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
         table: TABLE_SPANS,
         columns: ['traceId', 'startedAt'],
