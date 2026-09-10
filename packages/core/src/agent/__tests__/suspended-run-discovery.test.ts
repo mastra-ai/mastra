@@ -349,15 +349,18 @@ describe('suspended-run discovery', () => {
       const seedSnapshot = seedRun!.snapshot as WorkflowRunState;
       type StoredRun = Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'][number];
 
-      const createRun = (runId: string, snapshot: WorkflowRunState | string, workflowName = 'agentic-loop') =>
-        ({
+      let timestamp = 0;
+      const createRun = (runId: string, snapshot: WorkflowRunState | string, workflowName = 'agentic-loop') => {
+        const createdAt = new Date(timestamp++);
+        return {
           runId,
           workflowName,
           resourceId: 'resource-1',
           snapshot,
-          createdAt: new Date(0),
-          updatedAt: new Date(0),
-        }) satisfies StoredRun;
+          createdAt,
+          updatedAt: createdAt,
+        } satisfies StoredRun;
+      };
       const snapshotForAgent = (agentId: string) => {
         const snapshot = structuredClone(seedSnapshot);
         for (const key in snapshot.context) {
@@ -401,7 +404,7 @@ describe('suspended-run discovery', () => {
 
       const firstPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 1, page: 0 });
       expect(firstPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-first' }] });
-      expect(listSpy.mock.calls.map(([args]) => [args.workflowName, args.page, args.perPage])).toEqual([
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
         ['agentic-loop', 0, 100],
         ['agentic-loop', 1, 100],
         ['agentic-loop', 2, 100],
@@ -414,6 +417,21 @@ describe('suspended-run discovery', () => {
       listSpy.mockClear();
       const secondPage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2, page: 1 });
       expect(secondPage).toMatchObject({ total: 4, runs: [{ runId: 'regular-third' }, { runId: 'durable-first' }] });
+
+      runsByWorkflow.set(
+        'agentic-loop',
+        Array.from({ length: 100 }, (_, index) => createRun(`exact-multiple-${index}`, structuredClone(seedSnapshot))),
+      );
+      runsByWorkflow.set(DurableStepIds.AGENTIC_LOOP, []);
+      listSpy.mockClear();
+
+      const outOfRangePage = await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 10, page: 10 });
+      expect(outOfRangePage).toEqual({ runs: [], total: 100 });
+      expect(listSpy.mock.calls.map(([args]) => [args?.workflowName, args?.page, args?.perPage])).toEqual([
+        ['agentic-loop', 0, 100],
+        ['agentic-loop', 1, 100],
+        [DurableStepIds.AGENTIC_LOOP, 0, 100],
+      ]);
     }, 30000);
 
     it('only returns runs owned by the listing agent', async () => {

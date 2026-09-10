@@ -8219,6 +8219,10 @@ export class Agent<
    * agent's id, and runs whose snapshots carry a different id are skipped. Filter by
    * `threadId`/`resourceId` to scope results to a conversation.
    *
+   * Storage pagination is offset-based, so concurrent changes or rows with tied sort
+   * values can make a multi-page discovery reflect the storage adapter's ordering
+   * rather than a transactional snapshot.
+   *
    * @example
    * ```typescript
    * const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
