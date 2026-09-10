@@ -266,7 +266,20 @@ export class ObserverRunner {
     options?: ObserverCallOptions,
   ): Promise<ObserverCallResult> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
-    const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
+    const resolvedModel = (() => {
+      try {
+        return options?.model ? { model: options.model } : this.resolveModel(inputTokens);
+      } catch (error) {
+        this.mastra?.getLogger?.().error('OM observer model resolution failed', {
+          error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          inputTokens,
+          threadId: messagesToObserve[0]?.threadId,
+          hasRequestContext: Boolean(options?.requestContext),
+        });
+        throw error;
+      }
+    })();
     const activeExtractors = await resolveExtractors(
       filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
       {
@@ -324,15 +337,37 @@ export class ObserverRunner {
             },
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
-                const streamResult = await agent.stream(observerMessages, {
-                  modelSettings: { ...this.observationConfig.modelSettings },
-                  providerOptions: this.observationConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
-                  ...(abortSignal ? { abortSignal } : {}),
-                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
-                  ...childObservabilityContext,
-                });
-                return streamResult.getFullOutput();
+                try {
+                  const streamResult = await agent.stream(observerMessages, {
+                    modelSettings: { ...this.observationConfig.modelSettings },
+                    providerOptions: this.observationConfig.providerOptions as any,
+                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(abortSignal ? { abortSignal } : {}),
+                    ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
+                    ...childObservabilityContext,
+                  });
+                  return await streamResult.getFullOutput();
+                } catch (error) {
+                  const providerError = error as Record<string, unknown>;
+
+                  this.mastra?.getLogger?.().error('OM observer provider call failed', {
+                    error,
+                    errorName: error instanceof Error ? error.name : undefined,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorCause: error instanceof Error ? error.cause : providerError?.cause,
+                    status: providerError?.status,
+                    statusCode: providerError?.statusCode,
+                    responseBody: providerError?.responseBody,
+                    model: this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    inputTokens,
+                    threadId: messagesToObserve[0]?.threadId,
+                    observedMessageCount: messagesToObserve.length,
+                    providerOptionProviders: Object.keys(this.observationConfig.providerOptions ?? {}),
+                    hasRequestContext: Boolean(internalRequestContext),
+                    aborted: abortSignal?.aborted ?? false,
+                  });
+                  throw error;
+                }
               }, abortSignal),
           }),
         { label: 'observer', abortSignal },
@@ -503,7 +538,20 @@ export class ObserverRunner {
       (total, messages) => total + this.tokenCounter.countMessages(messages),
       0,
     );
-    const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
+    const resolvedModel = (() => {
+      try {
+        return model ? { model } : this.resolveModel(inputTokens);
+      } catch (error) {
+        this.mastra?.getLogger?.().error('OM multi-thread observer model resolution failed', {
+          error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          inputTokens,
+          threadIds: threadOrder,
+          hasRequestContext: Boolean(requestContext),
+        });
+        throw error;
+      }
+    })();
     const firstThreadMessages = messagesByThread.get(threadOrder[0] ?? '') ?? [];
     const activeExtractors = await resolveExtractors(this.observationConfig.extractors ?? [], {
       source: 'observer',
@@ -601,15 +649,36 @@ export class ObserverRunner {
             },
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
-                const streamResult = await agent.stream(observerMessages, {
-                  modelSettings: { ...this.observationConfig.modelSettings },
-                  providerOptions: this.observationConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
-                  ...(abortSignal ? { abortSignal } : {}),
-                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
-                  ...childObservabilityContext,
-                });
-                return streamResult.getFullOutput();
+                try {
+                  const streamResult = await agent.stream(observerMessages, {
+                    modelSettings: { ...this.observationConfig.modelSettings },
+                    providerOptions: this.observationConfig.providerOptions as any,
+                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(abortSignal ? { abortSignal } : {}),
+                    ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
+                    ...childObservabilityContext,
+                  });
+                  return await streamResult.getFullOutput();
+                } catch (error) {
+                  const providerError = error as Record<string, unknown>;
+
+                  this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
+                    error,
+                    errorName: error instanceof Error ? error.name : undefined,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                    errorCause: error instanceof Error ? error.cause : providerError?.cause,
+                    status: providerError?.status,
+                    statusCode: providerError?.statusCode,
+                    responseBody: providerError?.responseBody,
+                    model: this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    inputTokens,
+                    threadIds: threadOrder,
+                    providerOptionProviders: Object.keys(this.observationConfig.providerOptions ?? {}),
+                    hasRequestContext: Boolean(internalRequestContext),
+                    aborted: abortSignal?.aborted ?? false,
+                  });
+                  throw error;
+                }
               }, abortSignal),
           }),
         { label: 'observer-multi-thread', abortSignal },
