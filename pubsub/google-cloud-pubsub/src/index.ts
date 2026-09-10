@@ -196,7 +196,7 @@ export class GoogleCloudPubSub extends PubSub {
       try {
         const activeCbs = this.activeCbs[subscriptionKey] ?? [];
         for (const cb of activeCbs) {
-          cb(
+          await cb(
             event,
             async () => {
               try {
@@ -294,7 +294,7 @@ export class GoogleCloudPubSub extends PubSub {
 
     for (const cb of [...callbacks]) {
       try {
-        cb(
+        await cb(
           localEvent,
           async () => {},
           async () => {},
