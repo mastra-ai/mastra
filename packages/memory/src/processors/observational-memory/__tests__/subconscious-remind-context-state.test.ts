@@ -173,4 +173,83 @@ describe('Subconscious reminder parent-context state lane', () => {
 
     expect(readParentObservations).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * The lane reads the parent's *committed* record, while the batch that just
+   * triggered this check has not been committed yet and travels in the check
+   * message instead. Neither half is complete on its own, so the division of
+   * labour is load-bearing: the message covers the newest batch, the lane
+   * covers accumulated memory. Both sentinel facts below share distinctive
+   * terms with the candidate, so a lane that read the batch would visibly
+   * project it — the exclusion is a real constraint rather than a lexical miss.
+   */
+  describe('the committed/pre-commit split', () => {
+    const committedFact = 'The datastore migration has been blocked on the counters rewrite since Tuesday.';
+    const batchFact = 'The datastore migration counters rewrite just landed in staging.';
+
+    function checkMessageWithBatch(): MastraDBMessage {
+      const eventId = 'subconscious:remind:split:event';
+      const message = checkMessage(eventId);
+      (message.content as { parts: { type: string; text: string }[] }).parts = [
+        {
+          type: 'text',
+          text: `Passive reminder check ${eventId}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nNewly extracted observations:\n${batchFact}\n\nRecent conversation messages already visible to the parent agent:\n(none)`,
+        },
+      ];
+      return message;
+    }
+
+    it('keeps the newest batch out of the lane and the accumulated memory in it', async () => {
+      const processor = new RemindContextStateProcessor({ readParentObservations: async () => committedFact });
+
+      const signal = await processor.computeStateSignal(args({ messages: [checkMessageWithBatch()] }));
+
+      expect(signal!.contents).toContain('since Tuesday');
+      // Would be projected if the lane read the check message's batch: it shares
+      // 'datastore', 'migration', 'counters' and 'rewrite' with the candidate.
+      expect(signal!.contents).not.toContain('landed in staging');
+    });
+
+    it('delivers the batch through the check message, so the two halves reach the model together', async () => {
+      const prompts: string[] = [];
+      const model = new MockLanguageModelV2({
+        doGenerate: async options => {
+          prompts.push(JSON.stringify(options.prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content: [{ type: 'text', text: '<no-reminder />' }],
+          };
+        },
+      });
+      const parentMemory = {
+        omEngine: Promise.resolve({ getRecord: async () => ({ activeObservations: committedFact }) }),
+      } as unknown as Memory;
+
+      const agent = createReminderAgent({
+        model,
+        memory: new Memory({ storage: new InMemoryStore() }),
+        scope: ['resource:resource-1'],
+        threadId: 'subconscious:parent:remind',
+        resourceId: 'resource-1',
+        parentThreadId: 'parent',
+        parentMemory,
+        fallbackSendSignal: vi.fn(),
+      });
+
+      await agent.generate([checkMessageWithBatch()], {
+        memory: { thread: 'subconscious:parent:remind', resource: 'resource-1' },
+        maxSteps: 1,
+      });
+
+      // Both halves present, and the batch arrives ahead of the lane section
+      // rather than inside it.
+      expect(prompts[0]).toContain('landed in staging');
+      expect(prompts[0]).toContain('since Tuesday');
+      const laneSection = prompts[0]!.slice(prompts[0]!.indexOf('currently say about the candidates'));
+      expect(laneSection).not.toContain('landed in staging');
+    });
+  });
 });
