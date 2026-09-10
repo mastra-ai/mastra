@@ -1,5 +1,19 @@
 # mastra
 
+## 1.29.0-alpha.4
+
+### Minor Changes
+
+- Added deploy-scoped worker provisioning for Mastra Cloud. Deployment builds now use static analysis to emit a nullable, versioned `workers.json` manifest when a Mastra instance explicitly configures shared storage and PubSub. The manifest describes orchestration, scheduler, background task, and statically discoverable custom workers, and `mastra deploy` uses it to coordinate dedicated worker services behind the `platform-workers` rollout flag. Worker runtimes also expose an authenticated configuration endpoint so Mastra Cloud can compare the live topology with the build-time manifest. ([#22394](https://github.com/mastra-ai/mastra/pull/22394))
+
+  Deploy preflight now detects missing or localhost database URLs, offers to attach managed Redis when interactive, and prints the exact command required for non-interactive runs. New environments prompt for a United States or Europe deployment region unless `--region` or `--yes` is provided. Deploy output also includes a colored architecture summary for Studio, server, workers, databases, observability, and region.
+
+### Patch Changes
+
+- Updated dependencies [[`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa)]:
+  - @mastra/core@1.66.0-alpha.4
+  - @mastra/deployer@1.66.0-alpha.4
+
 ## 1.28.1-alpha.3
 
 ### Patch Changes

@@ -1,8 +1,11 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
+import type { Ref } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useMemoryTimeline } from '../context/memory-timeline-context';
@@ -11,6 +14,8 @@ export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
+  /** Lets the caller collapse/expand the left panel (e.g. "Hide threads panel"). */
+  leftPanel?: Ref<CollapsiblePanelHandle>;
   rightSlot?: React.ReactNode;
   /** Accessible label for the mobile drawer that hosts the left slot */
   leftDrawerLabel?: string;
@@ -25,6 +30,7 @@ export const AgentLayout = ({
   agentId,
   children,
   leftSlot,
+  leftPanel,
   rightSlot,
   leftDrawerLabel = 'Open left panel',
   rightDrawerLabel = 'Open right panel',
@@ -89,16 +95,20 @@ export const AgentLayout = ({
         onLayoutChange={onLayoutChange}
       >
         {leftSlot && (
-          <Panel
+          <CollapsiblePanel
             id="left-slot"
+            direction="left"
+            ref={leftPanel}
             panelRef={leftPanelRef}
+            collapsible
+            collapsedSize={0}
             minSize={256}
             maxSize={'50%'}
             defaultSize={300}
             className="min-w-0"
           >
             {leftSlot}
-          </Panel>
+          </CollapsiblePanel>
         )}
 
         {leftSlot && <PanelSeparator />}
