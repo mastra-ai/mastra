@@ -4,18 +4,8 @@
 '@mastra/mysql': minor
 ---
 
-Added configurable age-based pruning for observability spans.
+Added configurable age-based pruning for observability spans. Set `retention.observability.spans.maxAge` when constructing the storage adapter, then run pruning when appropriate for your application.
 
 ```typescript
-const retention = {
-  observability: { spans: { maxAge: '30d' } },
-} as const;
-
-const stores = [
-  new MySQLStore({ ...mysqlConnection, retention }),
-  new MSSQLStore({ ...mssqlConnection, retention }),
-  new DSQLStore({ ...dsqlConnection, retention }),
-];
-
-await Promise.all(stores.map(storage => storage.prune()));
+await storage.prune();
 ```
