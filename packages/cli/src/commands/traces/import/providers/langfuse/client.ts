@@ -141,6 +141,7 @@ export class LangfuseClient {
       }
 
       if (response.status >= 300 && response.status < 400) {
+        await discardResponseBody(response);
         throw new LangfuseReaderError('Langfuse redirected an authenticated request. Redirects are not followed.', {
           status: response.status,
         });
@@ -151,12 +152,14 @@ export class LangfuseClient {
       }
 
       if (response.status === 401 || response.status === 403) {
+        await discardResponseBody(response);
         throw new LangfuseReaderError(`Langfuse rejected the project credentials (HTTP ${response.status}).`, {
           status: response.status,
         });
       }
 
       if (response.status === 404) {
+        await discardResponseBody(response);
         throw new LangfuseReaderError('Langfuse API endpoint was not found.', { status: 404 });
       }
 
@@ -166,16 +169,18 @@ export class LangfuseClient {
             response.status === 429
               ? parseRetryAfter(response.headers.get('retry-after'), backoffMilliseconds(attempt))
               : backoffMilliseconds(attempt);
-          await response.body?.cancel();
+          await discardResponseBody(response);
           await this.waitBeforeRetry(delay, signal);
           continue;
         }
+        await discardResponseBody(response);
         throw new LangfuseReaderError(`Langfuse request failed repeatedly with HTTP ${response.status}.`, {
           status: response.status,
           retryable: true,
         });
       }
 
+      await discardResponseBody(response);
       throw new LangfuseReaderError(`Langfuse request failed with HTTP ${response.status}.`, {
         status: response.status,
       });
@@ -262,9 +267,18 @@ async function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> 
   });
 }
 
+async function discardResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup must not replace the request error that the caller needs.
+  }
+}
+
 async function readResponseText(response: Response): Promise<string> {
   const contentLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+    await discardResponseBody(response);
     throw new LangfuseResponseTooLargeError();
   }
   if (!response.body) return '';

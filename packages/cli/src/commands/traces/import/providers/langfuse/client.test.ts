@@ -17,6 +17,15 @@ const observation = {
   type: 'SPAN',
 };
 
+function cancelableResponse(
+  status: number,
+  headers?: HeadersInit,
+): { response: Response; cancel: ReturnType<typeof vi.fn> } {
+  const cancel = vi.fn();
+  const body = new ReadableStream({ cancel });
+  return { response: new Response(body, { status, headers }), cancel };
+}
+
 describe('LangfuseClient', () => {
   it('identifies the project associated with its Basic-auth credentials', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
@@ -68,9 +77,10 @@ describe('LangfuseClient', () => {
   });
 
   it('honors Retry-After when Langfuse rate-limits a request', async () => {
+    const rateLimit = cancelableResponse(429, { 'Retry-After': '3' });
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '3' } }))
+      .mockResolvedValueOnce(rateLimit.response)
       .mockResolvedValueOnce(Response.json({ data: [], meta: { cursor: null } }));
     const sleep = vi.fn().mockResolvedValue(undefined);
     const onRetry = vi.fn();
@@ -79,6 +89,7 @@ describe('LangfuseClient', () => {
     await client.getObservationsPage({ fields: 'core', limit: 1000 });
 
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(rateLimit.cancel).toHaveBeenCalledOnce();
     expect(sleep).toHaveBeenCalledWith(3000, undefined);
     expect(onRetry).toHaveBeenCalledOnce();
   });
@@ -118,6 +129,17 @@ describe('LangfuseClient', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it.each([302, 401, 404, 400, 500])('cancels an unread HTTP %s response before throwing', async status => {
+    const result = cancelableResponse(status);
+    const client = new LangfuseClient(options, {
+      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(result.response),
+      maxAttempts: 1,
+    });
+
+    await expect(client.identifyProject()).rejects.toBeInstanceOf(LangfuseReaderError);
+    expect(result.cancel).toHaveBeenCalledOnce();
+  });
+
   it('explains the Langfuse v4 requirement when Observations API v2 is missing', async () => {
     const client = new LangfuseClient(options, {
       fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status: 404 })),
@@ -153,15 +175,13 @@ describe('LangfuseClient', () => {
   });
 
   it('rejects a response whose content length exceeds the Langfuse API response limit', async () => {
+    const oversized = cancelableResponse(200, { 'Content-Length': String(5 * 1024 * 1024 + 1) });
     const client = new LangfuseClient(options, {
-      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
-        new Response('{}', {
-          headers: { 'Content-Length': String(5 * 1024 * 1024 + 1) },
-        }),
-      ),
+      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(oversized.response),
     });
 
     await expect(client.identifyProject()).rejects.toBeInstanceOf(LangfuseResponseTooLargeError);
+    expect(oversized.cancel).toHaveBeenCalledOnce();
   });
 
   it('stops reading a streamed response when it exceeds the Langfuse API response limit', async () => {
