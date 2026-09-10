@@ -231,6 +231,8 @@ export interface CustomProviderInfo {
   url: string;
   hasApiKey: boolean;
   models: string[];
+  /** Configured on the deployment; cannot be edited or removed by an org. */
+  readOnly?: true;
 }
 
 /** Redact a stored custom-provider row for the client (key presence only). */
@@ -241,8 +243,11 @@ function toCustomProviderInfo(record: CustomProviderRecord): CustomProviderInfo 
     url: record.url,
     hasApiKey: Boolean(record.apiKey),
     models: record.models,
+    ...(record.preset ? { readOnly: true as const } : {}),
   };
 }
+
+const PRESET_CONFLICT = 'This provider is configured on the deployment and cannot be changed here';
 
 /** The resolved custom-providers storage scope for a request. */
 interface CustomProvidersContext {
@@ -868,12 +873,16 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
               ? ((body as Record<string, unknown>).previousId as string)
               : undefined;
+          const providerId = getCustomProviderId(parsed.name);
+          if (ctx.storage.isPreset(providerId) || (previousId !== undefined && ctx.storage.isPreset(previousId))) {
+            return c.json({ error: PRESET_CONFLICT }, 409);
+          }
           try {
             const record = await ctx.storage.upsert({
               orgId: ctx.orgId,
               userId: ctx.userId,
               input: {
-                providerId: getCustomProviderId(parsed.name),
+                providerId,
                 name: parsed.name,
                 url: parsed.url,
                 apiKey: parsed.apiKey,
@@ -900,6 +909,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in ctx) return ctx.response;
           const id = c.req.param('id');
+          if (ctx.storage.isPreset(id)) return c.json({ error: PRESET_CONFLICT }, 409);
           try {
             await ctx.storage.delete({ orgId: ctx.orgId, providerId: id });
             onCustomProvidersChanged({ orgId: ctx.orgId });
