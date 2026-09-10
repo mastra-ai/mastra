@@ -2,14 +2,13 @@ import { expect } from './expect.js';
 
 import type { McE2eScenario } from './types.js';
 
-const PLATFORM_BOT_ATTRIBUTION =
-  'Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>';
+const TUI_ATTRIBUTION = 'Co-Authored-By: mastracode <284800079+mastra-platform[bot]@users.noreply.github.com>';
 
 export const commitAttributionPromptScenario: McE2eScenario = {
   name: 'commit-attribution-prompt',
   description:
-    'Verify real TUI prompts include platform bot commit attribution guidance and the authored commit records it.',
-  testName: 'includes platform bot commit attribution prompt guidance and committed history',
+    'Verify real TUI prompts include mastracode commit attribution guidance and the authored commit records it.',
+  testName: 'includes mastracode commit attribution prompt guidance and committed history',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'commit-attribution-prompt.json',
@@ -25,7 +24,7 @@ export const commitAttributionPromptScenario: McE2eScenario = {
     terminal.submit('!git log -1 --format=%B');
     await runtime.waitForScreenText(/test: commit attribution e2e/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /Co-Authored-By: mastra-platform\[bot\] <284800079\+mastra-platform\[bot\]@users\.noreply\.github\.com>/i,
+      /Co-Authored-By: mastracode <284800079\+mastra-platform\[bot\]@users\.noreply\.github\.com>/i,
       terminal,
       10_000,
     );
@@ -37,7 +36,7 @@ export const commitAttributionPromptScenario: McE2eScenario = {
       throw new Error(`Expected commit attribution scenario to make 2 AIMock requests, received ${requests.length}`);
     }
     const body = JSON.stringify(requests);
-    expect(body).toContain(PLATFORM_BOT_ATTRIBUTION);
+    expect(body).toContain(TUI_ATTRIBUTION);
     expect(body).toContain('git commit');
   },
 };

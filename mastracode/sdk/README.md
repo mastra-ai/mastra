@@ -21,8 +21,18 @@ import { mountAgentControllerOnMastra } from '@mastra/code-sdk';
 // (thread management, modes, tools, memory) and starts its workers.
 const { mastra, controller } = await mountAgentControllerOnMastra({
   cwd: process.cwd(),
+  coAuthor: {
+    name: 'my-coding-app',
+    email: 'my-coding-app@example.com',
+  },
 });
 ```
+
+### Commit attribution
+
+`coAuthor` controls the `Co-Authored-By` trailer included in coding-agent commit guidance. Both fields are optional: an omitted field uses the SDK's `mastra-platform[bot]` name or `284800079+mastra-platform[bot]@users.noreply.github.com` email default.
+
+The `mastracode` TUI sets only its name to `mastracode`; Factory sets its name to `mastra-platform[bot]`. They intentionally share the default email, so GitHub resolves both trailers to the same bot account while preserving the app name in the raw commit message.
 
 ## Documentation
 
