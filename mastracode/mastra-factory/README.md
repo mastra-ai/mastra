@@ -47,7 +47,7 @@ npx create-factory@latest --help
 
 ## Documentation
 
-- [create-factory CLI reference](https://mastra.ai/reference/cli/create-factory)
+- [create-factory CLI reference](https://factory.mastra.ai/reference/create-factory)
 
 ## Changelog
 
