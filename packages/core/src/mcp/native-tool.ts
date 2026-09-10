@@ -24,8 +24,12 @@ export interface MCPRequestContextV2 {
   readonly signal: AbortSignal;
   readonly metadata?: Record<string, unknown>;
   readonly inputResponses?: Record<string, ElicitResult>;
-  /** Client-echoed state is untrusted until the application verifies it. */
-  readonly requestState?: string;
+  /**
+   * Client-echoed continuation state. The raw wire string when the server has no
+   * verify hook, otherwise the payload that hook returned. Handlers must not
+   * trust the raw form for authorization or business decisions.
+   */
+  readonly requestState?: unknown;
   log(level: LoggingLevel, data: unknown, logger?: string): Promise<void>;
   progress(progress: number, total?: number, message?: string): Promise<void>;
 }
@@ -106,7 +110,7 @@ const contextSchema = z
       signal: z.instanceof(AbortSignal),
       metadata: z.record(z.string(), z.unknown()).optional(),
       inputResponses: z.record(z.string(), inputResponseSchema).optional(),
-      requestState: z.string().optional(),
+      requestState: z.unknown().optional(),
       log: callableSchema,
       progress: callableSchema,
     }),
