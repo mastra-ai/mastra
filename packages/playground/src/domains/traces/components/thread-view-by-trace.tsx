@@ -15,8 +15,9 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -304,6 +305,16 @@ function TraceThreadRow({
                 <NeedsReviewDot feedback={feedbackData?.feedback} />
               </Tab>
             </TabList>
+            <Button
+              as={Link}
+              to={`/traces?traceId=${encodeURIComponent(traceId)}`}
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+            >
+              <ExternalLinkIcon />
+              Go to trace
+            </Button>
           </DataPanel.Header>
         </div>
         <TabContent value="spans" className="min-h-0 py-0">

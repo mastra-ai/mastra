@@ -456,6 +456,16 @@ describe('ThreadViewByTrace', () => {
   });
 
   describe('the trace panel tabs', () => {
+    it('links each row to its trace on the traces page', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      renderView();
+
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+
+      expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
+    });
+
     it('shows the span tree by default and switches to the feedback thread on the Feedback tab', async () => {
       installHandlers();
       installFeedbackHandlers();
