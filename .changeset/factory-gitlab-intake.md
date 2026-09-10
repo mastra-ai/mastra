@@ -4,7 +4,7 @@
 
 Added GitLab issues as a Factory intake source. Connect a GitLab instance (gitlab.com or self-hosted), pick which projects to sync, and route each one to a Factory. Its open issues then arrive in Intake alongside GitHub and Linear, can be filed onto the board, and get a `factory/gitlab-<iid>` branch when work starts.
 
-**Issues in, pull requests out through GitHub.** GitLab supplies the issues; the code still lives in the Factory's linked GitHub repository, so review happens as a GitHub pull request. This is the same split Linear already runs under — merge requests, GitLab branches, and clone auth are not served from here.
+**Intake is the entry point; merge requests follow.** This entry covers issues arriving in Intake. Serving GitLab merge requests through the version-control capability, dispatching webhooks onto work-item rules, and resolving the source-control owner by capability are described in the companion entry for the same release.
 
 **Credentials are per-organization.** Either an OAuth application (authorization code + PKCE), or a static group or personal access token for a single-team self-hosted setup that would rather not register one. Pass the integration to `MastraFactory` and it registers its own routes:
 
@@ -27,4 +27,4 @@ const gitlab = new GitLabIntegration({
 new MastraFactory({ storage, integrations: [github, gitlab] });
 ```
 
-Set the OAuth application's redirect URI to exactly `<publicUrl>/web/gitlab/oauth/callback`. Webhooks are optional: point GitLab at `<publicUrl>/web/gitlab/webhook` and give it `webhookSecret` as the secret token, which is compared against the `X-Gitlab-Token` header. The OAuth flow signs `state`, so it also needs a replica-stable state secret, and the server refuses to boot without one.
+Set the OAuth application's redirect URI to exactly `<publicUrl>/web/gitlab/oauth/callback`. Point GitLab's webhook at `<publicUrl>/web/gitlab/webhook` and give it `webhookSecret` as the secret token, which is compared against the `X-Gitlab-Token` header. `webhookSecret` is required — the webhook route moves cards and has no user session to authenticate against. The OAuth flow signs `state`, so it also needs a replica-stable state secret, and the server refuses to boot without one.
