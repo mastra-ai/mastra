@@ -107,16 +107,101 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Predicate context | Fields | Operators |
 | - | - | - |
 | Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
-| Span | `spanType` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Score | `score`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Score | `spanId` | `exists`, `notExists` |
+| Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `comment` | `exists`, `notExists` |
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
 
-String comparisons are exact and case-sensitive, and literals are never coerced. Numeric score predicates therefore require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by span properties
+
+Every condition inside one `spans.some` or `spans.none` clause applies to the same current span. For example, this predicate finds a failed tool span whose name is `medication_lookup`; a matching name on one span and an error on another don't satisfy it:
+
+```typescript
+const failedMedicationLookup = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+        { op: 'exists', path: 'error' },
+      ],
+    },
+  },
+}
+```
+
+Use `status` for the derived `success` or `error` outcome. Use `error` when you only need to test whether error details are present.
+
+`durationMs` is the span's elapsed time in milliseconds. Span `startedAt` and `endedAt` conditions filter related spans independently of the top-level root `timeRange`:
+
+```typescript
+const slowModelCalls = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+        {
+          op: 'gte',
+          left: { path: 'startedAt' },
+          right: { literal: '2026-07-15T00:00:00.000Z' },
+        },
+      ],
+    },
+  },
+}
+```
+
+`model` and `provider` read the canonical `attributes.model` and `attributes.provider` span attributes. Only stored string values are queryable; missing, null, and non-string values count as missing.
+
+```typescript
+const selectedModel = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        {
+          op: 'eq',
+          left: { path: 'model' },
+          right: { literal: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+        },
+        { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+      ],
+    },
+  },
+}
+```
+
+Use generic entity fields for tool and retrieval identity. The version fields let one clause qualify the same span by its entity lineage:
+
+```typescript
+const versionedRetrieval = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'entityType' }, right: { literal: 'rag_ingestion' } },
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication-index' } },
+        { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'index-v3' } },
+        { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v2' } },
+      ],
+    },
+  },
+}
+```
 
 ### Filter by score time
 
@@ -164,6 +249,72 @@ const traceLevelScoreWhere = { scores: { some: { op: 'notExists', path: 'spanId'
 ```
 
 The deprecated `source` field and `scorerName` aren't available as score predicate fields. Use the canonical `scoreSource` and `scorerId` fields.
+
+### Filter by metadata
+
+Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
+
+```typescript
+const messageTrace = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+    { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+    { op: 'exists', path: 'metadata.protocolVersion' },
+    {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'run-456' } },
+        { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'trace-789' } },
+      ],
+    },
+    { op: 'not', arg: { op: 'exists', path: 'metadata.parentMessageId' } },
+  ],
+}
+```
+
+The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
+
+Metadata fields aren't available for grouping or field discovery.
+
+### Filter by feedback
+
+Every condition inside one `feedback.some` or `feedback.none` clause applies to the same current feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
+
+```typescript
+const negativePatientRating = {
+  feedback: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+        { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+      ],
+    },
+  },
+}
+```
+
+Strict stored-value types are the portable contract for feedback predicates. PostgreSQL and ClickHouse distinguish numeric `3` from textual `'3'` for equality and ordered comparisons. DuckDB currently persists feedback values as `VARCHAR`, so numeric-looking strings may be coerced for equality and ordered numeric predicates. OBS-306 will remove this DuckDB exception through typed persistence. Ordered operators require a finite numeric literal. `eq` and `ne` accept one string or number, while `in` and `notIn` require a non-empty set containing only strings or only numbers. `exists` and `notExists` test for either value type.
+
+Use `none` to select traces without a matching record. Traces with no feedback also match:
+
+```typescript
+const missingClinicianReview = {
+  feedback: {
+    none: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+      ],
+    },
+  },
+}
+```
+
+Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
 ## Responses
 

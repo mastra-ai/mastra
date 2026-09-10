@@ -85,6 +85,95 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
+  it('projects canonical span values and compiles one richer same-span existence check', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          spans: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+                { op: 'eq', left: { path: 'model' }, right: { literal: 'claude-sonnet-4-6' } },
+                { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+                {
+                  op: 'gte',
+                  left: { path: 'startedAt' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
+                { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+                { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+                { op: 'exists', path: 'entityVersionId' },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/FROM current_spans s/g)).toHaveLength(1);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'model') = 'string'`);
+    expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
+    expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
+    expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
+    expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."provider" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."status" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."startedAt" IS NOT NULL AND s."startedAt" >=');
+    expect(compiled.text).toContain('s."durationMs" IS NOT NULL AND s."durationMs" >');
+    expect(compiled.text).toContain('s."entityVersionId" IS NOT NULL');
+    expect(compiled.values).toEqual(
+      expect.arrayContaining([
+        'medication_lookup',
+        'claude-sonnet-4-6',
+        'anthropic',
+        '2026-01-01T12:00:00.000Z',
+        5000,
+        'success',
+      ]),
+    );
+  });
+
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).not.toContain(key);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
+    expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
+    expect(compiled.text).toContain('IS NULL OR');
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      key,
+      value,
+      'actorRole',
+      'assistant',
+      'tool',
+      'parentMessageId',
+      101,
+    ]);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
@@ -119,6 +208,60 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).toContain('NOT r."isPending"');
     expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
+  });
+
+  it('compiles typed feedback relations with one correlated existence check per clause', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                    { op: 'exists', path: 'comment' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.text.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.text).toContain('s."traceId" IS NOT NULL');
+    expect(compiled.text).toContain('s."traceId" = r."traceId"');
+    expect(compiled.text).toContain('s."valueNumber" IS NOT NULL AND s."valueNumber" <');
+    expect(compiled.text).toContain('s."valueString" IS NOT NULL AND s."valueString" IN');
+    expect(compiled.text).toContain('(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)');
+    expect(compiled.text).toContain('FROM "public"."mastra_feedback_events" s');
+    expect(compiled.text).toContain('newer."feedbackId" = s."feedbackId"');
+    expect(compiled.text).toContain('newer."cursorId" > s."cursorId"');
+    expect(compiled.text).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compilePostgresTraceQuery('public', plan()).text;
+    const feedbackOnly = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).text;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('mastra_feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
   it('uses total null semantics for negative predicates', () => {

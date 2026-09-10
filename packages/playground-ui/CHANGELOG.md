@@ -1,5 +1,129 @@
 # @mastra/playground-ui
 
+## 54.0.0
+
+### Minor Changes
+
+- Adds `appearance="contained"` to display tabs with a frame around the content panel. Choose `frame="stroke"` for an outlined frame or `frame="inset"` for a filled frame. Tabs that do not fit the available width move into a `+N` dropdown. ([#23441](https://github.com/mastra-ai/mastra/pull/23441))
+
+  Set `attention` on a tab to show a line along its bottom edge. The line pulses briefly, then stays visible until you clear the prop. Users who prefer reduced motion see a static line.
+
+  ```tsx
+  <Tabs defaultTab="overview" appearance="contained" frame="inset">
+    <TabList>
+      <Tab value="overview">Overview</Tab>
+      <Tab value="activity">Activity</Tab>
+    </TabList>
+    <TabContent value="overview">Overview content</TabContent>
+    <TabContent value="activity">Activity content</TabContent>
+  </Tabs>
+  ```
+
+- Added SettingsLayout header options for pages that need more context or manage their own content layout. Use `titleAccessory` for content beside the title, `description` for supporting text, and `variant="header"` when the page already provides its content container. Existing layouts remain unchanged when these props are omitted. ([#23424](https://github.com/mastra-ai/mastra/pull/23424))
+
+  ```tsx
+  <SettingsLayout
+    title="Deployment"
+    titleAccessory={<Badge size="sm">Studio</Badge>}
+    description="Jan 1, 2025 07:00:00"
+    variant="header"
+  >
+    <DeploymentDetails />
+  </SettingsLayout>
+  ```
+
+### Patch Changes
+
+- Fix `DataListSkeleton` rendering a broken grid when a column track contains spaces (e.g. `minmax(0, 10rem)`), as on the scorer detail page. ([#23428](https://github.com/mastra-ai/mastra/pull/23428))
+
+- `TraceTimeline` gains a `revealSpanId` prop that scrolls the given span into view once it renders, even when it is nested deep in the tree. ([#23477](https://github.com/mastra-ai/mastra/pull/23477))
+
+- CollapsiblePanel now exposes a `CollapsiblePanelHandle` (`collapse()` / `expand()`) through its `ref`, so a parent can hide and show it programmatically. Expanding restores the exact width the panel had when `collapse()` was called, and falls back to `defaultSize` after a reload instead of opening at `minSize`. Removed the cursor-following pill on collapsed panel edges. ([#23517](https://github.com/mastra-ai/mastra/pull/23517))
+
+- Added spacing between the "New Chat" button and the thread list in `ThreadList`. ([#23438](https://github.com/mastra-ai/mastra/pull/23438))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`559f18b`](https://github.com/mastra-ai/mastra/commit/559f18bbbea6e9e2f555fdebbac01aade348e167), [`4fbbdf1`](https://github.com/mastra-ai/mastra/commit/4fbbdf1ba4ee8a900aedceb6cda657369bab06ae), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`d70d0b5`](https://github.com/mastra-ai/mastra/commit/d70d0b5a8326c14d45d934f523f4b07b0eb9b68b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb), [`3083d64`](https://github.com/mastra-ai/mastra/commit/3083d644b85df75bed88411f610146b5250d580f), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0
+  - @mastra/client-js@1.45.0
+  - @mastra/memory@1.29.0
+  - @mastra/react@1.4.12
+
+## 54.0.0-alpha.4
+
+### Patch Changes
+
+- CollapsiblePanel now exposes a `CollapsiblePanelHandle` (`collapse()` / `expand()`) through its `ref`, so a parent can hide and show it programmatically. Expanding restores the exact width the panel had when `collapse()` was called, and falls back to `defaultSize` after a reload instead of opening at `minSize`. Removed the cursor-following pill on collapsed panel edges. ([#23517](https://github.com/mastra-ai/mastra/pull/23517))
+
+- Updated dependencies [[`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6)]:
+  - @mastra/core@1.66.0-alpha.4
+  - @mastra/client-js@1.45.0-alpha.4
+  - @mastra/react@1.4.12-alpha.4
+
+## 53.1.0-alpha.3
+
+### Patch Changes
+
+- `TraceTimeline` gains a `revealSpanId` prop that scrolls the given span into view once it renders, even when it is nested deep in the tree. ([#23477](https://github.com/mastra-ai/mastra/pull/23477))
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`559f18b`](https://github.com/mastra-ai/mastra/commit/559f18bbbea6e9e2f555fdebbac01aade348e167), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb), [`3083d64`](https://github.com/mastra-ai/mastra/commit/3083d644b85df75bed88411f610146b5250d580f)]:
+  - @mastra/core@1.66.0-alpha.3
+  - @mastra/client-js@1.44.1-alpha.3
+  - @mastra/memory@1.29.0-alpha.2
+  - @mastra/react@1.4.12-alpha.3
+
+## 53.1.0-alpha.2
+
+### Minor Changes
+
+- Adds `appearance="contained"` to display tabs with a frame around the content panel. Choose `frame="stroke"` for an outlined frame or `frame="inset"` for a filled frame. Tabs that do not fit the available width move into a `+N` dropdown. ([#23441](https://github.com/mastra-ai/mastra/pull/23441))
+
+  Set `attention` on a tab to show a line along its bottom edge. The line pulses briefly, then stays visible until you clear the prop. Users who prefer reduced motion see a static line.
+
+  ```tsx
+  <Tabs defaultTab="overview" appearance="contained" frame="inset">
+    <TabList>
+      <Tab value="overview">Overview</Tab>
+      <Tab value="activity">Activity</Tab>
+    </TabList>
+    <TabContent value="overview">Overview content</TabContent>
+    <TabContent value="activity">Activity content</TabContent>
+  </Tabs>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+  - @mastra/client-js@1.44.1-alpha.2
+  - @mastra/react@1.4.12-alpha.2
+
+## 53.1.0-alpha.1
+
+### Minor Changes
+
+- Added SettingsLayout header options for pages that need more context or manage their own content layout. Use `titleAccessory` for content beside the title, `description` for supporting text, and `variant="header"` when the page already provides its content container. Existing layouts remain unchanged when these props are omitted. ([#23424](https://github.com/mastra-ai/mastra/pull/23424))
+
+  ```tsx
+  <SettingsLayout
+    title="Deployment"
+    titleAccessory={<Badge size="sm">Studio</Badge>}
+    description="Jan 1, 2025 07:00:00"
+    variant="header"
+  >
+    <DeploymentDetails />
+  </SettingsLayout>
+  ```
+
+### Patch Changes
+
+- Added spacing between the "New Chat" button and the thread list in `ThreadList`. ([#23438](https://github.com/mastra-ai/mastra/pull/23438))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4fbbdf1`](https://github.com/mastra-ai/mastra/commit/4fbbdf1ba4ee8a900aedceb6cda657369bab06ae), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+  - @mastra/memory@1.29.0-alpha.1
+  - @mastra/client-js@1.44.1-alpha.1
+  - @mastra/react@1.4.12-alpha.1
+
 ## 53.0.1-alpha.0
 
 ### Patch Changes

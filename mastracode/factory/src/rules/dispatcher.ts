@@ -12,8 +12,11 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { recordSessionRunStart } from '../session/run-audit.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
@@ -135,6 +138,7 @@ function watchRun(
     arm,
     wait,
     supersededAtEnd: () => supersededAtEnd,
+    endReason: () => endReason,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -249,6 +253,7 @@ export interface FactoryBindingPreparationInput {
 }
 
 export interface FactoryDecisionDispatcherOptions {
+  audit?: AuditRecorder;
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
@@ -393,6 +398,7 @@ async function awaitNotification(
 }
 
 export class FactoryDecisionDispatcher {
+  readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #boards: BoardRegistry;
@@ -418,6 +424,7 @@ export class FactoryDecisionDispatcher {
   readonly #inFlight = new Set<Promise<void>>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
+    this.#audit = options.audit;
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
@@ -869,6 +876,14 @@ export class FactoryDecisionDispatcher {
               }
             }
           }
+          await this.#recordRunStart(
+            session,
+            binding,
+            deliveryId,
+            record.approvedBy ?? undefined,
+            run.endReason,
+            item?.title,
+          );
           // A landed `deliver` still runs on the in-flight session, so the run's
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
@@ -1222,6 +1237,36 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  async #recordRunStart(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    kickoffId: string,
+    approvedBy: string | undefined,
+    observedEnd: ReturnType<typeof watchRun>['endReason'],
+    workItemName: string | undefined,
+  ): Promise<void> {
+    if (!this.#audit) return;
+    const humanApproved = isHumanActorId(approvedBy);
+    await recordSessionRunStart(session, {
+      audit: this.#audit,
+      actorType: humanApproved ? 'human' : 'system',
+      observedEnd,
+      run: {
+        kickoffId,
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: humanApproved ? approvedBy : 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        workItemName,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+      },
+    });
+  }
+
   async #dispatchPendingStart(record: FactoryPendingStartRecord, now: Date): Promise<void> {
     try {
       await this.#withLease(
@@ -1300,6 +1345,14 @@ export class FactoryDecisionDispatcher {
                 throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
               }
             }
+            await this.#recordRunStart(
+              session,
+              binding,
+              `factory-kickoff:${record.kickoffKey}:${record.attempts}`,
+              startedBy,
+              run.endReason,
+              item?.title,
+            );
             await run.settle();
           } finally {
             run.close();

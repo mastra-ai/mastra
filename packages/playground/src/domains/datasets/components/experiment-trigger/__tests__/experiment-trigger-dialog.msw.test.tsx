@@ -8,34 +8,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
+import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import { ExperimentTriggerDialog } from '../experiment-trigger-dialog';
 import type { ExperimentTriggerDialogProps } from '../experiment-trigger-dialog';
+import { getMultiSelectValues, setMultiSelectValues } from '@/test/mock-combobox-helpers';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
-  Combobox: ({
-    options,
-    value,
-    onValueChange,
-    placeholder,
-  }: {
-    options: Array<{ label: string; value: string }>;
-    value?: string;
-    onValueChange?: (value: string) => void;
-    placeholder?: string;
-  }) => (
-    <select aria-label={placeholder} value={value ?? ''} onChange={event => onValueChange?.(event.target.value)}>
-      <option value="">{placeholder}</option>
-      {options.map(option => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
+vi.mock('@mastra/playground-ui/components/Combobox', () => import('@/test/mock-combobox'));
 
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: { value: string; onChange?: (value: string) => void }) => (
@@ -125,6 +106,10 @@ function renderDialog(props: Partial<ExperimentTriggerDialogProps> = {}) {
 const selectOption = (label: string, value: string) =>
   fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } });
 
+const scorersListbox = () => screen.getByRole('listbox', { name: 'Select scorers...' });
+const selectedScorerValues = () => getMultiSelectValues('Select scorers...');
+const selectScorers = (values: string[]) => setMultiSelectValues('Select scorers...', values);
+
 const runButton = () => screen.getByRole('button', { name: 'Run' });
 
 const nameInput = () => screen.getByLabelText('Name *') as HTMLInputElement;
@@ -146,7 +131,7 @@ describe('ExperimentTriggerDialog', () => {
       const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
       expect((datasetCombobox as HTMLSelectElement).value).toBe('');
       expect(screen.getByText('Scorers (Optional)')).toBeDefined();
-      expect(screen.getByRole('combobox', { name: 'Select scorers...' })).toBeDefined();
+      expect(scorersListbox()).toBeDefined();
       expect((runButton() as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -401,6 +386,110 @@ describe('ExperimentTriggerDialog', () => {
       fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body.name).toBe('Prompt v2');
+    });
+  });
+  describe('given the selected dataset has default scorers', () => {
+    const datasetsWithDefaults = [
+      buildDataset({ id: 'dataset-1', name: 'Dataset 1', scorerIds: ['quality'] }),
+      buildDataset({ id: 'dataset-2', name: 'Dataset 2', scorerIds: ['stored-judge'] }),
+      buildDataset({ id: 'dataset-3', name: 'Dataset 3' }),
+    ];
+
+    function setupWithDefaults() {
+      const handlers = setupHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse(datasetsWithDefaults))),
+        http.get(`${BASE_URL}/api/datasets/:datasetId`, ({ params }) => {
+          const dataset = datasetsWithDefaults.find(d => d.id === params.datasetId);
+          return dataset ? HttpResponse.json(dataset) : HttpResponse.json({ error: 'not found' }, { status: 404 });
+        }),
+        http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)),
+      );
+      return handlers;
+    }
+
+    async function openWithDataset(datasetId: string, props: Partial<ExperimentTriggerDialogProps> = {}) {
+      const rendered = renderDialog({ initialDatasetId: datasetId, ...props });
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Quality scorer' })).toBeDefined());
+      return rendered;
+    }
+
+    it('pre-selects the dataset scorers and sends them in the payload', async () => {
+      const { triggerCalls } = setupWithDefaults();
+      await openWithDataset('dataset-1');
+
+      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
+
+      typeName('Defaults run');
+      await pickAgentTarget();
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['quality']);
+    });
+
+    it('shows that the scorers come from the dataset defaults', async () => {
+      setupWithDefaults();
+      await openWithDataset('dataset-1');
+
+      await waitFor(() => expect(screen.getByText("Pre-filled from the dataset's default scorers.")).toBeDefined());
+    });
+
+    it('lets the user clear them and then sends no scorerIds', async () => {
+      const { triggerCalls } = setupWithDefaults();
+      await openWithDataset('dataset-1');
+      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
+
+      selectScorers([]);
+      expect(selectedScorerValues()).toEqual([]);
+
+      typeName('No scorers');
+      await pickAgentTarget();
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).not.toHaveProperty('scorerIds');
+    });
+
+    it('re-applies the defaults of the newly selected dataset when switching dataset', async () => {
+      setupWithDefaults();
+      await openWithDataset('dataset-1');
+      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
+
+      selectScorers([]);
+      selectOption('Select a dataset...', 'dataset-2');
+      await waitFor(() => expect(selectedScorerValues()).toEqual(['stored-judge']));
+
+      selectOption('Select a dataset...', 'dataset-3');
+      await waitFor(() => expect(selectedScorerValues()).toEqual([]));
+    });
+  });
+
+  describe('given the dialog is opened with explicit initial scorer ids (rerun)', () => {
+    it('keeps the explicit scorers instead of the dataset defaults', async () => {
+      const { triggerCalls } = setupHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/datasets`, () =>
+          HttpResponse.json(buildListDatasetsResponse([buildDataset({ id: 'dataset-1', scorerIds: ['quality'] })])),
+        ),
+        http.get(`${BASE_URL}/api/datasets/:datasetId`, () =>
+          HttpResponse.json(buildDataset({ id: 'dataset-1', scorerIds: ['quality'] })),
+        ),
+        http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)),
+      );
+      renderDialog({ initialDatasetId: 'dataset-1', initialScorerIds: ['stored-judge'] });
+
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Stored judge' })).toBeDefined());
+      expect(selectedScorerValues()).toEqual(['stored-judge']);
+
+      typeName('Rerun');
+      await pickAgentTarget();
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['stored-judge']);
     });
   });
 });

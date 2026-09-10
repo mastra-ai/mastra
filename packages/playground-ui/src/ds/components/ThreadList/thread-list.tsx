@@ -21,7 +21,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
       <nav
         aria-label={ariaLabel}
         className={cn(
-          'h-full overflow-y-auto p-1',
+          'flex h-full flex-col gap-1 overflow-y-auto p-1',
           !embedded && 'rounded-studio-panel border border-border1/50 bg-surface3',
         )}
       >
@@ -40,7 +40,7 @@ export interface ThreadListNewItemProps {
 
 export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemProps) => {
   return (
-    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start rounded-xl">
+    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start rounded-xl px-3">
       {children}
     </Button>
   );
@@ -55,7 +55,7 @@ export interface ThreadListItemsProps {
 }
 
 export const ThreadListItems = ({ children }: ThreadListItemsProps) => (
-  <ol className="flex flex-col gap-px" data-testid="thread-list">
+  <ol className="flex flex-col gap-1" data-testid="thread-list">
     {children}
   </ol>
 );
@@ -92,7 +92,7 @@ export const ThreadListItem = ({
         onClick={onClick}
         variant="ghost"
         className={cn(
-          'h-auto! min-h-form-md w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
+          'w-full min-w-0 justify-start rounded-xl px-3 text-left',
           onDelete && 'pr-9',
           isActive && 'bg-surface4 text-neutral6',
           className,

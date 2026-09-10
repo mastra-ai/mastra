@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
+import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
   deltaLimitSchema,
   deltaInfoSchema,
@@ -140,8 +141,35 @@ export const spanRecordSchema = z
   })
   .describe('Span record data');
 
-/** Complete span record as stored in the database */
-export type SpanRecord = z.infer<typeof spanRecordSchema>;
+/** Span record exactly as the schema stores it: payload fields are untyped. */
+type StoredSpanRecord = z.infer<typeof spanRecordSchema>;
+
+/**
+ * Stored span record narrowed to one span type: `attributes`, `input` and
+ * `output` carry the shapes core records for that type. A union of span types
+ * gives a union of records, so `spanType` keeps discriminating after the
+ * guard.
+ */
+export type TypedSpanRecord<TType extends SpanType> = TType extends SpanType
+  ? Omit<StoredSpanRecord, 'spanType' | 'attributes' | 'input' | 'output'> & {
+      spanType: TType;
+      attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
+      input?: SpanInput<TType> | null;
+      output?: SpanOutput<TType> | null;
+    }
+  : never;
+
+/**
+ * Complete span record as stored in the database.
+ *
+ * Without a type argument this is the stored record as-is. Narrow `TType` to
+ * get a `TypedSpanRecord`. The schema itself stays permissive, so this is a
+ * read-side view only; narrow with `isSpanRecordOfType` from
+ * `@mastra/core/observability`.
+ */
+export type SpanRecord<TType extends SpanType = SpanType> = SpanType extends TType
+  ? StoredSpanRecord
+  : TypedSpanRecord<TType>;
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
