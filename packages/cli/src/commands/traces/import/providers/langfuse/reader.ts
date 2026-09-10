@@ -3,11 +3,13 @@ import {
   type LangfuseClientDependencies,
   type LangfuseClientOptions,
   type LangfuseObservationQuery,
+  LangfuseResponseTooLargeError,
 } from './client.js';
 import {
   LANGFUSE_EXPAND_ALL_METADATA,
   LANGFUSE_OBSERVATION_FIELDS,
   type LangfuseObservation,
+  type LangfuseObservationsPage,
   type LangfuseProject,
   type LangfuseSourceTrace,
   type LangfuseTraceDiscovery,
@@ -34,9 +36,11 @@ export interface LangfuseTraceReadOptions {
  */
 export class LangfuseObservationsReader {
   private readonly client: LangfuseClient;
+  private readonly onRetry?: () => void;
 
   constructor(options: LangfuseClientOptions, dependencies: LangfuseClientDependencies = {}) {
     this.client = new LangfuseClient(options, dependencies);
+    this.onRetry = dependencies.onRetry;
   }
 
   get baseUrl(): string {
@@ -106,11 +110,25 @@ export class LangfuseObservationsReader {
 
   private async *pages(query: Omit<LangfuseObservationQuery, 'cursor'>): AsyncGenerator<LangfuseObservation[]> {
     const seenCursors = new Set<string>();
+    let limit = query.limit;
     let cursor: string | undefined;
 
     do {
       query.signal?.throwIfAborted();
-      const page = await this.client.getObservationsPage({ ...query, cursor });
+      let page: LangfuseObservationsPage;
+      while (true) {
+        try {
+          page = await this.client.getObservationsPage({ ...query, cursor, limit });
+          break;
+        } catch (error) {
+          if (!(error instanceof LangfuseResponseTooLargeError) || limit === 1) throw error;
+
+          // The cursor identifies the last returned observation independently
+          // of the requested limit, so the page can safely be retried smaller.
+          limit = Math.max(1, Math.floor(limit / 2));
+          this.onRetry?.();
+        }
+      }
       yield page.data;
 
       cursor = page.cursor ?? undefined;

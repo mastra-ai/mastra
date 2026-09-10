@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LangfuseClient, LangfuseReaderError } from './client.js';
+import { LangfuseClient, LangfuseReaderError, LangfuseResponseTooLargeError } from './client.js';
 
 const options = {
   baseUrl: 'https://cloud.langfuse.com',
@@ -152,7 +152,7 @@ describe('LangfuseClient', () => {
     await expect(client.identifyProject()).rejects.toThrow('exactly one source project');
   });
 
-  it('rejects responses above the Langfuse API response limit', async () => {
+  it('rejects a response whose content length exceeds the Langfuse API response limit', async () => {
     const client = new LangfuseClient(options, {
       fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
         new Response('{}', {
@@ -161,7 +161,22 @@ describe('LangfuseClient', () => {
       ),
     });
 
-    await expect(client.identifyProject()).rejects.toThrow('response exceeds');
+    await expect(client.identifyProject()).rejects.toBeInstanceOf(LangfuseResponseTooLargeError);
+  });
+
+  it('stops reading a streamed response when it exceeds the Langfuse API response limit', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+        controller.enqueue(new Uint8Array(1));
+        controller.close();
+      },
+    });
+    const client = new LangfuseClient(options, {
+      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(body)),
+    });
+
+    await expect(client.identifyProject()).rejects.toBeInstanceOf(LangfuseResponseTooLargeError);
   });
 
   it.each([

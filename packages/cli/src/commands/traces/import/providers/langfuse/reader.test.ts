@@ -97,6 +97,47 @@ describe('LangfuseObservationsReader', () => {
     }
   });
 
+  it('retries an oversized page with a smaller limit without losing or duplicating observations', async () => {
+    const grandchild = { ...child, id: 'grandchild', parentObservationId: 'child' };
+    const oversizedBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+        controller.enqueue(new Uint8Array(1));
+        controller.close();
+      },
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ data: [root], meta: { cursor: 'next-page' } }))
+      .mockResolvedValueOnce(new Response(oversizedBody))
+      .mockResolvedValueOnce(Response.json({ data: [child], meta: { cursor: 'final-page' } }))
+      .mockResolvedValueOnce(Response.json({ data: [grandchild], meta: { cursor: null } }));
+    const onRetry = vi.fn();
+    const reader = new LangfuseObservationsReader(clientOptions, { fetch, onRetry });
+
+    await expect(reader.readTrace({ traceId: 'trace-1', projectId: 'project-1' })).resolves.toEqual({
+      traceId: 'trace-1',
+      observations: [root, child, grandchild],
+    });
+
+    const urls = fetch.mock.calls.map(([input]) => new URL(String(input)));
+    expect(urls.map(url => url.searchParams.get('limit'))).toEqual(['1000', '1000', '500', '500']);
+    expect(urls.map(url => url.searchParams.get('cursor'))).toEqual([null, 'next-page', 'next-page', 'final-page']);
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('fails when one observation exceeds the response limit', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+      return new Response(null, { headers: { 'Content-Length': String(5 * 1024 * 1024 + 1) } });
+    });
+    const reader = new LangfuseObservationsReader(clientOptions, { fetch });
+
+    await expect(reader.readTrace({ traceId: 'trace-1', projectId: 'project-1' })).rejects.toThrow('response exceeds');
+
+    const limits = fetch.mock.calls.map(([input]) => new URL(String(input)).searchParams.get('limit'));
+    expect(limits).toEqual(['1000', '500', '250', '125', '62', '31', '15', '7', '3', '1']);
+  });
+
   it.each([
     [
       'discovery',

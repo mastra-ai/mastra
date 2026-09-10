@@ -44,6 +44,13 @@ export class LangfuseReaderError extends Error {
   }
 }
 
+export class LangfuseResponseTooLargeError extends LangfuseReaderError {
+  constructor() {
+    super(`Langfuse response exceeds the ${MAX_RESPONSE_BYTES}-byte API limit.`);
+    this.name = 'LangfuseResponseTooLargeError';
+  }
+}
+
 export class LangfuseClient {
   readonly baseUrl: string;
 
@@ -258,7 +265,7 @@ async function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> 
 async function readResponseText(response: Response): Promise<string> {
   const contentLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
-    throw new LangfuseReaderError(`Langfuse response exceeds the ${MAX_RESPONSE_BYTES}-byte API limit.`);
+    throw new LangfuseResponseTooLargeError();
   }
   if (!response.body) return '';
 
@@ -273,7 +280,7 @@ async function readResponseText(response: Response): Promise<string> {
     bytes += chunk.value.byteLength;
     if (bytes > MAX_RESPONSE_BYTES) {
       await reader.cancel();
-      throw new LangfuseReaderError(`Langfuse response exceeds the ${MAX_RESPONSE_BYTES}-byte API limit.`);
+      throw new LangfuseResponseTooLargeError();
     }
     text += decoder.decode(chunk.value, { stream: true });
   }
