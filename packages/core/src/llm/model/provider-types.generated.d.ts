@@ -6433,6 +6433,7 @@ export type ProviderModelsMap = {
     '@cf/qwen/qwq-32b',
     '@cf/zai-org/glm-4.7-flash',
     '@cf/zai-org/glm-5.2',
+    '@cf/zai-org/glm-5.3',
     '@cf/zai-org/glm-5.3-flash',
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
@@ -6781,6 +6782,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.3',
   ];
   readonly 'opencode-go': readonly [
+    'deepseek-flash',
     'deepseek-v4-flash',
     'deepseek-v4-flash-vision-exp',
     'deepseek-v4-pro',
@@ -6966,6 +6968,7 @@ export type ProviderModelsMap = {
     'moonshot/kimi-k2.7-code-highspeed',
     'moonshot/kimi-k3',
     'nebius/deepseek-ai/DeepSeek-V4-Flash-0731',
+    'nebius/deepseek-ai/DeepSeek-V4-Pro-0813',
     'nebius/meta-llama/Llama-3.3-70B-Instruct',
     'nebius/nvidia/Nemotron-3-Ultra-550b-a55b',
     'nebius/nvidia/nemotron-3-super-120b-a12b',
