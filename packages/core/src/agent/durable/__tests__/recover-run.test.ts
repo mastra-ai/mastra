@@ -22,6 +22,7 @@ import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
+import { TripWire } from '../../trip-wire';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
@@ -753,6 +754,50 @@ describe('DurableAgent.recover(runId)', () => {
     expect((errorEvents[0]?.[1] as any).data.error.message).toBe('terminal failure');
     recovered.cleanup();
   });
+
+  it('publishes a recovered workflow tripwire once without losing its native payload', async () => {
+    const runId = 'run-recovered-tripwire';
+    const store = new InMemoryStore();
+    const pubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(pubsub, 'publish');
+    const { agent, mastra } = createDurableWithStore('agent-recovered-tripwire', store, pubsub);
+    await seed(store, runId, 'running', agent.id);
+    const tripwire = {
+      reason: 'Recovered output rejected',
+      retry: true,
+      metadata: { policy: 'recovery-policy' },
+      processorId: 'recovered-output-check',
+    };
+    // Only the workflow terminal is stubbed. Recovery ownership, snapshot
+    // cleanup, native pubsub and the public output stream are exercised.
+    const restart = vi.fn(async () => ({ status: 'tripwire' as const, tripwire }));
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, runId })),
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+    const recovered = await agent.recover(runId);
+    try {
+      await expect(globalRunRegistry.get(runId)?.workflowExecution).rejects.toBeInstanceOf(TripWire);
+      const output = await recovered.output.getFullOutput();
+      expect(output.tripwire).toEqual(tripwire);
+      expect(recovered.output.status).toBe('tripwire');
+      const terminals = publish.mock.calls.filter(
+        ([topic, event]) =>
+          topic === AGENT_STREAM_TOPIC(runId) &&
+          (event.type === AgentStreamEventTypes.ERROR ||
+            event.type === AgentStreamEventTypes.FINISH ||
+            (event.type === AgentStreamEventTypes.CHUNK && (event.data as { type?: string }).type === 'tripwire')),
+      );
+      expect(terminals).toHaveLength(1);
+      expect(terminals[0]?.[1].data).toMatchObject({ type: 'tripwire', payload: tripwire });
+      expect(restart).toHaveBeenCalledOnce();
+      expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, runId)).toBeNull();
+    } finally {
+      recovered.cleanup();
+      await mastra.shutdown();
+      await pubsub.close();
+    }
+  }, 15_000);
 
   it('rolls back thread registration when terminal error publication fails', async () => {
     const runId = 'run-terminal-publish-fail';

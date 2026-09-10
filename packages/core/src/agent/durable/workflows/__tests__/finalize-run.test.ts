@@ -6,11 +6,13 @@ import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types'
 
 const resolveRuntimeDependencies = vi.fn();
 
-vi.mock('../../utils/resolve-runtime', () => ({
+vi.mock('../../utils/resolve-runtime', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../utils/resolve-runtime')>()),
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
 }));
 
 const { runDurableFinishSideEffects } = await import('../finalize-run');
+const { DurableProcessorRebuildError } = await import('../../utils/resolve-runtime');
 
 function makeInitData(state: Record<string, unknown>): DurableAgenticWorkflowInput {
   return {
@@ -36,6 +38,63 @@ describe('runDurableFinishSideEffects', () => {
 
   afterEach(() => {
     globalRunRegistry.delete('run-1');
+  });
+
+  it('propagates a required processor rebuild failure', async () => {
+    const failure = new DurableProcessorRebuildError('agent-1', new Error('Required processor unavailable'));
+    resolveRuntimeDependencies.mockRejectedValue(failure);
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({}),
+        messageListState: makeMessageListState(),
+        mastra: { getLogger: () => undefined } as any,
+      }),
+    ).rejects.toBe(failure);
+  });
+
+  it.each(['thread', 'messages'] as const)('propagates required %s persistence failure before titling', async fault => {
+    const failure = new Error(`Failed ${fault}`);
+    const createThread = vi.fn(async () => {
+      if (fault === 'thread') throw failure;
+    });
+    const flushMessages = vi.fn(async () => {
+      if (fault === 'messages') throw failure;
+    });
+    const generateThreadTitle = vi.fn();
+    globalRunRegistry.set('run-1', {
+      outputProcessors: [],
+      saveQueueManager: { flushMessages },
+      memory: { createThread },
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: fault !== 'thread' }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(failure);
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('keeps an optional title failure nonfatal after the required write succeeds', async () => {
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const generateThreadTitle = vi.fn().mockRejectedValue(new Error('Optional title failed'));
+    globalRunRegistry.set('run-1', {
+      outputProcessors: [],
+      saveQueueManager: { flushMessages },
+      memory: {},
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+    const result = await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+      messageListState: makeMessageListState(),
+    });
+    expect(flushMessages).toHaveBeenCalledOnce();
+    expect(generateThreadTitle).toHaveBeenCalledOnce();
+    expect(result.outputText).toBe('hi there');
   });
 
   it('persists with the save queue the rebuild returned, even when the registry entry is not updated', async () => {

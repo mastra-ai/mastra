@@ -6,6 +6,7 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent/agent';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
+import { getProcessableResponseMessages } from '../agent/message-list/utils/response-text';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
@@ -31,6 +32,7 @@ import {
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
+import { normalizeProcessedText, textParts } from '../processors/processed-text';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -1296,6 +1298,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Workflow validation may clone the array. Final processors must receive
+              // the live MessageList objects so documented in-place edits persist.
+              const messages = getProcessableResponseMessages(passThrough.messageList);
+              normalizeProcessedText(messages, new Map(), passThrough.messageList);
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
@@ -1307,6 +1314,9 @@ function createStepFromProcessor<TProcessorId extends string>(
                 steps: [],
               };
 
+              const textBeforeProcessing = new Map(
+                (messages as MastraDBMessage[]).map(message => [message.id, textParts(message)]),
+              );
               const result = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -1324,12 +1334,14 @@ function createStepFromProcessor<TProcessorId extends string>(
                     text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
                   });
                 }
+                normalizeProcessedText(getProcessableResponseMessages(result), textBeforeProcessing, result);
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
                   systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
+                normalizeProcessedText(result, textBeforeProcessing);
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
@@ -1342,6 +1354,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               } else if (result && 'messages' in result && 'systemMessages' in result) {
                 // Processor returned { messages, systemMessages }
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                normalizeProcessedText(typedResult.messages, textBeforeProcessing);
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
                   passThrough.messageList,
@@ -1356,6 +1369,11 @@ function createStepFromProcessor<TProcessorId extends string>(
                   systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
+              normalizeProcessedText(
+                getProcessableResponseMessages(passThrough.messageList),
+                textBeforeProcessing,
+                passThrough.messageList,
+              );
               return { ...passThrough, messages };
             }
             return { ...passThrough, messages };

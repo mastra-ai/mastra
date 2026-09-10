@@ -482,38 +482,24 @@ describe('createStep with Processor', () => {
       );
     });
 
-    it('should call processOutputResult when phase is outputResult', async () => {
-      const processOutputResultMock = async ({ messages }) => {
-        return messages.filter(m => m.role !== 'system');
-      };
-
-      const processor: Processor = {
-        id: 'output-result-processor',
-        processOutputResult: processOutputResultMock,
-      };
-
-      const step = createStep(processor);
-      const messageList = createMockMessageList();
-      const inputData = {
-        phase: 'outputResult' as const,
-        messages: [
-          { id: '1', role: 'user', content: 'hi' },
-          { id: '2', role: 'system', content: 'system' },
-          { id: '3', role: 'assistant', content: 'hello' },
-        ],
-        messageList,
-      };
-
-      const result = await step.execute({ inputData } as any);
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          messages: [
-            { id: '1', role: 'user', content: 'hi' },
-            { id: '3', role: 'assistant', content: 'hello' },
-          ],
-        }),
-      );
+    it('should call processOutputResult with live response messages', async () => {
+      const messageList = new MessageList();
+      messageList.add({ id: 'input', role: 'user', content: 'hi' }, 'input');
+      messageList.add({ id: 'answer', role: 'assistant', content: 'hello' }, 'response');
+      const processOutputResult = vi.fn(({ messages }) => messages);
+      const step = createStep({ id: 'output-result-processor', processOutputResult });
+      const result = await step.execute({
+        inputData: {
+          phase: 'outputResult',
+          messages: structuredClone(messageList.get.response.db()),
+          messageList,
+        },
+      } as any);
+      expect(processOutputResult).toHaveBeenCalledOnce();
+      expect(result.messages).toEqual(messageList.get.response.db());
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].id).toBe('answer');
+      expect(messageList.get.input.db()[0].id).toBe('input');
     });
 
     it('should call processOutputStep when phase is outputStep', async () => {

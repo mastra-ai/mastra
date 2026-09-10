@@ -426,6 +426,8 @@ export interface DurableAgenticLoopOutput {
   /** Accumulated output from all iterations */
   output: {
     text?: string;
+    /** Complete response text changed by final processors; empty means deletion. */
+    processedText?: string;
     usage: LanguageModelUsage;
     steps: unknown[];
   };

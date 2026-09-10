@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { emitErrorEvent } from '@mastra/core/agent/durable';
+import { emitChunkEvent, emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
+import { ChunkFrom } from '@mastra/core/stream';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
@@ -504,6 +505,14 @@ export class InngestWorkflow<
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }
+            }
+            if (result.status === 'tripwire' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+              await emitChunkEvent(pubsub, inputData.runId, {
+                type: 'tripwire',
+                from: ChunkFrom.AGENT,
+                runId: inputData.runId,
+                payload: result.tripwire,
+              });
             }
 
             if (result.status !== 'paused') {

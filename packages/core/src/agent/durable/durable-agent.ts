@@ -26,6 +26,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
+import { TripWire } from '../trip-wire';
 import type { AgentSubscribeToThreadOptions, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
@@ -1529,8 +1530,8 @@ export class DurableAgent<
       actor: workflowInput.options?.actor,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
-    if (result?.status === 'failed') {
-      const error = new Error((result as any).error?.message || 'Workflow execution failed');
+    const error = this.getWorkflowFailure(result, 'Workflow execution failed');
+    if (error) {
       await this.emitError(runId, error);
     }
     // Reaching any non-suspended terminal status means the run is done and its
@@ -1567,7 +1568,40 @@ export class DurableAgent<
   protected async emitError(runId: string, error: Error): Promise<void> {
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
+    if (error instanceof TripWire) {
+      await emitChunkEvent(this.pubsub, runId, {
+        type: 'tripwire',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          reason: error.message,
+          retry: error.options.retry,
+          metadata: error.options.metadata,
+          processorId: error.processorId,
+        },
+      });
+      return;
+    }
     await emitErrorEvent(this.pubsub, runId, error);
+  }
+
+  /** Preserve native workflow guard failures across start, resume and recovery. */
+  protected getWorkflowFailure(
+    result: Pick<WorkflowRunState, 'status' | 'error' | 'tripwire'> | undefined,
+    fallbackMessage: string,
+  ): Error | undefined {
+    if (result?.status === 'tripwire') {
+      const tripwire = result.tripwire;
+      return new TripWire(
+        tripwire?.reason ?? 'Processor tripwire triggered',
+        { retry: tripwire?.retry, metadata: tripwire?.metadata },
+        tripwire?.processorId,
+      );
+    }
+    if (result?.status === 'failed') {
+      return new Error(result.error?.message || fallbackMessage);
+    }
+    return undefined;
   }
 
   /**
@@ -2409,9 +2443,9 @@ export class DurableAgent<
         } finally {
           await stopGoalActivity({ agentId: this.id, runId });
         }
-        if (result?.status === 'failed') {
-          const error = new Error((result as any).error?.message || 'Workflow resume failed');
-          void this.emitError(runId, error);
+        const error = this.getWorkflowFailure(result, 'Workflow resume failed');
+        if (error) {
+          await this.emitError(runId, error);
         }
         // Same snapshot cleanup as the initial `start()` path: once resume
         // settles on any non-suspended terminal status the persisted rows are
@@ -2700,8 +2734,9 @@ export class DurableAgent<
           await this.deleteRunSnapshots(runId);
           recoveryLease.assertOwned();
         }
-        if (result?.status === 'failed') {
-          throw new Error((result as any).error?.message || 'Workflow recover failed');
+        const error = this.getWorkflowFailure(result, 'Workflow recover failed');
+        if (error) {
+          throw error;
         }
       })
       .catch(async error => {

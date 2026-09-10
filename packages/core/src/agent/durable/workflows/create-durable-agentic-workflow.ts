@@ -622,10 +622,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               steps: state.accumulatedSteps,
             },
           });
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
-            lastStep.text = finishResult.outputText;
-            finalText = finishResult.outputText;
-          }
+          finalText = finishResult.processedText ?? (finishResult.outputText || finalText);
 
           const finalOutput = {
             messageListState: finishResult.messageListState,
@@ -637,6 +634,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             },
             output: {
               text: finalText,
+              ...(finishResult.processedText !== undefined ? { processedText: finishResult.processedText } : {}),
               usage: state.accumulatedUsage,
               steps: state.accumulatedSteps,
             },

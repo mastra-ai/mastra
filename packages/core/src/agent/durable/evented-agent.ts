@@ -105,6 +105,10 @@ export class EventedAgent<
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
         .then(async result => {
+          const error = this.getWorkflowFailure(result, 'Workflow execution failed');
+          if (error) {
+            await this.emitError(runId, error);
+          }
           // Reaching any non-suspended terminal status means the run is done and
           // its persisted snapshot rows will never be resumed. Delete them so
           // finished runs stop showing up in listActiveRuns() and being re-driven

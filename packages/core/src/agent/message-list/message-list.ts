@@ -991,6 +991,32 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /** Persist a drained batch, restoring only unsaved markers if its write fails. */
+  public async persistUnsavedMessages(persist: (messages: MastraDBMessage[]) => Promise<unknown>): Promise<void> {
+    const inputIds = new Set([...this.newUserMessages].map(message => message.id));
+    const responseIds = new Set([...this.newResponseMessages].map(message => message.id));
+    try {
+      const messages = this.drainUnsavedMessages();
+      if (messages.length === 0) return;
+      await persist(messages);
+    } catch (error) {
+      // A write can overlap edits or deletions. Mark the current objects rather
+      // than reinserting the failed snapshot, which could restore stale content.
+      for (const message of this.messages) {
+        if (
+          this.newUserMessages.has(message) ||
+          this.newResponseMessages.has(message) ||
+          this.memoryMessages.has(message) ||
+          this.userContextMessages.has(message)
+        )
+          continue;
+        if (responseIds.has(message.id)) this.newResponseMessages.add(message);
+        else if (inputIds.has(message.id)) this.newUserMessages.add(message);
+      }
+      throw error;
+    }
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;

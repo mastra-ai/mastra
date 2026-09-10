@@ -5,6 +5,7 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { TripWire } from '../agent/trip-wire';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -53,7 +54,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'tool-output'>
   | StreamPayloadChunk<'step-output'>
   | StreamPayloadChunk<'watch'>
-  | StreamPayloadChunk<'tripwire'>
   | StreamPayloadChunk<'is-task-complete'>
   | StreamPayloadChunk<'background-task-started'>
   | StreamPayloadChunk<'background-task-completed'>
@@ -82,6 +82,7 @@ type StreamChunk =
   | StreamPayloadChunk<'tool-call-approval'>
   | StreamPayloadChunk<'tool-call-suspended'>
   | StreamPayloadChunk<'error'>
+  | StreamPayloadChunk<'tripwire'>
   | StreamPayloadChunk<'step-finish'>
   | StreamPayloadChunk<'finish'>
   | StreamPayloadChunk<'goal'>
@@ -419,7 +420,7 @@ export class SessionRunEngine {
       for await (const chunk of response.fullStream) {
         if (bailed) return;
         result = await this.processStreamChunk(state, chunk, requestContext);
-        if (chunk.type === 'error') {
+        if (chunk.type === 'error' || chunk.type === 'tripwire') {
           error = true;
         }
         if (chunk.type === 'abort') {
@@ -429,6 +430,7 @@ export class SessionRunEngine {
           result ||
           chunk.type === 'finish' ||
           chunk.type === 'error' ||
+          chunk.type === 'tripwire' ||
           chunk.type === 'abort' ||
           chunk.type === 'tool-call-suspended' ||
           this.#session.run.isAbortRequested()
@@ -767,8 +769,19 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'tripwire':
       case 'error': {
-        const streamError = getErrorFromUnknown(getPayload(chunk).error);
+        const payload = getPayload(chunk);
+        const streamError =
+          chunk.type === 'tripwire'
+            ? new TripWire(
+                getString(payload.reason) ?? 'Processor tripwire triggered',
+                { retry: typeof payload.retry === 'boolean' ? payload.retry : undefined, metadata: payload.metadata },
+                getString(payload.processorId),
+              )
+            : getErrorFromUnknown(payload.error);
+        this.setStopReason(state.currentMessage, 'error', true);
+        this.setErrorMessage(state.currentMessage, streamError.message);
         this.#session.emit({ type: 'error', error: streamError });
 
         // A run that dies after emitting `tool_suspended` (e.g. persisting the
@@ -1273,6 +1286,7 @@ export class SessionRunEngine {
             streamResult ||
             chunk.type === 'finish' ||
             chunk.type === 'error' ||
+            chunk.type === 'tripwire' ||
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
@@ -1287,7 +1301,7 @@ export class SessionRunEngine {
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the
             // run never silently stops without a visible terminal state.
-            let isError = chunk.type === 'error';
+            let isError = chunk.type === 'error' || chunk.type === 'tripwire';
             if (
               currentRun.terminalError &&
               !isError &&

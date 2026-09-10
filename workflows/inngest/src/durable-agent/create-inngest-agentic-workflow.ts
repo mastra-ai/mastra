@@ -28,6 +28,7 @@ import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
 
+import { createInngestStepFailure } from '../execution-engine';
 import { init } from '../index';
 
 /**
@@ -396,27 +397,30 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           let finalText = lastStep?.text;
 
-          const finishResult = await params.engine.step.run(`agent.${state.runId}.finish-side-effects`, () =>
-            runDurableFinishSideEffects({
-              runId: state.runId,
-              initData,
-              messageListState: state.messageListState,
-              mastra,
-              requestContext,
-              tracingContext,
-              logger: mastra?.getLogger?.(),
-              outputResult: {
-                text: finalText ?? '',
-                usage: state.accumulatedUsage,
-                finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
-              },
-            }),
-          );
-          if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
-            lastStep.text = finishResult.outputText;
-            finalText = finishResult.outputText;
-          }
+          const finishResult = await params.engine.step.run(`agent.${state.runId}.finish-side-effects`, async () => {
+            try {
+              return await runDurableFinishSideEffects({
+                runId: state.runId,
+                initData,
+                messageListState: state.messageListState,
+                mastra,
+                requestContext,
+                tracingContext,
+                logger: mastra?.getLogger?.(),
+                outputResult: {
+                  text: finalText ?? '',
+                  usage: state.accumulatedUsage,
+                  finishReason: state.lastStepResult?.reason ?? 'unknown',
+                  steps: state.accumulatedSteps,
+                },
+              });
+            } catch (error) {
+              // This inner SDK step is serialized before the outer native map
+              // can catch it. Preserve guard identity here as well as there.
+              throw createInngestStepFailure(error);
+            }
+          });
+          finalText = finishResult.processedText ?? (finishResult.outputText || finalText);
 
           const finalOutput = {
             messageListState: finishResult.messageListState,
@@ -428,6 +432,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             },
             output: {
               text: finalText,
+              ...(finishResult.processedText !== undefined ? { processedText: finishResult.processedText } : {}),
               usage: state.accumulatedUsage,
               steps: state.accumulatedSteps,
             },

@@ -347,6 +347,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             break;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
+          if (chunk.type === 'tripwire') {
+            safeClose(controller);
+            markTerminated();
+            // A guard refusal is terminal too. Notify the native lifecycle
+            // before user callbacks, which may throw, so registry and topic
+            // cleanup cannot be skipped by a failed observer.
+            try {
+              await onStreamFinished?.();
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onStreamFinished callback error:`, callbackError);
+            }
+          }
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
         }

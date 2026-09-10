@@ -3,6 +3,7 @@ import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { getProcessableResponseMessages } from '../agent/message-list/utils/response-text';
 import type { AgentStateSignalInput } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
@@ -27,6 +28,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
+import { normalizeProcessedText, textParts } from './processed-text';
 import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import {
@@ -72,28 +74,6 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   } catch {
     // onViolation errors are silently caught
   }
-}
-
-function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
-  const liveMessages = messageList.get.response.db();
-  const persistedMessages = messageList.getPersisted.response.db();
-
-  if (persistedMessages.length === 0) {
-    return [...liveMessages];
-  }
-  if (liveMessages.length === 0) {
-    return [...persistedMessages];
-  }
-
-  const messagesById = new Map(persistedMessages.map(message => [message.id, message]));
-  for (const message of liveMessages) {
-    messagesById.set(message.id, message);
-  }
-
-  return messageList.get.all
-    .db()
-    .filter(message => messagesById.has(message.id))
-    .map(message => messagesById.get(message.id)!);
 }
 
 /**
@@ -648,6 +628,7 @@ export class ProcessorRunner {
       let processableMessages = getProcessableResponseMessages(messageList);
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
+      const textBeforeProcessing = new Map(processableMessages.map(message => [message.id, textParts(message)]));
 
       // Handle workflow as processor
       if (isProcessorWorkflow(processorOrWorkflow)) {
@@ -664,6 +645,7 @@ export class ProcessorRunner {
           requestContext,
           writer,
         );
+        normalizeProcessedText(getProcessableResponseMessages(messageList), textBeforeProcessing, messageList);
         continue;
       }
 
@@ -754,6 +736,7 @@ export class ProcessorRunner {
             if (deletedIds.length) {
               messageList.removeByIds(deletedIds);
             }
+            normalizeProcessedText(processResult, textBeforeProcessing);
             processableMessages = processResult || [];
             for (const message of processResult) {
               messageList.removeByIds([message.id]);
@@ -761,6 +744,10 @@ export class ProcessorRunner {
             }
           }
         }
+
+        // In-place parts edits do not require a recorded MessageList mutation.
+        processableMessages = getProcessableResponseMessages(messageList);
+        normalizeProcessedText(processableMessages, textBeforeProcessing, messageList);
 
         processorSpan?.end({
           output: {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { TripWire } from '@mastra/core/agent';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
@@ -14,6 +15,7 @@ import type {
   StepFailure,
   ExecutionEngineOptions,
   TimeTravelExecutionParams,
+  StepTripwireInfo,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
@@ -52,6 +54,39 @@ function isNonRetryableStepFailure(error: unknown): boolean {
   }
 
   return false;
+}
+
+/** Preserve native failure data before each SDK serialization boundary. */
+export function createInngestStepFailure(error: unknown): Error {
+  const errorInstance = getErrorFromUnknown(error, {
+    serializeStack: false,
+    fallbackMessage: 'Unknown step execution error',
+  });
+  const previousCause = error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+  const tripwire =
+    error instanceof TripWire
+      ? {
+          reason: error.message,
+          retry: error.options.retry,
+          metadata: error.options.metadata,
+          processorId: error.processorId,
+        }
+      : previousCause &&
+          typeof previousCause === 'object' &&
+          'status' in previousCause &&
+          previousCause.status === 'failed' &&
+          'tripwire' in previousCause
+        ? previousCause.tripwire
+        : undefined;
+  return new Error(errorInstance.message, {
+    cause: {
+      status: 'failed',
+      error: errorInstance,
+      endedAt: Date.now(),
+      ...(isNonRetryableStepFailure(error) && { nonRetryable: true as const }),
+      tripwire,
+    },
+  });
 }
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
@@ -123,7 +158,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     },
   ): Promise<
     | { ok: true; result: T }
-    | { ok: false; error: { status: 'failed'; error: Error; endedAt: number; nonRetryable?: true } }
+    | {
+        ok: false;
+        error: { status: 'failed'; error: Error; endedAt: number; nonRetryable?: true; tripwire?: StepTripwireInfo };
+      }
   > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
@@ -214,19 +252,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const fnResult = await operationFn();
         return fnResult;
       } catch (e) {
-        const errorInstance = getErrorFromUnknown(e, {
-          serializeStack: false,
-          fallbackMessage: 'Unknown step execution error',
-        });
-        const isNonRetryable = isNonRetryableStepFailure(e);
-        throw new Error(errorInstance.message, {
-          cause: {
-            status: 'failed',
-            error: errorInstance,
-            endedAt: Date.now(),
-            ...(isNonRetryable && { nonRetryable: true as const }),
-          },
-        });
+        throw createInngestStepFailure(e);
       }
     });
     return result as T;
