@@ -201,4 +201,4 @@ The documentation site is built from the `docs/` directory. Follow its [document
 
 ## Need help?
 
-Join the [Mastra Discord community](https://discord.gg/BTYqqHKUrf) for support and discussions.
+Join the [Mastra Discord community](https://discord.gg/mastra-ai) for support and discussions.
