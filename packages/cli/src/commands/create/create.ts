@@ -419,7 +419,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
     // terminal visibly alive with a spinner while the background scaffold
     // (clone/install) completes — otherwise the CLI looks frozen.
     platformSetup = await platformSetupPromise;
-    if (platformSetup.status === 'cancelled') {
+    if (platformSetup.status === 'cancelled' && !interruptionSignal) {
+      // A SIGINT also cancels platform setup; in that case the interruption
+      // branch below reports the 'cancelled' outcome instead.
       analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
       p.log.info('Skipping Mastra platform setup.');
     }
