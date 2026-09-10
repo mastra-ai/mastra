@@ -1875,10 +1875,10 @@ class MastraScorer<
  * import { createScorer } from '@mastra/core/evals';
  *
  * const scorer = createScorer({
- *   id: 'response-quality',
- *   description: 'Evaluate the quality of an agent response.',
+ *   id: 'response-presence',
+ *   description: 'Check whether the agent produced any output messages.',
  *   type: 'agent',
- * });
+ * }).generateScore(({ run }) => (run.output.length > 0 ? 1 : 0));
  * ```
  *
  * @see For documentation bundled with your installed package, locate
