@@ -15,7 +15,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { ToolCallTrailingSlotContext, useToolCallTrailingSlot } from './tool-call-trailing-slot';
 import { useChatRunning } from '@/lib/ai-ui/chat/chat-context';
 
 export interface BadgeWrapperProps {
@@ -48,7 +47,6 @@ export const BadgeWrapper = ({
 }: BadgeWrapperProps) => {
   const [open, setOpen] = useState(!initialCollapsed);
   const { isRunning } = useChatRunning();
-  const trailingSlot = useToolCallTrailingSlot();
   // A badge already on screen when the thread loaded was not just called.
   const [arrivedLive] = useState(() => isRunning);
 
@@ -87,16 +85,9 @@ export const BadgeWrapper = ({
         ) : (
           <span className="min-w-0 flex-1">{header}</span>
         )}
-        {(extraInfo || trailingSlot) && (
-          <ToolCallTrailing className="gap-1 pr-1">
-            {extraInfo}
-            {trailingSlot}
-          </ToolCallTrailing>
-        )}
+        {extraInfo && <ToolCallTrailing className="gap-1 pr-1">{extraInfo}</ToolCallTrailing>}
       </span>
-      <ToolCallContent>
-        <ToolCallTrailingSlotContext.Provider value={null}>{children}</ToolCallTrailingSlotContext.Provider>
-      </ToolCallContent>
+      <ToolCallContent>{children}</ToolCallContent>
     </ToolCall>
   );
 };
