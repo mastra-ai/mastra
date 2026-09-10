@@ -784,6 +784,17 @@ function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }
   };
 }
 
+/**
+ * An integration that owns source control. Ownership is the `versionControl`
+ * capability, not the id, so a fake asserting owner behavior must declare it.
+ */
+function fakeSourceControlIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
+  return fakeIntegration({
+    versionControl: { initialize: vi.fn() } as unknown as FactoryIntegration['versionControl'],
+    ...overrides,
+  });
+}
+
 function fakeAuditIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {
   return fakeIntegration({ audit: vi.fn(async () => {}), ...overrides });
 }
@@ -1022,14 +1033,45 @@ describe('MastraFactory.prepare integrations', () => {
   it('exposes the source-control owner on the routes context when github is registered', async () => {
     const ctx = await prepareIntegrationContext({
       storage: fakeStorage(),
-      integrations: [fakeIntegration({ id: 'github' })],
+      integrations: [fakeSourceControlIntegration({ id: 'github' })],
     });
     expect(ctx.storage.sourceControlOwner).toBeDefined();
     expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
   });
 
-  it('omits the source-control owner from the routes context when github is absent', async () => {
+  it('owns source control from a non-github provider when it is the only one', async () => {
+    // A GitLab-only deployment has to resolve an owner, or nothing can open a
+    // session: repositories, branches, and sessions all key off this handle.
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeSourceControlIntegration({ id: 'gitlab' })],
+    });
+    expect(ctx.storage.sourceControlOwner!.integrationId).toBe('gitlab');
+  });
+
+  it('keeps github as the owner when both providers are registered', async () => {
+    // Registration order must not decide which forge holds the codebase, or
+    // adding GitLab to an existing deployment would silently move it.
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeSourceControlIntegration({ id: 'gitlab' }), fakeSourceControlIntegration({ id: 'github' })],
+    });
+    expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+  });
+
+  it('omits the source-control owner when no integration owns source control', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
+  it('does not treat an integration without the capability as the owner', async () => {
+    // Being named github is not ownership: an intake-only registration holds
+    // no repositories, so handing it the owner handle would resolve sessions
+    // against a provider that has none.
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'github' })],
+    });
     expect(ctx.storage.sourceControlOwner).toBeUndefined();
   });
 
@@ -1106,7 +1148,10 @@ describe('MastraFactory.prepare integrations', () => {
       const factory = new MastraFactory({
         secretEncryption,
         storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [
+          fakeSourceControlIntegration({ id: 'github' }),
+          fakeIntegration({ id: 'chat-platform', channels }),
+        ],
       });
 
       await factory.prepare();

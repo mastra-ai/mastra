@@ -174,6 +174,25 @@ export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfi
 }
 
 /**
+ * The registered integration that owns source control, or `undefined` when no
+ * codebase provider is configured.
+ *
+ * A deployment has exactly one codebase, so exactly one integration owns the
+ * repositories, sessions, and branches. Which one is a deployment's choice,
+ * not a constant: resolving it by the capability rather than the literal id
+ * `'github'` is what lets a GitLab-only deployment open sessions at all.
+ *
+ * GitHub keeps precedence when both are registered, so registration order
+ * cannot silently move an existing deployment's codebase to another forge.
+ */
+export function sourceControlOwner<T extends { readonly id: string; readonly versionControl?: unknown }>(
+  integrations: readonly T[],
+): T | undefined {
+  const owners = integrations.filter(integration => integration.versionControl !== undefined);
+  return owners.find(integration => integration.id === 'github') ?? owners[0];
+}
+
+/**
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
  */

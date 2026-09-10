@@ -7,6 +7,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { sourceControlOwner } from '../integrations/base.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -335,9 +336,10 @@ export function buildIntegrationContext(
       'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings'
     >;
     /**
-     * Stable id of the registered source-control-owning integration (today:
-     * `'github'` when registered). Every call site must derive and pass it so
-     * `routes()`, `channels()`, and `workers()` all see the same context shape.
+     * Stable id of the registered source-control-owning integration, resolved
+     * from the `versionControl` capability by {@link sourceControlOwner}.
+     * Every call site must derive and pass it so `routes()`, `channels()`, and
+     * `workers()` all see the same context shape.
      */
     sourceControlOwnerId?: string;
   },
@@ -457,6 +459,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
+  // Whoever owns the codebase, not whoever is named GitHub. GitHub keeps
+  // precedence when both are registered, so an existing deployment resolves
+  // the same owner it always did.
+  const ownerId = sourceControlOwner(registrations.map(({ integration }) => integration))?.id;
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
 
@@ -468,7 +474,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         stateSigner: deps.stateSigner,
         emitAudit,
-        ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
+        ...(ownerId ? { sourceControlOwnerId: ownerId } : {}),
       },
       integration.id,
     );

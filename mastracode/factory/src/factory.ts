@@ -44,6 +44,7 @@ import {
 import { createBoardRegistry, workItemPhaseSemantics } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { touchFeed } from './feed-events.js';
+import { sourceControlOwner } from './integrations/base.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -589,6 +590,16 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
+    // The integration that owns the codebase — repositories, sessions, and
+    // branches all live under its id. Resolved by capability so a deployment
+    // whose codebase is on GitLab gets sessions; GitHub keeps precedence when
+    // both are registered, so existing deployments are unaffected.
+    const sourceControlOwnerId = sourceControlOwner(integrations)?.id;
+    // Session rows are written under the owning integration's id, so readers
+    // must resolve the same handle. Falls back to `'github'` when nothing owns
+    // source control, which is exactly what these readers used before, so a
+    // deployment without a codebase provider keeps its current behavior.
+    const ownedSourceControl = sourceControlStorage.forIntegration(sourceControlOwnerId ?? 'github');
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -815,9 +826,7 @@ export class MastraFactory {
                       // Only offered while the source-control domain is ready — a
                       // throwing lookup would abort recovery's catch block and also
                       // skip the metadata baseRef fallback.
-                      ...(storage.isDomainReady('source-control')
-                        ? { sessions: sourceControlStorage.forIntegration('github').sessions }
-                        : {}),
+                      ...(storage.isDomainReady('source-control') ? { sessions: ownedSourceControl.sessions } : {}),
                     }),
                   );
                   // Bound factory sessions can read the project's synced
@@ -1067,17 +1076,11 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(session => {
       observeSessionFilesystem(session, {
         filesystem: filesystemStorage,
-        sourceControl: sourceControlStorage.forIntegration('github'),
+        sourceControl: ownedSourceControl,
       });
-      observeSessionFirstMessage(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
-      });
-      observeSessionFirstExec(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
-      });
-      observeSessionThreadTitle(session, {
-        sourceControl: sourceControlStorage.forIntegration('github'),
-      });
+      observeSessionFirstMessage(session, { sourceControl: ownedSourceControl });
+      observeSessionFirstExec(session, { sourceControl: ownedSourceControl });
+      observeSessionThreadTitle(session, { sourceControl: ownedSourceControl });
       observeSessionRunEnd(session, { audit: auditDomain });
     });
 
@@ -1104,7 +1107,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionMemorySettings(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: ownedSourceControl,
           memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
@@ -1115,7 +1118,7 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionModelPack(session, {
-          sourceControl: sourceControlStorage.forIntegration('github'),
+          sourceControl: ownedSourceControl,
           workItems: workItemsStorage,
           modelPacks: modelPacksStorage,
         }),
@@ -1159,7 +1162,7 @@ export class MastraFactory {
           factoryReady,
           domains,
           feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          ...(sourceControlOwnerId ? { sourceControlOwnerId } : {}),
         },
         integration.id,
       );
@@ -1205,7 +1208,7 @@ export class MastraFactory {
                 factoryReady,
                 domains,
                 feed: commentsDomain,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+                ...(sourceControlOwnerId ? { sourceControlOwnerId } : {}),
               },
               integration.id,
             ),
