@@ -44,6 +44,38 @@ async function fixture() {
 }
 
 describe('strict scheduled result Session', () => {
+  it.each(['missing', 'different'] as const)(
+    'does not reuse an active subscription with a %s owning agent',
+    async kind => {
+      const { controller, options, agent } = await fixture();
+      const session = await controller.createSession(options);
+      session.thread.cleanupSubscription();
+      const subscription = {
+        stream: [],
+        activeRunId: () => 'running',
+        abort: vi.fn(),
+        unsubscribe: vi.fn(),
+      };
+      session.stream.attach({
+        subscription: subscription as never,
+        key: `${agent.id}:owner:result`,
+        ...(kind === 'different'
+          ? {
+              agent: new Agent({
+                id: agent.id,
+                name: 'Different instance',
+                instructions: 'No calls.',
+                model: 'openai/gpt-4o',
+              }),
+            }
+          : {}),
+      });
+      await expect(controller.createSession(options)).rejects.toThrow('active Session subscription');
+      expect(subscription.unsubscribe).not.toHaveBeenCalled();
+      session.thread.cleanupSubscription();
+    },
+  );
+
   it('concurrent bindings share one Session and one subscription', async () => {
     const { controller, options } = await fixture();
     const sessions = await Promise.all(Array.from({ length: 8 }, () => controller.createSession(options)));

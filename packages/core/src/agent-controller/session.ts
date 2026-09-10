@@ -570,7 +570,8 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    if (session.stream.matches({ key }) && session.stream.getCurrentAgent() === agent) return;
+    const currentAgent = session.stream.getCurrentAgent();
+    if (session.stream.matches({ key }) && (currentAgent === agent || (!strict && currentAgent === null))) return;
     if (strict && (session.run.isRunning() || session.stream.isActive() || session.approval.isArmed())) {
       throw new Error('Cannot replace an active Session subscription');
     }
