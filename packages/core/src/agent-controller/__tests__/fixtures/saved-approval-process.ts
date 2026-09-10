@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { z } from 'zod';
-import { Memory } from '../../../../../../packages/memory/src/index.ts';
-import { LibSQLStore } from '../../../../../../stores/libsql/src/index.ts';
+import { Memory } from '../../../../../../packages/memory/src/index.js';
+import { LibSQLStore } from '../../../../../../stores/libsql/src/index.js';
 import { createDurableAgent } from '../../../../dist/agent/durable/index.js';
 import { Agent } from '../../../../dist/agent/index.js';
 import { AgentController } from '../../../../dist/agent-controller/index.js';
@@ -19,6 +19,8 @@ globalThis.fetch = async () => {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 let calls = 0,
   executions = 0;
+let initialInputChecks = 0;
+const stepInputIds: string[][] = [];
 const events: any[] = [];
 const storage = new LibSQLStore({ id: 'approval-restart', url: `file:${db}` });
 const memory = new Memory({ storage, options: { generateTitle: false } });
@@ -75,6 +77,27 @@ const agent = createDurableAgent({
     instructions: 'Use the fixture.',
     model,
     memory,
+    inputProcessors: [
+      {
+        id: 'saved-input-identity',
+        processInput({ messages, messageList }) {
+          initialInputChecks++;
+          assert.ok(
+            messageList.getPersisted.input.db().some(message => message.role === 'user' || message.role === 'signal'),
+          );
+          return messages;
+        },
+        processInputStep({ messageList }) {
+          const ids = messageList.getPersisted.input
+            .db()
+            .filter(message => message.role === 'user' || message.role === 'signal')
+            .map(message => message.id);
+          assert.ok(ids.length > 0);
+          stepInputIds.push(ids);
+          return {};
+        },
+      },
+    ],
     tools: { fixture: tool },
   }),
   cache,
@@ -82,7 +105,9 @@ const agent = createDurableAgent({
 });
 const controller = new AgentController({
   id: 'fixture-controller',
-  agent,
+  // DurableAgent intentionally changes stream/generate return types. This
+  // fixture exercises the shared controller subscription API instead.
+  agent: agent as unknown as Agent<any, any, any>,
   storage,
   memory,
   pubsub,
@@ -113,7 +138,11 @@ const scope = { resourceId: 'fixture-owner', threadId: 'fixture-thread' };
 const session = await controller.createSession(scope);
 session.subscribe(e => {
   if (['error', 'agent_end', 'tool_end', 'tool_approval_required'].includes(e.type))
-    events.push({ type: e.type, reason: e.reason, error: e.error?.message });
+    events.push({
+      type: e.type,
+      reason: e.type === 'agent_end' ? e.reason : undefined,
+      error: e.type === 'error' ? e.error.message : undefined,
+    });
 });
 if (phase === 'prepare') {
   void session
@@ -126,7 +155,12 @@ if (phase === 'prepare') {
     await wait(50);
   }
   assert.equal(saved?.total, 1);
+  const savedRun = saved?.runs[0];
+  assert.ok(savedRun);
+  const savedCall = savedRun.toolCalls[0];
+  assert.ok(savedCall);
   assert.equal(executions, 0);
+  assert.equal(initialInputChecks, 1);
 
   console.info(
     'RESULT ' +
@@ -136,16 +170,22 @@ if (phase === 'prepare') {
         pid: process.pid,
         calls,
         executions,
-        runId: saved!.runs[0].runId,
-        requiresApproval: saved!.runs[0].toolCalls[0].requiresApproval,
+        initialInputChecks,
+        stepInputIds,
+        runId: savedRun.runId,
+        requiresApproval: savedCall.requiresApproval,
       }),
   );
   process.exit(0);
 }
 const saved = await agent.listSuspendedRuns(scope);
 assert.equal(saved.total, 1);
-assert.equal(saved.runs[0].runId, expectedRunId);
-assert.equal(saved.runs[0].toolCalls[0].requiresApproval, true);
+const savedRun = saved.runs[0];
+assert.ok(savedRun);
+const savedCall = savedRun.toolCalls[0];
+assert.ok(savedCall);
+assert.equal(savedRun.runId, expectedRunId);
+assert.equal(savedCall.requiresApproval, true);
 assert.deepEqual(session.displayState.get().pendingApproval, {
   toolCallId: 'fixture-call',
   toolName: 'fixture',
@@ -196,8 +236,19 @@ assert.deepEqual(
   events.filter(e => e.type === 'error'),
   [],
 );
+assert.equal(initialInputChecks, 0, 'Restoring saved work must not rerun initial input processors');
 console.info(
   'RESULT ' +
-    JSON.stringify({ phase, decision, pid: process.pid, calls, executions, runId: saved.runs[0].runId, events }),
+    JSON.stringify({
+      phase,
+      decision,
+      pid: process.pid,
+      calls,
+      executions,
+      initialInputChecks,
+      stepInputIds,
+      runId: savedRun.runId,
+      events,
+    }),
 );
 process.exit(0);
