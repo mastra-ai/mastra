@@ -28,7 +28,7 @@ import {
   signalToDataPartFormat,
   signalToMastraDBMessage,
 } from '../signals';
-import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadStreamRuntime, agentThreadStreamRuntime, isReplayedStreamPart } from '../thread-stream-runtime';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -1109,6 +1109,62 @@ describe('Agent signals', () => {
       await pubsub.flush();
       await nextTick();
       await pubsub.flush();
+    }
+  });
+
+  it('keeps replay metadata scoped to each retained stream generation of the same run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const threadId = 'replayed-stream-thread';
+    const resourceId = 'replayed-stream-resource';
+    const runId = 'replayed-run';
+    const key = `${resourceId}\u0000${threadId}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+    const agent = { id: 'replayed-stream-agent' } as Agent<any, any, any, any>;
+    pubsub.owners.set(key, runId);
+
+    const publishGeneration = async (
+      streamId: string,
+      streamSeq: number,
+      terminal: 'run-suspended' | 'run-completed',
+    ) => {
+      await pubsub.publish(topic, {
+        type: 'run-registered',
+        data: { type: 'run-registered', runId, streamId, streamSeq },
+      });
+      await pubsub.publish(topic, {
+        type: 'stream-part',
+        data: { type: 'stream-part', runId, streamId, sourceId: 'origin', part: { type: 'start' } },
+      });
+      await pubsub.publish(topic, {
+        type: terminal,
+        data: { type: terminal, runId, streamId, ...(terminal === 'run-completed' ? { persisted: true } : {}) },
+      });
+    };
+
+    await publishGeneration('replayed-stream-1', 1, 'run-suspended');
+    await publishGeneration('replayed-stream-2', 2, 'run-completed');
+    await pubsub.flush();
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    try {
+      const retainedSuspension = await withTimeout(iterator.next(), 'Timed out waiting for retained suspension');
+      expect(retainedSuspension).toMatchObject({ value: { type: 'start', runId } });
+      expect(isReplayedStreamPart(retainedSuspension.value)).toBe(true);
+      expect(JSON.stringify(retainedSuspension.value)).toBe(JSON.stringify({ type: 'start', runId }));
+
+      const retainedContinuation = await withTimeout(iterator.next(), 'Timed out waiting for retained continuation');
+      expect(retainedContinuation).toMatchObject({ value: { type: 'start', runId } });
+      expect(isReplayedStreamPart(retainedContinuation.value)).toBe(true);
+
+      await publishGeneration('live-stream-3', 3, 'run-completed');
+      await pubsub.flush();
+      const liveContinuation = await withTimeout(iterator.next(), 'Timed out waiting for live continuation');
+      expect(liveContinuation).toMatchObject({ value: { type: 'start', runId } });
+      expect(isReplayedStreamPart(liveContinuation.value)).toBe(false);
+    } finally {
+      subscription.unsubscribe();
     }
   });
 
