@@ -646,6 +646,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       // restart), which is the safe default.
       requireToolApproval:
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
+      toolApprovalPolicy: execOptions?.toolApprovalPolicy,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,

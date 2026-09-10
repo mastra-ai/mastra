@@ -267,6 +267,12 @@ describe('serializeDurableState', () => {
 // ---------------------------------------------------------------------------
 
 describe('serializeDurableOptions', () => {
+  it('preserves the manual run policy through storage serialization', () => {
+    expect(JSON.parse(JSON.stringify(serializeDurableOptions({ toolApprovalPolicy: 'manual' })))).toMatchObject({
+      toolApprovalPolicy: 'manual',
+    });
+    expect(serializeDurableOptions({}).toolApprovalPolicy).toBeUndefined();
+  });
   it('serialises basic scalar options', () => {
     const result = serializeDurableOptions({
       maxSteps: 10,

@@ -681,7 +681,8 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName);
+        const runPolicy = getPayload(chunk).toolApprovalPolicy === 'manual' ? 'manual' : undefined;
+        const policy = this.#session.resolveToolApproval(toolName, runPolicy);
 
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext });

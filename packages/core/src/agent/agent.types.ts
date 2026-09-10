@@ -681,6 +681,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   requireToolApproval?: RequireToolApproval;
 
+  /** Require an explicit decision for every tool in this run, even in an automatic Session. */
+  toolApprovalPolicy?: 'manual';
+
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 

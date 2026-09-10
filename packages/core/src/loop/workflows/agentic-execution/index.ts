@@ -32,7 +32,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     // called tool set is not known yet, and map-tool-calls narrows it before the
     // foreach actually consumes this value.
     concurrency: resolveToolCallConcurrency({
-      requireToolApproval: rest.requireToolApproval,
+      requireToolApproval: rest.toolApprovalPolicy === 'manual' || rest.requireToolApproval,
       tools: rest.tools,
       activeTools: rest.activeTools as string[] | undefined,
       configuredConcurrency: configuredToolCallConcurrency,
@@ -134,7 +134,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // serializes; run-wide requireToolApproval still forces sequential.
         const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
-          requireToolApproval: rest.requireToolApproval,
+          requireToolApproval: rest.toolApprovalPolicy === 'manual' || rest.requireToolApproval,
           tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
           activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,

@@ -91,6 +91,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   agentVersionId,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
+  toolApprovalPolicy,
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
@@ -587,7 +588,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Approval decisions must come from the workflow resume boundary; model-authored
         // resumeData is untrusted and cannot grant or decline consent.
         const approvalGated =
-          !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
+          !isDelegatedApproval &&
+          (suspendedForApproval ||
+            ((toolRequiresApproval || toolApprovalPolicy === 'manual') && suspendData === undefined));
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
@@ -617,6 +620,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
+                  toolApprovalPolicy,
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   args: inputData.args,
@@ -651,6 +655,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
             return suspend(
               {
+                toolApprovalPolicy,
                 requireToolApproval: {
                   toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
@@ -762,6 +767,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     toolName: approvalToolName,
                     args: approvalArgs,
                     resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                    toolApprovalPolicy,
                   },
                 },
                 'approval',
@@ -822,6 +828,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   // runtime source for routing this targeted resume.
                   suspendedToolRunId: options.runId,
                   __mastraToolInput: acceptedInput,
+                  toolApprovalPolicy,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -870,6 +877,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   toolCallSuspended: suspendPayload,
                   __mastraToolInput: acceptedInput,
+                  toolApprovalPolicy,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
                   ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),

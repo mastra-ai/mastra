@@ -3233,6 +3233,7 @@ export class Session<TState = unknown> {
             approved: decision.decision === 'approve',
             declineContext: decision.declineContext,
             requireToolApproval: (this.state.get() as Record<string, unknown>).yolo !== true,
+            toolApprovalPolicy: call.toolApprovalPolicy,
             memory: { thread: threadId, resource: resourceId },
             requestContext,
             toolsets,
@@ -3444,12 +3445,17 @@ export class Session<TState = unknown> {
    * session-scoped grant, then the tool's category grant/policy, falling back to
    * "ask". Pure session state plus the injected category resolver.
    */
-  resolveToolApproval(toolName: string): PermissionPolicy {
+  resolveToolApproval(toolName: string, toolApprovalPolicy?: 'manual'): PermissionPolicy {
     const state = this.state.get() as Record<string, unknown>;
     const rules = this.permissions.getRules();
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
+
+    const category = this.#resolveCategory?.(toolName);
+    if (toolApprovalPolicy === 'manual') {
+      return category && rules.categories[category] === 'deny' ? 'deny' : 'ask';
+    }
 
     if (state.yolo === true) return 'allow';
 
@@ -3457,7 +3463,6 @@ export class Session<TState = unknown> {
 
     if (this.hasToolGrant(toolName)) return 'allow';
 
-    const category = this.#resolveCategory?.(toolName);
     if (category) {
       if (this.hasCategoryGrant(category)) return 'allow';
       const categoryPolicy = rules.categories[category];

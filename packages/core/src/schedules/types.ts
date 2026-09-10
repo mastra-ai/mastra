@@ -15,6 +15,8 @@ import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../agen
 export type ScheduleStreamOptions = {
   /** Request context applied to the woken run, stored as a plain object. */
   requestContext?: Record<string, unknown>;
+  /** Require explicit tool decisions for this run, including in an automatic Session. */
+  toolApprovalPolicy?: 'manual';
 };
 
 /**
@@ -90,6 +92,7 @@ const ScheduleAttributesSchema = z.record(z.string(), z.union([z.string(), z.num
 /** Serializable stream options applied to a woken run. See {@link ScheduleStreamOptions}. */
 const ScheduleStreamOptionsSchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
+  toolApprovalPolicy: z.literal('manual').optional(),
 });
 
 /** Options applied when the target thread is actively streaming. */

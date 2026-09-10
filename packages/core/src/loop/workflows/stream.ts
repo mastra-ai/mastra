@@ -20,6 +20,7 @@ import { createAgenticLoopWorkflow } from './agentic-loop';
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
+  toolApprovalPolicy,
   models,
   toolChoice,
   modelSettings,
@@ -254,6 +255,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         streamState,
         agentId,
         requireToolApproval,
+        toolApprovalPolicy,
         toolCallConcurrency,
         ...restWithTimeoutSignal,
       });

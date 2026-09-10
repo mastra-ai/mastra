@@ -659,8 +659,15 @@ function buildIfIdleOptions(ifIdle: ScheduleIfIdle): AgentSignalIfIdleOptions {
   return {
     ...(ifIdle.behavior ? { behavior: ifIdle.behavior } : {}),
     ...(ifIdle.attributes ? { attributes: ifIdle.attributes } : {}),
-    ...(requestContext
-      ? { streamOptions: { requestContext: new RequestContext(Object.entries(requestContext)) } }
+    ...(ifIdle.streamOptions
+      ? {
+          streamOptions: {
+            ...(requestContext ? { requestContext: new RequestContext(Object.entries(requestContext)) } : {}),
+            ...(ifIdle.streamOptions.toolApprovalPolicy
+              ? { toolApprovalPolicy: ifIdle.streamOptions.toolApprovalPolicy }
+              : {}),
+          },
+        }
       : {}),
   };
 }

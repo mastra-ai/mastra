@@ -113,6 +113,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
   /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
+  /** Persist an explicit approval requirement for every tool in this run. */
+  toolApprovalPolicy?: AgentExecutionOptions<OUTPUT>['toolApprovalPolicy'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum number of tool calls to execute concurrently, or an object with `limit`/`strategy` */

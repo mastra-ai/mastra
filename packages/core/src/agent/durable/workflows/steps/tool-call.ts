@@ -506,17 +506,19 @@ export function createDurableToolCallStep() {
       const registryRequireToolApproval = registryEntry?.requireToolApproval;
       const effectiveRequireToolApproval =
         registryRequireToolApproval !== undefined ? registryRequireToolApproval : agentOptions.requireToolApproval;
-      const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
-        toolName,
-        requestContext: registryEntry?.requestContext
-          ? Object.fromEntries(
-              [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
-            )
-          : undefined,
-        // Use the same rebuilt-workspace fallback as execution (above), so
-        // workspace-aware approval policies see their workspace cross-process.
-        workspace,
-      });
+      const requiresApproval =
+        agentOptions.toolApprovalPolicy === 'manual' ||
+        (await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
+          toolName,
+          requestContext: registryEntry?.requestContext
+            ? Object.fromEntries(
+                [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+              )
+            : undefined,
+          // Use the same rebuilt-workspace fallback as execution (above), so
+          // workspace-aware approval policies see their workspace cross-process.
+          workspace,
+        }));
 
       // Add suspended-tool / pending-approval metadata to the last assistant
       // message so `extractSuspendedToolsFromMessages` can detect it on the
@@ -688,7 +690,7 @@ export function createDurableToolCallStep() {
                   type: 'tool-call-approval',
                   runId,
                   from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, resumeSchema },
+                  payload: { toolCallId, toolName, args, resumeSchema, toolApprovalPolicy: agentOptions.toolApprovalPolicy },
                 });
               }
 
@@ -721,6 +723,7 @@ export function createDurableToolCallStep() {
         return suspend(
           {
             type: 'approval',
+            toolApprovalPolicy: agentOptions.toolApprovalPolicy,
             toolCallId,
             toolName,
             args,
@@ -981,6 +984,7 @@ export function createDurableToolCallStep() {
                       toolName: approvalToolName,
                       args: approvalArgs,
                       resumeSchema: approvalResumeSchema,
+                      toolApprovalPolicy: agentOptions.toolApprovalPolicy,
                     },
                   });
                 }
@@ -1003,6 +1007,7 @@ export function createDurableToolCallStep() {
                 type: 'approval',
                 requireToolApproval: { toolCallId, toolName: approvalToolName, args: approvalArgs },
                 __mastraToolInput: acceptedInput,
+                toolApprovalPolicy: agentOptions.toolApprovalPolicy,
                 // Persist the inner suspended run id in the workflow snapshot,
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.
@@ -1062,6 +1067,7 @@ export function createDurableToolCallStep() {
                 type: 'suspension',
                 toolCallSuspended: suspendPayload,
                 __mastraToolInput: acceptedInput,
+                toolApprovalPolicy: agentOptions.toolApprovalPolicy,
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
