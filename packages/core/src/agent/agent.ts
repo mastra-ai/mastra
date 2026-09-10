@@ -517,39 +517,32 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
 }
 
 /**
- * The Agent class is the foundation for creating AI agents in Mastra. It provides methods for generating responses,
- * streaming interactions, managing memory, and handling voice capabilities.
+ * Creates an AI agent that generates and streams responses, with optional tools,
+ * memory, and voice capabilities.
+ *
+ * Opt into durable execution with `durable`; attaching the agent to a `Mastra`
+ * instance then wraps it with `createDurableAgent`.
  *
  * @example
+ * `yourModel` is your configured model.
  * ```typescript
  * import { Agent } from '@mastra/core/agent';
- * import { Memory } from '@mastra/memory';
  *
  * const agent = new Agent({
- *   id: 'my-agent',
- *   name: 'My Agent',
- *   instructions: 'You are a helpful assistant',
- *   model: 'openai/gpt-5',
- *   tools: {
- *     calculator: calculatorTool,
- *   },
- *   memory: new Memory(),
+ *   id: 'assistant',
+ *   name: 'Assistant',
+ *   instructions: 'You are a helpful assistant.',
+ *   model: yourModel,
  * });
  * ```
  *
- * @example
- * Opt into durable execution via config — the agent is auto-wrapped with
- * `createDurableAgent` when it is attached to a `Mastra` instance:
- * ```typescript
- * const agent = new Agent({
- *   id: 'my-agent',
- *   instructions: 'You are a helpful assistant',
- *   model: 'openai/gpt-5',
- *   durable: true, // or: { cache, pubsub, maxSteps, cleanupTimeoutMs }
- * });
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
  *
- * const mastra = new Mastra({ agents: { myAgent: agent } });
- * ```
+ * @see [Agent documentation](https://mastra.ai/docs/agents/overview)
+ * if packaged docs are unavailable.
  */
 export class Agent<
   TAgentId extends string = string,
