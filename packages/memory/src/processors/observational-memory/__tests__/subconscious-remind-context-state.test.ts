@@ -694,15 +694,54 @@ describe('Subconscious reminder parent-context state lane', () => {
         expect(delta!.contents).not.toContain('reflection');
       });
 
-      it('says nothing about a candidate that survived the reflection', async () => {
+      it('says nothing about any candidate that survived the reflection', async () => {
         const observations = bigObservations({ first: firstFact, second: secondFact });
         const snapshot = await firstSnapshot(observations);
 
-        // Reflection ran, but this candidate still matches. A generation bump is
-        // not by itself news about any candidate that survived it.
-        const delta = await laneAt(observations, 1).computeStateSignal(secondArgs(snapshot));
+        // Reflection ran and every candidate still matches. A generation bump is
+        // not news about any candidate that survived it, so the line records the
+        // reflection and names nobody — but it has to be emitted, or the
+        // generation never reaches the next check.
+        const delta = await laneAt(observations, 1).computeStateSignal(secondArgs(snapshot, 'check-two'));
+        const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
 
-        expect(delta).toBeUndefined();
+        expect(ops).toEqual([{ op: 'reflection-survived' }]);
+        expect(delta!.contents).toContain('every candidate in play still matches');
+        for (const id of candidates.map(candidate => candidate.id)) {
+          expect(delta!.contents).not.toContain(id);
+        }
+        expect((delta!.value as { generationCount: number }).generationCount).toBe(1);
+      });
+
+      /**
+       * A reflection that leaves every candidate matching emits nothing, so the
+       * generation it produced is not written into any signal the next check can
+       * read. If the lane simply compares against the last generation it managed
+       * to record, a later wording change gets blamed on a reflection the
+       * candidate demonstrably survived.
+       */
+      it('does not blame a reflection a candidate was already seen to survive', async () => {
+        const observations = bigObservations({ first: firstFact, second: secondFact });
+        const snapshot = await firstSnapshot(observations);
+
+        // Check two: reflection ran and every candidate survived it. That is the
+        // emission carrying generation 1 forward.
+        const survived = await laneAt(observations, 1).computeStateSignal(secondArgs(snapshot, 'check-two'));
+        expect(survived).toBeDefined();
+
+        // Check three: no new reflection, but the first candidate's wording drifted.
+        const delta = await laneAt(afterReflection, 1).computeStateSignal(
+          args({
+            messages: [checkWith('check-three', candidates)],
+            contextWindow: { hasSnapshot: true },
+            lastSnapshot: base(snapshot),
+            deltasSinceSnapshot: [{ metadata: survived!.metadata } as never],
+          } as Partial<ComputeStateSignalArgs>),
+        );
+        const ops = (delta as { delta: { ops: { op: string }[] } }).delta.ops;
+
+        expect(ops).toEqual([expect.objectContaining({ op: 'no-longer-matched' })]);
+        expect(delta!.contents).not.toContain('reflection');
       });
 
       it('takes the prior generation from the newest emission, not just the snapshot', async () => {

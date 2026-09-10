@@ -88,7 +88,8 @@ export type RemindContextOp =
   | { op: 'node-activity'; entry: RemindContextEntry }
   | { op: 'no-longer-matched'; entry: RemindContextEntry }
   | { op: 'out-of-context'; entry: RemindContextEntry }
-  | { op: 'left-candidate-set'; id: string };
+  | { op: 'left-candidate-set'; id: string }
+  | { op: 'reflection-survived' };
 
 /**
  * The most a single candidate's excerpt may contribute to a rendered line.
@@ -304,6 +305,8 @@ export function applyRemindContextOps(entries: RemindContextEntry[], ops: Remind
       if (index >= 0) next.splice(index, 1);
       continue;
     }
+    // Carries the generation, not a candidate: every entry stays as it was.
+    if (op.op === 'reflection-survived') continue;
     const index = next.findIndex(entry => entry.id === op.entry.id);
     if (index >= 0) next[index] = op.entry;
     else next.push(op.entry);
@@ -408,6 +411,12 @@ function opLine(op: RemindContextOp, eventId: string): string {
       return `${stamp}: ${op.entry.id} — the parent's observations were rewritten by a reflection between checks and this candidate did not survive the rewrite, so treat it as out of the parent's context.${op.entry.marker ? `\n${markerLine(op.entry.id, op.entry.marker)}` : ''}`;
     case 'left-candidate-set':
       return `${stamp}: ${op.id} — was not among this check's candidates. This is a statement about which candidates the search returned, not about what the parent still holds.`;
+    case 'reflection-survived':
+      // Emitted only so the generation reaches the transcript. Staying silent
+      // here would leave the next check comparing against a pre-reflection
+      // generation and blaming this reflection for a later wording change that
+      // every candidate present was already seen to survive.
+      return `${stamp}: the parent's observations were rewritten by a reflection, and every candidate in play still matches.`;
   }
 }
 
@@ -591,7 +600,17 @@ export class RemindContextStateProcessor implements Processor<typeof REMIND_CONT
     // Nothing moved and the base is still visible. The runtime's dedupe cannot
     // cover this case — it keys on cache key *and* mode, and the previous
     // emission was a snapshot — so the guard has to live here.
-    if (ops.length === 0) return;
+    //
+    // A reflection that every candidate survived is the one exception. It moves
+    // no candidate, but the generation it produced has to reach the transcript:
+    // the next check reads the prior generation out of the newest emission, and
+    // if this one stays silent, a later wording change is compared against a
+    // pre-reflection generation and blamed on a reflection whose survivors were
+    // already observed.
+    if (ops.length === 0) {
+      if (!reflectionRan(priorGeneration(args), generationCount)) return;
+      ops.push({ op: 'reflection-survived' });
+    }
 
     const { contents, emitted } = renderOps(ops, check.eventId ?? 'unknown');
     const applied = applyRemindContextOps(prior, emitted);
