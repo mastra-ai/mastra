@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, relative } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -281,6 +282,15 @@ export const applySourceDependencyRange = (
 
   return { ...dependencyInfo, version: declared };
 };
+
+/**
+ * A UUID-shaped identifier derived from a tool's project-relative entry path. The same path yields
+ * the same id on every machine, so `mastra build` output is reproducible.
+ */
+export function toolIdForEntry(relativeEntryFile: string): string {
+  const digest = createHash('sha256').update(relativeEntryFile).digest('hex');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+}
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -579,6 +589,9 @@ export abstract class Bundler extends MastraBundler {
         absolute: true,
         expandDirectories: false,
       });
+      // The glob returns entries in filesystem order, which differs between machines and runs;
+      // the order decides the rollup input map and therefore the emitted chunk graph.
+      expandedPaths.sort();
 
       for (const path of expandedPaths) {
         if (await fsExtra.pathExists(path)) {
@@ -595,9 +608,13 @@ export abstract class Bundler extends MastraBundler {
             continue;
           }
 
-          const uniqueToolID = crypto.randomUUID();
           // Normalize Windows paths to forward slashes for consistent handling
           const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+          // The id only has to be unique within one build. Deriving it from the entry file's
+          // project-relative path (instead of a random UUID) makes two builds of the same sources
+          // emit the same tool bundle names and the same chunk graph. Kept UUID-shaped so nothing
+          // that reads `tools/<id>` sees a different format.
+          const uniqueToolID = toolIdForEntry(relative(process.cwd(), entryFile).replaceAll('\\', '/'));
           inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
           this.logger.warn('Tool path does not exist, skipping', { path });

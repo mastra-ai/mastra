@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { SourceDependencyConstraints } from './index';
-import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+import {
+  Bundler,
+  applySourceDependencyRange,
+  getSourceDependencyConstraints,
+  isRegistryVersionSpec,
+  toolIdForEntry,
+} from './index';
 
 const tempDirs: string[] = [];
 
@@ -68,6 +74,41 @@ const createSourceApp = async ({
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('Bundler.listToolsInputOptions', () => {
+  it('returns the same tool ids, in the same order, for the same sources on every call', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));
+    tempDirs.push(tempDir);
+    const toolsDir = join(tempDir, 'src', 'mastra', 'tools');
+    await mkdir(join(toolsDir, 'nested', 'c'), { recursive: true });
+    // Written out of alphabetical order on purpose: the map must not follow write or glob order.
+    for (const file of ['b.ts', 'a.ts', join('nested', 'c', 'index.ts')]) {
+      await writeFile(join(toolsDir, file), 'export {}', 'utf-8');
+    }
+
+    const bundler = new TestBundler('Test');
+    const first = await bundler.listToolsInputOptions([join(toolsDir, '**/*.ts')]);
+    const second = await bundler.listToolsInputOptions([join(toolsDir, '**/*.ts')]);
+
+    expect(second).toEqual(first);
+    expect(Object.keys(second)).toEqual(Object.keys(first));
+    const entryFiles = Object.values(first);
+    expect(entryFiles).toEqual([...entryFiles].sort());
+    for (const key of Object.keys(first)) {
+      expect(key).toMatch(/^tools\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    }
+  });
+});
+
+describe('toolIdForEntry', () => {
+  it('is a pure function of the relative path', () => {
+    expect(toolIdForEntry('src/mastra/tools/weather.ts')).toBe(toolIdForEntry('src/mastra/tools/weather.ts'));
+    expect(toolIdForEntry('src/mastra/tools/weather.ts')).not.toBe(toolIdForEntry('src/mastra/tools/search.ts'));
+    expect(toolIdForEntry('src/mastra/tools/weather.ts')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+  });
 });
 
 describe('Bundler.writePackageJson', () => {
