@@ -119,7 +119,7 @@ export function unpackStepMessageMirrors<T extends StepLike>(steps: T[], message
           // of the whole run — is what makes this faithful: conversions merge
           // adjacent assistant messages, so later messages can change how
           // earlier ones render.
-          return (uiMessages ??= convertMessages(getDbMessages()).to('AIV5.UI') as AIV5Type.UIMessage[]);
+          return (uiMessages ??= convertMessages(getDbMessages()).to('AIV5.UI'));
         },
       },
       messages: {

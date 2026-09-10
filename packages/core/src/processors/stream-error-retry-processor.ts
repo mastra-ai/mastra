@@ -136,7 +136,7 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
 export function isBadRequestError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
 
-  if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
+  if ('statusCode' in error && error.statusCode === 400) return true;
 
   return false;
 }

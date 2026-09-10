@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Mastra } from '../mastra';
-import type { GetMetricBreakdownResponse, ObservabilityStorage } from '../storage/domains';
+import type { GetMetricBreakdownResponse } from '../storage/domains';
 import { getServerTelemetryContext } from './context';
 import { captureTelemetryEvent, isTelemetryEnabled } from './posthog';
 
@@ -97,7 +97,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
       return;
     }
 
-    const observability = mastra.getStorage()?.stores?.observability as ObservabilityStorage | undefined;
+    const observability = mastra.getStorage()?.stores?.observability;
     if (!observability || typeof observability.getMetricBreakdown !== 'function') {
       return;
     }

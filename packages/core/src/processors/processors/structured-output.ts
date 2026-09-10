@@ -376,13 +376,8 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   }
 
   private getErrorMessage(error: unknown): string {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'message' in error &&
-      typeof (error as { message?: unknown }).message === 'string'
-    ) {
-      return (error as { message: string }).message;
+    if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
     }
 
     if (error instanceof Error) {

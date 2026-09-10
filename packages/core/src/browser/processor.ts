@@ -244,7 +244,7 @@ function getMostRecentBrowserClickResultUrlFromMessages(
 
     const content = message.content;
     if (!content || typeof content !== 'object' || Array.isArray(content)) continue;
-    const parts = (content as { parts?: unknown }).parts;
+    const parts = content.parts;
     if (!Array.isArray(parts)) continue;
 
     for (const part of [...parts].reverse()) {
@@ -263,7 +263,7 @@ function getMostRecentBrowserClickResultUrlFromMessages(
 function isBrowserStateSignalMessage(message: ComputeStateSignalArgs['messages'][number]): boolean {
   const content = message.content;
   if (!content || typeof content !== 'object' || Array.isArray(content)) return false;
-  const signal = (content as { metadata?: { signal?: unknown } }).metadata?.signal;
+  const signal = content.metadata?.signal;
   if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
   const metadata = (signal as { metadata?: unknown }).metadata;
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;

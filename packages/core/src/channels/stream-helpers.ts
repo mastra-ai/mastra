@@ -286,7 +286,7 @@ export async function postFileAttachment(args: {
   logger?.debug?.('[CHANNEL] Received file chunk', {
     mimeType,
     dataType: typeof data,
-    size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
+    size: typeof data === 'string' ? data.length : data?.byteLength,
   });
   const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
   const filename = payloadFilename ?? `generated.${ext}`;
