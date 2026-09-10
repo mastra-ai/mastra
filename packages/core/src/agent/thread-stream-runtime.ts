@@ -499,6 +499,7 @@ export class AgentThreadStreamRuntime {
 
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
     return (
+      record.lifecycle === 'running' ||
       record.output.status === 'running' ||
       record.output.status === 'suspended' ||
       record.lifecycle === 'suspending' ||

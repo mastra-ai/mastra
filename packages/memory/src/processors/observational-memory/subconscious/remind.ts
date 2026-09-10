@@ -146,6 +146,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           const recentMessages = context.recentMessages?.trim() || '(none)';
           const replyTool = context.mainAgent
             ? createReplyToMemoryQuestionTool({
+                memory: remindMemory,
                 parentAgent: context.mainAgent,
                 parentThreadId: context.threadId,
                 resourceId,
@@ -187,7 +188,9 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             },
           );
           const accepted = await delivery.accepted;
-          if (accepted.action === 'wake') await accepted.output.consumeStream();
+          if (accepted.action === 'wake') {
+            await accepted.output.consumeStream();
+          }
           if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
             throw new Error(`Reminder event ${eventId} was not accepted for processing (${accepted.action}).`);
           }

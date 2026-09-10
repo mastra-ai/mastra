@@ -1,14 +1,15 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
-import type {
-  ProcessOutputResultArgs,
-  ProcessOutputStepArgs,
-  Processor,
-  ProcessorStreamWriter,
-} from '@mastra/core/processors';
+import type { ProcessOutputResultArgs, ProcessOutputStepArgs, Processor } from '@mastra/core/processors';
 
+import type { Memory } from '../../..';
 import { withOmInternalThreadId } from '../internal-request-context';
 import { publishSubconsciousError } from './activity';
-import { getRemindMessageMetadata, getRemindMessageText, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
+import {
+  getRemindMessageMetadata,
+  getRemindMessageText,
+  isUserAuthoredRemindMessage,
+  REMIND_MESSAGE_METADATA_KEY,
+} from './remind-protocol';
 
 const NUDGE_AFTER_MS = 20_000;
 const MAX_CONTINUATION_ATTEMPTS = 2;
@@ -59,7 +60,7 @@ function terminalReplies(messages: MastraDBMessage[], result?: ProcessOutputResu
 function messageMetadata(message: MastraDBMessage) {
   const metadata = getRemindMessageMetadata(message);
   if (metadata) return metadata;
-  if (message.role !== 'user') return undefined;
+  if (!isUserAuthoredRemindMessage(message)) return undefined;
 
   const text = getRemindMessageText(message);
   const question = text.match(/^Memory question (\S+)\n/);
@@ -75,6 +76,11 @@ function messageMetadata(message: MastraDBMessage) {
     replyIds: continuation[2].split(', ').filter(Boolean),
     attempt: Number(continuation[1]),
   };
+}
+
+function isMessageInProcessorScope(message: MastraDBMessage, threadId: string, resourceId: string): boolean {
+  if (message.threadId === undefined && message.resourceId === undefined) return true;
+  return message.threadId === threadId && message.resourceId === resourceId;
 }
 
 function getPendingQuestions(messages: MastraDBMessage[], answered = terminalReplies(messages)): PendingQuestion[] {
@@ -94,12 +100,6 @@ function getPendingQuestions(messages: MastraDBMessage[], answered = terminalRep
   return [...pending.values()];
 }
 
-function consumeWakeOutput(output: { consumeStream(): Promise<unknown> }, writer?: ProcessorStreamWriter): void {
-  void output.consumeStream().catch(async error => {
-    await publishSubconsciousError({ error: `remind: ${errorText(error)}`, agent: 'remind', writer });
-  });
-}
-
 export class RemindContinuationProcessor implements Processor<'remind-continuation'> {
   readonly id = 'remind-continuation';
   readonly name = 'Reminder Continuation Processor';
@@ -111,6 +111,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       resourceId: string;
       parentThreadId: string;
       parentAgent: Agent;
+      memory: Memory;
       maxSteps: number;
       getReminderAgent(): Agent;
     },
@@ -121,7 +122,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
 
     const messages = args.messageList.get.all
       .db()
-      .filter(message => message.threadId === this.options.threadId && message.resourceId === this.options.resourceId);
+      .filter(message => isMessageInProcessorScope(message, this.options.threadId, this.options.resourceId));
     const pending = getPendingQuestions(messages);
     if (pending.length === 0) return args.messages;
 
@@ -158,9 +159,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
     try {
       const messages = args.messageList.get.all
         .db()
-        .filter(
-          message => message.threadId === this.options.threadId && message.resourceId === this.options.resourceId,
-        );
+        .filter(message => isMessageInProcessorScope(message, this.options.threadId, this.options.resourceId));
       const pending = getPendingQuestions(messages, terminalReplies(messages, args.result));
       if (pending.length === 0) return args.messages;
 
@@ -171,14 +170,27 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
         group.push(question);
         byAttempt.set(question.attempt, group);
       }
-      for (const questions of byAttempt.values()) await this.dispatchContinuation(questions, args);
+      for (const questions of byAttempt.values()) {
+        void this.dispatchContinuation(questions, args).catch(error => this.reportError(error, args));
+      }
       for (const question of pending.filter(question => question.attempt >= MAX_CONTINUATION_ATTEMPTS)) {
-        await this.deliverUnableToAnswer(question.replyId, args.messageList);
+        if (this.deliveredTerminalReplies.has(question.replyId)) continue;
+        this.deliveredTerminalReplies.add(question.replyId);
+        const marker = this.addUnableToAnswerMarker(question.replyId, args.messageList);
+        void this.deliverUnableToAnswer(question.replyId, marker).catch(error => this.reportError(error, args));
       }
     } catch (error) {
-      await publishSubconsciousError({ error: `remind: ${errorText(error)}`, agent: 'remind', writer: args.writer });
+      void this.reportError(error, args);
     }
     return args.messages;
+  }
+
+  private async reportError(error: unknown, args: ProcessOutputResultArgs): Promise<void> {
+    await publishSubconsciousError({
+      error: `remind: ${errorText(error)}`,
+      agent: 'remind',
+      writer: args.writer,
+    }).catch(() => {});
   }
 
   private async dispatchContinuation(questions: PendingQuestion[], args: ProcessOutputResultArgs): Promise<void> {
@@ -207,17 +219,15 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       },
     );
     const accepted = await delivery.accepted;
-    if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
+    if (accepted.action === 'wake') {
+      await accepted.output.consumeStream();
+    } else if (accepted.action !== 'deliver') {
       throw new Error(`Reminder continuation was not accepted (${accepted.action}).`);
     }
-    if (accepted.action === 'wake') consumeWakeOutput(accepted.output, args.writer);
   }
 
-  private async deliverUnableToAnswer(
-    replyId: string,
-    messageList: ProcessOutputResultArgs['messageList'],
-  ): Promise<void> {
-    if (this.deliveredTerminalReplies.has(replyId)) return;
+  private async deliverUnableToAnswer(replyId: string, marker: MastraDBMessage): Promise<void> {
+    await this.options.memory.saveMessages({ messages: [marker] });
     const signal = {
       id: `${replyId}:terminal:signal`,
       type: 'reactive' as const,
@@ -252,25 +262,29 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
     });
     const delivered = await delivery.accepted;
     if (delivered.action === 'blocked') throw new Error('Terminal reminder failure delivery was blocked.');
-    this.deliveredTerminalReplies.add(replyId);
-    messageList.add(
-      {
-        id: `subconscious:remind:${replyId}:terminal`,
-        role: 'assistant',
-        threadId: this.options.threadId,
-        resourceId: this.options.resourceId,
-        createdAt: new Date(),
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'text',
-              text: `Memory question ${replyId} terminal: unable to answer after two continuation attempts`,
-            },
-          ],
-        },
+  }
+
+  private addUnableToAnswerMarker(
+    replyId: string,
+    messageList: ProcessOutputResultArgs['messageList'],
+  ): MastraDBMessage {
+    const marker: MastraDBMessage = {
+      id: `subconscious:remind:${replyId}:terminal`,
+      role: 'assistant',
+      threadId: this.options.threadId,
+      resourceId: this.options.resourceId,
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: `Memory question ${replyId} terminal: unable to answer after two continuation attempts`,
+          },
+        ],
       },
-      'response',
-    );
+    };
+    messageList.add(marker, 'response');
+    return marker;
   }
 }

@@ -17,6 +17,7 @@ import {
   ensureOwnedRemindThread,
   getRemindMessageMetadata,
   getRemindThreadId,
+  isUserAuthoredRemindMessage,
   REMIND_MESSAGE_METADATA_KEY,
 } from './remind-protocol';
 import type { ResolvedSubconsciousAgent } from './types';
@@ -42,10 +43,16 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function consumeWakeOutput(output: { consumeStream(): Promise<unknown> }, writer?: ProcessorStreamWriter): void {
-  void output.consumeStream().catch(async error => {
+async function consumeWakeOutput(
+  output: { consumeStream(): Promise<unknown>; _waitUntilFinished?(): Promise<void> },
+  writer?: ProcessorStreamWriter,
+): Promise<void> {
+  try {
+    await output.consumeStream();
+    await output._waitUntilFinished?.();
+  } catch (error) {
     await publishSubconsciousError({ error: `remind: ${errorText(error)}`, agent: 'remind', writer });
-  });
+  }
 }
 
 function messageText(message: unknown): string {
@@ -91,10 +98,11 @@ function trustedQuestion(messages: unknown, replyId: string, threadId: string, r
   if (!Array.isArray(messages)) return false;
   return messages.some(message => {
     const dbMessage = inScopeMessage(message, threadId, resourceId);
-    if (!dbMessage) return false;
+    if (!dbMessage || !isUserAuthoredRemindMessage(dbMessage)) return false;
     const metadata = getRemindMessageMetadata(dbMessage);
     if (metadata?.type === 'question' && metadata.replyId === replyId) return true;
-    return dbMessage.role === 'user' && messageText(message).startsWith(`Memory question ${replyId}\n`);
+    if (metadata?.type === 'continuation' && metadata.replyIds.includes(replyId)) return true;
+    return messageText(message).startsWith(`Memory question ${replyId}\n`);
   });
 }
 
@@ -201,6 +209,7 @@ export function createAskMemoryTool(options: {
         const reminderMemory = options.memory.createSubconsciousMemory();
         const reminderThread = await ensureOwnedRemindThread({ memory: reminderMemory, parentThreadId, resourceId });
         const replyTool = createReplyToMemoryQuestionTool({
+          memory: reminderMemory,
           parentAgent,
           parentThreadId,
           resourceId,
@@ -245,7 +254,9 @@ export function createAskMemoryTool(options: {
         if (accepted.action !== 'wake' && accepted.action !== 'deliver') {
           throw new Error(`Reminder question ${replyId} was not accepted for processing (${accepted.action}).`);
         }
-        if (accepted.action === 'wake') consumeWakeOutput(accepted.output, context.writer);
+        if (accepted.action === 'wake') {
+          void consumeWakeOutput(accepted.output, context.writer);
+        }
         return { accepted: true, replyId, status: 'pending' } satisfies AskMemoryResult;
       } catch (error) {
         const message = errorText(error);
@@ -257,6 +268,7 @@ export function createAskMemoryTool(options: {
 }
 
 export function createReplyToMemoryQuestionTool(options: {
+  memory?: Memory;
   parentAgent: Agent;
   parentThreadId: string;
   resourceId: string;
@@ -290,13 +302,30 @@ export function createReplyToMemoryQuestionTool(options: {
         moreComing: boolean;
         outcome?: 'answer' | 'unable-to-answer' | 'error';
       };
-      const messages = context.agent?.messages;
       const reminderThreadId = getRemindThreadId(options.parentThreadId);
-      if (
-        context.agent?.threadId !== reminderThreadId ||
-        context.agent.resourceId !== options.resourceId ||
-        !trustedQuestion(messages, replyId, reminderThreadId, options.resourceId)
-      ) {
+      if (context.agent?.threadId !== reminderThreadId || context.agent.resourceId !== options.resourceId) {
+        return { delivered: false, replyId, reason: 'question-not-in-current-conversation' };
+      }
+
+      let messages = Array.isArray(context.agent.messages) ? context.agent.messages : [];
+      if (options.memory) {
+        try {
+          const recalled = await options.memory.recall({
+            threadId: reminderThreadId,
+            resourceId: options.resourceId,
+            perPage: false,
+          });
+          messages = [...recalled.messages, ...messages];
+        } catch (error) {
+          await publishSubconsciousError({
+            error: `remind: ${errorText(error)}`,
+            agent: 'remind',
+            writer: context.writer,
+          });
+          return { delivered: false, replyId, reason: 'question-history-unavailable', error: errorText(error) };
+        }
+      }
+      if (!trustedQuestion(messages, replyId, reminderThreadId, options.resourceId)) {
         return { delivered: false, replyId, reason: 'question-not-in-current-conversation' };
       }
       if (!moreComing && hasTerminalReply(messages, replyId, reminderThreadId, options.resourceId)) {

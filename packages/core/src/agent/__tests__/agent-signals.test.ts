@@ -2997,6 +2997,50 @@ describe('Agent signals', () => {
     }
   });
 
+  it('queues sendMessage while a successful run is still completing', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const streamMock = vi.fn().mockResolvedValue({ runId: 'completion-follow-up-run' });
+    const agent = {
+      id: 'completion-window-agent',
+      stream: streamMock,
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'completion-window-run';
+    const threadId = 'completion-window-thread';
+    const resourceId = 'completion-window-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(
+      agent,
+      {
+        runId,
+        status: 'success',
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'finish', runId, payload: {} });
+            controller.close();
+          },
+        }),
+        _waitUntilFinished: () => finished,
+      } as any,
+      { memory: { thread: threadId, resource: resourceId } } as any,
+    );
+
+    const result = runtime.sendMessage(agent, 'Follow up during completion', { resourceId, threadId });
+
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+    expect(streamMock).not.toHaveBeenCalled();
+
+    finishRun();
+    await waitForCondition(() => streamMock.mock.calls.length === 1);
+    expect(streamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'user', contents: 'Follow up during completion' }),
+      expect.objectContaining({ memory: { thread: threadId, resource: resourceId } }),
+    );
+  });
+
   it('restores a queued signal when the drain follow-up stream fails', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
