@@ -54,6 +54,27 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
   return pendingToolApprovalIds;
 };
 
+const isWaitingQueuedMessage = (message: MastraDBMessage): boolean =>
+  message.content.metadata?.deliveryState === 'queueing' || message.content.metadata?.deliveryState === 'queued';
+
+const placeQueuedTurnBeforeResponse = (
+  messages: MastraDBMessage[],
+  clientMessageId: string,
+  runId: string,
+): MastraDBMessage[] => {
+  const messageIndex = messages.findIndex(
+    message => message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId,
+  );
+  const responseIndex = messages.findIndex(
+    message => message.role === 'assistant' && message.content.metadata?.deliveryRunId === runId,
+  );
+  if (responseIndex < 0 || messageIndex <= responseIndex) return messages;
+  const reordered = [...messages];
+  const [message] = reordered.splice(messageIndex, 1);
+  if (message) reordered.splice(responseIndex, 0, message);
+  return reordered;
+};
+
 const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallId: string): boolean =>
   parts.some(part => {
     if (part.type !== 'tool-invocation') return false;
@@ -208,6 +229,8 @@ export type GenerateArgs = SharedArgs & {
 };
 
 export type StreamArgs = SharedArgs & {
+  /** Queue a separate turn, or explicitly steer the active run. Defaults to send (deliver). */
+  delivery?: 'send' | 'queue' | 'steer';
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
   signalId?: string;
@@ -317,14 +340,49 @@ export const useChat = ({
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
+  const observedRuns = useRef(new Map<string, 'sent' | 'failed'>());
+  const finishedRuns = useRef(new Set<string>());
+  const initialMessagesThread = useRef(threadId);
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
-    setMessages(formattedMessages);
+    const sameThread = initialMessagesThread.current === threadId;
+    initialMessagesThread.current = threadId;
+    setMessages(prev => {
+      // History may lag behind both the active response and locally queued turns.
+      const accepted = sameThread
+        ? prev.filter(
+            message => isWaitingQueuedMessage(message) || typeof message.content.metadata?.deliveryRunId === 'string',
+          )
+        : [];
+      const nextMessages = [
+        ...formattedMessages.map(stored => {
+          const live = accepted.find(message => message.id === stored.id);
+          const runId = live?.content.metadata?.deliveryRunId;
+          if (live?.role === 'assistant' && typeof runId === 'string' && !finishedRuns.current.has(runId)) return live;
+          return stored;
+        }),
+        ...accepted.filter(
+          message =>
+            !(initialMessages ?? []).some(
+              stored =>
+                stored.id === message.id ||
+                (typeof message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === 'string' &&
+                  stored.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === message.content.metadata[CLIENT_MESSAGE_ID_KEY]),
+            ),
+        ),
+      ];
+      return [
+        ...nextMessages.filter(message => !isWaitingQueuedMessage(message)),
+        ...nextMessages.filter(isWaitingQueuedMessage),
+      ];
+    });
     setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
-  }, [initialMessages]);
+    if (!sameThread || !_currentRunId.current || finishedRuns.current.has(_currentRunId.current)) {
+      _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    }
+  }, [initialMessages, threadId]);
 
   useEffect(() => {
     _activeContinuation.current = {
@@ -415,7 +473,86 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
-      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+      if (
+        chunk.type === 'start' &&
+        !(typeof chunk.payload.messageId === 'string' && chunk.payload.messageId.startsWith('persisted-signal:'))
+      ) {
+        observedRuns.current.set(chunk.runId, 'sent');
+      }
+      if ((chunk.type === 'error' || chunk.type === 'abort') && !observedRuns.current.has(chunk.runId)) {
+        observedRuns.current.set(chunk.runId, 'failed');
+      }
+      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+        finishedRuns.current.add(chunk.runId);
+      }
+      const echoMetadata = chunk.type === 'data-user-message' && isDataChunk(chunk) ? chunk.data?.metadata : undefined;
+      const echoedClientId =
+        echoMetadata && typeof echoMetadata === 'object' && CLIENT_MESSAGE_ID_KEY in echoMetadata
+          ? echoMetadata[CLIENT_MESSAGE_ID_KEY]
+          : undefined;
+      setMessages(prev => {
+        const conversation = prev.map(message => {
+          const metadata = message.content.metadata;
+          if (
+            isWaitingQueuedMessage(message) &&
+            typeof echoedClientId === 'string' &&
+            metadata?.[CLIENT_MESSAGE_ID_KEY] === echoedClientId
+          ) {
+            return {
+              ...message,
+              content: {
+                ...message.content,
+                metadata: { ...metadata, deliveryState: 'sent', deliveryRunId: chunk.runId },
+              },
+            };
+          }
+          if (typeof metadata?.deliveryRunId !== 'string') return message;
+          let deliveryState: MastraDBMessageMetadata['deliveryState'];
+          if (metadata.deliveryState === 'queued') deliveryState = observedRuns.current.get(metadata.deliveryRunId);
+          if (metadata.deliveryState === 'steered' && finishedRuns.current.has(metadata.deliveryRunId))
+            deliveryState = 'sent';
+          if (!deliveryState) return message;
+          return {
+            ...message,
+            content: {
+              ...message.content,
+              metadata: {
+                ...metadata,
+                deliveryState,
+                status: deliveryState === 'failed' ? undefined : metadata.status,
+              },
+            },
+          };
+        });
+        const waiting = conversation.filter(isWaitingQueuedMessage);
+        const active = conversation.filter(message => !isWaitingQueuedMessage(message));
+        const promotesQueuedTurn = prev.some(
+          message =>
+            isWaitingQueuedMessage(message) && message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === echoedClientId,
+        );
+        const ordered =
+          promotesQueuedTurn && typeof echoedClientId === 'string'
+            ? placeQueuedTurnBeforeResponse(active, echoedClientId, chunk.runId)
+            : active;
+        const tail = ordered.at(-1);
+        // A startup echo confirms the user message; it must not discard the run's response ID.
+        const startupResponse =
+          chunk.type === 'data-user-message' &&
+          tail?.role === 'assistant' &&
+          tail.content.parts.length === 0 &&
+          tail.content.metadata?.deliveryRunId === chunk.runId
+            ? tail
+            : undefined;
+        return [
+          ...accumulateChunk({
+            chunk,
+            conversation: startupResponse ? ordered.slice(0, -1) : ordered,
+            metadata: { mode: 'stream', deliveryRunId: chunk.runId },
+          }),
+          ...(startupResponse ? [startupResponse] : []),
+          ...waiting,
+        ];
+      });
 
       const signalTasks = extractTasksFromSignalChunk(chunk);
       if (signalTasks !== undefined) setTasks(signalTasks);
@@ -664,7 +801,9 @@ export const useChat = ({
     clientTools,
     signalId,
     clientMessageId,
+    delivery = 'send',
   }: StreamArgs) => {
+    const activeRunAtSend = isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined;
     const {
       frequencyPenalty,
       presencePenalty,
@@ -706,7 +845,9 @@ export const useChat = ({
     };
     setIsRunning(true);
 
-    _streamAbortRef.current?.abort();
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
+      _streamAbortRef.current?.abort();
+    }
     const internalAbort = new AbortController();
     _streamAbortRef.current = internalAbort;
 
@@ -762,6 +903,7 @@ export const useChat = ({
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
+      if (delivery === 'queue') throw new Error('Queueing requires thread signal support. The message was not sent.');
       await streamWithLegacyRoute();
       return;
     }
@@ -771,6 +913,7 @@ export const useChat = ({
     await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
     if (_threadSignalsUnsupportedRef.current) {
+      if (delivery === 'queue') throw new Error('Queueing requires thread signal support. The message was not sent.');
       await streamWithLegacyRoute();
       return;
     }
@@ -801,7 +944,7 @@ export const useChat = ({
     };
 
     try {
-      const result = await agent.sendMessage({
+      const result = await agent[delivery === 'queue' ? 'queueMessage' : 'sendMessage']({
         message: clientMessageId
           ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
           : messageContents,
@@ -815,6 +958,33 @@ export const useChat = ({
           },
         },
       });
+      if (clientMessageId && delivery !== 'send') {
+        setMessages(prev => {
+          const updated = prev.map(message => {
+            if (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] !== clientMessageId) return message;
+            let deliveryState: MastraDBMessageMetadata['deliveryState'] = 'sent';
+            if (delivery === 'queue') deliveryState = observedRuns.current.get(result.runId) ?? 'queued';
+            else if (activeRunAtSend === result.runId && !finishedRuns.current.has(result.runId))
+              deliveryState = 'steered';
+            return {
+              ...message,
+              content: {
+                ...message.content,
+                metadata: {
+                  ...message.content.metadata,
+                  deliveryState,
+                  deliveryRunId: result.runId,
+                  status: deliveryState === 'failed' ? undefined : message.content.metadata.status,
+                },
+              },
+            };
+          });
+          if (delivery === 'queue' && observedRuns.current.has(result.runId)) {
+            return placeQueuedTurnBeforeResponse(updated, clientMessageId, result.runId);
+          }
+          return updated;
+        });
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -827,6 +997,8 @@ export const useChat = ({
         setIsRunning(false);
       }
     } catch (error) {
+      // A requested queue must never silently fall back to steering the active run.
+      if (delivery === 'queue') throw error;
       if (isThreadSignalUnsupportedError(error)) {
         onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
         try {
@@ -932,7 +1104,18 @@ export const useChat = ({
       console.error('[useChat] Failed to abort thread subscription', error);
     });
     closeThreadSubscription();
-    setMessages(prev => finishStreamingAssistantMessage(prev));
+    const cancelledRunId = _currentRunId.current;
+    if (cancelledRunId) finishedRuns.current.add(cancelledRunId);
+    setMessages(prev =>
+      finishStreamingAssistantMessage(
+        prev.map(message => {
+          const metadata = message.content.metadata;
+          if (!cancelledRunId || metadata?.deliveryState !== 'steered' || metadata.deliveryRunId !== cancelledRunId)
+            return message;
+          return { ...message, content: { ...message.content, metadata: { ...metadata, deliveryState: 'sent' } } };
+        }),
+      ),
+    );
     pendingToolApprovalIdsRef.current.clear();
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
@@ -1209,6 +1392,9 @@ export const useChat = ({
         ...dbUserMessage.content.metadata,
         mode: 'stream',
         status: 'pending',
+        ...(mode === 'stream' && 'delivery' in args && args.delivery === 'queue'
+          ? { deliveryState: 'queueing' as const }
+          : {}),
         [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
       };
       const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
@@ -1228,7 +1414,22 @@ export const useChat = ({
     } catch (error) {
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
-      setIsRunning(false);
+      if (!isRunning) setIsRunning(false);
+      if (clientMessageId) {
+        setMessages(prev =>
+          prev.map(message =>
+            message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId
+              ? {
+                  ...message,
+                  content: {
+                    ...message.content,
+                    metadata: { ...message.content.metadata, status: undefined, deliveryState: 'failed' },
+                  },
+                }
+              : message,
+          ),
+        );
+      }
       throw error;
     }
   };

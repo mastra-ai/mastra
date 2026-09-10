@@ -31,6 +31,7 @@ import { ComposerAttachments as ChatComposerAttachments } from './attachments/at
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
+import { ActiveSendControls } from './components/active-send-controls';
 import { BracketOverlay } from './components/bracket-overlay';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
@@ -274,14 +275,14 @@ const AgentComposer = ({
   const isEmpty = text.trim().length === 0 && attachments.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
 
-  const submit = async () => {
+  const submit = async (delivery: 'send' | 'queue' | 'steer' = 'send') => {
     if (isEmpty || sendBlocked || !canExecuteAgent) return;
     const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
     const message = text;
     setThreadInput('');
     clear();
     setSendPulseKey(k => k + 1);
-    send({ message, attachments: coreUserMessages });
+    send({ message, attachments: coreUserMessages, delivery });
   };
 
   return (
@@ -293,7 +294,9 @@ const AgentComposer = ({
         className="relative"
         onSubmit={event => {
           event.preventDefault();
-          void submit();
+          const submitter = event.nativeEvent instanceof SubmitEvent ? event.nativeEvent.submitter : undefined;
+          const value = submitter instanceof HTMLButtonElement ? submitter.value : 'send';
+          void submit(value === 'queue' || value === 'steer' ? value : 'send');
         }}
       >
         <ComposerAttachments>
@@ -318,7 +321,9 @@ const AgentComposer = ({
                   if (sendBlocked) return;
                   event.preventDefault();
                   event.stopPropagation();
-                  void submit();
+                  const form = event.currentTarget.form;
+                  const button = form?.querySelector<HTMLButtonElement>('[data-chat-submit]');
+                  if (button) form?.requestSubmit(button);
                 }
               }}
               disabled={!canExecuteAgent}
@@ -454,16 +459,23 @@ const ComposerSendButton = ({
 
   return (
     <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
-        disabled={!canExecute || isEmpty}
-      >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
-      </Button>
+      {isRunning ? (
+        <ActiveSendControls disabled={!canExecute || isEmpty} />
+      ) : (
+        <Button
+          type="submit"
+          name="delivery"
+          value="send"
+          data-chat-submit
+          variant="default"
+          size="icon-md"
+          aria-label="Send"
+          tooltip={canExecute ? 'Send' : 'No permission to execute'}
+          disabled={!canExecute || isEmpty}
+        >
+          <ArrowUp />
+        </Button>
+      )}
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
           <CircleStopIcon />

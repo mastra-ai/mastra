@@ -244,7 +244,7 @@ export const useChatSendHandler = ({
   );
 
   const send = useCallback(
-    async ({ message, attachments = [] }: ChatSendArgs) => {
+    async ({ message, attachments = [], delivery }: ChatSendArgs) => {
       const deps = sendDepsRef.current;
       if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
 
@@ -294,6 +294,7 @@ export const useChatSendHandler = ({
           await sendMessage({
             message,
             mode: 'stream',
+            delivery,
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId: deps.threadId,

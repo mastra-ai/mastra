@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { abortedThread, acceptedMessage, noMcpServers } from './fixtures/message-delivery';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -55,6 +56,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(noMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
@@ -119,6 +121,7 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           threadId={threadId}
           initialMessages={initialMessages}
           supportsMemory={true}
+          modelVersion="v2"
           settings={{ modelSettings: { chatWithLegacyStream: false } }}
         >
           <Thread
@@ -178,6 +181,365 @@ describe('Thread', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe('when choosing how to send during an active run', () => {
+    let emit: (chunk: unknown) => void;
+    const requests: string[] = [];
+    beforeEach(() => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      requests.length = 0;
+      server.use(...baseHandlers());
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+        http.post(
+          `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  emit = chunk => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, () => {
+          requests.push('send');
+          emit({ type: 'start', runId: 'first', from: 'AGENT', payload: { messageId: 'answer-first' } });
+          return HttpResponse.json(acceptedMessage('first'));
+        }),
+        http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, () => {
+          requests.push('queue');
+          return HttpResponse.json(acceptedMessage(`queued-${requests.length}`));
+        }),
+      );
+    });
+    const sendText = (text: string) => {
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
+      fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+    };
+    it('keeps each streamed answer with its turn while later messages wait', async () => {
+      const { rerender } = renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      await act(async () => {
+        emit({ type: 'text-start', runId: 'first', from: 'AGENT', payload: { id: 'text-first' } });
+        emit({ type: 'text-delta', runId: 'first', from: 'AGENT', payload: { id: 'text-first', text: 'Answer' } });
+      });
+      sendText('SECOND');
+      await screen.findByText('Queued');
+      sendText('THIRD');
+      await waitFor(() => expect(screen.getAllByText('Queued')).toHaveLength(2));
+      await act(async () => {
+        emit({ type: 'text-delta', runId: 'first', from: 'AGENT', payload: { id: 'text-first', text: ' FIRST' } });
+        emit({ type: 'text-end', runId: 'first', from: 'AGENT', payload: { id: 'text-first' } });
+        emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} });
+      });
+      const transcript = () =>
+        Array.from(document.querySelectorAll('[data-message-id] .mastra-markdown p')).map(node => node.textContent);
+      await waitFor(() => expect(transcript()).toEqual(['FIRST', 'Answer FIRST', 'SECOND', 'THIRD']));
+      await act(async () => {
+        emit({ type: 'start', runId: 'queued-2', from: 'AGENT', payload: { messageId: 'answer-second' } });
+        emit({ type: 'text-start', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second' } });
+        emit({ type: 'text-delta', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second', text: 'Answer' } });
+      });
+      const savedFirstAnswer = { ...assistantMessage('Answer FIRST'), id: 'answer-first' };
+      rerender(renderThreadTree([userMessage('FIRST'), savedFirstAnswer]));
+      await act(async () => {
+        emit({ type: 'text-delta', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second', text: ' SECOND' } });
+        emit({ type: 'text-end', runId: 'queued-2', from: 'AGENT', payload: { id: 'text-second' } });
+        emit({ type: 'finish', runId: 'queued-2', from: 'AGENT', payload: {} });
+      });
+      await waitFor(() => expect(transcript()).toEqual(['FIRST', 'Answer FIRST', 'SECOND', 'Answer SECOND', 'THIRD']));
+      await act(async () => {
+        emit({ type: 'start', runId: 'queued-3', from: 'AGENT', payload: { messageId: 'answer-third' } });
+        emit({ type: 'text-start', runId: 'queued-3', from: 'AGENT', payload: { id: 'text-third' } });
+        emit({
+          type: 'text-delta',
+          runId: 'queued-3',
+          from: 'AGENT',
+          payload: { id: 'text-third', text: 'Answer THIRD' },
+        });
+        emit({ type: 'text-end', runId: 'queued-3', from: 'AGENT', payload: { id: 'text-third' } });
+        emit({ type: 'finish', runId: 'queued-3', from: 'AGENT', payload: {} });
+      });
+      await waitFor(() =>
+        expect(transcript()).toEqual(['FIRST', 'Answer FIRST', 'SECOND', 'Answer SECOND', 'THIRD', 'Answer THIRD']),
+      );
+      expect(screen.queryByText('Queued')).toBeNull();
+    });
+    it('queues each follow-up and clears only the label for the run that starts', async () => {
+      renderThread([]);
+      expect(await screen.findByRole('button', { name: 'Send', exact: true })).toBeTruthy();
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await screen.findByText('Queued');
+      sendText('THIRD');
+      await waitFor(() => expect(screen.getAllByText('Queued')).toHaveLength(2));
+      expect(requests).toEqual(['send', 'queue', 'queue']);
+      await act(async () => emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} }));
+      expect(screen.getAllByText('Queued')).toHaveLength(2);
+      await act(async () =>
+        emit({ type: 'start', runId: 'queued-2', from: 'AGENT', payload: { messageId: 'answer-second' } }),
+      );
+      await waitFor(() => expect(screen.getAllByText('Queued')).toHaveLength(1));
+    });
+    it.each([false, true])(
+      'places a queued turn before its response when acceptance arrives late (echo: %s)',
+      async echoReceived => {
+        renderThread([]);
+        await screen.findByRole('button', { name: 'Send', exact: true });
+        sendText('FIRST');
+        await screen.findByRole('button', { name: 'Queue', exact: true });
+        server.use(
+          http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, async ({ request }) => {
+            const body = await request.json();
+            emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} });
+            emit({ type: 'start', runId: 'already-started', from: 'AGENT', payload: { messageId: 'answer-second' } });
+            if (echoReceived)
+              emit({
+                type: 'data-user-message',
+                runId: 'already-started',
+                from: 'AGENT',
+                data: {
+                  type: 'user-message',
+                  id: 'server-second',
+                  contents: 'SECOND',
+                  metadata: body.message.metadata,
+                },
+              });
+            emit({ type: 'text-start', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
+            emit({
+              type: 'text-delta',
+              runId: 'already-started',
+              from: 'AGENT',
+              payload: { id: 'text-second', text: 'Answer' },
+            });
+            emit({
+              type: 'step-start',
+              runId: 'already-started',
+              from: 'AGENT',
+              payload: { messageId: 'answer-second' },
+            });
+            emit({
+              type: 'text-delta',
+              runId: 'already-started',
+              from: 'AGENT',
+              payload: { id: 'text-second', text: ' SECOND' },
+            });
+            emit({ type: 'text-end', runId: 'already-started', from: 'AGENT', payload: { id: 'text-second' } });
+            await new Promise(resolve => setTimeout(resolve, 30));
+            return HttpResponse.json(acceptedMessage('already-started'));
+          }),
+        );
+        sendText('SECOND');
+        await waitFor(() => expect(document.querySelector('[data-message-delivery="sent"]')).toBeTruthy());
+        await waitFor(() =>
+          expect(
+            Array.from(document.querySelectorAll('[data-message-id] .mastra-markdown p')).map(node => node.textContent),
+          ).toEqual(['FIRST', 'SECOND', 'Answer SECOND']),
+        );
+        expect(
+          new Set(
+            Array.from(document.querySelectorAll('[data-message-id]')).map(node =>
+              node.getAttribute('data-message-id'),
+            ),
+          ).size,
+        ).toBe(3);
+        expect(screen.queryByText('Queued')).toBeNull();
+      },
+    );
+    it('does not mark a run queued when its start arrives before the acceptance response', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, async () => {
+          emit({ type: 'start', runId: 'already-started', from: 'AGENT', payload: { messageId: 'answer-second' } });
+          await new Promise(resolve => setTimeout(resolve, 30));
+          return HttpResponse.json(acceptedMessage('already-started'));
+        }),
+      );
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await waitFor(() => expect(document.querySelector('[data-message-delivery="sent"]')).toBeTruthy());
+      expect(screen.queryByText('Queued')).toBeNull();
+    });
+    it('reports an unsupported queue without falling back to a steering send', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, () => new HttpResponse(undefined, { status: 501 })),
+      );
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await screen.findByText('Not sent');
+      expect(requests).toEqual(['send']);
+      expect(screen.queryByText('Queued')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Queue', exact: true })).toBeTruthy();
+    });
+    it('accepts rapid identical queued messages without cancelling the earlier request', async () => {
+      let calls = 0;
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/queue-message`, async () => {
+          const runId = `queued-${++calls}`;
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return HttpResponse.json(acceptedMessage(runId));
+        }),
+      );
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('REPEAT');
+      await waitFor(() => expect(calls).toBe(1));
+      sendText('REPEAT');
+      await waitFor(() => expect(screen.getAllByText('Queued')).toHaveLength(2));
+      expect(screen.getAllByText('REPEAT', { selector: 'p' })).toHaveLength(2);
+      expect(screen.queryByText('Not sent')).toBeNull();
+    });
+    it('settles a queued item when its run fails before starting', async () => {
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await screen.findByText('Queued');
+      await act(async () =>
+        emit({ type: 'error', runId: 'queued-2', from: 'AGENT', payload: { error: 'Could not start queued run' } }),
+      );
+      await screen.findByText('Not sent');
+      expect(screen.queryByText('Queued')).toBeNull();
+    });
+    it('preserves accepted queued messages when earlier history is refreshed', async () => {
+      const { rerender } = renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      sendText('SECOND');
+      await screen.findByText('Queued');
+      rerender(renderThreadTree([userMessage('FIRST')]));
+      expect(await screen.findByText('Queued')).toBeTruthy();
+      expect(screen.getByText('SECOND', { selector: 'p' })).toBeTruthy();
+    });
+    it.each([false, true])(
+      'keeps a started queued message through stale history (echo received: %s)',
+      async echoReceived => {
+        const { rerender } = renderThread([]);
+        await screen.findByRole('button', { name: 'Send', exact: true });
+        sendText('FIRST');
+        await screen.findByRole('button', { name: 'Queue', exact: true });
+        sendText('SECOND');
+        await screen.findByText('Queued');
+        const clientMessageId = screen
+          .getByText('SECOND', { selector: 'p' })
+          .closest('[data-message-id]')
+          ?.getAttribute('data-message-id');
+        expect(clientMessageId).toBeTruthy();
+        await act(async () => emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} }));
+        await act(async () =>
+          emit({ type: 'start', runId: 'queued-2', from: 'AGENT', payload: { messageId: 'answer-second' } }),
+        );
+        expect(screen.queryByText('Queued')).toBeNull();
+        if (echoReceived) {
+          await act(async () =>
+            emit({
+              type: 'data-user-message',
+              runId: 'queued-2',
+              from: 'AGENT',
+              data: { type: 'user-message', id: 'm-SECOND', metadata: { clientMessageId } },
+            }),
+          );
+        }
+        rerender(renderThreadTree([userMessage('FIRST'), assistantMessage('FIRST answered')]));
+        expect(screen.getByText('SECOND', { selector: 'p' })).toBeTruthy();
+        const savedSecond = userMessage('SECOND');
+        savedSecond.content.metadata = { clientMessageId };
+        rerender(renderThreadTree([userMessage('FIRST'), assistantMessage('FIRST answered'), savedSecond]));
+        expect(screen.getAllByText('SECOND', { selector: 'p' })).toHaveLength(1);
+        expect(
+          screen.getByText('SECOND', { selector: 'p' }).closest('[data-message-id]')?.getAttribute('data-message-id'),
+        ).toBe(savedSecond.id);
+        expect(screen.queryByText('Queued')).toBeNull();
+      },
+    );
+    it.each(['finish', 'error', 'abort', 'cancel'])(
+      'clears steering feedback for the matching run on %s',
+      async type => {
+        server.use(http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => HttpResponse.json(abortedThread)));
+        renderThread([]);
+        await screen.findByRole('button', { name: 'Send', exact: true });
+        sendText('FIRST');
+        await screen.findByRole('button', { name: 'Queue', exact: true });
+        sendText('NEXT TURN');
+        await screen.findByText('Queued');
+        fireEvent.click(screen.getByRole('button', { name: 'Choose send behavior' }));
+        fireEvent.click(await screen.findByRole('menuitemradio', { name: /Steer/ }));
+        sendText('CHANGE DIRECTION');
+        await screen.findByText('Sent to current run');
+        if (type === 'cancel') {
+          fireEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+        } else {
+          await act(async () => emit({ type, runId: 'unrelated', from: 'AGENT', payload: {} }));
+          expect(screen.getByText('Sent to current run')).toBeTruthy();
+          await act(async () => emit({ type, runId: 'first', from: 'AGENT', payload: {} }));
+        }
+        await waitFor(() => expect(screen.queryByText('Sent to current run')).toBeNull());
+        expect(screen.getByText('CHANGE DIRECTION', { selector: 'p' })).toBeTruthy();
+        expect(screen.getByText('Queued')).toBeTruthy();
+      },
+    );
+    it('does not restore steering feedback when acceptance arrives after the run finishes', async () => {
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      let releaseResponse = () => {};
+      const responseGate = new Promise<void>(resolve => {
+        releaseResponse = resolve;
+      });
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async () => {
+          emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} });
+          await responseGate;
+          return HttpResponse.json(acceptedMessage('first'));
+        }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Choose send behavior' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: /Steer/ }));
+      sendText('CHANGE DIRECTION');
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      releaseResponse();
+      await waitFor(() => expect(document.querySelector('[data-message-delivery="sent"]')).toBeTruthy());
+      expect(screen.queryByText('Sent to current run')).toBeNull();
+      expect(screen.getByText('CHANGE DIRECTION', { selector: 'p' })).toBeTruthy();
+    });
+    it('steers only after explicit selection and resets to Queue for a later active period', async () => {
+      renderThread([]);
+      await screen.findByRole('button', { name: 'Send', exact: true });
+      sendText('FIRST');
+      await screen.findByRole('button', { name: 'Queue', exact: true });
+      fireEvent.click(screen.getByRole('button', { name: 'Choose send behavior' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: /Steer/ }));
+      expect(requests).toEqual(['send']);
+      sendText('CHANGE DIRECTION');
+      await screen.findByText('Sent to current run');
+      expect(requests).toEqual(['send', 'send']);
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'keep my draft' } });
+      await act(async () => emit({ type: 'finish', runId: 'first', from: 'AGENT', payload: {} }));
+      expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeTruthy();
+      expect(
+        screen.getByRole('textbox').getAttribute('value') ?? screen.getByRole<HTMLTextAreaElement>('textbox').value,
+      ).toBe('keep my draft');
+      await act(async () =>
+        emit({ type: 'start', runId: 'next', from: 'AGENT', payload: { messageId: 'answer-next' } }),
+      );
+      expect(screen.getByRole('button', { name: 'Queue', exact: true })).toBeTruthy();
+    });
   });
 
   describe('when no suggested prompts are provided for an empty thread', () => {

@@ -44,7 +44,14 @@ When you interact with your agent, you can follow its reasoning and view tool ca
 
 You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
-You can send a follow-up message in the same thread during an agent response stream. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
+When the agent is idle, select **Send** to start a response. During an active response, chats using the thread signals transport offer two actions in the send button's dropdown:
+
+- **Queue** (default): Wait for the current response to finish, then process the message as a separate turn. Each message shows **Queued** until its run starts.
+- **Steer**: Send the message into the current run to change its direction. The message shows **Sent to current run**. Steering can redirect the agent before it answers the earlier request.
+
+Choosing an action doesn't submit the message. Press **Enter** or select the button to use the selected action. When the agent becomes idle, the button returns to **Send** without clearing your draft.
+
+Queued messages wait in server memory, so a server restart loses messages that haven't started. Queue labels are local to the current chat session; other tabs can observe active responses, but don't show waiting messages. Stopping the current run doesn't cancel queued messages.
 
 Use [Editor](/docs/studio/editor) to let non-technical team members iterate on agents and version every change, plus run experiments without redeploying.
 

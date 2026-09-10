@@ -3,6 +3,7 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -323,7 +324,7 @@ export const MessageRow = memo(function MessageRow({
   const displayRole = dbMessage.role;
 
   if (displayRole === 'user') {
-    const isPending = isPendingMessage(message);
+    const isPending = isPendingMessage(message) && metadata?.deliveryState !== 'queued';
 
     return (
       <div
@@ -331,6 +332,7 @@ export const MessageRow = memo(function MessageRow({
         {...rootProps}
         data-message-id={message.id}
         data-message-pending={isPending ? 'true' : undefined}
+        data-message-delivery={typeof metadata?.deliveryState === 'string' ? metadata.deliveryState : undefined}
       >
         <DatasetSaveAction messageText={getTextFromParts(message)} />
         <div
@@ -341,6 +343,17 @@ export const MessageRow = memo(function MessageRow({
         >
           <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
         </div>
+        {metadata?.deliveryState === 'queued' && (
+          <Txt variant="ui-sm" role="status">
+            Queued
+          </Txt>
+        )}
+        {metadata?.deliveryState === 'steered' && <Txt variant="ui-sm">Sent to current run</Txt>}
+        {metadata?.deliveryState === 'failed' && (
+          <Txt variant="ui-sm" role="status">
+            Not sent
+          </Txt>
+        )}
         {footerSlot}
       </div>
     );
