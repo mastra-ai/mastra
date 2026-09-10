@@ -1,30 +1,58 @@
-# `create-factory`
+# create-factory
 
-`create-factory` scaffolds a Mastra Factory project.
+Mastra Factory is an open source environment for building software with coding agents. Connect your repository to turn issues into plans, implementations, and reviewed pull requests.
 
-```shell
-npm create factory
+`create-factory` is the recommended way to scaffold your Mastra Factory. By default, 
+
+## Installation
+
+> [!IMPORTANT]
+> Make sure that you have Node.js 22.13.0 or later installed on your system.
+
+Run the latest version directly with your package manager.
+
+Using npm:
+
+```bash
+npx create-factory@latest
 ```
 
-It clones the public [`softwarefactory-template`](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes Git. Run `npm create factory -- --help` for options.
+Using Yarn:
 
-Optional Mastra platform setup writes provisioned credentials and resource identifiers to `.env`, enabling cloud sandboxes even when Factory runs locally.
-
-Pass `--no-platform` to skip platform provisioning. This leaves the template `.env` unchanged.
-
-## Development
-
-This package owns prompts, template cloning, package-manager detection, optional Mastra platform setup, dependency installation, and Git initialization.
-
-```shell
-pnpm --filter create-factory test
-pnpm --filter create-factory check
-pnpm --filter create-factory lint
-pnpm --filter create-factory build
+```bash
+yarn dlx create-factory@latest
 ```
 
-Generated project behavior belongs to the separate template repository.
+Using pnpm:
 
-## License
+```bash
+pnpm create factory@latest
+```
 
-Apache-2.0
+## Usage
+
+The interactive setup asks where to create the project and helps configure your Mastra Factory project.
+
+By default, the setup wizard provisions Mastra platform resources during setup, enabling you to fully run Mastra Factory on platform or locally with cloud-backed capabilities. If you prefer to [self-host]() Mastra Factory, run the setup with the `--no-platform` flag.
+
+```bash
+npx create-factory@latest -- --no-platform
+```
+
+Pass `--help` to see all options:
+
+```bash
+npx create-factory@latest --help
+```
+
+## Documentation
+
+- [create-factory CLI reference](https://mastra.ai/reference/cli/create-factory)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/mastracode/mastra-factory/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
