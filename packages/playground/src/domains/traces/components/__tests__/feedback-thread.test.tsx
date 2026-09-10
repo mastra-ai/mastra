@@ -86,7 +86,16 @@ describe('FeedbackThread', () => {
   it('shows an empty state when there is no feedback', () => {
     render(<FeedbackThread onSubmit={vi.fn()} />);
 
-    expect(screen.getByText('No feedback yet')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No feedback yet' })).toBeTruthy();
+    expect(screen.getByText('Leave feedback on this trace to see it here.')).toBeTruthy();
+  });
+
+  it('places the composer above the feedback list', () => {
+    render(<FeedbackThread feedbackData={withAuthor({ id: 'u1' })} onSubmit={vi.fn()} />);
+
+    const composer = screen.getByRole('form', { name: 'Leave feedback' });
+    const item = screen.getByText('u1');
+    expect(composer.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('disables the send button while the input is empty or whitespace-only', () => {

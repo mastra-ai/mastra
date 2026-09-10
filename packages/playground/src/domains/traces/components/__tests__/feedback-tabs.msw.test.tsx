@@ -125,7 +125,7 @@ describe('feedback tabs delete', () => {
     // Invalidation refetches; the emptied list drops the record from the thread.
     await waitFor(() => expect(onList).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
-    expect(screen.getByText('No feedback yet')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No feedback yet' })).toBeTruthy();
   });
 
   it('deletes a trace-level feedback record by feedbackId after confirmation', async () => {

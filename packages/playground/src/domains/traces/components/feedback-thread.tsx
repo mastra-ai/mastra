@@ -18,9 +18,10 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@mastra/playground-ui/components/Comment';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
-import { Trash2Icon } from 'lucide-react';
+import { MessageSquareIcon, Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
@@ -158,7 +159,7 @@ function FeedbackItems({
 }
 
 /**
- * Feedback rendered as a comment thread: existing records above, a composer below.
+ * Feedback rendered as a comment thread: a composer above, existing records below.
  * Pagination, submission, deletion, and review status are driven by the caller.
  */
 export function FeedbackThread({
@@ -194,15 +195,40 @@ export function FeedbackThread({
 
   return (
     <Comment variant={variant} className="min-h-0 gap-4 px-3">
+      <CommentComposer
+        aria-label="Leave feedback"
+        onSubmit={async event => {
+          event.preventDefault();
+          if (sendBlocked) return;
+          try {
+            await onSubmit(text.trim());
+            setText('');
+          } catch {
+            // Keep the draft so the comment isn't lost; the caller surfaces the failure.
+          }
+        }}
+      >
+        <CommentComposerInput
+          aria-label="Leave feedback"
+          placeholder="Leave feedback..."
+          value={text}
+          onChange={event => setText(event.target.value)}
+        >
+          <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
+        </CommentComposerInput>
+      </CommentComposer>
+
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">
             Loading feedback...
           </Txt>
         ) : feedbackItems.length === 0 ? (
-          <Txt variant="ui-md" className="text-neutral3">
-            No feedback yet
-          </Txt>
+          <EmptyState
+            iconSlot={<MessageSquareIcon />}
+            titleSlot="No feedback yet"
+            descriptionSlot="Leave feedback on this trace to see it here."
+          />
         ) : (
           <FeedbackItems
             variant={variant}
@@ -230,29 +256,6 @@ export function FeedbackThread({
           </Button>
         </div>
       )}
-
-      <CommentComposer
-        aria-label="Leave feedback"
-        onSubmit={async event => {
-          event.preventDefault();
-          if (sendBlocked) return;
-          try {
-            await onSubmit(text.trim());
-            setText('');
-          } catch {
-            // Keep the draft so the comment isn't lost; the caller surfaces the failure.
-          }
-        }}
-      >
-        <CommentComposerInput
-          aria-label="Leave feedback"
-          placeholder="Leave feedback..."
-          value={text}
-          onChange={event => setText(event.target.value)}
-        >
-          <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
-        </CommentComposerInput>
-      </CommentComposer>
 
       <AlertDialog
         open={feedbackIdToDelete !== undefined}
