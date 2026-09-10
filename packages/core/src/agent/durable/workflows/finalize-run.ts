@@ -10,6 +10,7 @@ import { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { persistTerminalError, TerminalErrorHistorySaveError } from '../persist-terminal-error';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -26,6 +27,7 @@ export interface DurableFinishSideEffectsOptions {
   tracingContext?: TracingContext;
   logger?: IMastraLogger;
   outputResult?: OutputResult;
+  terminalError?: string;
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -78,6 +80,7 @@ export async function runDurableFinishSideEffects({
   tracingContext,
   logger,
   outputResult,
+  terminalError,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
   const durableState = initData.state;
@@ -111,6 +114,7 @@ export async function runDurableFinishSideEffects({
         runId,
         error,
       });
+      throw error;
     }
   }
 
@@ -161,6 +165,7 @@ export async function runDurableFinishSideEffects({
       );
     } catch (error) {
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
+      throw error;
     }
   }
 
@@ -195,12 +200,25 @@ export async function runDurableFinishSideEffects({
         threadId: durableState.threadId,
         error,
       });
+      throw error;
+    }
+  }
+
+  if (terminalError) {
+    const error = new Error(terminalError);
+    try {
+      await persistTerminalError({ agentId: initData.agentId, runId, state: durableState, memory, error });
+    } catch (saveError) {
+      throw new TerminalErrorHistorySaveError(error, saveError);
     }
   }
 
   // Same exclusions as the persistence block above: an observational-memory run writes no
   // messages here, and titling it would create a thread row holding a title and nothing else.
   if (
+    outputResult?.finishReason !== 'abort' &&
+    outputResult?.finishReason !== 'aborted' &&
+    outputResult?.finishReason !== 'error' &&
     durableState?.threadId &&
     durableState?.resourceId &&
     !durableState.observationalMemory &&

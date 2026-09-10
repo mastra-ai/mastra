@@ -243,6 +243,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   let lastErrorStack: string | undefined;
   let lastErrorName: string | undefined;
   let lastErrorCause: unknown;
+  let deferredErrorChunk: ChunkType<OUTPUT> | undefined;
 
   // Idle/liveness watchdog. A durable run whose driving process crashed stops
   // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
@@ -350,6 +351,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorStack = typeof errPayload?.error?.stack === 'string' ? errPayload.error.stack : undefined;
             lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
             lastErrorCause = errPayload?.error ?? errPayload;
+            // A handled model error still finalizes output and saves history.
+            // Consumers treat an error chunk as terminal, so wait for FINISH.
+            deferredErrorChunk = chunk as ChunkType<OUTPUT>;
+            break;
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
@@ -373,6 +378,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           const data = streamEvent.data as AgentFinishEventData;
+          const errorChunk = deferredErrorChunk;
+          deferredErrorChunk = undefined;
+          if (errorChunk) safeEnqueue(controller, errorChunk);
           // Enqueue finish chunk and close stream even if callback throws
           const finishChunk = {
             type: 'finish' as const,
@@ -384,6 +392,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           safeEnqueue(controller, finishChunk);
           safeClose(controller);
           markTerminated();
+
+          if (errorChunk) {
+            try {
+              await onChunk?.(errorChunk);
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onChunk callback error:`, callbackError);
+            }
+          }
 
           // Build rich onFinish payload from finish event data.
           // The pubsub FINISH event carries output.text, output.steps, and

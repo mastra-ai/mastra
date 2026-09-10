@@ -299,6 +299,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
+            params.workflowStatus === 'failed' ||
             params.workflowStatus === 'paused' ||
             params.workflowStatus === 'suspended' ||
             params.workflowStatus === 'running'
@@ -626,6 +627,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             requestContext,
             tracingContext,
             logger,
+            terminalError: state.state?.terminalError,
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,

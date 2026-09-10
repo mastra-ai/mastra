@@ -105,6 +105,11 @@ export class EventedAgent<
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
         .then(async result => {
+          const error = this.getWorkflowFailure(result, 'Workflow execution failed');
+          let historySaveFailed = false;
+          if (error) {
+            historySaveFailed = !(await this.emitError(runId, error, workflowInput));
+          }
           // Reaching any non-suspended terminal status means the run is done and
           // its persisted snapshot rows will never be resumed. Delete them so
           // finished runs stop showing up in listActiveRuns() and being re-driven
@@ -112,7 +117,7 @@ export class EventedAgent<
           // so `resume()` / `recoverActiveRuns()` can find them. If the process
           // dies before this fires, the run is a genuine orphan and the recover
           // path performs the same cleanup once it reaches a terminal status.
-          if (result?.status && result.status !== 'suspended') {
+          if (result?.status && result.status !== 'suspended' && !historySaveFailed) {
             await this.deleteRunSnapshots(runId);
           }
         })
