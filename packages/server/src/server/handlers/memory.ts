@@ -1710,12 +1710,17 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
       }
 
+      // Resolve either the agent's memory or, for agent-less (storage-backed) memory,
+      // the memory store directly so a transfer without an `agentId` still works.
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
-      if (!memory) {
+      const memoryStore = memory ? undefined : await getStorageFromContext({ mastra })?.getStore('memory');
+      if (!memory && !memoryStore) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
-      const sourceThread = await memory.getThreadById({ threadId: effectiveThreadId! });
+      const sourceThread = memory
+        ? await memory.getThreadById({ threadId: effectiveThreadId! })
+        : await memoryStore!.getThreadById({ threadId: effectiveThreadId! });
       if (!sourceThread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
@@ -1730,7 +1735,9 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
-      const result = await memory.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId });
+      const result = memory
+        ? await memory.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId })
+        : await memoryStore!.updateThreadResourceId({ threadId: effectiveThreadId!, resourceId });
 
       return { ...result, resourceId: result.resourceId ?? null };
     } catch (error) {

@@ -2991,6 +2991,15 @@ Notes:
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
+
+    // Preserve the storage no-op contract: if the thread already belongs to the
+    // target resource there is nothing to move and no vectors to migrate, so
+    // return the existing thread untouched rather than deleting/rebuilding vectors.
+    const existing = await memoryStore.getThreadById({ threadId });
+    if (existing && existing.resourceId === resourceId) {
+      return existing;
+    }
+
     const thread = await memoryStore.updateThreadResourceId({ threadId, resourceId });
 
     // Migrate semantic-recall message vectors so resource-scoped retrieval keeps

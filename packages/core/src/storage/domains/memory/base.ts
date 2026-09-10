@@ -243,31 +243,63 @@ export abstract class MemoryStorage extends StorageDomain {
         });
       }
     } catch (error) {
-      await this.saveThread({
-        thread: { ...thread, createdAt: thread.createdAt, updatedAt: thread.updatedAt },
-      });
-      // Restore any messages that may have already been moved before the failure. Messages
-      // without an original resourceId are left as-is (nothing meaningful to revert to).
-      const messagesToRestore = messagesToMove.filter(
-        (message): message is { id: string; originalResourceId: string } =>
-          typeof message.originalResourceId === 'string' && message.originalResourceId.length > 0,
-      );
-      if (messagesToRestore.length > 0) {
-        try {
-          await this.updateMessages({
-            messages: messagesToRestore.map(message => ({
-              id: message.id,
-              resourceId: message.originalResourceId,
-            })),
-          });
-        } catch (rollbackError) {
-          this.logger?.error?.(
-            `Failed to restore message ownership after a failed thread transfer for thread "${threadId}". ` +
-              `Some messages may remain under resource "${resourceId}".`,
-            rollbackError,
-          );
-        }
+      // Run both compensations independently so a failure in one does not skip the other,
+      // and track whether compensation fully succeeded. If any part of the rollback fails
+      // we surface an explicit incomplete-compensation error instead of silently logging,
+      // so the caller knows thread and message ownership may be split and can reconcile.
+      const compensationErrors: unknown[] = [];
+
+      try {
+        await this.saveThread({
+          thread: { ...thread, createdAt: thread.createdAt, updatedAt: thread.updatedAt },
+        });
+      } catch (threadRollbackError) {
+        compensationErrors.push(threadRollbackError);
+        this.logger?.error?.(
+          `Failed to revert thread ownership after a failed thread transfer for thread "${threadId}". ` +
+            `The thread may remain under resource "${resourceId}".`,
+          threadRollbackError,
+        );
       }
+
+      // Restore only the messages that actually landed on the new resource before the failure.
+      // Re-listing lets non-atomic adapters that applied a partial batch be reconciled precisely,
+      // and avoids touching messages that never moved (so a failure that moved nothing does not
+      // produce a false split-ownership report).
+      const originalResourceById = new Map(
+        messagesToMove
+          .filter(message => typeof message.originalResourceId === 'string' && message.originalResourceId.length > 0)
+          .map(message => [message.id, message.originalResourceId as string]),
+      );
+      try {
+        const { messages: currentMessages } = await this.listMessages({ threadId, perPage: false });
+        const messagesToRestore = currentMessages
+          .filter(message => {
+            const originalResourceId = originalResourceById.get(message.id);
+            return message.resourceId === resourceId && originalResourceId && originalResourceId !== resourceId;
+          })
+          .map(message => ({ id: message.id, resourceId: originalResourceById.get(message.id)! }));
+        if (messagesToRestore.length > 0) {
+          await this.updateMessages({ messages: messagesToRestore });
+        }
+      } catch (messageRollbackError) {
+        compensationErrors.push(messageRollbackError);
+        this.logger?.error?.(
+          `Failed to restore message ownership after a failed thread transfer for thread "${threadId}". ` +
+            `Some messages may remain under resource "${resourceId}".`,
+          messageRollbackError,
+        );
+      }
+
+      if (compensationErrors.length > 0) {
+        throw new Error(
+          `Thread transfer for thread "${threadId}" failed and could not be fully rolled back, so thread and ` +
+            `message ownership may be split between the original resource and "${resourceId}". Reconcile the ` +
+            `thread and its messages manually. Original cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+
       throw error;
     }
 

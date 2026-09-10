@@ -3132,4 +3132,48 @@ describe('Memory', () => {
       expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
+
+  describe('updateThreadResourceId', () => {
+    it('is a no-op that skips vector migration when the thread already belongs to the target resource', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [new Array(1536).fill(0.1)] }),
+        modelId: 'mock-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: { semanticRecall: { scope: 'resource' }, lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'noop-thread',
+          resourceId: 'resource-a',
+          title: 'Noop',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.updateThreadResourceId({ threadId: 'noop-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      // A same-resource call must not delete or rebuild vectors.
+      expect(mockVector.deleteVectors).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+  });
 });

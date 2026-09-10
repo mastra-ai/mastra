@@ -2638,6 +2638,41 @@ describe('Memory Handlers', () => {
         ).rejects.toMatchObject({ status: 404 });
       });
 
+      it('transfers via the storage fallback when no agentId is provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          storage,
+        });
+        await mockMemory.createThread({ threadId: 'no-agent-thread', resourceId: 'user-a', title: 'Src' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'na-msg-1',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'no-agent-thread',
+              resourceId: 'user-a',
+              content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            },
+          ] as MastraDBMessage[],
+        });
+
+        // Privileged context, no agentId: must resolve memory via the storage fallback.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: undefined,
+          threadId: 'no-agent-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        const reread = await mockMemory.getThreadById({ threadId: 'no-agent-thread' });
+        expect(reread!.resourceId).toBe('user-b');
+      });
+
       it('rejects with 403 when auth is configured without an FGA provider', async () => {
         // An authenticated deployment with no FGA provider cannot authorize a privileged,
         // non-resource-scoped transfer, so the route must fail closed rather than treat the
