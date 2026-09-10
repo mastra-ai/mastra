@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, normalize } from 'node:path';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,7 @@ vi.mock('node:os', async importOriginal => {
 import {
   createGitRefInstructionReader,
   createGitRefReminderReader,
+  getStaticallyLoadedInstructionPaths,
   loadAgentInstructions,
 } from './agent-instructions.js';
 
@@ -147,6 +148,63 @@ describe('git-ref instruction readers', () => {
 
     const reader = createGitRefInstructionReader(repo, 'main');
     expect(loadAgentInstructions(repo, undefined, reader)).toEqual([]);
+  });
+
+  it.each(['alias', 'canonical'] as const)(
+    'keeps %s project roots isolated when tool paths use the other spelling',
+    projectSpelling => {
+      const alias = join(root, 'repo-alias');
+      symlinkSync(repo, alias, 'junction');
+      const canonical = realpathSync(repo);
+      const projectPath = projectSpelling === 'alias' ? alias : canonical;
+      const toolRoot = projectSpelling === 'alias' ? canonical : alias;
+      const instruction = join(toolRoot, 'AGENTS.md');
+      const reader = createGitRefReminderReader(projectPath, 'main');
+      const staticReader = createGitRefInstructionReader(projectPath, 'main');
+
+      expect(reader.pathExists(instruction)).toBe(true);
+      expect(reader.isDirectory(toolRoot)).toBe(true);
+      expect(reader.readFile(instruction)).toBe('trusted base instructions');
+      expect(staticReader.read(instruction)).toBe('trusted base instructions');
+      writeFileSync(join(repo, 'CLAUDE.md'), 'INJECTED new file');
+      expect(reader.pathExists(join(toolRoot, 'CLAUDE.md'))).toBe(false);
+      expect(() => reader.readFile(join(toolRoot, 'CLAUDE.md'))).toThrow();
+      const missingRef = createGitRefReminderReader(projectPath, 'missing-ref');
+      expect(missingRef.pathExists(instruction)).toBe(false);
+      expect(() => missingRef.readFile(instruction)).toThrow();
+    },
+  );
+
+  it('resolves missing and symlinked checkout descendants relative to the trusted project root', () => {
+    write(join(repo, 'nested', 'AGENTS.md'), 'trusted nested instructions');
+    git('add', 'nested');
+    git('commit', '-m', 'nested instructions');
+    const alias = join(root, 'repo-alias');
+    symlinkSync(repo, alias, 'junction');
+    const reader = createGitRefReminderReader(realpathSync(repo), 'main');
+    rmSync(join(repo, 'nested'), { recursive: true });
+    expect(reader.pathExists(join(alias, 'nested', 'AGENTS.md'))).toBe(true);
+    expect(reader.isDirectory(join(alias, 'nested'))).toBe(true);
+    expect(reader.readFile(join(alias, 'nested', 'AGENTS.md'))).toBe('trusted nested instructions');
+
+    const outside = join(root, 'outside');
+    write(join(outside, 'AGENTS.md'), 'INJECTED symlink target');
+    symlinkSync(outside, join(repo, 'nested'), 'junction');
+    expect(reader.readFile(join(alias, 'nested', 'AGENTS.md'))).toBe('trusted nested instructions');
+    expect(reader.readFile(join(outside, 'AGENTS.md'))).toBe('INJECTED symlink target');
+
+    rmSync(join(repo, 'nested'));
+    symlinkSync(repo, join(repo, 'nested'), 'junction');
+    expect(reader.readFile(join(alias, 'nested', 'AGENTS.md'))).toBe('trusted nested instructions');
+  });
+
+  it('includes canonical project-root paths in static instruction deduplication', () => {
+    const alias = join(root, 'repo-alias');
+    symlinkSync(repo, alias, 'junction');
+    const reader = createGitRefInstructionReader(alias, 'main');
+    const paths = getStaticallyLoadedInstructionPaths(alias, undefined, reader);
+    expect(paths).toContain(join(alias, 'AGENTS.md'));
+    expect(paths).toContain(join(realpathSync(repo), 'AGENTS.md'));
   });
 
   it('reminder reader resolves project paths at the ref and falls back to fs outside the project', () => {
