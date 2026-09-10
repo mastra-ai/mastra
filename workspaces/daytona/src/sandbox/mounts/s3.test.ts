@@ -182,7 +182,8 @@ describe('mountS3 credentials', () => {
       stderr: 'Transport endpoint is not connected',
     }));
     await expect(mountS3('/mnt/s3', config, ctx)).rejects.toThrow('S3 mount is not readable');
-    expect(ctx.run.mock.calls.at(-1)![0]).toContain('rm -f ');
+    // The sandbox unmount path checks daemon lifetime before deleting password files.
+    expect(ctx.run.mock.calls.some(([cmd]) => cmd.startsWith('rm -f '))).toBe(false);
   });
 
   it('warns without reporting a working mount as failed if staging cleanup fails', async () => {

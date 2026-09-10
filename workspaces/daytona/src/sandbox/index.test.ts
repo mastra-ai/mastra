@@ -842,6 +842,20 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Mount Configuration', () => {
+    it('checks persisted S3 credentials after unmount even without an in-memory mount entry', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.process.executeCommand.mockClear();
+      await sandbox.unmount('/data/reconnected');
+      const commands = mockSandbox.process.executeCommand.mock.calls.map(([command]) => command);
+      const detach = commands.findIndex(command => command.includes('sudo fusermount -u '));
+      const cleanup = commands.findIndex(command => command.includes('credentials_in_use()'));
+      const marker = commands.findIndex(command => command.includes('rm -f /tmp/.mastra-mounts/'));
+      expect(detach).toBeGreaterThanOrEqual(0);
+      expect(cleanup).toBeGreaterThan(detach);
+      expect(marker).toBeGreaterThan(cleanup);
+    });
+
     it('recovers a disconnected S3 mount even when mountpoint cannot inspect it, then retries the same path', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();

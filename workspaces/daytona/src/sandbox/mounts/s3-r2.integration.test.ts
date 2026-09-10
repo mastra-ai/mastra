@@ -157,6 +157,49 @@ print('5 cross-scope operations denied')
       expect(retriedMount.success, retriedMount.error).toBe(true);
       expect(await command(scope.sandbox, 'timeout 15 cat /missing-marker/seed.txt')).toBe('seed');
       expect(await command(scope.sandbox, 'timeout 15 cat /s3-data/sentinel.txt')).toBe(`original-${scope.name}`);
+
+      // After isolation checks, use long-lived test-bucket credentials to verify cleanup across reconnects.
+      const longLived = new S3Filesystem({
+        ...scope.filesystem.getMountConfig(),
+        accessKeyId,
+        secretAccessKey,
+        sessionToken: undefined,
+      });
+      const mounted = await scope.sandbox.mount(longLived, '/long-lived');
+      expect(mounted.success, mounted.error).toBe(true);
+      const credentialFile = await command(scope.sandbox, "printf '%s\\n' /tmp/.mastra-s3-*/credentials");
+      const reconnected = new DaytonaSandbox({ id: scope.sandbox.id, ephemeral: true });
+      await reconnected.start(); // Empty registry: reconcile persisted mounts from the previous instance.
+      expect(reconnected.daytona.id).toBe(scope.sandbox.daytona.id);
+      async function verifyCredentialCleanup(file: string) {
+        await command(reconnected, "! grep -Fq -- ' /long-lived ' /proc/mounts");
+        // Daytona may move even a healthy mount aside rather than detach it. Check retention
+        // before explicitly terminating ONLY this test's relocated daemon to exercise later cleanup.
+        const terminate = `from pathlib import Path
+import os, signal
+file = ${JSON.stringify(file)}
+for process in Path('/proc').iterdir():
+ if not process.name.isdigit():
+  continue
+ try:
+  args = (process / 'cmdline').read_bytes().split(b'\\0')
+ except (FileNotFoundError, PermissionError):
+  continue
+ if ('passwd_file=' + file).encode() in args:
+  assert (process / 'comm').read_text().strip() == 's3fs'
+  assert Path(file).is_file(), 'Active mount lost its password file'
+  os.kill(int(process.name), signal.SIGTERM)
+`;
+        await command(reconnected, `python -c ${shellQuote(terminate)}`);
+        await reconnected.unmount('/long-lived');
+        await command(reconnected, `test ! -e ${shellQuote(file.slice(0, file.lastIndexOf('/')))}`);
+      }
+      await verifyCredentialCleanup(credentialFile);
+      const mountedAgain = await reconnected.mount(longLived, '/long-lived');
+      expect(mountedAgain.success, mountedAgain.error).toBe(true);
+      const nextCredentialFile = await command(reconnected, "printf '%s\\n' /tmp/.mastra-s3-*/credentials");
+      await reconnected.unmount('/long-lived');
+      await verifyCredentialCleanup(nextCredentialFile);
     } finally {
       const cleanup = await Promise.allSettled(
         started.map(async scope => {

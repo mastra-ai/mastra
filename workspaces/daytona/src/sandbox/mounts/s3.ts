@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
+import { s3CredentialsPrefix } from './s3-credentials';
 import { LOG_PREFIX, validateEndpoint, validatePrefix, validateS3BucketName } from './types';
 import type { MountContext } from './types';
 
@@ -126,7 +127,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   }
 
   // A fresh private directory protects uploaded secrets even if the SDK replaces the file.
-  const credentialsDirectory = `/tmp/.mastra-s3-${randomUUID()}`;
+  const credentialsDirectory = `${s3CredentialsPrefix(mountPath)}${randomUUID()}`;
   const credentialsPath = `${credentialsDirectory}/credentials`;
 
   // Allow non-root processes to use FUSE and the allow_other mount option.
@@ -137,7 +138,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
   );
 
   let credentialsCreated = false;
-  let mounted = false;
+  let mountAttempted = false;
   try {
     if (config.accessKeyId && config.secretAccessKey) {
       const prepared = await run(`mkdir -m 700 ${shellQuote(credentialsDirectory)}`, 30_000);
@@ -201,6 +202,7 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     const mountCmd = `${credentialEnv}s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
     logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
+    mountAttempted = true;
     const result = await run(mountCmd, 60_000);
     logger.debug(`${LOG_PREFIX} s3fs result:`, {
       exitCode: result.exitCode,
@@ -216,11 +218,10 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     if (probe.exitCode !== 0) {
       throw new Error(`S3 mount is not readable (exit ${probe.exitCode}): ${probe.stderr || probe.stdout}`);
     }
-    mounted = true;
   } finally {
     // Exported credentials live in the daemon environment; it never sources this staging file again.
-    // Keep ordinary password files available to s3fs for the mount lifetime.
-    if (credentialsCreated && (config.sessionToken || !mounted)) {
+    // After a launch attempt, unmount cleanup verifies that s3fs no longer needs its password file.
+    if (credentialsCreated && (config.sessionToken || !mountAttempted)) {
       try {
         const cleanup = await run(
           `rm -f ${shellQuote(credentialsPath)} && rmdir ${shellQuote(credentialsDirectory)}`,

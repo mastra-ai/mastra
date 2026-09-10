@@ -38,6 +38,7 @@ import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
+import { cleanupS3Credentials } from './mounts/s3-credentials';
 import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
@@ -1002,6 +1003,13 @@ export class DaytonaSandbox extends MastraSandbox {
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );
 
+    await cleanupS3Credentials(mountPath, {
+      run: async (cmd, timeout) => {
+        const result = await runCommand(sandbox, cmd, { timeout: timeout ?? MOUNT_COMMAND_TIMEOUT_MS });
+        return { exitCode: result.exitCode, stdout: result.output, stderr: '' };
+      },
+      logger: this.logger,
+    });
     this.mounts.delete(mountPath);
 
     // Clean up marker file and mount directory in one round-trip.
