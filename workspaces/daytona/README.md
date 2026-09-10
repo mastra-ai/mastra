@@ -37,7 +37,7 @@ await workspace.destroy();
 - [Daytona integration guide](https://mastra.ai/integrations/sandboxes/daytona)
 - [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
-## R2 integration test
+### R2 integration test
 
 The opt-in S3 mount test creates billable Daytona sandboxes and disposable R2 objects. Use a dedicated test bucket with test-only credentials that can list, read, write, and delete its objects. The lifecycle checks also mount with those long-lived credentials; don't supply production credentials.
 
