@@ -609,6 +609,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          ...(githubStorage ? { sessions: githubStorage.sessions } : {}),
         }).routes()
       : []),
   ];

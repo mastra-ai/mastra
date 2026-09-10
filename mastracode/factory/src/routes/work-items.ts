@@ -43,6 +43,7 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import type { ParkedSessionOwnership } from './attention-parked.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -67,6 +68,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
   liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  /** Persisted session rows, read for the ownership that authorizes a park no work item covers. */
+  sessions?: ParkedSessionOwnership;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -438,6 +441,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         workItems,
         comments: this.deps.comments,
         liveSessions,
+        ...(this.deps.sessions ? { sessions: this.deps.sessions } : {}),
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 

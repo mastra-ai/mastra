@@ -22,6 +22,8 @@ let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
 
 const parkedBySession = new Map<string, ParkedRun>();
+/** Persisted session rows behind the parks, keyed by session id: the ownership an unbound park is authorized against. */
+const sessionRowsBySession = new Map<string, { orgId: string; userId: string; visibility: 'org' | 'private' }>();
 
 function buildApp(user: typeof orgUser | null = orgUser) {
   const app = new Hono();
@@ -44,6 +46,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
         parked: sessionId => parkedBySession.get(sessionId),
         parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
       },
+      sessions: { getBySessionId: async sessionId => sessionRowsBySession.get(sessionId) ?? null },
     }).routes(),
   );
   return app;
@@ -132,6 +135,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDef
 
 beforeEach(async () => {
   parkedBySession.clear();
+  sessionRowsBySession.clear();
   seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'org1 project' } });
   PROJECT_ID = project.id;
@@ -343,8 +347,10 @@ describe('agent waiting attention items', () => {
 
   it('lists a parked session that is not bound to a work-item role', async () => {
     parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt });
+    sessionRowsBySession.set(sessionId, { orgId: 'org1', userId: 'u1', visibility: 'org' });
 
     const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
     expect(open).toMatchObject({
       items: [
         {
@@ -362,6 +368,35 @@ describe('agent waiting attention items', () => {
       ],
       kinds: { 'agent-waiting': { open: 1, unread: 1, latest: { unread: true } } },
     });
+  });
+
+  it('hides another member’s private unbound park while still listing the viewer’s own', async () => {
+    const otherSessionId = '7a1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+    parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt });
+    parkedBySession.set(otherSessionId, { toolName: 'ask_user', suspendedAt: suspendedAt + 1_000 });
+    sessionRowsBySession.set(sessionId, { orgId: 'org1', userId: 'u2', visibility: 'private' });
+    sessionRowsBySession.set(otherSessionId, { orgId: 'org1', userId: 'u1', visibility: 'private' });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
+    expect(open.items.map((entry: any) => entry.sessionId)).toEqual([otherSessionId]);
+    expect(open).toMatchObject({ kinds: { 'agent-waiting': { open: 1, unread: 1 } } });
+
+    // The other member sees the mirror image: their own private park, not u1's.
+    const asOther = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`, {
+        workosId: 'u2',
+        organizationId: 'org1',
+      })
+    ).json();
+    expect(asOther.items.map((entry: any) => entry.sessionId)).toEqual([sessionId]);
+  });
+
+  it('hides an unbound park with no session row to authorize it', async () => {
+    parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({ items: [], kinds: { 'agent-waiting': { open: 0, unread: 0, latest: null } } });
   });
 });
 

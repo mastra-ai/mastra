@@ -36,6 +36,15 @@ interface ReceiptedParkedSession {
   receipt: FactoryAttentionReceiptRecord | undefined;
 }
 
+/**
+ * The ownership facts of a session, read straight from the source-control
+ * sessions domain. Narrow on purpose: the provider only ever asks who owns a
+ * session and whether the org may see it.
+ */
+export interface ParkedSessionOwnership {
+  getBySessionId(sessionId: string): Promise<{ orgId: string; userId: string; visibility: 'org' | 'private' } | null>;
+}
+
 function parkedRunLabel(toolName: string): string {
   return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
 }
@@ -75,19 +84,40 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
   readonly kind = 'agent-waiting' as const;
   readonly #workItems: WorkItemsStorage;
   readonly #liveSessions: Pick<LiveSessions, 'parkedIn'>;
+  readonly #sessions: ParkedSessionOwnership | undefined;
 
   constructor({
     workItems,
     liveSessions,
+    sessions,
   }: {
     workItems: WorkItemsStorage;
     liveSessions: Pick<LiveSessions, 'parkedIn'>;
+    /** Session ownership, needed to list parks no work item authorizes. Absent means unbound parks stay hidden. */
+    sessions?: ParkedSessionOwnership;
   }) {
     this.#workItems = workItems;
     this.#liveSessions = liveSessions;
+    this.#sessions = sessions;
   }
 
-  /** Newest park first. A session bound to several cards is listed once, under the first card. Parks with no card (user sessions) still list, aimed at their own thread. */
+  /**
+   * Whether an unbound park may be shown to the viewer. A card carries org-wide
+   * visibility, so a bound park needs no such check; an unbound one has only its
+   * session row to authorize against, and the rule is the sessions list's own —
+   * org-visible sessions plus the viewer's own private ones, within the
+   * viewer's org. Ownership, not branch flavour: Slack `slack/…` sessions are
+   * user sessions too. No row (or no sessions domain at all) means nothing to
+   * authorize against, so the park stays hidden rather than being shown to the
+   * whole org.
+   */
+  async #visibleToViewer(scope: AttentionScope, sessionId: string): Promise<boolean> {
+    const session = await this.#sessions?.getBySessionId(sessionId);
+    if (!session || session.orgId !== scope.orgId) return false;
+    return session.visibility !== 'private' || session.userId === scope.userId;
+  }
+
+  /** Newest park first. A session bound to several cards is listed once, under the first card. Parks with no card (user and Slack sessions) list too, aimed at their own thread, but only for a viewer their session row admits. */
   async #parked(scope: AttentionScope): Promise<ParkedSession[]> {
     const runBySession = new Map(
       this.#liveSessions.parkedIn(scope.factoryProjectId).map(({ sessionId, run }) => [sessionId, run]),
@@ -112,6 +142,11 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
     }
     for (const [sessionId, run] of runBySession) {
       if (bySession.has(sessionId)) continue;
+      if (!(await this.#visibleToViewer(scope, sessionId))) continue;
+      // Aimed at the user-threads list because an unbound park is one in
+      // practice: a work session's ref is written at creation, before its run
+      // can park, so reaching here with a work branch needs the card deleted
+      // after the ref landed.
       bySession.set(sessionId, {
         item: undefined,
         role: 'user',

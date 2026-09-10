@@ -17,6 +17,7 @@ import type {
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
 import { ActivityAttentionProvider } from './attention-activity.js';
 import { ParkedRunAttentionProvider } from './attention-parked.js';
+import type { ParkedSessionOwnership } from './attention-parked.js';
 import { proposedDecisionAttentionSpec } from './attention-proposed.js';
 import type {
   AttentionPageResult,
@@ -38,6 +39,8 @@ interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   comments: WorkItemCommentsStorage;
   liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
+  /** Session ownership, so a park no work item authorizes is listed only for a viewer its session row admits. */
+  sessions?: ParkedSessionOwnership;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
@@ -162,14 +165,14 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems, comments, liveSessions } = dependencies;
+  const { workItems, comments, liveSessions, sessions } = dependencies;
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems }, failedDecisionAttentionSpec),
     new DecisionAttentionProvider({ workItems }, proposedDecisionAttentionSpec),
     new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
-    new ParkedRunAttentionProvider({ workItems, liveSessions }),
+    new ParkedRunAttentionProvider({ workItems, liveSessions, ...(sessions ? { sessions } : {}) }),
   ];
 
   return [
