@@ -28,6 +28,7 @@ export function formatOmError(error: unknown): string {
         const body: unknown = JSON.parse(value.responseBody);
         if (isRecord(body)) {
           add(body.message);
+          add(body.detail);
           if (isRecord(body.error)) add(body.error.message);
           else add(body.error);
         }

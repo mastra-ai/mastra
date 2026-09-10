@@ -75,6 +75,9 @@ export function applyTail(output: string, tail: number | null | undefined): stri
 // Token-based truncation (uses tokenx for fast, lightweight estimation)
 // ---------------------------------------------------------------------------
 
+// Unicode mode matches lone surrogate code points without matching complete pairs.
+const UNPAIRED_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
+
 /**
  * Token-based output limit. Truncates output to fit within a token budget.
  * Uses tokenx for fast token estimation and truncates at the token level
@@ -96,7 +99,10 @@ export async function applyTokenLimit(
   const totalTokens = estimateTokenCount(output);
   if (totalTokens <= limit) return output;
 
-  const kept = from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit);
+  const kept = (from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit)).replace(
+    UNPAIRED_SURROGATE_RE,
+    '\uFFFD',
+  );
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -125,8 +131,8 @@ export async function applyTokenLimitSandwich(
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget) : '';
-  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget) : '';
+  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget).replace(UNPAIRED_SURROGATE_RE, '\uFFFD') : '';
+  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget).replace(UNPAIRED_SURROGATE_RE, '\uFFFD') : '';
 
   const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');

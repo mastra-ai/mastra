@@ -11,6 +11,8 @@ export interface Project {
   name: string;
   slug: string | null;
   organizationId: string;
+  /** Present on the studio list endpoint; set at creation and never changed by deploys on the unified path. */
+  factoryEnabled?: boolean;
   latestDeployId: string | null;
   latestDeployStatus: string | null;
   latestDeployCreatedAt?: string | null;
