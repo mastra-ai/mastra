@@ -69,6 +69,21 @@ const { messages } = await memory.recall({
     isOptional: true,
   },
   {
+    name: 'excludeSignals',
+    type: "('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder')[]",
+    description:
+      'Signal types to omit from returned messages. Matches exact stored types and takes precedence over includeSystemReminders, including an empty list. Does not change storage or model context.',
+    isOptional: true,
+  },
+  {
+    name: 'includeSystemReminders',
+    type: 'boolean',
+    description:
+      'Deprecated. Use excludeSignals: [] to include all signals, or excludeSignals: ["reactive", "system-reminder"] to hide reminders. When excludeSignals is omitted, true includes all signals; false or omitted preserves reminder-hidden history.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'orderBy',
     type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
     description: 'Sort order for retrieved messages. Defaults to descending by creation date.',
@@ -122,6 +137,47 @@ const { messages } = await memory.recall({
   },
 ]}
 />
+
+## Signal visibility
+
+`excludeSignals` filters messages returned by this call, not the underlying storage or later model requests. Ordinary messages remain available. This option isn't a security boundary and doesn't change signal delivery or persistence policies such as `ifActive`, `ifIdle`, or `transient`.
+
+### Defaults and precedence
+
+| `excludeSignals` | `includeSystemReminders` | Returned signals |
+| - | - | - |
+| Omitted | Omitted or `false` | Existing reminder-hidden history |
+| Omitted | `true` | All signals |
+| `[]` | Any value | All signals |
+| Nonempty list | Any value | All except matching types |
+
+Unlike [agent streams](/reference/streaming/agents/stream), recall continues to hide reminders by default for compatibility. The deprecated `includeSystemReminders` flag only applies when `excludeSignals` is omitted.
+
+```typescript
+const all = await memory.recall({
+  threadId: 'thread-123',
+  excludeSignals: [],
+})
+
+const withoutReminders = await memory.recall({
+  threadId: 'thread-123',
+  excludeSignals: ['reactive', 'system-reminder'],
+})
+```
+
+### Stored types and legacy messages
+
+Recall matches the **exact stored type**, without alias normalization. For example, `['reactive']` doesn't exclude a row encoded as `system-reminder`, and `['user']` doesn't exclude one encoded as `user-message`. Modern streams and subscriptions normalize these aliases instead. Use `['reactive', 'system-reminder']` to exclude both reminder representations across these APIs.
+
+A recognized type in a `data-signal` or `data-user-message` part takes precedence over signal metadata and legacy reminder markers. Signal-role messages can also encode their type in `content.metadata.signal.type`. Unknown types and malformed signal parts don't match exclusions.
+
+If no recognized encoded type exists, a message classified by the existing legacy reminder rules counts as `system-reminder`, not `reactive`. These rules include user messages with `systemReminder` or `dynamicAgentsMdReminder` metadata, or a first text part starting with `<system-reminder`. Such rows remain visible with `['reactive']` and are excluded with `['system-reminder']`.
+
+### Pagination and API scope
+
+Filtering happens after the storage query and pagination. A page can contain fewer than `perPage` messages, or none, without changing `total`, `hasMore`, or page offsets. Totals still describe the underlying query, not the filtered messages.
+
+The option applies to in-process `memory.recall()` calls. HTTP and client-js contracts don't expose `excludeSignals` in this release.
 
 ## Metadata filtering
 

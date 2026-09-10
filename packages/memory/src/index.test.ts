@@ -1,9 +1,12 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import {
+  Agent,
   createSignal,
   isTransientSignalMessage as coreIsTransientSignalMessage,
   MessageList,
 } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AgentSignalType, MastraDBMessage } from '@mastra/core/agent';
+import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -2435,6 +2438,208 @@ describe('Memory', () => {
       expect(result.messages).toHaveLength(5);
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('hasMore', false);
+    });
+  });
+
+  describe('recall signal exclusions', () => {
+    const target = { threadId: 'recall-signals', resourceId: 'recall-owner' };
+    const signalTypes: AgentSignalType[] = [
+      'user',
+      'state',
+      'reactive',
+      'notification',
+      'user-message',
+      'system-reminder',
+    ];
+    let memory: Memory;
+    let messages: MastraDBMessage[];
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
+      await memory.createThread(target);
+      const message = (
+        id: string,
+        role: MastraDBMessage['role'],
+        content: MastraDBMessage['content'],
+      ): MastraDBMessage => ({
+        ...target,
+        id,
+        role,
+        content,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      messages = [
+        ...signalTypes.map(type =>
+          message(type, 'signal', {
+            format: 2,
+            parts: [{ type: 'text', text: `Signal ${type}` }],
+            metadata: { signal: { type } },
+          }),
+        ),
+        message('plain-user', 'user', { format: 2, parts: [{ type: 'text', text: 'ordinary user message' }] }),
+        message('plain-assistant', 'assistant', { format: 2, parts: [{ type: 'text', text: 'ordinary response' }] }),
+        message('embedded-markup', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'quote <system-reminder>example</system-reminder>' }],
+        }),
+        message('legacy-metadata', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'old guidance' }],
+          metadata: { dynamicAgentsMdReminder: {} },
+        }),
+        message('legacy-system-metadata', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: 'older guidance' }],
+          metadata: { systemReminder: {} },
+        }),
+        message('legacy-markup', 'user', {
+          format: 2,
+          parts: [{ type: 'text', text: '<system-reminder>legacy</system-reminder>' }],
+        }),
+        message('encoded-precedence', 'user', {
+          format: 2,
+          parts: [{ type: 'data-signal', data: { type: 'notification' } }],
+          metadata: { systemReminder: {} },
+        }),
+        message('encoded-legacy-user', 'assistant', {
+          format: 2,
+          parts: [{ type: 'data-user-message', data: { type: 'user-message' } }],
+        }),
+        message('unknown', 'signal', {
+          format: 2,
+          parts: [{ type: 'data-signal', data: { type: 'future' } }],
+          metadata: { signal: { type: 'future' } },
+        }),
+        message('malformed', 'assistant', { format: 2, parts: [{ type: 'data-signal', data: null }] }),
+      ];
+      messages.forEach((message, index) => {
+        message.createdAt = new Date(Date.UTC(2024, 0, 1, 0, index));
+      });
+      await memory.saveMessages({ messages });
+    });
+
+    const legacyIds = ['legacy-metadata', 'legacy-system-metadata', 'legacy-markup'];
+    const exclusionCases: { excludeSignals: AgentSignalType[] | undefined; hidden: string[] }[] = [
+      { excludeSignals: undefined, hidden: [] },
+      { excludeSignals: [], hidden: [] },
+      { excludeSignals: ['reactive'], hidden: ['reactive'] },
+      { excludeSignals: ['system-reminder'], hidden: ['system-reminder', ...legacyIds] },
+      { excludeSignals: ['reactive', 'system-reminder'], hidden: ['reactive', 'system-reminder', ...legacyIds] },
+      { excludeSignals: ['user'], hidden: ['user'] },
+      { excludeSignals: ['user-message'], hidden: ['user-message', 'encoded-legacy-user'] },
+      { excludeSignals: ['state', 'notification'], hidden: ['state', 'notification', 'encoded-precedence'] },
+      {
+        excludeSignals: signalTypes,
+        hidden: [...signalTypes, ...legacyIds, 'encoded-precedence', 'encoded-legacy-user'],
+      },
+    ];
+    describe.each([undefined, false, true])('includeSystemReminders=%s', includeSystemReminders => {
+      it.each(exclusionCases)(
+        'matches explicit stored types with exclusions $excludeSignals',
+        async ({ excludeSignals, hidden }) => {
+          const rawStore = await memory.storage.getStore('memory');
+          const before = await rawStore!.listMessages({ ...target, perPage: false });
+          const result = await memory.recall({ ...target, perPage: false, includeSystemReminders, excludeSignals });
+          const hiddenIds =
+            excludeSignals === undefined && !includeSystemReminders
+              ? ['reactive', 'system-reminder', ...legacyIds, 'encoded-precedence']
+              : hidden;
+          expect(result.messages.map(message => message.id)).toEqual(
+            messages.filter(message => !hiddenIds.includes(message.id)).map(message => message.id),
+          );
+          // The inline peer-compatible implementation and core helper must agree.
+          expect(result.messages).toEqual(
+            filterSystemReminderMessages(
+              new MessageList().add(before.messages, 'memory').get.all.db(),
+              includeSystemReminders,
+              excludeSignals,
+            ),
+          );
+          expect(await rawStore!.listMessages({ ...target, perPage: false })).toEqual(before);
+          expect(result).toMatchObject({ total: messages.length, page: 0, perPage: false, hasMore: false });
+        },
+      );
+    });
+
+    it('keeps subsequent model memory identical after caller-only recall exclusions', async () => {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'text-start', id: 'text' },
+            { type: 'text-delta', id: 'text', delta: 'done' },
+            { type: 'text-end', id: 'text' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+      try {
+        for (const excludeSignals of [[], signalTypes]) {
+          const isolated = new Memory({ storage: new InMemoryStore(), options: { semanticRecall: false } });
+          await isolated.createThread(target);
+          const saved = signalTypes.map((type, i) =>
+            createSignal({ id: `signal-${i}`, type, contents: `context-${i}`, createdAt: new Date(0) }).toDBMessage(
+              target,
+            ),
+          );
+          await isolated.saveMessages({ messages: saved });
+          const store = await isolated.storage.getStore('memory');
+          const before = await store!.listMessages({ ...target, perPage: false });
+          const recalled = await isolated.recall({ ...target, perPage: false, excludeSignals });
+          expect(recalled.messages).toHaveLength(excludeSignals.length ? 0 : 6);
+          expect(await store!.listMessages({ ...target, perPage: false })).toEqual(before);
+          const agent = new Agent({
+            id: 'recall-proof',
+            name: 'Recall proof',
+            instructions: 'Continue',
+            model,
+            memory: isolated,
+          });
+          const output = await agent.stream('next turn', {
+            memory: { thread: target.threadId, resource: target.resourceId },
+          });
+          await output.consumeStream();
+          for (let i = 0; i < 6; i++)
+            expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(`context-${i}`);
+        }
+        expect(model.doStreamCalls).toHaveLength(2);
+        expect(model.doStreamCalls[1]?.prompt).toEqual(model.doStreamCalls[0]?.prompt);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('filters after pagination without refilling pages or changing totals', async () => {
+      for (const orderBy of [undefined, { field: 'createdAt' as const, direction: 'ASC' as const }]) {
+        for (const page of [0, 1, 2, 3]) {
+          const unfiltered = await memory.recall({ ...target, perPage: 4, page, orderBy, excludeSignals: [] });
+          const filtered = await memory.recall({ ...target, perPage: 4, page, orderBy, excludeSignals: signalTypes });
+          expect(filtered).toEqual({
+            ...unfiltered,
+            messages: filterSystemReminderMessages(unfiltered.messages, undefined, signalTypes),
+          });
+        }
+      }
+      const emptyPage = await memory.recall({
+        ...target,
+        perPage: 4,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        excludeSignals: signalTypes,
+      });
+      expect(emptyPage).toMatchObject({ messages: [], total: messages.length, hasMore: true, page: 0, perPage: 4 });
+      const noTotal = await memory.recall({ ...target, perPage: 4, includeTotal: false, excludeSignals: [] });
+      const filteredNoTotal = await memory.recall({
+        ...target,
+        perPage: 4,
+        includeTotal: false,
+        excludeSignals: signalTypes,
+      });
+      expect(filteredNoTotal).toEqual({
+        ...noTotal,
+        messages: filterSystemReminderMessages(noTotal.messages, undefined, signalTypes),
+      });
     });
   });
 
