@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps, CSSProperties, ReactNode, RefObject } from 'react';
-import { useState } from 'react';
+import { createRef } from 'react';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CollapsiblePanelHandle } from './collapsible-panel';
 import { CollapsiblePanel } from './collapsible-panel';
 
 const panelMocks = vi.hoisted(() => {
@@ -61,26 +62,13 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-type HarnessProps = Partial<ComponentProps<typeof CollapsiblePanel>> & { initialCollapsed?: boolean };
+type HarnessProps = Partial<ComponentProps<typeof CollapsiblePanel>>;
 
-// Stateful owner, the way real callers use the panel.
-const Harness = ({ initialCollapsed = false, children, onCollapsedChange, ...props }: HarnessProps) => {
-  const [collapsed, setCollapsed] = useState(initialCollapsed);
-  return (
-    <CollapsiblePanel
-      collapsedSize={0}
-      direction="left"
-      collapsed={collapsed}
-      onCollapsedChange={next => {
-        onCollapsedChange?.(next);
-        setCollapsed(next);
-      }}
-      {...props}
-    >
-      {children ?? <div data-testid="panel-content">Panel content</div>}
-    </CollapsiblePanel>
-  );
-};
+const Harness = ({ children, ...props }: HarnessProps) => (
+  <CollapsiblePanel collapsedSize={0} direction="left" {...props}>
+    {children ?? <div data-testid="panel-content">Panel content</div>}
+  </CollapsiblePanel>
+);
 
 const renderPanel = (direction: 'left' | 'right' = 'left') => render(<Harness direction={direction} minSize={280} />);
 
@@ -153,83 +141,46 @@ describe('CollapsiblePanel', () => {
     });
   });
 
-  describe('`collapsed` prop', () => {
-    const renderControlled = (collapsed: boolean, onCollapsedChange = vi.fn()) => {
-      const ui = (value: boolean) => (
-        <CollapsiblePanel
-          collapsedSize={0}
-          direction="left"
-          minSize={280}
-          defaultSize={300}
-          collapsed={value}
-          onCollapsedChange={onCollapsedChange}
-        >
-          <div data-testid="panel-content">Panel content</div>
-        </CollapsiblePanel>
-      );
-      const view = render(ui(collapsed));
-      return { onCollapsedChange, setCollapsed: (value: boolean) => view.rerender(ui(value)) };
+  describe('handle', () => {
+    const renderWithHandle = (props: HarnessProps = {}) => {
+      const handle = createRef<CollapsiblePanelHandle>();
+      render(<Harness ref={handle} minSize={280} defaultSize={300} {...props} />);
+      return handle;
     };
 
-    it('collapses the panel when asked to, remembering its width first', () => {
-      const { setCollapsed } = renderControlled(false);
+    it('collapses the panel, remembering its width first', () => {
+      const handle = renderWithHandle();
       panelMocks.state.size = 280; // user dragged the panel narrower than the default
 
-      setCollapsed(true);
+      act(() => handle.current?.collapse());
 
       expect(panelMocks.handle.collapse).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByTestId('resize-shrinking')); // the collapse animation streams widths
       fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-      setCollapsed(false);
+      act(() => handle.current?.expand());
 
       expect(panelMocks.handle.resize).toHaveBeenCalledWith(280);
       expect(panelMocks.handle.expand).not.toHaveBeenCalled();
     });
 
-    it('asks the owner to expand instead of touching the panel itself', () => {
-      const { onCollapsedChange } = renderControlled(true);
-      fireEvent.click(screen.getByTestId('resize-collapsed'));
-      onCollapsedChange.mockClear();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
-
-      expect(onCollapsedChange).toHaveBeenCalledWith(false);
-      expect(panelMocks.handle.resize).not.toHaveBeenCalled();
-      expect(panelMocks.handle.expand).not.toHaveBeenCalled();
-    });
-
-    it('reports a collapse that came from the panel itself (persisted layout, drag)', () => {
-      const { onCollapsedChange, setCollapsed } = renderControlled(false);
-
+    it('reopens at the default size when the collapse came from the panel itself (persisted layout, drag)', () => {
+      const handle = renderWithHandle();
       fireEvent.click(screen.getByTestId('resize-collapsed'));
 
-      expect(onCollapsedChange).toHaveBeenCalledWith(true);
-      expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
+      act(() => handle.current?.expand());
 
-      // Once the owner syncs, nothing is re-applied and reopening uses the default size.
-      setCollapsed(true);
-      expect(panelMocks.handle.collapse).not.toHaveBeenCalled();
-      setCollapsed(false);
       expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
     });
 
-    it('reports an expand that came from the panel itself', () => {
-      const { onCollapsedChange } = renderControlled(true);
+    it('falls back to the library expand when nothing better is known', () => {
+      const handle = renderWithHandle({ defaultSize: undefined });
       fireEvent.click(screen.getByTestId('resize-collapsed'));
-      onCollapsedChange.mockClear();
 
-      fireEvent.click(screen.getByTestId('resize-open'));
+      act(() => handle.current?.expand());
 
-      expect(onCollapsedChange).toHaveBeenCalledWith(false);
-    });
-
-    it('does not report when the panel already matches', () => {
-      const { onCollapsedChange } = renderControlled(false);
-
-      fireEvent.click(screen.getByTestId('resize-open'));
-
-      expect(onCollapsedChange).not.toHaveBeenCalled();
+      expect(panelMocks.handle.expand).toHaveBeenCalledTimes(1);
+      expect(panelMocks.handle.resize).not.toHaveBeenCalled();
     });
   });
 });

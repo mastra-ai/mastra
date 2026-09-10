@@ -3,8 +3,9 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -34,11 +35,7 @@ function AgentThread() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  // Scoped to the agent it was hidden for: the route element stays mounted when
-  // switching agents, and each agent persists its own layout.
-  const [threadsHiddenForAgent, setThreadsHiddenForAgent] = useState<string | null>(null);
-  const threadsHidden = threadsHiddenForAgent === agentId;
-  const setThreadsHidden = (hidden: boolean) => setThreadsHiddenForAgent(hidden ? agentId! : null);
+  const threadsPanel = useRef<CollapsiblePanelHandle>(null);
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
@@ -134,8 +131,7 @@ function AgentThread() {
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
                     <AgentLayout
                       agentId={agentId!}
-                      leftCollapsed={threadsHidden}
-                      onLeftCollapsedChange={setThreadsHidden}
+                      leftPanel={threadsPanel}
                       leftSlot={
                         isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
@@ -145,7 +141,7 @@ function AgentThread() {
                             threadId={actualThreadId}
                             threads={sidebarThreads}
                             // The mobile drawer has its own close control, so no hide button there.
-                            onHidePanel={isMobile ? undefined : () => setThreadsHidden(true)}
+                            onHidePanel={isMobile ? undefined : () => threadsPanel.current?.collapse()}
                           />
                         )
                       }

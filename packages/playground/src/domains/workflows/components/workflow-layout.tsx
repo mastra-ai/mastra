@@ -23,8 +23,6 @@ const getTimelineLeftOffset = (panelWidth: number) => Math.max(panelWidth - TIME
 export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
   const isMobile = useIsMobile();
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => getTimelineLeftOffset(LEFT_PANEL_DEFAULT_WIDTH));
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `workflow-layout-v6-${workflowId}`,
     storage: localStorage,
@@ -71,8 +69,6 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             defaultSize={LEFT_PANEL_DEFAULT_WIDTH}
             collapsedSize={0}
             collapsible={true}
-            collapsed={leftCollapsed}
-            onCollapsedChange={setLeftCollapsed}
             className="pointer-events-auto min-w-0 bg-transparent"
             onResize={size => setLeftPanelWidth(getTimelineLeftOffset(size.inPixels))}
           >
@@ -99,8 +95,6 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             defaultSize={340}
             collapsedSize={0}
             collapsible={true}
-            collapsed={rightCollapsed}
-            onCollapsedChange={setRightCollapsed}
             className="pointer-events-auto min-w-0 bg-transparent"
           >
             {rightSlot}
