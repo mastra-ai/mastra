@@ -14,10 +14,16 @@ const config = {
   accessToken: 'platform-token',
 };
 
-function fakeAuth(tenant: { orgId?: string; userId: string } | undefined = { orgId: 'org-1', userId: 'user-1' }) {
+function fakeAuth(
+  tenant: { orgId?: string; userId: string; workosId?: string } | undefined = {
+    orgId: 'org-1',
+    userId: 'user-1',
+    workosId: 'user-1',
+  },
+) {
   return {
     enabled: () => true,
-    ensureUser: vi.fn(async () => ({ workosId: tenant?.userId ?? 'user-1', organizationId: tenant?.orgId })),
+    ensureUser: vi.fn(async () => ({ workosId: tenant?.workosId, organizationId: tenant?.orgId })),
     tenant: () => tenant,
     isOrganizationAdmin: vi.fn(async () => true),
   };
@@ -206,7 +212,9 @@ describe('PlatformGithubIntegration', () => {
     const storage = sourceControl.forIntegration('github');
     integration.versionControl.initialize({ storage });
 
-    await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
+    await expect(
+      integration.intake.listSources({ orgId: 'org-1', userId: 'user-1', workosId: 'workos-user-1' }),
+    ).resolves.toEqual([
       {
         id: 'acme/app',
         name: 'acme/app',
@@ -220,7 +228,7 @@ describe('PlatformGithubIntegration', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           authorization: 'Bearer platform-token',
-          'x-acting-user-id': 'user-1',
+          'x-acting-user-id': 'workos-user-1',
         }),
       }),
     );
@@ -1149,7 +1157,7 @@ describe('PlatformGithubIntegration', () => {
     });
     const integration = createIntegration(fetchImpl);
     const context = {
-      auth: fakeAuth(),
+      auth: fakeAuth({ orgId: 'org-1', userId: 'byo-user-1' }),
       sandbox: { enabled: true, provider: 'stub' },
       storage: {
         generic: seed.integrations.forIntegration('github'),
@@ -1165,7 +1173,7 @@ describe('PlatformGithubIntegration', () => {
     integration.versionControl.initialize({ storage: context.storage.sourceControl });
     const app = new Hono();
     app.use('*', async (c, next) => {
-      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      c.set('webAuthUser' as never, { id: 'byo-user-1', organizationId: 'org-1' } as never);
       await next();
     });
     mountApiRoutes(app as never, integration.routes(context));
@@ -1178,6 +1186,8 @@ describe('PlatformGithubIntegration', () => {
       userGithubUsername: null,
       reason: 'not_connected',
     });
+    const installationsRequest = fetchImpl.mock.calls.find(([input]) => String(input).endsWith('/installations'));
+    expect((installationsRequest?.[1] as RequestInit).headers).not.toHaveProperty('x-acting-user-id');
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

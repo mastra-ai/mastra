@@ -258,7 +258,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
-    listSources: async ({ orgId, userId }) => {
+    listSources: async ({ orgId, userId, workosId }) => {
       const installations = await this.#client.request<{
         installations: Array<{
           installationId: number;
@@ -267,7 +267,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           suspendedAt: string | null;
           usable: boolean;
         }>;
-      }>('GET', `${API_PREFIX}/github-app/installations`, undefined, { actingUserId: userId });
+      }>('GET', `${API_PREFIX}/github-app/installations`, undefined, { actingUserId: workosId });
       const usable = installations.installations.filter(
         installation => installation.usable && !installation.suspendedAt,
       );
@@ -650,7 +650,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }
 
         const [installations, userConnection] = await Promise.all([
-          this.#syncInstallations(tenant.orgId, tenant.userId),
+          this.#syncInstallations(tenant.orgId, tenant.userId, tenant.workosId),
           this.#fetchUserConnection(tenant.userId),
         ]);
         return c.json({
@@ -753,12 +753,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+    workosId?: string,
+  ): Promise<SourceControlInstallation[]> {
     const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
       'GET',
       `${API_PREFIX}/github-app/installations`,
       undefined,
-      { actingUserId: userId },
+      { actingUserId: workosId },
     );
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,

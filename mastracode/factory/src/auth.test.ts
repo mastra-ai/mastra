@@ -396,7 +396,7 @@ describe('mountFactoryAuth gate (enabled)', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123', workosId: 'user_123' });
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
 
@@ -454,7 +454,7 @@ describe('mountFactoryAuth gate (enabled)', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
+    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123', workosId: 'user_123' });
   });
 });
 
@@ -657,7 +657,7 @@ describe('org-tenant identity', () => {
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1' });
+    expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1', workosId: 'user_1' });
     // The user already has an org — no bootstrap round-trip.
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
@@ -670,7 +670,7 @@ describe('org-tenant identity', () => {
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
+    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot', workosId: 'user_boot' });
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_boot');
   });
 

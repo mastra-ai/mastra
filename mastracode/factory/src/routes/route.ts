@@ -26,7 +26,7 @@ export interface RouteAuth {
    */
   ensureUser(c: Context): Promise<unknown>;
   /** Tenant identity for the request, when signed in. */
-  tenant(c: Context): { orgId?: string; userId: string } | undefined;
+  tenant(c: Context): { orgId?: string; userId: string; workosId?: string } | undefined;
   /** Fail-closed check that the caller administers the given organization. */
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
 }

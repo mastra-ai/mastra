@@ -31,6 +31,7 @@ export interface IntakeItemPage {
 export interface ListIntakeSourcesInput {
   orgId: string;
   userId: string;
+  workosId?: string;
 }
 
 export interface ListIntakeItemsInput extends ListIntakeSourcesInput {

@@ -74,6 +74,8 @@ export interface FactoryAuthTenant {
   orgId?: string;
   /** Stable provider user id. */
   userId: string;
+  /** Verified WorkOS user id, when the active auth provider supplies one. */
+  workosId?: string;
 }
 
 /**
@@ -163,7 +165,7 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   const user = getFactoryAuthUser(c);
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  return { orgId: getFactoryAuthOrgId(user), userId };
+  return { orgId: getFactoryAuthOrgId(user), userId, ...(user?.workosId ? { workosId: user.workosId } : {}) };
 }
 
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
