@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
@@ -10,6 +10,35 @@ import { Subconscious } from '../subconscious';
 import { createReminderAgent } from '../subconscious/remind-agent';
 import { REMIND_MESSAGE_METADATA_KEY } from '../subconscious/remind-protocol';
 import { createAskMemoryTool, createReplyToMemoryQuestionTool } from '../subconscious/remind-questions';
+
+function createObserverModel(observations: string) {
+  const text = `<observations>\n${observations}\n</observations>\n<current-task>Answer the question.</current-task>`;
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      warnings: [],
+      content: [{ type: 'text' as const, text }],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'response-metadata' as const, id: 'observer-1', modelId: 'mock-observer', timestamp: new Date() },
+        { type: 'text-start' as const, id: 'text-1' },
+        { type: 'text-delta' as const, id: 'text-1', delta: text },
+        { type: 'text-end' as const, id: 'text-1' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  } as never);
+}
 
 const parentThreadId = 'parent-thread';
 const resourceId = 'resource-1';
@@ -337,6 +366,130 @@ describe('Subconscious reminder questions', () => {
 
     expect(result).toEqual({ delivered: false, replyId: 'reply-1', reason: 'already-terminal' });
     expect(parentAgent.sendSignal).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Requested by Tyler Barnes on #23289: prove the sidekick still answers a
+   * question that observational memory has compacted out of the model window.
+   * The sibling test above uses `messageTokens: 100000`, which proves
+   * persistence across tool steps but never forces an observation, so nothing
+   * covered the case the durable lookup exists for.
+   */
+  describe('forced observation', () => {
+    it('answers a question the model window no longer holds', async () => {
+      const parentAgent = createParentAgent();
+      const question = questionMessage('reply-1');
+      const reminderThreadId = question.threadId!;
+      const prompts: string[] = [];
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doGenerate: async options => {
+          calls++;
+          prompts.push(JSON.stringify(options.prompt));
+          return {
+            finishReason: calls < 3 ? ('tool-calls' as const) : ('stop' as const),
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            warnings: [],
+            content:
+              calls < 3
+                ? [
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: `call-${calls}`,
+                      toolName: calls === 1 ? 'lookup' : 'reply_to_memory_question',
+                      input: JSON.stringify(
+                        calls === 1 ? {} : { replyId: 'reply-1', answer: 'Use Atlas.', moreComing: false },
+                      ),
+                    },
+                  ]
+                : [{ type: 'text' as const, text: 'Done.' }],
+          };
+        },
+      });
+      // The observer gets its own model: sharing one mock with the agent would
+      // let observation calls advance the agent's step counter.
+      const observerModel = createObserverModel('The user asked about a past decision.');
+      // messageTokens: 1 forces an observation cycle rather than merely allowing
+      // one, so the question is genuinely compacted out of the model window.
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: { model: observerModel, observation: { messageTokens: 1, bufferTokens: false } },
+        },
+      });
+      await memory.createThread({ threadId: reminderThreadId, resourceId });
+      await memory.saveMessages({ messages: [question] });
+
+      const reply = createReplyToMemoryQuestionTool({ memory, parentAgent, parentThreadId, resourceId });
+      const execute = vi.spyOn(reply, 'execute');
+      const reminder = createReminderAgent({
+        model,
+        memory,
+        scope: [resourceId],
+        threadId: reminderThreadId,
+        resourceId,
+        parentThreadId,
+        fallbackSendSignal: vi.fn(),
+        additionalTools: {
+          lookup: { id: 'lookup', description: 'Look up the decision', execute: async () => 'Use Atlas.' },
+          reply_to_memory_question: reply,
+        },
+      });
+
+      await reminder.generate([question], {
+        memory: { thread: reminderThreadId, resource: resourceId },
+        maxSteps: 3,
+      });
+
+      // An observation really ran — otherwise this proves nothing about eviction.
+      const record = await (await memory.omEngine)!.getRecord(reminderThreadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+
+      // The question is in the first prompt and gone from every later one,
+      // including the step that decided to call the reply tool.
+      expect(prompts).toHaveLength(3);
+      expect(prompts[0]).toContain('Memory question reply-1');
+      expect(prompts[1]).not.toContain('Memory question reply-1');
+      expect(prompts[2]).not.toContain('Memory question reply-1');
+
+      // The reply still lands, and it lands correlated to the right question.
+      expect(execute).toHaveResolvedWith(expect.objectContaining({ delivered: true, replyId: 'reply-1' }));
+      expect(parentAgent.sendSignal).toHaveBeenCalled();
+    });
+
+    it('refuses a reply correlated to a question from another thread', async () => {
+      const parentAgent = createParentAgent();
+      const foreign = questionMessage('reply-1');
+      foreign.threadId = 'subconscious:someone-elses-thread:remind';
+
+      const result = await createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId }).execute?.(
+        { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
+        replyToolContext([foreign]),
+      );
+
+      expect(result).toEqual({
+        delivered: false,
+        replyId: 'reply-1',
+        reason: 'question-not-in-current-conversation',
+      });
+      expect(parentAgent.sendSignal).not.toHaveBeenCalled();
+    });
+
+    it('refuses a reply correlated to a question that was never asked', async () => {
+      const parentAgent = createParentAgent();
+
+      const result = await createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId }).execute?.(
+        { replyId: 'reply-forged', answer: 'January 15.', moreComing: false },
+        replyToolContext([questionMessage('reply-1')]),
+      );
+
+      expect(result).toEqual({
+        delivered: false,
+        replyId: 'reply-forged',
+        reason: 'question-not-in-current-conversation',
+      });
+      expect(parentAgent.sendSignal).not.toHaveBeenCalled();
+    });
   });
 
   it('delivers terminal replies with one deterministic signal ID', async () => {
