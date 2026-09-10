@@ -2637,6 +2637,30 @@ describe('Memory Handlers', () => {
           }),
         ).rejects.toMatchObject({ status: 404 });
       });
+
+      it('rejects with 403 when auth is configured without an FGA provider', async () => {
+        // An authenticated deployment with no FGA provider cannot authorize a privileged,
+        // non-resource-scoped transfer, so the route must fail closed rather than treat the
+        // absence of a resource scope as sufficient privilege.
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          server: { auth: {} } as any,
+        });
+        await mockMemory.createThread({ threadId: 'authless-fga-thread', resourceId: 'user-a' });
+
+        // Privileged-looking context (no MASTRA_RESOURCE_ID_KEY), but auth-without-FGA must reject.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'authless-fga-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+      });
     });
 
     describe('DELETE_MESSAGES_ROUTE - ownership validation', () => {
