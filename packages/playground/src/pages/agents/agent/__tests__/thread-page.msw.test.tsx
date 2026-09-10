@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -313,6 +313,50 @@ describe('Standalone thread page', () => {
     await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(false));
     expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+  });
+
+  it('does not carry a hidden threads panel over to another agent', async () => {
+    installHandlers();
+    const OTHER_AGENT_ID = 'sommelier-agent';
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${OTHER_AGENT_ID}`, () =>
+        HttpResponse.json({ ...agentResponse, id: OTHER_AGENT_ID, name: 'Sommelier Agent' }),
+      ),
+      http.get(`${BASE_URL}/api/memory/threads`, ({ request }) => {
+        const agentId = new URL(request.url).searchParams.get('agentId');
+        if (agentId === OTHER_AGENT_ID) {
+          return HttpResponse.json({
+            threads: [
+              {
+                id: 'wine-1',
+                resourceId: OTHER_AGENT_ID,
+                title: 'Wine pairing',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          });
+        }
+        return HttpResponse.json(threadsResponse);
+      }),
+    );
+    const router = renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    // Given I hid the threads panel for the first agent
+    await screen.findByText('Sushi ideas');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+    await screen.findByRole('button', { name: 'Expand panel' });
+
+    // When I switch to another agent without leaving the page
+    await act(() => router.navigate(`/agents/${OTHER_AGENT_ID}/threads/new`));
+
+    // Then its threads panel is visible and its own layout is not marked collapsed
+    const otherThread = await screen.findByText('Wine pairing');
+    await waitFor(() => expect(isHiddenFromUser(otherThread)).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    const otherLayout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${OTHER_AGENT_ID}`);
+    expect(otherLayout === null || JSON.parse(otherLayout)['left-slot'] !== 0).toBe(true);
   });
 
   describe('when the thread list is still loading', () => {

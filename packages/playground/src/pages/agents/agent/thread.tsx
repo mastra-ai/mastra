@@ -34,7 +34,11 @@ function AgentThread() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const [threadsHidden, setThreadsHidden] = useState(false);
+  // Scoped to the agent it was hidden for: the route element stays mounted when
+  // switching agents, and each agent persists its own layout.
+  const [threadsHiddenForAgent, setThreadsHiddenForAgent] = useState<string | null>(null);
+  const threadsHidden = threadsHiddenForAgent === agentId;
+  const setThreadsHidden = (hidden: boolean) => setThreadsHiddenForAgent(hidden ? agentId! : null);
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
