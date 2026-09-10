@@ -22,4 +22,4 @@ const mastra = new Mastra({
 });
 ```
 
-The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and roles granting `stored-resources` now expand to cover stored workflows. Also exported `validateToolInput` from `@mastra/core/tools` for validating input against a tool schema.
+The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints. Also exported `validateToolInput` from `@mastra/core/tools` for validating input against a tool schema.
