@@ -18,9 +18,12 @@ import type { SessionPreviewDetails } from './SessionPreviewCard';
  * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
  * hover, and active states. Lifecycle lives on the left as an activity belt;
- * the trailing slot beside the label is left to the spinner, the merge badge
- * and the actions menu, which swap in place and collapse the slot when there is
- * nothing to show so the label gets the full row. Because that slot comes and
+ * the trailing slot beside the label is left to the spinner, the unread dot,
+ * the merge badge and the actions menu, which swap in place and collapse the
+ * slot when there is nothing to show so the label gets the full row. The belt
+ * and the dot answer different questions — the belt clears when the session
+ * moves on, the dot only when a person reads what it owes them, so a row can
+ * carry both. Because that slot comes and
  * goes, the belt, the menu and the preview card anchor to the row box instead —
  * a resized or hidden anchor would drag them across the screen.
  */
@@ -33,6 +36,7 @@ export function SessionNavRow({
   loading,
   status,
   merged,
+  hasUnread,
   preview: previewDetails,
   pinned = false,
   onSelect,
@@ -52,6 +56,8 @@ export function SessionNavRow({
   /** Merged pull request for this session's branch — shown only when the row is otherwise idle. */
   merged?: boolean;
   status?: SessionRowStatus;
+  /** Attention is owed here and nobody has read it — unlike the belt, this outlives the session going idle. */
+  hasUnread?: boolean;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
   onSelect: () => void;
@@ -86,12 +92,22 @@ export function SessionNavRow({
     </button>
   );
   const belt = loading ? undefined : status;
-  const trailing = trailingKind({ loading, status, merged });
+  const trailing = trailingKind({ loading, status, merged, hasUnread });
   const action = (
     <>
       {belt ? <SessionActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3" /> : null}
+        {trailing === 'unread' ? (
+          <span
+            role="img"
+            aria-label={`Unread attention in ${name}`}
+            title="Unread attention"
+            className={cn('flex', yieldsToActions)}
+          >
+            <span className="bg-warning1 size-1.5 rounded-full" aria-hidden />
+          </span>
+        ) : null}
         {trailing === 'merged' ? (
           <span
             role="img"
@@ -151,9 +167,25 @@ function beltLabel(status: SessionRowStatus, name: string) {
   return `${name} waiting on you`;
 }
 
-/** A merge badge is worth the slot only on a session with no lifecycle left to report. */
-function trailingKind({ loading, status, merged }: { loading?: boolean; status?: SessionRowStatus; merged?: boolean }) {
+/**
+ * Unread attention is owed now, so it takes the slot over a merge badge, which is
+ * settled history. It ignores `status` on purpose: a parked session that nobody has
+ * read is exactly the case the belt alone cannot tell apart, so the dot shows there too.
+ * A merge badge is still worth the slot only on a session with no lifecycle left to report.
+ */
+function trailingKind({
+  loading,
+  status,
+  merged,
+  hasUnread,
+}: {
+  loading?: boolean;
+  status?: SessionRowStatus;
+  merged?: boolean;
+  hasUnread?: boolean;
+}) {
   if (loading) return 'loading';
+  if (hasUnread) return 'unread';
   return merged && !status ? 'merged' : undefined;
 }
 

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
@@ -26,6 +27,7 @@ import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessi
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import { sessionRowStatus } from '../services/sessionStatus';
+import { unreadSessionIds } from '../services/unreadSessions';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
 const COLLAPSED_ROW_COUNT = 5;
@@ -74,6 +76,10 @@ export function WorkspacesSection() {
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
   const parkedSessions = useParkedSessions(factoryId);
+  // The same arguments the sidebar badge reads with, so the rows share its cached
+  // page instead of standing up a second poll of the same endpoint.
+  const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
+  const unreadSessions = unreadSessionIds(attention.data?.items ?? []);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
   const runningByPath = useActiveRunResources({
@@ -119,6 +125,7 @@ export function WorkspacesSection() {
         attention:
           parkedSessions.has(workspace.sessionId) ||
           (item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id))),
+        hasUnread: unreadSessions.has(workspace.sessionId),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
@@ -257,6 +264,7 @@ interface FactoryWorkspaceRow {
   initializing: boolean;
   running: boolean;
   attention: boolean;
+  hasUnread: boolean;
   review: boolean;
   itemLabel?: string;
   itemTitle?: string;
@@ -316,6 +324,7 @@ function WorkspaceGroup({
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
             status={sessionRowStatus(row)}
+            hasUnread={row.hasUnread}
             pinned={row.pinned}
             preview={{
               kind,
