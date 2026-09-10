@@ -1956,6 +1956,60 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
     expect(options?.attributes).not.toHaveProperty('entryId');
   });
 
+  it('uses one canonical trimmed id for both the parallel span name and the entryId attribute', async () => {
+    const workflowId = 'span-parallel-trim';
+    const runId = randomUUID();
+
+    await engine.executeParallel({
+      workflowId,
+      runId,
+      entry: {
+        type: 'parallel',
+        id: '  check-document  ',
+        steps: [{ type: 'step', step: passthroughStep as unknown as Step }],
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_PARALLEL);
+    expect(options?.name).toBe("parallel: 'check-document'");
+    expect(options?.attributes).toMatchObject({ entryId: 'check-document' });
+  });
+
+  it('falls back to the structural parallel name when the entry id is whitespace-only', async () => {
+    const workflowId = 'span-parallel-whitespace';
+    const runId = randomUUID();
+
+    await engine.executeParallel({
+      workflowId,
+      runId,
+      entry: {
+        type: 'parallel',
+        id: '   ',
+        steps: [{ type: 'step', step: passthroughStep as unknown as Step }],
+      } as any,
+      prevStep: { type: 'step', step: passthroughStep } as any,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext(workflowId, runId),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    });
+
+    const options = containerSpanOptions(SpanType.WORKFLOW_PARALLEL);
+    expect(options?.name).toBe("parallel: '1 branches'");
+    expect(options?.attributes).not.toHaveProperty('entryId');
+  });
+
   it('names the conditional container span from the entry id and attaches identity attributes', async () => {
     const workflowId = 'span-conditional';
     const runId = randomUUID();
