@@ -168,11 +168,10 @@ function createProcessInputStepArgs(
 }
 
 function extractReminderMarkup(messageList: TestMessageList): string[] {
+  type SignalMetadata = { attributes?: { type?: string }; metadata?: { path?: unknown } };
   return messageList.get.all.db().flatMap(message => {
     if (message.role === 'signal') {
-      const signalMetadata = message.content.metadata?.signal as
-        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
-        | undefined;
+      const signalMetadata = message.content.metadata?.signal as SignalMetadata | undefined;
       if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
         const path = signalMetadata.metadata?.path;
         return typeof path === 'string'
@@ -464,6 +463,9 @@ describe('AgentsMDInjector', () => {
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
       }),
+      createUserMessage(
+        '<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Project guidance from AGENTS</system-reminder>',
+      ),
       createUserMessage('Thanks, now keep going.'),
     );
 
@@ -473,10 +475,92 @@ describe('AgentsMDInjector', () => {
       readFile: () => 'Project guidance from AGENTS',
     });
 
+    const messagesBefore = [...messageList.get.all.db()];
     await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
 
-    expect(extractReminderMarkup(messageList)).toEqual([]);
+    expect(messageList.get.all.db()).toEqual(messagesBefore);
+    expect(extractReminderMarkup(messageList)).toHaveLength(1);
   });
+
+  it('scans all completed results newest-first without changing message or part order', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart('old', { path: '/repo/old/AGENTS.md' }, 'result', {})],
+      }),
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart('middle', { path: '/repo/middle/AGENTS.md' }, 'result', {}),
+          createToolInvocationPart('new', { path: '/repo/new/AGENTS.md' }, 'result', {}),
+        ],
+      }),
+    );
+    const originalMessages = structuredClone(messageList.get.all.db());
+    const readFile = vi.fn((path: string) => `Instructions for ${path}`);
+    const testProcessor = new AgentsMDInjector({ readFile });
+
+    // These completed results are deliberately outside the response tracking set.
+    expect(messageList.get.response.db()).toEqual([]);
+    for (const directory of ['new', 'middle', 'old']) {
+      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(extractReminderMarkup(messageList).at(-1)).toContain(`/repo/${directory}/AGENTS.md`);
+    }
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toHaveLength(3);
+    expect(readFile.mock.calls[0]).toEqual(['/repo/new/AGENTS.md']);
+    expect(messageList.get.all.db().slice(0, originalMessages.length)).toEqual(originalMessages);
+  });
+
+  it.each(['static', 'metadata', 'markup'] as const)(
+    'continues past a newer %s-covered directory to an uncovered result',
+    async coverage => {
+      const messageList = new TestMessageList();
+      const coveredPath = '/repo/covered/AGENTS.md';
+      if (coverage === 'metadata') {
+        messageList.push(
+          createUserMessage('Previously loaded instructions', {
+            systemReminder: { type: 'dynamic-agents-md', path: coveredPath },
+          }),
+        );
+      } else if (coverage === 'markup') {
+        messageList.push(
+          createUserMessage(
+            `<system-reminder type="dynamic-agents-md" path="${coveredPath}">Old content</system-reminder>`,
+          ),
+        );
+      }
+      messageList.push(
+        createAssistantMessage({
+          format: 2,
+          parts: [createToolInvocationPart('uncovered', { path: '/repo/uncovered/AGENTS.md' }, 'result', {})],
+        }),
+        createAssistantMessage({
+          format: 2,
+          parts: [
+            createToolInvocationPart('covered-1', { path: coveredPath }, 'result', {}),
+            createToolInvocationPart('covered-2', { path: coveredPath }, 'result', {}),
+          ],
+        }),
+      );
+      const readFile = vi.fn<(path: string) => string>(() => FILE_CONTENT);
+      const testProcessor = new AgentsMDInjector({
+        readFile,
+        getIgnoredInstructionPaths: () => (coverage === 'static' ? [coveredPath] : []),
+      });
+      const before = messageList.get.all.db().length;
+
+      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+      expect(messageList.get.all.db()).toHaveLength(before + 1);
+      expect(extractReminderMarkup(messageList).at(-1)).toContain('/repo/uncovered/AGENTS.md');
+      expect(readFile.mock.calls.filter(([path]) => path === coveredPath)).toHaveLength(coverage === 'static' ? 0 : 1);
+      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+      expect(messageList.get.all.db()).toHaveLength(before + 1);
+    },
+  );
 
   it('does not inject for instruction files already loaded statically', async () => {
     const messageList = new TestMessageList();

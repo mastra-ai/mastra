@@ -239,13 +239,13 @@ type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
 function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[] {
   const completed: CompletedToolCall[] = [];
 
-  for (const message of messages) {
+  for (const message of [...messages].reverse()) {
     const parts = isRecord(message.content) ? message.content.parts : undefined;
     if (!Array.isArray(parts)) {
       continue;
     }
 
-    for (const part of parts) {
+    for (const part of [...parts].reverse()) {
       if (!isRecord(part) || part.type !== 'tool-invocation') {
         continue;
       }
@@ -263,10 +263,6 @@ function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[]
   }
 
   return completed;
-}
-
-function getCurrentStepResponseMessages(messageList: MessageList): MastraDBMessage[] {
-  return messageList.get.response.db();
 }
 
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
@@ -335,31 +331,39 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       readFile: this.readFile,
     };
     const messages = messageList.get.all.db();
-    const responseMessages = getCurrentStepResponseMessages(messageList);
-    const completedToolCalls = getCompletedToolCalls(responseMessages);
-    const instructionPath = this.findReferencedInstructionPath(completedToolCalls, reader);
+    // Memory processors can reclassify completed responses before this hook runs.
+    const completedToolCalls = getCompletedToolCalls(messages);
+    const checkedPaths = new Set<string>();
+    for (const toolCall of completedToolCalls) {
+      const instructionPath = this.findInstructionPathInInvocation(toolCall, reader);
+      if (!instructionPath || checkedPaths.has(instructionPath)) {
+        continue;
+      }
+      checkedPaths.add(instructionPath);
 
-    if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
-      return messageList;
+      if (this.isIgnoredInstructionPath(args, instructionPath)) {
+        continue;
+      }
+
+      const reminderText = this.getReminderText(instructionPath, reader);
+      if (!reminderText) {
+        continue;
+      }
+
+      const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
+      if (this.hasReminderAlready(messages, reminderMarkup)) {
+        continue;
+      }
+
+      await args.sendSignal?.({
+        type: 'reactive',
+        tagName: 'system-reminder',
+        contents: reminderText,
+        attributes: { type: REMINDER_TYPE, path: instructionPath },
+        metadata: getReminderMetadata(instructionPath).systemReminder,
+      });
+      break;
     }
-
-    const reminderText = this.getReminderText(instructionPath, reader);
-    if (!reminderText) {
-      return messageList;
-    }
-
-    const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
-    if (this.hasReminderAlready(messages, reminderMarkup)) {
-      return messageList;
-    }
-
-    await args.sendSignal?.({
-      type: 'reactive',
-      tagName: 'system-reminder',
-      contents: reminderText,
-      attributes: { type: REMINDER_TYPE, path: instructionPath },
-      metadata: getReminderMetadata(instructionPath).systemReminder,
-    });
 
     return messageList;
   }
@@ -381,24 +385,6 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
     const normalizedInstructionPath = toAbsolutePath(instructionPath);
     return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
-  }
-
-  private findReferencedInstructionPath(
-    toolCalls: CompletedToolCall[] | undefined,
-    reader: ReminderFileReader,
-  ): string | undefined {
-    if (!Array.isArray(toolCalls)) {
-      return undefined;
-    }
-
-    for (const toolCall of toolCalls) {
-      const path = this.findInstructionPathInInvocation(toolCall, reader);
-      if (path) {
-        return path;
-      }
-    }
-
-    return undefined;
   }
 
   private findInstructionPathInInvocation(invocation: unknown, reader: ReminderFileReader): string | undefined {
