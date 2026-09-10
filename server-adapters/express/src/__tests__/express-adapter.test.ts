@@ -893,11 +893,8 @@ describe('Express Server Adapter', () => {
           params.abortSignal?.addEventListener('abort', signalAbort);
           return {
             fullStream: new ReadableStream({
-              async start(controller) {
+              start(controller) {
                 controller.enqueue({ type: 'text-delta', textDelta: 'one' });
-                await sleep(10);
-                controller.enqueue({ type: 'text-delta', textDelta: 'two' });
-                controller.close();
               },
             }),
           };
