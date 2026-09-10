@@ -102,6 +102,8 @@ export interface ProviderInfo {
   orgCredential?: 'oauth' | 'api_key';
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
+  /** Org custom provider, managed under custom providers rather than provider keys. */
+  custom?: true;
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -233,6 +235,45 @@ export interface CustomProviderInfo {
   models: string[];
 }
 
+/**
+ * The caller's org custom providers, or `[]` when custom-provider storage is
+ * unavailable or the caller has no tenant. Callers fail soft: the built-in
+ * catalogue still serves.
+ */
+async function listCallerCustomProviders({
+  c,
+  auth,
+  customProviders,
+}: {
+  c: Context;
+  auth: RouteAuth;
+  customProviders?: CustomProvidersStorage;
+}): Promise<CustomProviderRecord[]> {
+  if (!customProviders) return [];
+  try {
+    const ctx = await resolveCustomProvidersContext({ c, auth, customProviders });
+    return 'response' in ctx ? [] : await ctx.storage.list({ orgId: ctx.orgId });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Custom providers that carry a key, shaped like catalogue entries so provider
+ * pickers list them as connected. Keyless records cannot run models and are
+ * left out.
+ */
+export function customProviderInfos(records: CustomProviderRecord[], tenantMode: boolean): ProviderInfo[] {
+  return records
+    .filter(record => record.apiKey)
+    .map(record => ({
+      provider: record.providerId,
+      source: tenantMode ? 'stored-org' : 'stored',
+      ...(tenantMode ? { orgKey: true, orgCredential: 'api_key' as const } : {}),
+      custom: true,
+    }));
+}
+
 /** Redact a stored custom-provider row for the client (key presence only). */
 function toCustomProviderInfo(record: CustomProviderRecord): CustomProviderInfo {
   return {
@@ -329,10 +370,13 @@ export async function buildProviderAccess({
   controller,
   authStorage,
   tenantCredentials,
+  customProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  /** Custom providers are not in the gateway catalogue; a stored key is their access. */
+  customProviders?: Pick<CustomProviderRecord, 'providerId' | 'apiKey'>[];
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
@@ -368,6 +412,11 @@ export async function buildProviderAccess({
       access[m.provider] = accessLevel(m.provider);
       seen.add(m.provider);
     }
+  }
+  for (const custom of customProviders ?? []) {
+    if (seen.has(custom.providerId)) continue;
+    access[custom.providerId] = custom.apiKey ? 'apikey' : false;
+    seen.add(custom.providerId);
   }
   return access;
 }
@@ -732,12 +781,20 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const providers = await listProviders({
+              controller,
+              authStorage: tenantCredentials ? undefined : authStorage,
+              tenantCredentials,
+            });
+            // Custom providers live in the DB, not the gateway catalogue, so the
+            // pickers only see them when appended here.
+            const known = new Set(providers.map(p => p.provider));
+            const custom = customProviderInfos(
+              await listCallerCustomProviders({ c: loose(c), auth, customProviders: options.customProviders }),
+              tenantCredentials !== undefined,
+            ).filter(p => !known.has(p.provider));
             return c.json({
-              providers: await listProviders({
-                controller,
-                authStorage: tenantCredentials ? undefined : authStorage,
-                tenantCredentials,
-              }),
+              providers: [...providers, ...custom],
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
           } catch (error) {
@@ -940,26 +997,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // tenant mode / sentinel `local` org in no-auth mode). The boot-time
             // gateway catalog only carries the local list, so tenant callers get
             // theirs here. Dedupe against ids already present.
-            if (options.customProviders) {
-              try {
-                const ctx = await resolveCustomProvidersContext({
-                  c: loose(c),
-                  auth,
-                  customProviders: options.customProviders,
-                });
-                if (!('response' in ctx)) {
-                  const known = new Set(catalog.map(m => m.id));
-                  for (const record of await ctx.storage.list({ orgId: ctx.orgId })) {
-                    for (const model of record.models) {
-                      const id = `${record.providerId}/${model}`;
-                      if (known.has(id)) continue;
-                      known.add(id);
-                      catalog.push({ id, provider: record.providerId, modelName: model, hasApiKey: true });
-                    }
-                  }
-                }
-              } catch {
-                // Fail soft: the catalog still serves the built-in models.
+            const known = new Set(catalog.map(m => m.id));
+            const customRecords = await listCallerCustomProviders({
+              c: loose(c),
+              auth,
+              customProviders: options.customProviders,
+            });
+            for (const record of customRecords) {
+              for (const model of record.models) {
+                const id = `${record.providerId}/${model}`;
+                if (known.has(id)) continue;
+                known.add(id);
+                catalog.push({ id, provider: record.providerId, modelName: model, hasApiKey: true });
               }
             }
             return c.json({
@@ -1306,6 +1355,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               controller,
               authStorage: tenantCredentials ? undefined : authStorage,
               tenantCredentials,
+              customProviders: await listCallerCustomProviders({
+                c: loose(c),
+                auth,
+                customProviders: options.customProviders,
+              }),
             });
             if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
 

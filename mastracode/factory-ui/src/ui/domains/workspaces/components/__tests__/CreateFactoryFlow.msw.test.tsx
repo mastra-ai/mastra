@@ -251,6 +251,42 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
+  it('lists an org custom provider as connected and saves one of its models', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    const { patchedBodies } = stubModelStepEndpoints(calls);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          providers: [
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+            { provider: 'acme', source: 'stored-org', orgKey: true, orgCredential: 'api_key', custom: true },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({ models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }] }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('button', { name: 'Skip' }));
+
+    const acme = await screen.findByRole('option', { name: /acme/i });
+    expect(acme).toHaveTextContent('Connected');
+    await user.click(acme);
+    await user.click(await screen.findByRole('option', { name: /acme\/fast-1/ }));
+
+    await waitForMutationsIdle(client);
+    expect(patchedBodies).toEqual([{ defaultModelId: 'acme/fast-1' }]);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
+  });
+
   it('skips the intake write when the repository already feeds issue intake', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
