@@ -63,6 +63,23 @@ const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallI
     return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
   });
 
+const filterUnresolvedApprovals = <T extends { toolCallId: string }>(
+  entries: Record<string, T> | undefined,
+  parts: MastraDBMessage['content']['parts'],
+): Record<string, T> | undefined => {
+  if (!entries || typeof entries !== 'object') return undefined;
+  const pending = Object.fromEntries(
+    Object.entries(entries).filter(
+      ([, approval]) =>
+        approval &&
+        typeof approval === 'object' &&
+        typeof approval.toolCallId === 'string' &&
+        !toolCallHasOutput(parts, approval.toolCallId),
+    ),
+  );
+  return Object.keys(pending).length ? pending : undefined;
+};
+
 /**
  * Normalize persisted initial messages back into the stream-friendly shape the
  * UI renders from. Mirrors `main`'s `resolveInitialMessages`:
@@ -108,23 +125,19 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
           : message;
 
       const normalizedMetadata = normalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
-      const pendingToolApprovals = normalizedMetadata?.pendingToolApprovals;
-      if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+      if (
+        !normalizedMetadata?.pendingToolApprovals &&
+        !normalizedMetadata?.requireApprovalMetadata &&
+        !normalizedMetadata?.suspendedTools
+      ) {
         return normalizedMessage;
       }
 
-      const stillPending = Object.fromEntries(
-        Object.entries(pendingToolApprovals).filter(
-          ([, approval]) =>
-            approval &&
-            typeof approval === 'object' &&
-            typeof approval.toolCallId === 'string' &&
-            !toolCallHasOutput(normalizedMessage.content.parts, approval.toolCallId),
-        ),
-      );
-
-      const { pendingToolApprovals: _omit, ...restMetadata } = normalizedMetadata;
-      const hasStillPending = Object.keys(stillPending).length > 0;
+      const { pendingToolApprovals, requireApprovalMetadata, suspendedTools, ...restMetadata } = normalizedMetadata;
+      const parts = normalizedMessage.content.parts;
+      const pending = filterUnresolvedApprovals(pendingToolApprovals, parts);
+      const required = { ...filterUnresolvedApprovals(requireApprovalMetadata, parts), ...pending };
+      const suspended = filterUnresolvedApprovals(suspendedTools, parts);
 
       return {
         ...normalizedMessage,
@@ -132,8 +145,10 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
           ...normalizedMessage.content,
           metadata: {
             ...restMetadata,
-            mode: 'stream' as const,
-            ...(hasStillPending ? { pendingToolApprovals: stillPending, requireApprovalMetadata: stillPending } : {}),
+            ...(pendingToolApprovals ? { mode: 'stream' as const } : {}),
+            ...(pending ? { pendingToolApprovals: pending } : {}),
+            ...(Object.keys(required).length ? { requireApprovalMetadata: required } : {}),
+            ...(suspended ? { suspendedTools: suspended } : {}),
           },
         },
       };

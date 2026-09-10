@@ -50,6 +50,42 @@ export const approvalHistory = (runId = 'recovery-run', toolCallId = 'approval-t
     },
   ],
 });
+export const approvalMetadataHistory = (
+  key: 'pendingToolApprovals' | 'requireApprovalMetadata' | 'suspendedTools',
+  resolved: boolean,
+): typeof emptyHistory => ({
+  messages: [
+    {
+      id: 'approval-fixture',
+      role: 'assistant',
+      createdAt: new Date('2026-01-02'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: resolved
+              ? { state: 'result', toolCallId: 'approval-tool', toolName: 'weather', args: {}, result: 'done' }
+              : { state: 'call', toolCallId: 'approval-tool', toolName: 'weather', args: {} },
+          },
+        ],
+        metadata: {
+          mode: 'generate',
+          [key]: {
+            weather: {
+              toolCallId: 'approval-tool',
+              toolName: 'weather',
+              args: {},
+              runId: 'recovery-run',
+              suspendPayload: {},
+            },
+          },
+        },
+      },
+    },
+  ],
+});
+
 export const approvalChunk: ChunkType = {
   type: 'tool-call-approval',
   runId: 'recovery-run',

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   completedHistory,
   approvalHistory,
+  approvalMetadataHistory,
   approvalChunk,
   emptyHistory,
   finishChunk,
@@ -66,6 +67,24 @@ afterEach(() => {
 });
 
 describe('Chat history recovery', () => {
+  describe.each(['pendingToolApprovals', 'requireApprovalMetadata', 'suspendedTools'] as const)(
+    'when history contains %s',
+    key => {
+      it.each([false, true])('restores only unresolved approvals (resolved=%s)', async resolved => {
+        const { result, rerender } = await setup();
+        rerender({ threadId: 'first', history: approvalMetadataHistory(key, resolved) });
+        expect(result.current.isAwaitingToolApproval).toBe(!resolved);
+        const message = result.current.messages.find(message => message.id === 'approval-fixture');
+        if (resolved) {
+          expect(message?.content.metadata?.[key]).toBeUndefined();
+          expect(message?.content.metadata?.requireApprovalMetadata).toBeUndefined();
+        } else {
+          expect(message?.content.metadata?.[key]).toBeDefined();
+        }
+      });
+    },
+  );
+
   describe('when approval history races with live run state', () => {
     it('hydrates same-run approvals before their live event arrives', async () => {
       const { result, rerender } = await setup();
