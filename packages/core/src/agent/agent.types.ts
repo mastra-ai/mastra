@@ -536,6 +536,12 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
+  /**
+   * Signal chunks to hide from this caller's stream. Defaults to none.
+   * Does not affect generated results, model context, or storage.
+   */
+  hideSignals?: AgentSignalType[];
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -828,27 +834,19 @@ export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
       : { structuredOutput?: never });
 
-/** Caller-local visibility for modern streaming APIs. */
-export type AgentStreamSignalOptions = {
-  /** Signal chunks to omit from this caller's stream. Defaults to none; model context and storage are unchanged. */
-  hideSignals?: AgentSignalType[];
-};
-
-/** @internal Includes stream-only options for propagation through the execution pipeline. */
-export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  AgentStreamSignalOptions & {
-    outputWriter?: OutputWriter;
-    messages: MessageListInput;
-    methodType: AgentMethodType;
-    /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
-    model?: MastraLanguageModel;
-    /** Internal: Whether the execution is a resume */
-    resumeContext?: {
-      resumeData: any;
-      snapshot: WorkflowRunState;
-    };
-    toolCallId?: string;
-  } & ([NonNullable<OUTPUT>] extends [never]
+export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
+  outputWriter?: OutputWriter;
+  messages: MessageListInput;
+  methodType: AgentMethodType;
+  /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
+  model?: MastraLanguageModel;
+  /** Internal: Whether the execution is a resume */
+  resumeContext?: {
+    resumeData: any;
+    snapshot: WorkflowRunState;
+  };
+  toolCallId?: string;
+} & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}
       ? { structuredOutput: StructuredOutputOptions<OUTPUT> }

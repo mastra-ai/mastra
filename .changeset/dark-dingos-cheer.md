@@ -18,6 +18,6 @@ const subscription = await agent.subscribeToThread({
 });
 ```
 
-Stream exclusions normalize legacy aliases. They filter streamed signal chunks after transforms, not aggregate output, and are not a security boundary. HTTP/client-js options are unchanged.
+Stream exclusions normalize legacy aliases. They filter streamed signal chunks after transforms, not aggregate output, and are not a security boundary. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()` without filtering their returned results. HTTP/client-js options are unchanged.
 
 Fixed directory instruction discovery after tool results move between message tracking sets. Completed results are searched newest-first, continuing past covered path fields to uncovered destinations; observational memory is unchanged. Local filesystem aliases now deduplicate against static and persisted instructions. Custom `ReminderFileReader` implementations can provide `getPathIdentity(path)` for comparison without rewriting read addresses or emitted paths; readers without it retain lexical identity.

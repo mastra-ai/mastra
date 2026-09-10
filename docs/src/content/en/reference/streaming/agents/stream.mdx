@@ -964,7 +964,7 @@ Exclusions apply after `experimentalTransform`, so transforms still receive the 
 
 Each [thread subscription](/reference/agents/agent#subscribetothreadoptions) has its own exclusion policy, independent of the initiating stream.
 
-The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. This option is available on in-process core streaming and subscription APIs, not HTTP or client-js request options, `generate()`, or legacy `streamLegacy()` APIs.
+The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()`, but it doesn't filter their returned results. This option isn't available on HTTP or client-js request options or legacy `streamLegacy()` APIs.
 
 Unlike streams, [memory recall](/reference/memory/recall) hides reminders by default for compatibility. Recall exclusions match stored types exactly rather than normalizing aliases. Use `['reactive', 'system-reminder']` to exclude both reminder representations across surfaces.
 

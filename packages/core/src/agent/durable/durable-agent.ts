@@ -17,7 +17,7 @@ import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
-import type { AgentExecutionOptions, AgentStreamSignalOptions } from '../agent.types';
+import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
@@ -150,7 +150,9 @@ const LIST_ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
 /**
  * Options for DurableAgent.stream()
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> extends AgentStreamSignalOptions {
+export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+  /** Signal chunks to hide from this caller's stream. Does not affect generated results. */
+  hideSignals?: AgentExecutionOptions<OUTPUT>['hideSignals'];
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
   /** Additional context messages to provide to the agent */
@@ -2831,7 +2833,7 @@ export class DurableAgent<
   // @ts-expect-error - Intentionally different signature for durable execution
   async generate(
     messages: MessageListInput,
-    options?: Omit<DurableAgentStreamOptions<TOutput>, 'hideSignals'>,
+    options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
     options = await this.#resolveExecutionOptions(options);
 
@@ -3048,7 +3050,7 @@ export class DurableAgent<
   async resumeGenerate(
     runId: string,
     resumeData: unknown,
-    options?: Omit<NonNullable<Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]>, 'hideSignals'>,
+    options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
   ): Promise<FullOutput<TOutput>> {
     const result = await this.resume(runId, resumeData, {
       ...(options ?? {}),

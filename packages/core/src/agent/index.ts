@@ -41,7 +41,6 @@ export * from './fs-routing';
 export type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
-  AgentStreamSignalOptions,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   // Delegation hook types

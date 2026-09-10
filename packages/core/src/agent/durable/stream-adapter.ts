@@ -16,7 +16,7 @@ import type {
   LanguageModelUsage,
   StepStartPayload,
 } from '../../stream/types';
-import type { AgentStreamSignalOptions } from '../agent.types';
+import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
@@ -48,7 +48,9 @@ function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
 /**
  * Options for creating a durable agent stream
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> extends AgentStreamSignalOptions {
+export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+  /** Signal chunks to hide from this caller's stream. */
+  hideSignals?: AgentExecutionOptionsBase<OUTPUT>['hideSignals'];
   /** Pubsub instance to subscribe to */
   pubsub: PubSub;
   /** Run identifier */

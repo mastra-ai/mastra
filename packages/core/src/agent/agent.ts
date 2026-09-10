@@ -150,7 +150,6 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
-  AgentStreamSignalOptions,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
@@ -8668,32 +8667,28 @@ export class Agent<
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<T> & {
-        structuredOutput: PublicStructuredOutputOptions<T>;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<OUTPUT> & {
-        structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async stream(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<unknown> & {
-        structuredOutput?: never;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<any> & {
-        structuredOutput?: PublicStructuredOutputOptions<any>;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path so callers using the agent outside of a
@@ -8899,37 +8894,33 @@ export class Agent<
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<T> & {
-        structuredOutput: PublicStructuredOutputOptions<T>;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<OUTPUT> & {
-        structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async streamUntilIdle(
     messages: MessageListInput,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<unknown> & {
-        structuredOutput?: never;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async streamUntilIdle<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<any> & {
-        structuredOutput?: PublicStructuredOutputOptions<any>;
-        /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
@@ -8974,40 +8965,36 @@ export class Agent<
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<T> & {
-        structuredOutput: PublicStructuredOutputOptions<T>;
-        toolCallId?: string;
-        /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      toolCallId?: string;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async resumeStreamUntilIdle<OUTPUT extends {}>(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<OUTPUT> & {
-        structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-        toolCallId?: string;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStreamUntilIdle(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<unknown> & {
-        structuredOutput?: never;
-        toolCallId?: string;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async resumeStreamUntilIdle<OUTPUT = TOutput>(
     resumeData: any,
-    streamOptions?: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<any> & {
-        structuredOutput?: PublicStructuredOutputOptions<any>;
-        toolCallId?: string;
-        maxIdleMs?: number;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      toolCallId?: string;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     return runResumeStreamUntilIdle<OUTPUT>(this, resumeData, streamOptions, {
       activeStreams: this.#activeStreamUntilIdle,
@@ -9033,35 +9020,31 @@ export class Agent<
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<T> & {
-        structuredOutput: PublicStructuredOutputOptions<T>;
-        toolCallId?: string;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      toolCallId?: string;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
   async resumeStream<OUTPUT extends {}>(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<OUTPUT> & {
-        structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
-        toolCallId?: string;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      toolCallId?: string;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStream(
     resumeData: any,
-    streamOptions: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<unknown> & {
-        structuredOutput?: never;
-        toolCallId?: string;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      toolCallId?: string;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
   async resumeStream<OUTPUT = TOutput>(
     resumeData: any,
-    streamOptions?: AgentStreamSignalOptions &
-      AgentExecutionOptionsBase<any> & {
-        structuredOutput?: PublicStructuredOutputOptions<any>;
-        toolCallId?: string;
-      } & { model?: DynamicArgument<MastraModelConfig> },
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      toolCallId?: string;
+    } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
