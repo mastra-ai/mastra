@@ -1824,6 +1824,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     importRunId?: string,
     details?: Record<string, unknown>,
   ): Promise<void> {
+    if (importRunId) {
+      const run = await executor.execute({
+        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
+        args: [importRunId],
+      });
+      if (!run.rows[0]) throw new KnowledgeNotFoundError('import run', importRunId);
+    }
     await executor.execute({
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,importRunId,details,createdAt) VALUES (?,?,?,?,?,?,jsonb(?),?)`,
       args: [
