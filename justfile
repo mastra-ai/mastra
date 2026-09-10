@@ -1,8 +1,9 @@
 # Task runner for Mastra Factory development. Bare `just` lists the recipes.
 #
 # Two ways to run the stack:
-#   `just start` builds both sides and serves that build from :4111 alone.
-#              Nothing is rebuilt while it runs, so edits land on the next run.
+#   `just start` builds both sides and serves that build from :4111 (or the
+#              next free port in 4111–4131). Nothing is rebuilt while it runs,
+#              so edits land on the next run.
 #   `just watch` runs the dev servers: the API rebundles on backend edits and
 #              Vite hot-reloads the UI on :5173, proxying the API on :4111.
 #
@@ -30,7 +31,31 @@ ui_url := "http://localhost:5173"
 default:
     @just --list
 
-# Build the factory and serve that build on :4111. Ignores later code changes.
+# First free TCP port from `preferred` through preferred+20. Prints the port.
+[private]
+_free-api-port preferred="4111":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    start="{{preferred}}"
+    last=$((start + 20))
+    port_in_use() {
+      local p="$1"
+      if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1
+      else
+        (echo >/dev/tcp/127.0.0.1/"$p") >/dev/null 2>&1
+      fi
+    }
+    for ((port=start; port<=last; port++)); do
+      if ! port_in_use "$port"; then
+        echo "$port"
+        exit 0
+      fi
+    done
+    echo "no free port in ${start}-${last}" >&2
+    exit 1
+
+# Build the factory and serve that build on :4111, or the next free port.
 [group('run')]
 start:
     #!/usr/bin/env bash
@@ -44,9 +69,17 @@ start:
     # that dir as its cwd, so `mastra factory dev` finds `factory/index.html`
     # there and serves the built SPA itself: one origin, no Vite, no HMR.
     MASTRACODE_OUT_DIR="{{web}}/src/mastra/public/factory" pnpm --dir "{{factory_ui}}" build
+    # Probe right before bind so a long build does not race a port that frees
+    # (or is taken) in the meantime. Range matches `mastra factory dev` (4111–4131).
+    preferred="${PORT:-4111}"
+    port="$(just _free-api-port "$preferred")"
+    api_url="http://localhost:${port}"
     echo
     echo "Mastra Factory (built)"
-    echo "  app  {{api_url}}   <- open this; the API server serves the SPA too"
+    echo "  app  ${api_url}   <- open this; the API server serves the SPA too"
+    if [ "$port" != "$preferred" ]; then
+      echo "  :${preferred} was in use; using :${port} (OAuth callbacks must match this origin)"
+    fi
     echo "  db   postgres :54329   redis :63799"
     echo "  factory dist and the SPA are frozen; rerun just start to rebuild them"
     echo
@@ -55,7 +88,9 @@ start:
     # npm versions, so a built-and-started bundle would ignore local changes.
     # Its watcher only reaches the host wiring under `mastracode/web/src/mastra`,
     # so editing those few files still restarts the API; factory and UI do not.
-    cd "{{web}}" && MASTRACODE_PUBLIC_URL="{{api_url}}" pnpm api
+    # PORT is exported so `pnpm api`'s `PORT=${PORT:-4111}` keeps the free port
+    # instead of pinning 4111 and disabling the CLI's own fallback.
+    cd "{{web}}" && PORT="$port" MASTRACODE_PUBLIC_URL="$api_url" pnpm api
 
 # Watch backend and UI and hot reload both: API on :4111, Vite HMR on :5173.
 [group('run')]
