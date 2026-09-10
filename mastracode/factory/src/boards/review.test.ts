@@ -119,8 +119,10 @@ describe('reviewBoard', () => {
     expect(argumentsText).toContain('origin refs/merge-requests/12/head');
     expect(argumentsText).toContain('git checkout -B factory/gitlab-mr-12 FETCH_HEAD');
     // `gh` is a GitHub client and is not authenticated against a GitLab
-    // instance, so the hint must not tell the reviewer to run it.
-    expect(argumentsText).not.toContain('gh pr');
+    // instance, so no part of the kickoff may tell the reviewer to run it —
+    // not just `gh pr`. A `gh` command here fails against an instance it has
+    // no credentials for, or worse, resolves a number in the wrong forge.
+    expect(argumentsText).not.toMatch(/\bgh\s/);
   });
 
   it('diffs a GitLab card against its target branch', async () => {

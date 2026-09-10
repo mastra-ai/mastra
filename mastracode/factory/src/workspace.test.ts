@@ -383,6 +383,31 @@ describe('bundled Factory skill assets', () => {
     expect(complete).not.toContain('description: Mark a GitHub issue');
   });
 
+  it('routes each review provider to a tool the agent actually has', async () => {
+    // The `gitlabMergeRequest` family seats `factory-review` and
+    // `factory-rereview` on GitLab merge requests, which `gh` cannot read.
+    // Without a GitLab branch naming its tools, a review run would reach for
+    // `gh pr view` against a pull request number that means something else
+    // entirely in the repository — or nothing at all.
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
+
+    for (const skillName of ['factory-review', 'factory-rereview']) {
+      const prose = await read(skillName);
+      expect(prose, skillName).toContain('gitlab_get_merge_request');
+      expect(prose, skillName).toContain('gitlab_create_merge_request_comment');
+      expect(prose, skillName).toContain('gh pr review');
+      // A GitLab approval is a permissioned action the connected account may
+      // not hold, so the verdict must land as a note and be reported as one.
+      expect(prose, skillName).toMatch(/note (?:body )?is the verdict of record/);
+      // Signals with no GitLab counterpart must be declared uncollected
+      // rather than read as clean.
+      expect(prose, skillName).toContain('uncollected signal');
+      // Their descriptions used to promise GitHub only.
+      expect(prose, skillName).not.toMatch(/^description:[^\n]*\bpull request\b(?![^\n]*merge request)/m);
+    }
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');

@@ -478,9 +478,41 @@ describe('checkoutSessionBranch', () => {
     ).resolves.toBeUndefined();
 
     expect(sandbox.calls).toContain(
-      "git -C '/workspace/repo' fetch --unshallow --filter=blob:none origin 'main' && git -C '/workspace/repo' fetch --filter=blob:none origin refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
+      "git -C '/workspace/repo' fetch --unshallow --filter=blob:none origin 'main' && git -C '/workspace/repo' fetch --filter=blob:none origin 'refs/pull/42/head' && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
     );
     expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
+  });
+
+  it('starts a GitLab merge request session on the merge-request ref', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('--is-shallow-repository')) return { exitCode: 0, stdout: 'true\n', stderr: '' };
+      return OK;
+    });
+
+    await expect(
+      checkoutSessionBranch(sandbox, '/workspace/repo', {
+        ...opts,
+        branch: 'factory/gitlab-mr-12',
+        pullRequestNumber: 12,
+        remote: {
+          origin: 'https://gitlab.example.com',
+          tokenUser: 'oauth2',
+          changeRef: iid => `refs/merge-requests/${iid}/head`,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    // GitHub's `refs/pull/<n>/head` does not exist on a GitLab instance, so
+    // fetching it would leave the session on the base tip with no change to review.
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain("origin 'refs/merge-requests/12/head'");
+    expect(joined).not.toContain('refs/pull/');
+    expect(joined).toContain("checkout -b 'factory/gitlab-mr-12' FETCH_HEAD");
+    // `glab` is not installed in the session sandbox; configuring gh's helper
+    // would point every on-demand blob fetch at a binary that cannot answer.
+    expect(joined).not.toContain('credential.helper');
   });
 
   it('keeps the history fetch plain when the clone is not shallow', async () => {

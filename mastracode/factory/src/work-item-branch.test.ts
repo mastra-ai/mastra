@@ -99,6 +99,15 @@ describe('pullRequestNumberFromBranch', () => {
     expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
     expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
   });
+
+  it('reads a GitLab merge request branch too, so its session starts on the MR head', () => {
+    // The caller uses this to decide whether to fetch the change ref; missing
+    // it would open a GitLab review on the base tip instead of the MR.
+    expect(pullRequestNumberFromBranch('factory/gitlab-mr-12')).toBe(12);
+    // A GitLab issue branch is not a proposed change.
+    expect(pullRequestNumberFromBranch('factory/gitlab-7')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('factory/gitlab-mr-0')).toBeUndefined();
+  });
 });
 
 describe('workItemThreadTitle', () => {

@@ -99,8 +99,16 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   return `factory/item-${item.id}`;
 }
 
-/** The pull request a `factory/pr-<number>` branch was named after, the inverse of {@link workItemBranch}. */
+/**
+ * The proposed change a session branch was named after, the inverse of
+ * {@link workItemBranch}.
+ *
+ * Both providers are recognized because the caller uses this to decide whether
+ * a session starts on the change head: a GitLab review session that fell
+ * through to the base tip would open a review of code the merge request does
+ * not contain.
+ */
 export function pullRequestNumberFromBranch(branch: string): number | undefined {
-  const match = /^factory\/pr-([1-9]\d*)$/.exec(branch);
+  const match = /^factory\/(?:pr|gitlab-mr)-([1-9]\d*)$/.exec(branch);
   return match ? Number(match[1]) : undefined;
 }

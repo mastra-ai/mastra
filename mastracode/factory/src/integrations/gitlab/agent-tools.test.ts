@@ -19,6 +19,28 @@ const ORG_ID = 'org1';
 
 const getIssue = vi.fn();
 const createIssueNote = vi.fn();
+const getMergeRequest = vi.fn();
+const listMergeRequestNotes = vi.fn();
+const createMergeRequestNote = vi.fn();
+
+const MERGE_REQUEST = {
+  id: 90,
+  iid: 12,
+  project_id: 42,
+  title: 'Add the widget',
+  description: 'Adds it.',
+  state: 'opened' as const,
+  web_url: 'https://gitlab.example.com/acme/app/-/merge_requests/12',
+  source_branch: 'feat/widget',
+  target_branch: 'main',
+  draft: false,
+  author: { username: 'contributor' },
+  assignees: [],
+  reviewers: [],
+  labels: ['feature'],
+  created_at: '2026-07-02T00:00:00Z',
+  updated_at: '2026-07-02T00:00:00Z',
+};
 
 const ISSUE = {
   id: 9,
@@ -70,6 +92,11 @@ beforeEach(async () => {
   PROJECT_ID = '';
   getIssue.mockReset().mockResolvedValue(ISSUE);
   createIssueNote.mockReset().mockResolvedValue({ id: 55 });
+  getMergeRequest.mockReset().mockResolvedValue(MERGE_REQUEST);
+  listMergeRequestNotes.mockReset().mockResolvedValue({ items: [], nextCursor: undefined });
+  createMergeRequestNote
+    .mockReset()
+    .mockResolvedValue({ id: 77, body: 'Looks good', web_url: 'https://gitlab.example.com/n/77' });
 
   seed = await createFactoryStorageForTests();
   const getById = seed.projects.getById.bind(seed.projects);
@@ -91,6 +118,9 @@ beforeEach(async () => {
     getIssue: (...args: never[]) => getIssue(...args),
     listIssueNotes: async () => [],
     createIssueNote: (...args: never[]) => createIssueNote(...args),
+    getMergeRequest: (...args: never[]) => getMergeRequest(...args),
+    listMergeRequestNotes: (...args: never[]) => listMergeRequestNotes(...args),
+    createMergeRequestNote: (...args: never[]) => createMergeRequestNote(...args),
   });
 });
 
@@ -99,6 +129,8 @@ describe('exposure gating', () => {
     expect(await toolsForProject()).toEqual({
       gitlab_get_issue: expect.anything(),
       gitlab_create_comment: expect.anything(),
+      gitlab_get_merge_request: expect.anything(),
+      gitlab_create_merge_request_comment: expect.anything(),
     });
   });
 
@@ -214,5 +246,76 @@ describe('disconnected orgs', () => {
     expect(await (tools.gitlab_get_issue!.execute as any)({ issue: '42!7' })).toMatchObject({
       error: expect.stringContaining('not connected'),
     });
+  });
+});
+
+describe('gitlab_get_merge_request', () => {
+  async function run(mergeRequest: string) {
+    const tools = await toolsForProject();
+    return (tools.gitlab_get_merge_request!.execute as any)({ mergeRequest });
+  }
+
+  it('returns the merge request with the branches a reviewer needs', async () => {
+    const result = await run('42!12');
+    expect(result.mergeRequest).toMatchObject({
+      id: '12',
+      title: 'Add the widget',
+      headBranch: 'feat/widget',
+      baseBranch: 'main',
+      state: 'open',
+    });
+    expect(result.comments).toEqual([]);
+  });
+
+  it.each([
+    ['the stored ref', '42!12'],
+    ['the UI shorthand', 'acme/app!12'],
+    ['the merge request URL', 'https://gitlab.example.com/acme/app/-/merge_requests/12'],
+  ])('accepts %s', async (_label, reference) => {
+    await expect(run(reference)).resolves.toHaveProperty('mergeRequest.id', '12');
+  });
+
+  it('does not read an issue reference as a merge request', async () => {
+    // `#12` and `!12` are independently numbered; treating one as the other
+    // would review a different piece of work entirely.
+    await expect(run('acme/app#12')).resolves.toMatchObject({ error: expect.stringContaining('was not found') });
+  });
+
+  it('reports a missing merge request without claiming GitLab is disconnected', async () => {
+    getMergeRequest.mockResolvedValue(null);
+    await expect(run('42!12')).resolves.toMatchObject({ error: expect.stringContaining('was not found') });
+  });
+
+  it('tells the model when the org has no GitLab connection', async () => {
+    const tokenless = new GitLabIntegration({ clientId: 'c', clientSecret: 's', webhookSecret: 'hook-secret' });
+    tokenless.initialize({
+      storage: seed.integrations.forIntegration('gitlab'),
+      projects: seed.projects,
+      auth: fakeRouteAuth(),
+    });
+    await seedProject();
+    await expect(tokenless.agentGetMergeRequest(ORG_ID, '42!12')).resolves.toBe('disconnected');
+  });
+});
+
+describe('gitlab_create_merge_request_comment', () => {
+  async function run(mergeRequest: string, body: string) {
+    const tools = await toolsForProject();
+    return (tools.gitlab_create_merge_request_comment!.execute as any)({ mergeRequest, body });
+  }
+
+  it('posts the verdict and returns its url', async () => {
+    await expect(run('42!12', 'Looks good')).resolves.toMatchObject({ posted: true });
+    expect(createMergeRequestNote).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: '42', iid: 12 }),
+      'Looks good',
+    );
+  });
+
+  it('reports a missing merge request rather than posting into the void', async () => {
+    await expect(run('not-a-reference', 'Looks good')).resolves.toMatchObject({
+      error: expect.stringContaining('was not found'),
+    });
+    expect(createMergeRequestNote).not.toHaveBeenCalled();
   });
 });

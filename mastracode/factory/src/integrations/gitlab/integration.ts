@@ -52,7 +52,7 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
-import type { VersionControl } from '../../capabilities/version-control.js';
+import type { PullRequest, PullRequestComment, VersionControl } from '../../capabilities/version-control.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -60,7 +60,14 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildGitlabAgentTools } from './agent-tools.js';
-import { GitLabClient, formatIssueRef, parseIssueRef, parseIssueReference, type GitLabIssue } from './client.js';
+import {
+  GitLabClient,
+  formatIssueRef,
+  parseIssueRef,
+  parseIssueReference,
+  parseMergeRequestReference,
+  type GitLabIssue,
+} from './client.js';
 import { resolveGitlabRules, type GitlabEventRules, type GitlabRuleOverrides } from './default-rules.js';
 import { toIntakeIssue, toIntakeIssueDetail, toIntakeItem, toStateEvent } from './intake.js';
 import {
@@ -612,6 +619,46 @@ export class GitLabIntegration implements FactoryIntegration {
     const ref = parseIssueReference(issue);
     if (!ref) return null;
     return this.createComment({ connection, issueId: formatIssueRef(ref), body });
+  }
+
+  /**
+   * A merge request's review context: the MR itself plus its discussion notes.
+   *
+   * The review agent needs both in one call — `gh` cannot read a GitLab merge
+   * request, so without this the `factory-review` skill would be pointed at a
+   * card whose change it has no way to fetch.
+   */
+  async agentGetMergeRequest(
+    orgId: string,
+    mergeRequest: string,
+  ): Promise<{ mergeRequest: PullRequest; comments: readonly PullRequestComment[] } | null | 'disconnected'> {
+    const connection = await this.bearerForOrg(orgId);
+    if (!connection) return 'disconnected';
+    const ref = parseMergeRequestReference(mergeRequest);
+    if (!ref) return null;
+    const target = { connection, sourceId: ref.projectId, pullRequestId: String(ref.iid) };
+    const found = await this.versionControl.getPullRequest(target);
+    if (!found) return null;
+    const comments = await this.versionControl.listComments(target);
+    return { mergeRequest: found, comments: comments.comments };
+  }
+
+  /** Publish a review verdict as a note on the merge request. */
+  async agentCreateMergeRequestComment(
+    orgId: string,
+    mergeRequest: string,
+    body: string,
+  ): Promise<PullRequestComment | null | 'disconnected'> {
+    const connection = await this.bearerForOrg(orgId);
+    if (!connection) return 'disconnected';
+    const ref = parseMergeRequestReference(mergeRequest);
+    if (!ref) return null;
+    return this.versionControl.createComment({
+      connection,
+      sourceId: ref.projectId,
+      pullRequestId: String(ref.iid),
+      body,
+    });
   }
 
   /**

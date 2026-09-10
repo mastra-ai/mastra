@@ -39,6 +39,7 @@ import type {
   PullRequestComment,
   PullRequestCommentPage,
   PullRequestPage,
+  RepoRemote,
   PullRequestRef,
   PullRequestState,
   RepositoryAccess,
@@ -232,6 +233,24 @@ export class GitLabVersionControl implements VersionControl {
         }),
       ),
     );
+  }
+
+  /**
+   * How the sandbox addresses this GitLab instance over HTTPS.
+   *
+   * `oauth2` is GitLab's required username for token auth, and a merge request
+   * head is fetchable under `refs/merge-requests/<iid>/head` — the analogue of
+   * GitHub's `refs/pull/<n>/head`. No credential helper is supplied: `glab` is
+   * not installed in the session sandbox, so on-demand blob fetches
+   * authenticate through the tokenized origin instead of a CLI that would not
+   * answer.
+   */
+  get remote(): RepoRemote {
+    return {
+      origin: this.#deps.baseUrl,
+      tokenUser: 'oauth2',
+      changeRef: iid => `refs/merge-requests/${iid}/head`,
+    };
   }
 
   /**

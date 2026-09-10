@@ -291,3 +291,45 @@ export interface VersionControl {
   requestReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
 }
+
+/**
+ * How a provider addresses a repository over HTTPS.
+ *
+ * Git itself is provider-neutral; only the host and the username half of token
+ * auth differ. GitHub wants `x-access-token`, GitLab wants `oauth2`, and each
+ * has its own host — so a deployment whose codebase lives on GitLab needs this
+ * to be data rather than a literal baked into the URL builders.
+ */
+export interface RepoRemote {
+  /** Origin with no trailing slash: `https://github.com`, `https://gitlab.example.com`. */
+  origin: string;
+  /** Username half of HTTPS token auth. */
+  tokenUser: string;
+  /**
+   * The ref namespace a proposed change is fetchable under, as a template
+   * taking the change number. GitHub publishes `refs/pull/<n>/head`; GitLab
+   * publishes `refs/merge-requests/<iid>/head`. Without this a review session
+   * would clone the base tip and never see the change it was opened to review.
+   */
+  changeRef: (changeNumber: number) => string;
+  /**
+   * Git credential helper for on-demand blob fetches in a blob-less history,
+   * or `undefined` when the provider has no CLI to answer them. GitHub's `gh`
+   * serves them from the session token; a GitLab session has no equivalent
+   * installed, so it authenticates through the tokenized origin instead.
+   */
+  credentialHelper?: string;
+}
+
+/**
+ * Past file contents of a blob-less history load on demand; git asks gh, which
+ * answers from the session's `GH_TOKEN`, so no credential is ever written.
+ */
+const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
+
+export const GITHUB_REMOTE: RepoRemote = {
+  origin: 'https://github.com',
+  tokenUser: 'x-access-token',
+  changeRef: number => `refs/pull/${number}/head`,
+  credentialHelper: GH_CREDENTIAL_HELPER,
+};

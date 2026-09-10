@@ -16,6 +16,8 @@
  */
 
 import { repoCloneCommand } from '@internal/workspace';
+import { GITHUB_REMOTE } from '../../capabilities/version-control.js';
+import type { RepoRemote } from '../../capabilities/version-control.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { timedPhase } from '../../timing.js';
@@ -212,23 +214,6 @@ export class MaterializeError extends Error {
 }
 
 /**
- * How a provider addresses a repository over HTTPS.
- *
- * Git itself is provider-neutral; only the host and the username half of token
- * auth differ. GitHub wants `x-access-token`, GitLab wants `oauth2`, and each
- * has its own host — so a deployment whose codebase lives on GitLab needs this
- * to be data rather than a literal baked into the URL builders.
- */
-export interface RepoRemote {
-  /** Origin with no trailing slash: `https://github.com`, `https://gitlab.example.com`. */
-  origin: string;
-  /** Username half of HTTPS token auth. */
-  tokenUser: string;
-}
-
-export const GITHUB_REMOTE: RepoRemote = { origin: 'https://github.com', tokenUser: 'x-access-token' };
-
-/**
  * `owner/repo`, or a GitLab nested group path (`group/subgroup/project`).
  * Each segment is restricted to git-and-shell-safe characters, so the name can
  * be interpolated into a remote URL without opening an injection.
@@ -396,15 +381,14 @@ export interface SessionBranchOptions {
   baseBranch: string;
   token: string;
   repoFullName: string;
-  /** A pull-request card's session starts on the PR head instead of the base tip. */
+  /**
+   * A proposed-change card's session starts on the change head instead of the
+   * base tip — a GitHub pull request number or a GitLab merge request iid.
+   */
   pullRequestNumber?: number;
+  /** Defaults to GitHub so every existing caller keeps its exact behavior. */
+  remote?: RepoRemote;
 }
-
-/**
- * Past file contents of a blob-less history load on demand; git asks gh, which
- * answers from the session's `GH_TOKEN`, so no credential is ever written.
- */
-const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 
 /**
  * A pull-request session first fetches the base's whole commit history without
@@ -415,11 +399,12 @@ function startPointFetchCommands(
   workdir: string,
   { baseBranch, pullRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber'>,
   shallowClone: boolean,
+  remote: RepoRemote = GITHUB_REMOTE,
 ): string {
   const git = `git -C ${shellQuote(workdir)}`;
   if (pullRequestNumber === undefined) return `${git} fetch origin ${shellQuote(baseBranch)}`;
   const unshallow = shallowClone ? '--unshallow ' : '';
-  return `${git} fetch ${unshallow}--filter=blob:none origin ${shellQuote(baseBranch)} && ${git} fetch --filter=blob:none origin refs/pull/${pullRequestNumber}/head`;
+  return `${git} fetch ${unshallow}--filter=blob:none origin ${shellQuote(baseBranch)} && ${git} fetch --filter=blob:none origin ${shellQuote(remote.changeRef(pullRequestNumber))}`;
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
@@ -436,14 +421,17 @@ async function checkoutSessionBranchImpl(
   workdir: string,
   options: SessionBranchOptions,
 ): Promise<void> {
-  const { branch, baseBranch, token, repoFullName, pullRequestNumber } = options;
+  const { branch, baseBranch, token, repoFullName, pullRequestNumber, remote = GITHUB_REMOTE } = options;
   if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
 
   const pullRequestSession = pullRequestNumber !== undefined;
-  if (pullRequestSession) {
-    await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(GH_CREDENTIAL_HELPER)}`);
+  // Only where the provider ships a CLI that can answer git's credential
+  // prompts. Configuring `gh` on a GitLab session would make every on-demand
+  // blob fetch ask a binary that is not installed.
+  if (pullRequestSession && remote.credentialHelper) {
+    await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(remote.credentialHelper)}`);
   }
 
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
@@ -479,7 +467,7 @@ async function checkoutSessionBranchImpl(
     if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
     const fetch = await sh(
       sandbox,
-      `${startPointFetchCommands(workdir, options, shallowClone)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+      `${startPointFetchCommands(workdir, options, shallowClone, remote)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
       { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
     if (fetch.exitCode !== 0) {
