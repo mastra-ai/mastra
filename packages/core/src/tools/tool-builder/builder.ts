@@ -23,6 +23,7 @@ import {
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
+import { isMCPToolV2 } from '../../mcp/native-tool';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
@@ -270,6 +271,9 @@ export class CoreToolBuilder extends MastraBase {
     backgroundTaskEnabled?: boolean;
   }) {
     super({ name: 'CoreToolBuilder' });
+    if (isMCPToolV2(input.originalTool)) {
+      throw new Error('Native MCP tools cannot be used as business tools');
+    }
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
