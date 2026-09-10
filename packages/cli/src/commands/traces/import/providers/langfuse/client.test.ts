@@ -94,6 +94,29 @@ describe('LangfuseClient', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['an empty value', '', 500],
+    ['a whitespace-only value', '   ', 500],
+    ['a delay longer than the local backoff cap', '120', 120_000],
+    ['an HTTP date', 'Thu, 10 Sep 2026 12:01:00 GMT', 60_000],
+  ])('handles Retry-After with %s', async (_case, retryAfter, expectedDelay) => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-10T12:00:00.000Z'));
+    const rateLimit = cancelableResponse(429, { 'Retry-After': retryAfter });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(rateLimit.response)
+      .mockResolvedValueOnce(Response.json({ data: [], meta: { cursor: null } }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const client = new LangfuseClient(options, { fetch, sleep });
+
+    try {
+      await client.getObservationsPage({ fields: 'core', limit: 1000 });
+      expect(sleep).toHaveBeenCalledWith(expectedDelay, undefined);
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   it('retries temporary network failures', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

@@ -239,11 +239,13 @@ function backoffMilliseconds(attempt: number): number {
 
 function parseRetryAfter(value: string | null, fallback: number): number {
   if (value === null) return fallback;
+  const retryAfter = value.trim();
+  if (retryAfter.length === 0) return fallback;
 
-  const seconds = Number(value);
+  const seconds = Number(retryAfter);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
 
-  const date = Date.parse(value);
+  const date = Date.parse(retryAfter);
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : fallback;
 }
 
