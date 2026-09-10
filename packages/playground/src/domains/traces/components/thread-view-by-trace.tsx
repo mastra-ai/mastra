@@ -326,7 +326,7 @@ function TraceThreadRow({
             style={!isExpanded && timelineBudget !== null ? { maxHeight: timelineBudget } : undefined}
             data-testid="trace-row-timeline"
           >
-            <div ref={timeline.ref} className="pt-2 pb-4">
+            <div ref={timeline.ref} className="px-4 pt-2 pb-4">
               <TraceTimeline
                 hierarchicalSpans={hierarchicalSpans}
                 selectedSpanId={selectedSpanId}
