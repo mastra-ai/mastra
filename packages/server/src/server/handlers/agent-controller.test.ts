@@ -611,6 +611,62 @@ describe('agent-controller routes', () => {
       const wire = JSON.parse(JSON.stringify(received));
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });
+
+    it('does not clone live stream payloads onto display_state_changed', async () => {
+      // A long Factory turn grows currentMessage / tool buffers / shell output by
+      // concatenation (V8 ConsStrings). structuredClone of that snapshot flattens
+      // the ropes and OOMs the process (~4GB heap on `just start`).
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ds-oom',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-ds-oom',
+        id: 'user-ds-oom',
+        ownerId: 'code',
+      });
+
+      let streamed = '';
+      for (let i = 0; i < 50; i++) streamed += `chunk-${i}-FACTORY_OOM_MARKER-`;
+
+      const message = {
+        id: 'm1',
+        role: 'assistant',
+        createdAt: new Date('2026-09-10T00:00:00.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: streamed }] },
+      };
+
+      session.emit({ type: 'agent_start' } as any);
+      session.emit({ type: 'message_start', message } as any);
+      session.emit({ type: 'tool_input_start', toolCallId: 't1', toolName: 'bash' } as any);
+      session.emit({ type: 'tool_input_delta', toolCallId: 't1', argsTextDelta: streamed } as any);
+      session.emit({ type: 'tool_start', toolCallId: 't1', toolName: 'bash', args: { command: 'ls' } } as any);
+      session.emit({ type: 'shell_output', toolCallId: 't1', output: streamed, stream: 'stdout' } as any);
+      session.emit({ type: 'tool_end', toolCallId: 't1', result: streamed, isError: false } as any);
+
+      let received: any;
+      for (let i = 0; i < 40; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
+          received = value;
+          if (received.displayState?.activeTools?.t1?.status === 'completed') break;
+        }
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      const wire = JSON.parse(JSON.stringify(received));
+      expect(wire.displayState.isRunning).toBe(true);
+      expect(wire.displayState.activeTools['t1']).toMatchObject({ name: 'bash', status: 'completed' });
+      expect(wire.displayState.currentMessage).toBeNull();
+      expect(JSON.stringify(wire.displayState)).not.toContain('FACTORY_OOM_MARKER');
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {

@@ -453,20 +453,61 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+function mapToRecord<K, V, U>(map: Map<K, V>, project: (value: V) => U): Record<string, U> {
+  const out: Record<string, U> = {};
+  for (const [key, value] of map) {
+    out[String(key)] = project(value);
+  }
+  return out;
+}
+
 /**
- * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
- * before converting its Maps so queued wire events retain point-in-time state.
+ * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot lightweight UI
+ * fields and convert Maps to records so queued wire events retain point-in-time
+ * state.
+ *
+ * Do not structuredClone the live streaming message, tool results, shell
+ * output, or input-buffer text. Those grow by concatenation (V8 ConsStrings)
+ * across a long Factory turn; cloning them flattens the ropes and can OOM the
+ * process. Message and tool payloads already travel on `message_*` / `tool_*`
+ * / `shell_output` events.
  */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
-  const snapshot = structuredClone(displayState);
-  return {
-    ...snapshot,
-    activeTools: Object.fromEntries(snapshot.activeTools),
-    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
-    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
-    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
-  };
+  return structuredClone({
+    isRunning: displayState.isRunning,
+    currentMessage: null,
+    queuedFollowUps: displayState.queuedFollowUps,
+    tokenUsage: displayState.tokenUsage,
+    activeTools: mapToRecord(displayState.activeTools, tool => ({
+      name: tool.name,
+      args: tool.args,
+      status: tool.status,
+      isError: tool.isError,
+    })),
+    toolInputBuffers: mapToRecord(displayState.toolInputBuffers, buf => ({
+      toolName: buf.toolName,
+      text: '',
+    })),
+    pendingApproval: displayState.pendingApproval,
+    pendingSuspensions: Object.fromEntries(displayState.pendingSuspensions),
+    activeSubagents: mapToRecord(displayState.activeSubagents, sub => ({
+      agentType: sub.agentType,
+      displayName: sub.displayName,
+      task: sub.task,
+      modelId: sub.modelId,
+      forked: sub.forked,
+      toolCalls: sub.toolCalls,
+      textDelta: '',
+      status: sub.status,
+      durationMs: sub.durationMs,
+    })),
+    omProgress: displayState.omProgress,
+    bufferingMessages: displayState.bufferingMessages,
+    bufferingObservations: displayState.bufferingObservations,
+    modifiedFiles: Object.fromEntries(displayState.modifiedFiles),
+    tasks: displayState.tasks,
+    previousTasks: displayState.previousTasks,
+  });
 }
 
 function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentControllerEvent & { error: Error } {
