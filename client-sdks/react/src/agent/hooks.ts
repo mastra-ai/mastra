@@ -305,6 +305,7 @@ export const useChat = ({
   const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const liveTasks = useRef<TaskItem[] | undefined>(undefined);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -317,14 +318,50 @@ export const useChat = ({
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
+  const lastHydration = useRef<
+    | {
+        agentId: string;
+        resourceId?: string;
+        threadId?: string;
+        initialMessages: MastraChatProps['initialMessages'];
+        formattedMessages: MastraDBMessage[];
+      }
+    | undefined
+  >(undefined);
+
   useEffect(() => {
+    const previous = lastHydration.current;
+    const sameThread =
+      previous?.agentId === agentId && previous.resourceId === resourceId && previous.threadId === threadId;
+    if (sameThread && previous.initialMessages === initialMessages) return;
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
-    setMessages(formattedMessages);
-    setTasks(extractLatestTasksFromMessages(formattedMessages));
+    lastHydration.current = { agentId, resourceId, threadId, initialMessages, formattedMessages };
+
+    if (sameThread) {
+      // Accumulation replaces changed messages immutably. Keep those local edits
+      // over history snapshots, even if the request returns after the run finishes.
+      const previousById = new Map(previous.formattedMessages.map(message => [message.id, message]));
+      setMessages(current => {
+        const live = current.filter(message => previousById.get(message.id) !== message);
+        const liveById = new Map(live.map(message => [message.id, message]));
+        const historyIds = new Set(formattedMessages.map(message => message.id));
+        return [
+          ...formattedMessages.map(message => liveById.get(message.id) ?? message),
+          ...live.filter(message => !historyIds.has(message.id)),
+        ];
+      });
+      setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
+      if (isRunning || isAwaitingToolApproval) return;
+    } else {
+      liveTasks.current = undefined;
+      if (previous) setIsRunning(false);
+      setMessages(formattedMessages);
+      setTasks(extractLatestTasksFromMessages(formattedMessages));
+    }
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
-  }, [initialMessages]);
+  }, [agentId, resourceId, threadId, initialMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
     _activeContinuation.current = {
@@ -417,10 +454,11 @@ export const useChat = ({
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-      const signalTasks = extractTasksFromSignalChunk(chunk);
-      if (signalTasks !== undefined) setTasks(signalTasks);
-      const toolTasks = extractTasksFromToolResultChunk(chunk);
-      if (toolTasks !== undefined) setTasks(toolTasks);
+      const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
+      if (streamedTasks !== undefined) {
+        liveTasks.current = streamedTasks;
+        setTasks(streamedTasks);
+      }
 
       if (
         chunk.type === 'data-user-message' &&
@@ -828,7 +866,6 @@ export const useChat = ({
       }
     } catch (error) {
       if (isThreadSignalUnsupportedError(error)) {
-        onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
         try {
           await agent.sendSignal({
             signal: {
@@ -840,6 +877,7 @@ export const useChat = ({
             threadId,
             ifIdle: { streamOptions },
           });
+          onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
