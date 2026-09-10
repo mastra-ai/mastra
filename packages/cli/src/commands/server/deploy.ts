@@ -551,7 +551,7 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId);
+  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId, undefined, { showAllLogs: opts.debug });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);

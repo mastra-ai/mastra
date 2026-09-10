@@ -616,7 +616,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollDeploy(deployResult.id, token, orgId);
+  const finalStatus = await pollDeploy(deployResult.id, token, orgId, undefined, { showAllLogs: opts.debug });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);

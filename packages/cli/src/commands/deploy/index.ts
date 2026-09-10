@@ -22,7 +22,8 @@ import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import type { DeployLogWriter } from '../../utils/deploy-log-format.js';
 import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
@@ -409,6 +410,11 @@ interface UnifiedDeployStatus {
   error: string | null;
 }
 
+interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+}
+
 /**
  * Poll the net-new env-scoped status endpoint until the deploy reaches a
  * terminal state. Kept inside the deploy command so the unified runtime
@@ -421,6 +427,7 @@ async function streamEnvironmentDeployLogs(
   environmentId: string,
   deployId: string,
   signal: AbortSignal,
+  logWriter: DeployLogWriter,
 ): Promise<void> {
   // Small delay to let the deploy pipeline start before requesting logs
   await new Promise(r => setTimeout(r, 2000));
@@ -467,7 +474,8 @@ async function streamEnvironmentDeployLogs(
         skipNextUrlMeta = false;
         if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
       }
-      await writeBarLine(data);
+      if (signal.aborted) return;
+      logWriter.write(data);
     }
   }
 }
@@ -479,6 +487,7 @@ async function pollEnvironmentDeploy(
   environmentId: string,
   deployId: string,
   maxWaitMs = 600_000,
+  options: PollDeployOptions = {},
 ): Promise<UnifiedDeployStatus> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
   const url = `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deployId}`;
@@ -487,7 +496,16 @@ async function pollEnvironmentDeploy(
 
   // Stream logs in parallel with status polling
   const logAbort = new AbortController();
-  streamEnvironmentDeployLogs(currentToken, orgId, projectId, environmentId, deployId, logAbort.signal).catch(() => {});
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
+  streamEnvironmentDeployLogs(
+    currentToken,
+    orgId,
+    projectId,
+    environmentId,
+    deployId,
+    logAbort.signal,
+    logWriter,
+  ).catch(() => {});
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -522,7 +540,11 @@ async function pollEnvironmentDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Stop streaming and draw any lines still queued for the scrolling
+    // window so nothing prints after the outcome message. The stream task
+    // checks the signal before every write, so nothing lands after flush.
     logAbort.abort();
+    logWriter.flush();
   }
 }
 
@@ -913,7 +935,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   await rm(zipPath, { force: true });
 
   p.log.step('Waiting for deploy to finish...');
-  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
+  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id, undefined, {
+    showAllLogs: opts.debug,
+  });
 
   if (finalStatus.status === 'running') {
     const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);

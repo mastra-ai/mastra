@@ -1,4 +1,5 @@
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import type { DeployLogWriter } from '../../utils/deploy-log-format.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
@@ -206,7 +207,18 @@ export async function uploadDeploy(
   return { id, status };
 }
 
-async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
+export interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+}
+
+async function streamDeployLogs(
+  deployId: string,
+  token: string,
+  orgId: string,
+  signal: AbortSignal,
+  logWriter: DeployLogWriter,
+): Promise<void> {
   // Small delay to let the deploy pipeline start before requesting logs
   await new Promise(r => setTimeout(r, 2000));
 
@@ -247,7 +259,8 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
           skipNextUrlMeta = false;
           if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
         }
-        await writeBarLine(data);
+        if (signal.aborted) return;
+        logWriter.write(data);
       }
     }
   }
@@ -258,6 +271,7 @@ export async function pollDeploy(
   token: string,
   orgId: string,
   maxWaitMs = 600000,
+  options: PollDeployOptions = {},
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
@@ -265,7 +279,8 @@ export async function pollDeploy(
 
   // Start streaming logs in the background via SSE
   const logAbort = new AbortController();
-  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
+  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal, logWriter).catch(() => {});
 
   let client = createApiClient(currentToken, orgId);
 
@@ -303,6 +318,10 @@ export async function pollDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Stop streaming and draw any lines still queued for the scrolling
+    // window so nothing prints after the outcome message. The stream task
+    // checks the signal before every write, so nothing lands after flush.
     logAbort.abort();
+    logWriter.flush();
   }
 }

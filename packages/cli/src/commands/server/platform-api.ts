@@ -1,4 +1,4 @@
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import {
@@ -191,11 +191,17 @@ export async function uploadServerDeploy(
   return { id, status };
 }
 
+export interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+}
+
 export async function pollServerDeploy(
   deployId: string,
   token: string,
   orgId: string,
   maxWaitMs = 600000, // 10 minutes — server builds take longer
+  options: PollDeployOptions = {},
 ): Promise<ServerDeployStatus> {
   const start = Date.now();
   let lastStatus = '';
@@ -205,7 +211,7 @@ export async function pollServerDeploy(
 
   // Poll for build + deploy logs in the background
   const logAbort = new AbortController();
-  pollServerLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+  const logsTask = pollServerLogs(deployId, currentToken, orgId, logAbort.signal, options).catch(() => {});
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -240,7 +246,10 @@ export async function pollServerDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Stop polling, let the log task fetch the final lines and flush them
+    // so nothing prints after the outcome message.
     logAbort.abort();
+    await logsTask;
   }
 }
 
@@ -401,22 +410,55 @@ export async function restartServerProject(token: string, orgId: string, project
   );
 }
 
+/** Sleep that returns early when the signal aborts. */
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+const SERVER_LOG_POLL_INTERVAL_MS = 2000;
+const FINAL_LOG_FETCH_TIMEOUT_MS = 3000;
+
 /**
  * Poll the server deploy logs endpoint and print new log lines.
  * Server deploys don't have SSE streaming — we poll the JSON endpoint.
+ * After the signal aborts (deploy reached a terminal state) the logs are
+ * fetched once more so the closing lines are not lost.
  */
-async function pollServerLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
-  await new Promise(r => setTimeout(r, 3000));
+async function pollServerLogs(
+  deployId: string,
+  token: string,
+  orgId: string,
+  signal: AbortSignal,
+  options: PollDeployOptions = {},
+): Promise<void> {
+  await abortableDelay(3000, signal);
 
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs });
   let printedBuild = 0;
   let printedDeploy = 0;
   let currentToken = token;
   let client = createApiClient(currentToken, orgId);
+  let finalFetchDone = false;
 
-  while (!signal.aborted) {
+  while (!finalFetchDone) {
+    if (signal.aborted) finalFetchDone = true;
     try {
       const { data, response } = await client.GET('/v1/server/deploys/{id}/logs', {
         params: { path: { id: deployId } },
+        // The closing fetch runs after the deploy finished; do not let a slow
+        // response hold up the outcome message.
+        ...(finalFetchDone ? { signal: AbortSignal.timeout(FINAL_LOG_FETCH_TIMEOUT_MS) } : {}),
       });
 
       if (response.status === 401) {
@@ -426,22 +468,18 @@ async function pollServerLogs(deployId: string, token: string, orgId: string, si
       }
 
       if (data) {
-        const newBuild = data.buildLogs.slice(printedBuild);
-        for (const line of newBuild) {
-          await writeBarLine(line);
-        }
+        logWriter.write(...data.buildLogs.slice(printedBuild));
         printedBuild = data.buildLogs.length;
 
-        const newDeploy = data.deployLogs.slice(printedDeploy);
-        for (const line of newDeploy) {
-          await writeBarLine(line);
-        }
+        logWriter.write(...data.deployLogs.slice(printedDeploy));
         printedDeploy = data.deployLogs.length;
       }
     } catch {
       // Ignore errors during log polling — deploy status polling is the source of truth
     }
 
-    await new Promise(r => setTimeout(r, 5000));
+    if (!finalFetchDone) await abortableDelay(SERVER_LOG_POLL_INTERVAL_MS, signal);
   }
+
+  logWriter.flush();
 }
