@@ -974,7 +974,7 @@ export const useChat = ({
                   ...message.content.metadata,
                   deliveryState,
                   deliveryRunId: result.runId,
-                  status: deliveryState === 'failed' ? undefined : message.content.metadata.status,
+                  status: deliveryState === 'failed' ? undefined : message.content.metadata?.status,
                 },
               },
             };
