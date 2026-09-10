@@ -67,10 +67,13 @@ function foldedPersisted(chunks: Chunk[]): MastraMessagePart[] {
 }
 
 describe('the live and the persisted message agree on their spans', () => {
-  it('draws the same text and reasoning parts from one chunk log', async () => {
+  it('draws the same text and reasoning parts from one chunk log, provider metadata aside', async () => {
     const live = spanPartsOf(await foldedLive(CHUNKS));
+    const persisted = spanPartsOf(foldedPersisted(CHUNKS));
     expect(live).toHaveLength(7);
-    expect(live).toEqual(spanPartsOf(foldedPersisted(CHUNKS)));
+    expect(live).toEqual(persisted.map(part => ({ ...part, providerMetadata: undefined })));
+    expect(persisted.some(part => part.providerMetadata)).toBe(true);
+    expect(live.every(part => part.providerMetadata === undefined)).toBe(true);
   });
 
   it('keeps a step reusing a block id out of the earlier part', async () => {

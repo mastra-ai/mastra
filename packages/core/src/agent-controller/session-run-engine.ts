@@ -296,6 +296,10 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
+  private isCurrentMessageObserved(state: StreamState): boolean {
+    return this.hasCurrentMessageContent(state) || state.messageIdObserved;
+  }
+
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -312,7 +316,7 @@ export class SessionRunEngine {
   }
 
   private finishCurrentMessageAndRotate(state: StreamState): void {
-    if (!this.hasCurrentMessageContent(state)) return;
+    if (!this.isCurrentMessageObserved(state)) return;
     this.setStopReason(state.currentMessage, 'complete');
     this.#session.emit({ type: 'message_end', message: state.currentMessage });
     state.lastFinishedMessage = state.currentMessage;
@@ -327,7 +331,7 @@ export class SessionRunEngine {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
       isSuspended: false,
-      spans: new MessagePartSpans(),
+      spans: new MessagePartSpans({ providerMetadata: false }),
       messageIdObserved: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
@@ -526,7 +530,7 @@ export class SessionRunEngine {
         }
         state.completedToolPrelude = false;
         state.offeredResponseIds.add(messageId);
-        if (!this.hasCurrentMessageContent(state) && !state.messageIdObserved) {
+        if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
         break;
@@ -1181,7 +1185,7 @@ export class SessionRunEngine {
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
-    if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
+    if (this.isCurrentMessageObserved(state) || !state.lastFinishedMessage) {
       this.#session.emit({ type: 'message_end', message: state.currentMessage });
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
     }

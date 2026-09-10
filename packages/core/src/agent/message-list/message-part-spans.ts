@@ -52,10 +52,15 @@ function emptyReasoningPart(providerMetadata: MastraProviderMetadata | undefined
  * append a later step into an earlier part.
  */
 export class MessagePartSpans {
+  readonly #carriesProviderMetadata: boolean;
   #textParts = new Map<string, TextPart>();
   #reasoningParts = new Map<string, ReasoningPart>();
   #textMetadata = new Map<string, MastraProviderMetadata | undefined>();
   #reasoningMetadata = new Map<string, MastraProviderMetadata | undefined>();
+
+  constructor({ providerMetadata = true }: { providerMetadata?: boolean } = {}) {
+    this.#carriesProviderMetadata = providerMetadata;
+  }
 
   clear(): void {
     this.#textParts.clear();
@@ -74,13 +79,14 @@ export class MessagePartSpans {
   }
 
   fold(parts: MastraMessagePart[], chunk: SpanChunk): FoldedSpan | undefined {
+    const providerMetadata = this.#carriesProviderMetadata ? chunk.payload.providerMetadata : undefined;
     switch (chunk.type) {
       case 'text-start':
-        this.#textMetadata.set(chunk.payload.id, chunk.payload.providerMetadata);
+        this.#textMetadata.set(chunk.payload.id, providerMetadata);
         return undefined;
 
       case 'text-delta': {
-        const { id, text, providerMetadata } = chunk.payload;
+        const { id, text } = chunk.payload;
         const open = this.#textParts.get(id);
         const part = open ?? this.#openTextPart(parts, id, providerMetadata);
         part.text += text;
@@ -89,19 +95,19 @@ export class MessagePartSpans {
       }
 
       case 'text-end': {
-        const { id, providerMetadata } = chunk.payload;
+        const { id } = chunk.payload;
         const part = this.#textParts.get(id);
         this.#textParts.delete(id);
         this.#textMetadata.delete(id);
         if (!part) return undefined;
         if (providerMetadata) part.providerMetadata = providerMetadata;
         if (!part.providerMetadata) delete part.providerMetadata;
-        return { part, created: false };
+        return undefined;
       }
 
       case 'reasoning-start': {
-        const { id, providerMetadata } = chunk.payload;
-        if (!isRedactedMetadata(providerMetadata)) {
+        const { id } = chunk.payload;
+        if (!isRedactedMetadata(chunk.payload.providerMetadata)) {
           this.#reasoningMetadata.set(id, providerMetadata);
           return undefined;
         }
@@ -109,7 +115,7 @@ export class MessagePartSpans {
       }
 
       case 'reasoning-delta': {
-        const { id, text, providerMetadata } = chunk.payload;
+        const { id, text } = chunk.payload;
         const open = this.#reasoningParts.get(id);
         const part = open ?? this.#openReasoningPart(parts, id, providerMetadata);
         part.reasoning = (part.reasoning ?? '') + text;
@@ -120,14 +126,14 @@ export class MessagePartSpans {
       }
 
       case 'reasoning-end': {
-        const { id, providerMetadata } = chunk.payload;
+        const { id } = chunk.payload;
         const open = this.#reasoningParts.get(id);
         const metadata = providerMetadata ?? this.#reasoningMetadata.get(id);
         this.#reasoningParts.delete(id);
         this.#reasoningMetadata.delete(id);
         if (open) {
           if (providerMetadata) open.providerMetadata = providerMetadata;
-          return { part: open, created: false };
+          return undefined;
         }
         // OpenAI needs an item_reference for the tool calls that follow a reasoning span.
         const part = emptyReasoningPart(metadata);
@@ -136,7 +142,7 @@ export class MessagePartSpans {
       }
 
       case 'redacted-reasoning': {
-        const part = redactedReasoningPart(chunk.payload.providerMetadata);
+        const part = redactedReasoningPart(providerMetadata);
         parts.push(part);
         return { part, created: true };
       }
