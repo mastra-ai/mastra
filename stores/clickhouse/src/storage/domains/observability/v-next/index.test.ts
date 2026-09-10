@@ -4316,19 +4316,21 @@ LIMIT 1`,
 
     it('buildRetentionDDL generates tracing TTL for span_events, trace_roots, and trace_branches', () => {
       const stmts = buildRetentionDDL({ tracing: 30 });
-      expect(stmts).toHaveLength(3);
+      expect(stmts).toHaveLength(4);
       expect(stmts[0]).toBe('ALTER TABLE mastra_span_events MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[1]).toBe('ALTER TABLE mastra_trace_roots MODIFY TTL endedAt + INTERVAL 30 DAY');
       expect(stmts[2]).toBe('ALTER TABLE mastra_trace_branches MODIFY TTL endedAt + INTERVAL 30 DAY');
+      expect(stmts[3]).toBe('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 60 DAY');
     });
 
     it('buildRetentionDDL generates per-signal TTL statements', () => {
       const stmts = buildRetentionDDL({ logs: 7, metrics: 14, scores: 90, feedback: 60 });
-      expect(stmts).toHaveLength(4);
+      expect(stmts).toHaveLength(5);
       expect(stmts).toContain('ALTER TABLE mastra_log_events MODIFY TTL timestamp + INTERVAL 7 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_metric_events MODIFY TTL timestamp + INTERVAL 14 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_score_events MODIFY TTL timestamp + INTERVAL 90 DAY');
       expect(stmts).toContain('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 60 DAY');
+      expect(stmts).toContain('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 120 DAY');
     });
 
     it('buildRetentionDDL skips zero, negative, and non-numeric values', () => {
@@ -4339,8 +4341,9 @@ LIMIT 1`,
         scores: undefined,
         feedback: 10,
       } as any);
-      expect(stmts).toHaveLength(1);
+      expect(stmts).toHaveLength(2);
       expect(stmts[0]).toBe('ALTER TABLE mastra_feedback_events MODIFY TTL timestamp + INTERVAL 10 DAY');
+      expect(stmts[1]).toBe('ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 40 DAY');
     });
 
     it('buildRetentionDDL floors fractional days', () => {
@@ -4392,7 +4395,7 @@ LIMIT 1`,
 
     // --- Integration tests: retention defaults and configured TTLs ---
 
-    it('creates score and feedback tables without TTL by default and applies configured retention', async () => {
+    it('creates signal and deletion-request tables without TTL by default and retrofits configured retention', async () => {
       const database = `mastra_retention_${Date.now()}`;
       const connection = {
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -4407,7 +4410,7 @@ LIMIT 1`,
         const storageWithoutRetention = new ObservabilityStorageClickhouseVNext({ client });
         await storageWithoutRetention.init();
 
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS, TABLE_DELETION_REQUESTS]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should not have a default TTL`).not.toContain('TTL');
         }
@@ -4416,13 +4419,14 @@ LIMIT 1`,
           client,
           retention: { scores: 30, feedback: 45 },
         });
-        await storageWithRetention.init();
+        await storageWithRetention.applyRetention();
 
         const expectedTTLs: Record<string, string> = {
           [TABLE_SCORE_EVENTS]: 'timestamp + toIntervalDay(30)',
           [TABLE_FEEDBACK_EVENTS]: 'timestamp + toIntervalDay(45)',
+          [TABLE_DELETION_REQUESTS]: 'requestedAt + toIntervalDay(75)',
         };
-        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS]) {
+        for (const table of [TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS, TABLE_DELETION_REQUESTS]) {
           const result = await client.query({ query: `SHOW CREATE TABLE ${table}`, format: 'TabSeparatedRaw' });
           expect(await result.text(), `${table} should use configured retention`).toContain(expectedTTLs[table]!);
         }
@@ -4448,6 +4452,7 @@ LIMIT 1`,
         'mastra_metric_events',
         'mastra_score_events',
         'mastra_feedback_events',
+        'mastra_deletion_requests',
       ];
 
       try {
@@ -4467,6 +4472,7 @@ LIMIT 1`,
           mastra_metric_events: 'timestamp + toIntervalDay(14)',
           mastra_score_events: 'timestamp + toIntervalDay(90)',
           mastra_feedback_events: 'timestamp + toIntervalDay(60)',
+          mastra_deletion_requests: 'requestedAt + toIntervalDay(120)',
         };
 
         for (const name of signalTables) {

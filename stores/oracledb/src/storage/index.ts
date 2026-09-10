@@ -47,7 +47,7 @@ export class OracleStore extends MastraCompositeStore {
 
   constructor(config: OracleStoreConfig) {
     try {
-      super({ id: config.id, name: 'OracleStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'OracleStore', disableInit: config.disableInit, retention: config.retention });
       this.schemaName = config.schemaName ? normalizeIdentifier(config.schemaName, 'schema name') : undefined;
       this.skipDefaultIndexes = config.skipDefaultIndexes;
       this.indexes = config.indexes;

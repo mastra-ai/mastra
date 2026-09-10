@@ -1,5 +1,5 @@
 import type { AwsCredentialIdentityProvider } from '@aws-sdk/types';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { CreateIndexOptions, RetentionConfig } from '@mastra/core/storage';
 import type { Pool } from 'pg';
 
 /**
@@ -45,6 +45,9 @@ export interface DSQLBaseConfig {
 
   /** Custom index definitions to create */
   indexes?: CreateIndexOptions[];
+
+  /** Opt-in age-based retention policies applied by store.prune(). */
+  retention?: RetentionConfig;
 }
 
 /**

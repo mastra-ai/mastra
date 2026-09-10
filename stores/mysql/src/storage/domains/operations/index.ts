@@ -298,6 +298,27 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
   }
 
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const [result] = await this.pool.execute(
+      `DELETE FROM ${formatTableName(tableName, this.database)} WHERE ${quoteIdentifier(column, 'column name')} < ? ORDER BY ${quoteIdentifier(column, 'column name')} LIMIT ${limit}`,
+      [cutoff],
+    );
+    return Number((result as { affectedRows?: number }).affectedRows ?? 0);
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.pool.execute(`DELETE FROM ${formatTableName(tableName, this.database)}`);

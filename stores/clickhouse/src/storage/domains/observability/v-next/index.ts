@@ -261,6 +261,22 @@ async function filterAppliedRetention(
 }
 
 /**
+ * Applies configured observability TTLs to existing ClickHouse tables.
+ * Statements whose current TTL already matches are skipped.
+ */
+export async function applyClickHouseRetention(args: {
+  client: ClickHouseClient;
+  retention: RetentionConfig;
+  replication?: ClickhouseReplicationConfig;
+}): Promise<readonly RetentionEntry[]> {
+  const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention));
+  for (const entry of pending) {
+    await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
+  }
+  return pending;
+}
+
+/**
  * Reconciles the discovery helper tables with the engine declared in the
  * current DDL. Skips tables that are already on the expected engine or that
  * don't exist yet; in those cases the regular `CREATE TABLE IF NOT EXISTS`
@@ -474,6 +490,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   // Initialization
   // -------------------------------------------------------------------------
 
+  async applyRetention(retention: RetentionConfig = this.#retention ?? {}): Promise<readonly RetentionEntry[]> {
+    return applyClickHouseRetention({
+      client: this.#client,
+      retention,
+      replication: this.#replication,
+    });
+  }
+
   async init(): Promise<void> {
     const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
     if (migrationStatus.needsMigration) {
@@ -547,10 +571,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // metadata version unconditionally, so re-issuing it on every boot is the
       // primary source of replica-catch-up races in deployments with retention.
       if (this.#retention) {
-        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
-        for (const entry of pendingRetention) {
-          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
-        }
+        await this.applyRetention();
       }
 
       // Burn `cursorId = 0` for every delta stream on the `serial` strategy.

@@ -1271,8 +1271,11 @@ export interface RetentionEntry {
   sql: string;
 }
 
+const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
+
 export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
   const entries: RetentionEntry[] = [];
+  const deletionSignalRetentionDays: number[] = [];
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
@@ -1280,6 +1283,9 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
 
     const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
     if (!tables) continue;
+    if (signal === 'tracing' || signal === 'scores' || signal === 'feedback') {
+      deletionSignalRetentionDays.push(safeDays);
+    }
 
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
@@ -1291,6 +1297,16 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
         sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
       });
     }
+  }
+
+  if (deletionSignalRetentionDays.length > 0) {
+    const days = Math.max(...deletionSignalRetentionDays) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
+    entries.push({
+      table: TABLE_DELETION_REQUESTS,
+      column: 'requestedAt',
+      days,
+      sql: `ALTER TABLE ${TABLE_DELETION_REQUESTS} MODIFY TTL requestedAt + INTERVAL ${days} DAY`,
+    });
   }
 
   return entries;

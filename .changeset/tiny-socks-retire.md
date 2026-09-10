@@ -19,7 +19,7 @@ const storage = new DuckDBStore({
       logs: { maxAge: '7d' },
     },
   },
-})
+});
 
-await storage.prune()
+await storage.prune();
 ```
