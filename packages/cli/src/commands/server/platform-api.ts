@@ -38,10 +38,32 @@ export async function fetchServerProjects(token: string, orgId: string): Promise
   return data.projects;
 }
 
-export async function createServerProject(token: string, orgId: string, name: string): Promise<ServerProject> {
+export type ServerProjectRegion = 'eu' | 'us';
+
+export interface CreateServerProjectOptions {
+  /**
+   * Mark the project as a Mastra Factory project. The platform only
+   * provisions factory backing (workspace sandboxes, factory route) for
+   * projects created with this flag; it cannot be set on an existing project
+   * through the unified deploy path.
+   */
+  factoryEnabled?: boolean;
+  region?: ServerProjectRegion;
+}
+
+export async function createServerProject(
+  token: string,
+  orgId: string,
+  name: string,
+  options: CreateServerProjectOptions = {},
+): Promise<ServerProject> {
   const client = createApiClient(token, orgId);
   const { data, error, response } = await client.POST('/v1/server/projects', {
-    body: { name },
+    body: {
+      name,
+      ...(options.factoryEnabled !== undefined ? { factoryEnabled: options.factoryEnabled } : {}),
+      ...(options.region ? { region: options.region } : {}),
+    },
   });
 
   if (error) {
@@ -126,7 +148,17 @@ export async function uploadServerDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { projectName?: string; envVars?: Record<string, string>; disablePlatformObservability?: boolean },
+  meta?: {
+    projectName?: string;
+    envVars?: Record<string, string>;
+    disablePlatformObservability?: boolean;
+    /**
+     * Set for Factory builds. The legacy server deploy route marks the
+     * project as a Factory project and provisions factory backing when it
+     * sees this, including on projects created without the flag.
+     */
+    factoryEnabled?: boolean;
+  },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
@@ -139,6 +171,7 @@ export async function uploadServerDeploy(
       ...(meta?.disablePlatformObservability !== undefined
         ? { disablePlatformObservability: meta.disablePlatformObservability }
         : {}),
+      ...(meta?.factoryEnabled ? { factoryEnabled: true } : {}),
     },
   });
 

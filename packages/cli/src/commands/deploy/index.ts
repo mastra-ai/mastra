@@ -16,14 +16,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { coreFeatures } from '@mastra/core/features';
-import { analyzeEntryProjectType } from '@mastra/deployer/build';
 import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { writeBarLine } from '../../utils/clack-bar.js';
-import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -39,8 +38,10 @@ import {
 } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
+import { createServerProject } from '../server/platform-api.js';
+import type { ServerProjectRegion } from '../server/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
-import { createProject } from '../studio/platform-api.js';
+import { createProject, fetchProjects as fetchStudioProjects } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
@@ -877,6 +878,132 @@ export async function resolveProject(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Project type + project creation                                   */
+/* ------------------------------------------------------------------ */
+
+function toServerProjectRegion(region: string | undefined): ServerProjectRegion | undefined {
+  return region === 'eu' || region === 'us' ? region : undefined;
+}
+
+/**
+ * Create the platform project for a first deploy.
+ *
+ * Factory projects go through the server project endpoint with
+ * `factoryEnabled: true`, the same call `create-factory` makes. The platform
+ * only provisions factory backing (workspace sandboxes, `<slug>.factory.*`
+ * route) for projects created with that flag, and the unified deploy path
+ * has no way to set it afterwards. Everything else keeps using the studio
+ * project endpoint.
+ */
+export async function createDeployProject(
+  token: string,
+  orgId: string,
+  projectName: string,
+  opts: { projectType?: string; region?: string } = {},
+): Promise<{ id: string; name: string; slug: string | null }> {
+  if (opts.projectType === 'factory') {
+    const region = toServerProjectRegion(opts.region);
+    return createServerProject(token, orgId, projectName, {
+      factoryEnabled: true,
+      ...(region ? { region } : {}),
+    });
+  }
+  return createProject(token, orgId, projectName);
+}
+
+/**
+ * Whether an existing project was created as a Factory project. Reads the
+ * studio project list, which is the only CLI-facing endpoint that returns
+ * the flag. `undefined` means it could not be determined (lookup failed or
+ * the project was not in the list), in which case the caller proceeds.
+ */
+export async function lookupProjectFactoryFlag(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<boolean | undefined> {
+  try {
+    const projects = await fetchStudioProjects(token, orgId);
+    const match = projects.find(project => project.id === projectId);
+    return typeof match?.factoryEnabled === 'boolean' ? match.factoryEnabled : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type NonFactoryTargetChoice = 'create' | 'deploy';
+
+/**
+ * A Factory build deployed into a project created without the factory flag
+ * runs as a plain server deployment: no workspace sandboxes, and the
+ * `<slug>.factory.*` route is never registered. The flag cannot be added
+ * afterwards on the unified path, so the useful way out is a new project.
+ * Offer that before touching the environment. Under `--yes` there is nobody
+ * to ask, so warn and keep the requested target.
+ */
+export async function resolveNonFactoryTarget(input: {
+  projectName: string;
+  /** Name for a replacement project; `null` when package.json has no name. */
+  newProjectName: string | null;
+  autoAccept: boolean;
+}): Promise<NonFactoryTargetChoice> {
+  const explanation = [
+    `This directory was scaffolded as a Mastra Factory, but the platform project "${input.projectName}" was created without Factory support, and that can't be added later.`,
+    `Deploying there runs it as a plain server: no workspace sandboxes, and the Factory URL will not work.`,
+  ];
+
+  if (input.autoAccept) {
+    p.log.warn(explanation.join('\n'));
+    return 'deploy';
+  }
+
+  // The explanation rides on the prompt message: clack wraps prompt text to
+  // the terminal width and keeps the guide bar on every line, which `log.*`
+  // does not do.
+  const choice = await p.select({
+    message: [...explanation, 'How do you want to continue?'].join('\n'),
+    options: [
+      ...(input.newProjectName
+        ? [
+            {
+              value: 'create' as const,
+              label: `Create a new Factory project "${input.newProjectName}" and deploy there`,
+              hint: 'recommended',
+            },
+          ]
+        : []),
+      { value: 'deploy' as const, label: `Deploy to "${input.projectName}" anyway as a plain server` },
+      { value: 'cancel' as const, label: 'Cancel' },
+    ],
+  });
+
+  if (p.isCancel(choice) || choice === 'cancel') {
+    p.cancel('Deploy cancelled.');
+    process.exit(0);
+  }
+
+  return choice;
+}
+
+async function promptDeployRegion(): Promise<string> {
+  const selectedRegion = await p.select({
+    message: 'Select a deployment region',
+    initialValue: 'us',
+    options: [
+      { value: 'us', label: 'United States' },
+      { value: 'eu', label: 'Europe' },
+    ],
+  });
+
+  if (p.isCancel(selectedRegion)) {
+    p.cancel('Deploy cancelled.');
+    process.exit(0);
+  }
+
+  return selectedRegion;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
 
@@ -922,21 +1049,7 @@ export async function resolveEnvironment(
 
   let region = requestedRegion;
   if (!region && !autoAccept) {
-    const selectedRegion = await p.select({
-      message: 'Select a deployment region',
-      initialValue: 'us',
-      options: [
-        { value: 'us', label: 'United States' },
-        { value: 'eu', label: 'Europe' },
-      ],
-    });
-
-    if (p.isCancel(selectedRegion)) {
-      p.cancel('Deploy cancelled.');
-      process.exit(0);
-    }
-
-    region = selectedRegion;
+    region = await promptDeployRegion();
   }
 
   return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
@@ -1231,6 +1344,10 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const packageName = getPackageName(targetDir);
   const gitBranch = getGitBranch(targetDir);
   const mastraVersion = getMastraVersion(targetDir);
+  // Detected up front: a new Factory project must be created with the
+  // factory flag, and the build step needs it for Factory UI staleness.
+  const projectType = await detectProjectType(targetDir);
+  const isFactoryProject = projectType === 'factory';
 
   // Step 1: Auth
   const token = await getToken();
@@ -1243,11 +1360,28 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project (does NOT create yet)
-  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
+  let resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
+
+  if (resolution.existing && isFactoryProject) {
+    const targetIsFactory = await lookupProjectFactoryFlag(token, orgId, resolution.projectId);
+    if (targetIsFactory === false) {
+      const choice = await resolveNonFactoryTarget({
+        projectName: resolution.projectName,
+        newProjectName: packageName,
+        autoAccept,
+      });
+      if (choice === 'create' && packageName) {
+        resolution = { existing: false, projectName: packageName };
+      }
+    }
+  }
 
   let projectId: string;
   let projectName: string;
   let projectSlug: string;
+  // Region for a newly created environment. A new Factory project asks for
+  // it once and reuses the answer for both the project and the environment.
+  let requestedRegion = opts.region;
 
   if (resolution.existing) {
     projectId = resolution.projectId;
@@ -1259,7 +1393,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.note(
       [
         `Organization:  ${orgName}`,
-        `Project:       ${projectName} (new)`,
+        `Project:       ${projectName} (new${isFactoryProject ? ' Factory project' : ''})`,
         `Environment:   ${envName}`,
         `Directory:     ${targetDir}`,
         ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
@@ -1279,11 +1413,18 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       }
     }
 
+    if (isFactoryProject && !requestedRegion && !autoAccept) {
+      requestedRegion = await promptDeployRegion();
+    }
+
     // Create the project
-    const project = await createProject(token, orgId, projectName);
+    const project = await createDeployProject(token, orgId, projectName, {
+      projectType,
+      region: requestedRegion,
+    });
     projectId = project.id;
     projectSlug = project.slug ?? project.name;
-    p.log.success(`Created project "${projectName}"`);
+    p.log.success(`Created ${isFactoryProject ? 'Factory ' : ''}project "${projectName}"`);
 
     // Save the project link
     await saveProjectConfig(
@@ -1295,7 +1436,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   // Step 5: Resolve environment (auto-create production if first deploy)
-  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, opts.region);
+  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, requestedRegion);
 
   let environment: Environment;
 
@@ -1361,12 +1502,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // Check build staleness
   const mastraDir = join(targetDir, 'src', 'mastra');
   const outputDirectory = join(targetDir, '.mastra');
-  // Detect project type so staleness hashing includes Factory UI inputs
-  const mastraEntryFile = findMastraEntryFile(mastraDir);
-  let projectType: string | undefined;
-  if (mastraEntryFile) {
-    projectType = await analyzeEntryProjectType(mastraEntryFile);
-  }
+  // Staleness hashing includes Factory UI inputs for factory projects.
   const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
   const workersManifestExists = await hasWorkersManifest(targetDir);
   const workerManifestChecked = await hasWorkerManifestCheck(targetDir);

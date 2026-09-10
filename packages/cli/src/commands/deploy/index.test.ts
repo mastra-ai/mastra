@@ -6,10 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectDatabase } from '../db/platform-api.js';
 
-const { confirmMock, fetchEnvironmentsMock, fetchProjectsMock, selectMock } = vi.hoisted(() => ({
+const {
+  confirmMock,
+  createProjectMock,
+  createServerProjectMock,
+  fetchEnvironmentsMock,
+  fetchProjectsMock,
+  fetchStudioProjectsMock,
+  selectMock,
+} = vi.hoisted(() => ({
   confirmMock: vi.fn(),
+  createProjectMock: vi.fn(),
+  createServerProjectMock: vi.fn(),
   fetchEnvironmentsMock: vi.fn(),
   fetchProjectsMock: vi.fn(),
+  fetchStudioProjectsMock: vi.fn(),
   selectMock: vi.fn(),
 }));
 
@@ -18,6 +29,7 @@ vi.mock('@clack/prompts', () => ({
   select: selectMock,
   isCancel: vi.fn(() => false),
   cancel: vi.fn(),
+  log: { warn: vi.fn(), info: vi.fn(), step: vi.fn(), success: vi.fn() },
 }));
 
 vi.mock('../env/platform-api.js', () => ({
@@ -26,9 +38,21 @@ vi.mock('../env/platform-api.js', () => ({
   createEnvironment: vi.fn(),
 }));
 
+vi.mock('../studio/platform-api.js', () => ({
+  createProject: createProjectMock,
+  fetchProjects: fetchStudioProjectsMock,
+}));
+
+vi.mock('../server/platform-api.js', () => ({
+  createServerProject: createServerProjectMock,
+}));
+
 import {
   applyPlatformWorkersFlagGate,
+  createDeployProject,
   deployBuildNeedsRefresh,
+  lookupProjectFactoryFlag,
+  resolveNonFactoryTarget,
   hasEnabledWorkers,
   hasWorkerManifestCheck,
   renderDeploymentArchitecture,
@@ -73,6 +97,114 @@ describe('project resolution', () => {
       projectName: 'project-1',
       projectSlug: 'project-1',
     });
+  });
+});
+
+describe('project creation', () => {
+  beforeEach(() => {
+    createProjectMock.mockReset();
+    createServerProjectMock.mockReset();
+  });
+
+  it('creates non-factory projects through the studio endpoint', async () => {
+    const project = { id: 'project-1', name: 'App', slug: 'app', organizationId: 'org-1' };
+    createProjectMock.mockResolvedValue(project);
+
+    await expect(createDeployProject('token', 'org-1', 'App', { region: 'eu' })).resolves.toEqual(project);
+
+    expect(createProjectMock).toHaveBeenCalledWith('token', 'org-1', 'App');
+    expect(createServerProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('creates factory projects with the factory flag and region', async () => {
+    const project = { id: 'project-1', name: 'Factory', slug: 'factory', organizationId: 'org-1' };
+    createServerProjectMock.mockResolvedValue(project);
+
+    await expect(
+      createDeployProject('token', 'org-1', 'Factory', { projectType: 'factory', region: 'eu' }),
+    ).resolves.toEqual(project);
+
+    expect(createServerProjectMock).toHaveBeenCalledWith('token', 'org-1', 'Factory', {
+      factoryEnabled: true,
+      region: 'eu',
+    });
+    expect(createProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('omits an unsupported region when creating a factory project', async () => {
+    createServerProjectMock.mockResolvedValue({ id: 'project-1', name: 'Factory', slug: null });
+
+    await createDeployProject('token', 'org-1', 'Factory', { projectType: 'factory', region: 'ap-southeast' });
+
+    expect(createServerProjectMock).toHaveBeenCalledWith('token', 'org-1', 'Factory', { factoryEnabled: true });
+  });
+});
+
+describe('factory target lookup', () => {
+  beforeEach(() => {
+    fetchStudioProjectsMock.mockReset();
+  });
+
+  it('reports whether the selected project was created as a factory project', async () => {
+    fetchStudioProjectsMock.mockResolvedValue([
+      { id: 'project-1', name: 'Plain', slug: 'plain', factoryEnabled: false },
+      { id: 'project-2', name: 'Factory', slug: 'factory', factoryEnabled: true },
+    ]);
+
+    await expect(lookupProjectFactoryFlag('token', 'org-1', 'project-1')).resolves.toBe(false);
+    await expect(lookupProjectFactoryFlag('token', 'org-1', 'project-2')).resolves.toBe(true);
+  });
+
+  it('is undefined when the flag is missing, the project is unknown, or the lookup fails', async () => {
+    fetchStudioProjectsMock.mockResolvedValue([{ id: 'project-1', name: 'Legacy', slug: 'legacy' }]);
+    await expect(lookupProjectFactoryFlag('token', 'org-1', 'project-1')).resolves.toBeUndefined();
+    await expect(lookupProjectFactoryFlag('token', 'org-1', 'project-9')).resolves.toBeUndefined();
+
+    fetchStudioProjectsMock.mockRejectedValue(new Error('temporary API failure'));
+    await expect(lookupProjectFactoryFlag('token', 'org-1', 'project-1')).resolves.toBeUndefined();
+  });
+});
+
+describe('non-factory target choice', () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+  });
+
+  it('offers a replacement Factory project and returns the choice', async () => {
+    selectMock.mockResolvedValue('create');
+
+    await expect(
+      resolveNonFactoryTarget({ projectName: 'primordial-goo', newProjectName: 'primordial-goo', autoAccept: false }),
+    ).resolves.toBe('create');
+
+    const prompt = selectMock.mock.calls[0]![0] as {
+      message: string;
+      options: Array<{ value: string; label: string }>;
+    };
+    expect(prompt.message).toContain('was created without Factory support');
+    expect(prompt.message).toContain('How do you want to continue?');
+    const options = prompt.options;
+    expect(options.map(option => option.value)).toEqual(['create', 'deploy', 'cancel']);
+    expect(options[0]!.label).toContain('Create a new Factory project "primordial-goo"');
+  });
+
+  it('omits the create option when no project name is available', async () => {
+    selectMock.mockResolvedValue('deploy');
+
+    await expect(
+      resolveNonFactoryTarget({ projectName: 'primordial-goo', newProjectName: null, autoAccept: false }),
+    ).resolves.toBe('deploy');
+
+    const options = selectMock.mock.calls[0]![0].options as Array<{ value: string }>;
+    expect(options.map(option => option.value)).toEqual(['deploy', 'cancel']);
+  });
+
+  it('keeps the requested target without prompting under --yes', async () => {
+    await expect(
+      resolveNonFactoryTarget({ projectName: 'primordial-goo', newProjectName: 'primordial-goo', autoAccept: true }),
+    ).resolves.toBe('deploy');
+
+    expect(selectMock).not.toHaveBeenCalled();
   });
 });
 
