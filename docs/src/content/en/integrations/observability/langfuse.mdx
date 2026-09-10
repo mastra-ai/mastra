@@ -213,7 +213,9 @@ Notes:
 
 The exporter maps span metadata to Langfuse sessions using `sessionId`, or `threadId` when `sessionId` is absent or `null`. An explicit empty `sessionId` suppresses this fallback and sends no session ID.
 
-[Observational Memory](/docs/memory/observational-memory) keeps observer and reflector spans in the caller's session, even when child spans arrive before their parents. It preserves the caller span's explicit `sessionId`, including an empty string. Otherwise, it uses the caller span's non-empty `threadId`, falling back to the original request's thread ID. Without either identity, it adds no session ID.
+For [Observational Memory](/docs/memory/observational-memory), the Langfuse exporter keeps observer and reflector spans in the caller's session, even when child spans arrive before their parents. An explicit `sessionId`, including an empty string, takes precedence. Otherwise, the exporter uses the original caller thread carried by Observational Memory before falling back to the span's own `threadId`. Observational Memory captures that caller identity from the caller span's non-empty `threadId`, or the original request's thread ID. Nested observation preserves the outer caller identity.
+
+This thread-to-session fallback is specific to Langfuse. Observational Memory doesn't synthesize generic `sessionId` metadata from a thread ID for other exporters.
 
 Internal observer and reflector execution threads remain separate. Multi-thread observation uses the invoking caller's session, not the first thread in the batch. This session behavior applies regardless of the `bufferOnIdle` setting and doesn't change buffering or span parentage.
 

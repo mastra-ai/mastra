@@ -41,8 +41,8 @@ const baseArgs = {
 
 describe.each(['observer', 'observer-multi-thread', 'reflector'] as const)('%s session correlation', phase => {
   const cases: Array<[string, Record<string, unknown>, unknown, unknown]> = [
-    ['explicit session', { sessionId: 'custom', threadId: 'T' }, 'T', 'custom'],
-    ['empty session suppression', { sessionId: '', threadId: 'T' }, 'T', ''],
+    ['explicit session', { sessionId: 'custom', threadId: 'T' }, 'T', 'T'],
+    ['empty session suppression', { sessionId: '', threadId: 'T' }, 'T', 'T'],
     ['null session', { sessionId: null, threadId: 'T' }, 'T', 'T'],
     ['undefined session', { sessionId: undefined, threadId: 'T' }, 'T', 'T'],
     ['absent session', { threadId: 'T' }, 'T', 'T'],
@@ -51,11 +51,11 @@ describe.each(['observer', 'observer-multi-thread', 'reflector'] as const)('%s s
     ['empty caller thread', { threadId: '' }, 'T', 'T'],
     ['no identity', {}, undefined, undefined],
     ['empty request thread', {}, '', undefined],
-    ['false session unchanged', { sessionId: false, threadId: 'T' }, 'T', false],
-    ['zero session unchanged', { sessionId: 0, threadId: 'T' }, 'T', 0],
-    ['object session unchanged', { sessionId: { malformed: true } }, 'T', { malformed: true }],
-    ['array session unchanged', { sessionId: ['malformed'] }, 'T', ['malformed']],
-    ['numeric session unchanged', { sessionId: 42 }, 'T', 42],
+    ['false session unchanged', { sessionId: false, threadId: 'T' }, 'T', 'T'],
+    ['zero session unchanged', { sessionId: 0, threadId: 'T' }, 'T', 'T'],
+    ['object session unchanged', { sessionId: { malformed: true } }, 'T', 'T'],
+    ['array session unchanged', { sessionId: ['malformed'] }, 'T', 'T'],
+    ['numeric session unchanged', { sessionId: 42 }, 'T', 'T'],
     ['false caller thread ignored', { threadId: false }, 'T', 'T'],
     ['numeric caller thread ignored', { threadId: 42 }, 'T', 'T'],
     ['object caller thread ignored', { threadId: {} }, 'T', 'T'],
@@ -63,7 +63,7 @@ describe.each(['observer', 'observer-multi-thread', 'reflector'] as const)('%s s
     ['malformed request ignored', {}, 42, undefined],
   ];
 
-  it.each(cases)('%s', async (_name, metadata, requestThread, expected) => {
+  it.each(cases)('%s', async (_name, metadata, requestThread, expectedThread) => {
     const { child, parent, observabilityContext } = createFakeSpanTree(metadata);
     observabilityContext.tracing = observabilityContext.tracingContext;
     const before = { ...observabilityContext };
@@ -98,12 +98,46 @@ describe.each(['observer', 'observer-multi-thread', 'reflector'] as const)('%s s
     checkCaller();
     expect(parent.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: expected === undefined ? wrapperMetadata : { ...wrapperMetadata, sessionId: expected },
+        metadata:
+          expectedThread === undefined
+            ? wrapperMetadata
+            : { ...wrapperMetadata, __mastraObservationalMemoryCallerThreadId: expectedThread },
       }),
     );
     expect(wrapperMetadata).toEqual({ diagnostic: 'preserved' });
     expect(child.end).toHaveBeenCalledTimes(1);
     expect(child.error).not.toHaveBeenCalled();
+  });
+
+  it('preserves the outer caller hint through nested OM and overrides wrapper collisions', async () => {
+    const { parent, observabilityContext } = createFakeSpanTree({
+      threadId: 'T-observer',
+      __mastraObservationalMemoryCallerThreadId: 'T',
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'T-observer');
+    await withOmTracingSpan({
+      ...baseArgs,
+      phase,
+      observabilityContext,
+      requestContext,
+      metadata: { __mastraObservationalMemoryCallerThreadId: 'collision' },
+      callback: async () => {},
+    });
+    expect(parent.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { __mastraObservationalMemoryCallerThreadId: 'T' } }),
+    );
+  });
+
+  it.each([false, 0, {}, [], ''])('ignores malformed inherited hints: %j', async hint => {
+    const { parent, observabilityContext } = createFakeSpanTree({
+      threadId: 'T',
+      __mastraObservationalMemoryCallerThreadId: hint,
+    });
+    await withOmTracingSpan({ ...baseArgs, phase, observabilityContext, callback: async () => {} });
+    expect(parent.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { __mastraObservationalMemoryCallerThreadId: 'T' } }),
+    );
   });
 
   it('does not create a root just to attach a request session', async () => {
@@ -158,7 +192,7 @@ describe.each(['observer', 'observer-multi-thread', 'reflector'] as const)('%s s
       callback: async () => {},
     });
     expect(canonical.parent.createChildSpan).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: { sessionId: 'canonical' } }),
+      expect.objectContaining({ metadata: { __mastraObservationalMemoryCallerThreadId: 'canonical' } }),
     );
     expect(legacy.parent.createChildSpan).not.toHaveBeenCalled();
     expect(canonical.observabilityContext.tracing).toBe(legacy.observabilityContext.tracingContext);

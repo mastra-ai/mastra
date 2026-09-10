@@ -2,5 +2,5 @@
 '@mastra/memory': patch
 ---
 
-- Fixed Langfuse session correlation for Observational Memory observer and reflector traces, including spans received before their parent spans.
+- Preserved caller thread identity in Observational Memory traces without assigning a session ID for other observability integrations.
 - Preserved the supplied observability context when explicitly triggering asynchronous observation buffering.
