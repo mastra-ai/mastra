@@ -992,6 +992,30 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
+/**
+ * Whether the incoming snapshot keeps every text part already drawn. Text is
+ * compared positionally among text parts only: tool parts are excluded because
+ * `preserveRuntimeToolParts` re-attaches the ones a snapshot omits,
+ * `reconcileToolResults` owns their state, and `withoutToolPartsDrawnElsewhere`
+ * means a snapshot legitimately carries fewer tool parts than are on screen.
+ */
+function textCovers(onScreen: MastraMessagePart[], incoming: MastraMessagePart[]): boolean {
+  const drawn = onScreen.flatMap(part => (part.type === 'text' ? [part.text] : []));
+  const next = incoming.flatMap(part => (part.type === 'text' ? [part.text] : []));
+  if (next.length < drawn.length) return false;
+  return drawn.every((text, index) => next[index].startsWith(text));
+}
+
+/**
+ * Fold a streamed or sealed message into the timeline.
+ *
+ * `message_*` events carry the full cumulative snapshot of the run's current
+ * message, so a snapshot that arrives stale or out of order would otherwise
+ * roll a bubble back to a shorter state. Drawn text never regresses: a snapshot
+ * that fails `textCovers` keeps the parts already on screen. Everything else it
+ * carries still applies — sealing (`streaming`), `content.metadata` such as
+ * `stopReason`, and the tool states `reconcileToolResults` folds in below.
+ */
 function upsertMessage(
   state: TranscriptState,
   message: MastraDBMessage,
@@ -1014,10 +1038,29 @@ function upsertMessage(
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
+  const losesDrawnText =
+    prevEntry !== undefined &&
+    message.role === 'assistant' &&
+    !textCovers(prevEntry.message.content.parts, canonicalEntry.message.content.parts);
   // An entry the reader is already watching keeps the identity it was drawn with:
   // adopting the server's id here remounts the row and everything it holds — open
   // cards, group state, its entrance. The canonical id still matches on lookup.
-  const entry = prevEntry ? { ...canonicalEntry, id: prevEntry.id } : canonicalEntry;
+  // Only the parts are held back when the snapshot would lose drawn text, so a
+  // shorter `message_end` still seals the entry and delivers its metadata.
+  const entry = prevEntry
+    ? {
+        ...canonicalEntry,
+        id: prevEntry.id,
+        ...(losesDrawnText
+          ? {
+              message: {
+                ...canonicalEntry.message,
+                content: { ...canonicalEntry.message.content, parts: prevEntry.message.content.parts },
+              },
+            }
+          : {}),
+      }
+    : canonicalEntry;
 
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;

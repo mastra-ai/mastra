@@ -5,8 +5,9 @@ import { createInitialTranscript, initialTranscript, transcriptReducer } from '.
 
 type MessageEntryFixture = {
   kind: 'message';
-  message: { content: { parts: unknown[] } };
+  message: { content: { parts: unknown[]; metadata?: Record<string, unknown> } };
   runtimeTools?: Record<string, { createdAt?: number }>;
+  streaming?: boolean;
 };
 
 function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
@@ -642,6 +643,97 @@ describe('transcript reducer message entries', () => {
     expect(state.entries).toHaveLength(2);
     expect(messageParts(state.entries[0])).toEqual(first.content.parts);
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Let me check the tests too' }]);
+  });
+
+  it('ignores a stale shorter snapshot for a message already drawn', () => {
+    // message_* events carry the full cumulative snapshot of the run's current
+    // message, so one that arrives stale or out of order would roll the bubble
+    // back to a shorter state under the reader.
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Hel' }]) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Hello world, long answer' }]),
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Hel' }]) },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Hello world, long answer' }]);
+  });
+
+  it('keeps a drawn text part a same-id snapshot omits', () => {
+    const drawnParts: MastraMessagePart[] = [
+      { type: 'text', text: 'step one' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'tool-1', toolName: 'view', args: {}, result: 'ok' },
+      },
+      { type: 'text', text: 'step two' },
+    ];
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-1', 'assistant', drawnParts) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'step one' }]),
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual(drawnParts);
+  });
+
+  it('still applies a snapshot that extends the drawn text', () => {
+    // The guard must not block the ordinary streaming case it sits in front of.
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Hel' }]) },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_update', message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Hello' }]) },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Hello' }]);
+  });
+
+  it('seals the entry and keeps metadata even when the snapshot is shorter', () => {
+    // Only the parts are held back: a shorter message_end still has to close the
+    // entry and deliver the stop reason it carries.
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'full answer' }]),
+      },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_end',
+        message: {
+          id: 'turn-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'full' }], metadata: { stopReason: 'complete' } },
+        },
+      },
+    });
+
+    const entry = state.entries[0];
+    if (!isMessageEntry(entry)) throw new Error('expected a message entry');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'full answer' }]);
+    expect(entry.streaming).toBe(false);
+    expect(entry.message.content.metadata).toEqual({ stopReason: 'complete' });
   });
 });
 
