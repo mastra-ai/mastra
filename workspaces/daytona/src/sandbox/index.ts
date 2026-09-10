@@ -992,13 +992,15 @@ export class DaytonaSandbox extends MastraSandbox {
     // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
     // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
     const quotedPath = shellQuote(mountPath);
+    // Validation rejects repeated slashes, so at most one trailing slash remains.
+    const normalizedMountPath = mountPath.endsWith('/') ? mountPath.slice(0, -1) : mountPath;
     await runCommand(
       sandbox,
       `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
         `sudo umount -l ${quotedPath} 2>/dev/null; ` +
         // Dead FUSE mounts can make mountpoint fail with ENOTCONN. Read the kernel table
         // instead so the existing move-aside fallback also handles disconnected mounts.
-        `grep -Fq -- ${shellQuote(` ${mountPath.replace(/\/+$/, '') || '/'} `)} /proc/mounts && ` +
+        `grep -Fq -- ${shellQuote(` ${normalizedMountPath || '/'} `)} /proc/mounts && ` +
         `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
       { timeout: MOUNT_COMMAND_TIMEOUT_MS },
     );

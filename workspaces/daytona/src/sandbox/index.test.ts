@@ -842,6 +842,28 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Mount Configuration', () => {
+    it.each(['/data/trailing', '/data/trailing/'])(
+      'matches kernel mount paths without a trailing slash: %s',
+      async path => {
+        const sandbox = new DaytonaSandbox();
+        await sandbox._start();
+        mockSandbox.process.executeCommand.mockClear();
+        await sandbox.unmount(path);
+        expect(
+          mockSandbox.process.executeCommand.mock.calls.some(([command]) =>
+            command.includes("grep -Fq -- ' /data/trailing ' /proc/mounts"),
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('rejects long repeated-slash paths before running unmount commands', async () => {
+      const sandbox = new DaytonaSandbox();
+      mockSandbox.process.executeCommand.mockClear();
+      await expect(sandbox.unmount(`/data/${'/'.repeat(100_000)}end`)).rejects.toThrow('Path traversal segments');
+      expect(mockSandbox.process.executeCommand).not.toHaveBeenCalled();
+    });
+
     it('checks persisted S3 credentials after unmount even without an in-memory mount entry', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();
