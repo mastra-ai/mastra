@@ -284,18 +284,32 @@ describe('ThreadViewByTrace', () => {
   describe('highlighting the spans behind a message', () => {
     const spanLabel = (name: string) => screen.getByLabelText(`View details for span ${name}`);
 
-    it('opening a tool call fades the other spans of that trace and opens the tool span', async () => {
+    it('expanding a tool call does not touch the timeline', async () => {
       installHandlers();
       const { queryClient } = renderView();
 
-      // The tool part of trace-a is backed by the root span and its tool call.
       const [toolBadge] = await screen.findAllByTestId('tool-badge');
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
-      const toolTrigger = within(toolBadge).getAllByRole('button')[0]!;
+      await screen.findByLabelText('View details for span Recipe lookup');
+
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]!);
+
+      expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
+      expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it("the tool call's highlight action fades the other spans of that trace and opens the tool span", async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+
+      // trace-a renders user, tool, assistant; the tool part is backed by the root span and its tool call.
+      const [, toolAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
+      if (!toolAction) throw new Error('expected a highlight action on the tool call');
       await screen.findByLabelText('View details for span Recipe lookup');
 
       expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30');
-      fireEvent.click(toolTrigger);
+      fireEvent.click(toolAction);
 
       // Nothing to fade in trace-a for the tool part (all its spans are featured)...
       expect(spanLabel('Chef agent run').className).not.toContain('opacity-30');
@@ -315,7 +329,7 @@ describe('ThreadViewByTrace', () => {
       installHandlers();
       const { queryClient } = renderView();
 
-      const [, assistantAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
+      const [, , assistantAction] = await screen.findAllByRole('button', { name: 'Highlight spans' });
       if (!assistantAction) throw new Error('expected a highlight action on the text reply');
       await screen.findByLabelText('View details for span Recipe lookup');
 
