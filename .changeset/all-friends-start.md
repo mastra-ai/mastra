@@ -23,14 +23,3 @@ const mastra = new Mastra({
 ```
 
 The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
-
-Also exported `validateToolInput` from `@mastra/core/tools` (alongside the existing `validateToolOutput`) for validating a value against a tool's input schema:
-
-```ts
-import { validateToolInput } from '@mastra/core/tools';
-
-const { data, error } = validateToolInput(myTool.inputSchema, input, myTool.id);
-if (error) {
-  // error is a ValidationError describing the schema mismatch
-}
-```
