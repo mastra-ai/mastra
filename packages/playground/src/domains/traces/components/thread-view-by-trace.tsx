@@ -135,7 +135,8 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
     if (!spanId) setHighlight(null);
   };
 
-  // Only fades the other spans in the timeline; opening a span's detail panel stays a separate,
+  // Fades the other spans and brings the last (most specific, deepest) span into view, since it is
+  // the one most likely to sit below the fold. Opening a span's detail panel stays a separate,
   // deliberate click so highlighting does not hijack the side panel.
   const highlightSpans = (traceId: string, spanIds: string[]) => {
     if (spanIds.length === 0) {
@@ -176,6 +177,7 @@ function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadVi
               isLast={index === traces.length - 1}
               selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
+              revealSpanId={highlight?.traceId === trace.traceId ? highlight.spanIds.at(-1) : undefined}
               isCurrent={currentTraceId === trace.traceId}
               isExpanded={expandedTraceIds.has(trace.traceId)}
               isAnchor={anchorTraceId === trace.traceId}
@@ -205,6 +207,7 @@ interface TraceThreadRowProps {
   traceId: string;
   selectedSpanId?: string;
   featuredSpanIds?: string[];
+  revealSpanId?: string;
   isCurrent: boolean;
   isExpanded: boolean;
   /** The oldest trace; its timeline column gets the rounded top edge of the list. */
@@ -227,6 +230,7 @@ function TraceThreadRow({
   traceId,
   selectedSpanId,
   featuredSpanIds,
+  revealSpanId,
   isCurrent,
   isExpanded,
   isFirst,
@@ -331,6 +335,7 @@ function TraceThreadRow({
                 hierarchicalSpans={hierarchicalSpans}
                 selectedSpanId={selectedSpanId}
                 featuredSpanIds={featuredSpanIds}
+                revealSpanId={revealSpanId}
                 onSpanClick={id => onSpanSelect(selectedSpanId === id ? undefined : id)}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}

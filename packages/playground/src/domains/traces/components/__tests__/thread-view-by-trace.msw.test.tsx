@@ -324,6 +324,10 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
       expect(spanLabel('Recipe lookup').className).not.toContain('bg-surface4');
       expect(spanLabel('Chef agent run').className).not.toContain('bg-surface4');
+      // The most specific span behind the message (last id, deepest in the tree) is brought into
+      // view, since it is the one most likely to sit below the fold — not the root.
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.instances[0]).toBe(screen.getByLabelText('View details for span Recipe lookup'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -339,6 +343,9 @@ describe('ThreadViewByTrace', () => {
 
       expect(spanLabel('Chef agent run').className).not.toContain('opacity-30');
       expect(spanLabel('Recipe lookup').className).toContain('opacity-30');
+      // The root is the only span behind the reply, so it is the one revealed.
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.instances[0]).toBe(screen.getByLabelText('View details for span Chef agent run'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
