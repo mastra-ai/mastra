@@ -37,13 +37,13 @@ const TableCaption = React.forwardRef<HTMLTableCaptionElement, React.HTMLAttribu
 
 interface ModelData {
   model: string
-  imageInput: boolean
-  objectGeneration: boolean
-  toolUsage: boolean
-  toolStreaming: boolean
-  audioInput?: boolean
-  videoInput?: boolean
-  reasoning?: boolean
+  imageInput: boolean | null
+  objectGeneration?: boolean
+  toolUsage: boolean | null
+  toolStreaming?: boolean
+  audioInput?: boolean | null
+  videoInput?: boolean | null
+  reasoning?: boolean | null
   contextWindow?: number | null
   maxOutput?: number | null
   inputCost?: number | null
@@ -53,9 +53,19 @@ interface ModelData {
 interface ProviderModelsTableProps {
   models: ModelData[]
   totalCount?: number
+  catalogOnly?: boolean
 }
 
-function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
+function Capability({ value }: { value: boolean | null | undefined }) {
+  if (value === null || value === undefined) return <span aria-label="Unknown">—</span>
+  return value ? (
+    <Check aria-label="Supported" className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
+  ) : (
+    <Cross aria-label="Unsupported" className="inline-block h-[18px] w-[18px]" />
+  )
+}
+
+function ProviderModelsTable({ models, totalCount, catalogOnly = false }: ProviderModelsTableProps) {
   // Check if we have extended data
   const hasExtendedData = models.some(
     m => m.audioInput || m.videoInput || m.reasoning || m.contextWindow || m.inputCost,
@@ -106,41 +116,21 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
             </TableCell>
             {hasExtendedData && <TableCell>{formatTokens(model.contextWindow)}</TableCell>}
             <TableCell className="text-center">
-              {model.toolUsage ? (
-                <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
-              ) : (
-                <Cross className="inline-block h-[18px] w-[18px]" />
-              )}
+              <Capability value={model.toolUsage} />
             </TableCell>
             {hasExtendedData && (
               <>
                 <TableCell className="text-center">
-                  {model.reasoning ? (
-                    <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
-                  ) : (
-                    <Cross className="inline-block h-[18px] w-[18px]" />
-                  )}
+                  <Capability value={model.reasoning} />
                 </TableCell>
                 <TableCell className="text-center">
-                  {model.imageInput ? (
-                    <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
-                  ) : (
-                    <Cross className="inline-block h-[18px] w-[18px]" />
-                  )}
+                  <Capability value={model.imageInput} />
                 </TableCell>
                 <TableCell className="text-center">
-                  {model.audioInput ? (
-                    <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
-                  ) : (
-                    <Cross className="inline-block h-[18px] w-[18px]" />
-                  )}
+                  <Capability value={model.audioInput} />
                 </TableCell>
                 <TableCell className="text-center">
-                  {model.videoInput ? (
-                    <Check className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
-                  ) : (
-                    <Cross className="inline-block h-[18px] w-[18px]" />
-                  )}
+                  <Capability value={model.videoInput} />
                 </TableCell>
                 <TableCell>{formatCost(model.inputCost)}</TableCell>
                 <TableCell>{formatCost(model.outputCost)}</TableCell>
@@ -150,9 +140,11 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
         ))}
       </TableBody>
       <TableCaption className="my-4 caption-bottom">
-        {totalCount && models.length < totalCount
-          ? `Showing ${models.length} of ${totalCount} available models`
-          : `${models.length} available model${models.length !== 1 ? 's' : ''}`}
+        {catalogOnly
+          ? `${models.length} catalog ${models.length === 1 ? 'entry' : 'entries'}; availability depends on account eligibility`
+          : totalCount && models.length < totalCount
+            ? `Showing ${models.length} of ${totalCount} available models`
+            : `${models.length} available model${models.length !== 1 ? 's' : ''}`}
       </TableCaption>
     </Table>
   )

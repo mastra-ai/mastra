@@ -721,6 +721,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/opencode-console',
+          label: 'OpenCode Console',
+        },
+        {
+          type: 'doc',
           id: 'providers/opencode-go',
           label: 'OpenCode Go',
         },

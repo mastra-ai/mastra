@@ -24,6 +24,12 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import {
+  OPENCODE_CONSOLE_PROVIDER_ID,
+  buildOpenCodeConsoleProvider,
+  createOpenCodeConsoleFetch,
+  fetchOpenCodeConsoleModelIds,
+} from './opencode-console.js';
 
 interface ModelsDevModelInfo {
   id: string;
@@ -264,6 +270,36 @@ export class ModelsDevGateway extends MastraModelGateway {
       }
     }
 
+    // OpenCode Console is not in models.dev yet. Keep a native `opencode-console/*`
+    // provider so agents can use the Console inference API until the catalog ships it.
+    if (!providerConfigs[OPENCODE_CONSOLE_PROVIDER_ID]) {
+      const consoleProvider = buildOpenCodeConsoleProvider({
+        modelIds: await fetchOpenCodeConsoleModelIds(),
+        attachmentModels: [
+          ...(this.attachmentCapabilities.opencode ?? []),
+          ...(this.attachmentCapabilities['opencode-go'] ?? []),
+        ],
+        temperatureModels: [
+          ...(this.temperatureCapabilities.opencode ?? []),
+          ...(this.temperatureCapabilities['opencode-go'] ?? []),
+        ],
+        structuredOutputModels: [
+          ...(this.structuredOutputCapabilities.opencode ?? []),
+          ...(this.structuredOutputCapabilities['opencode-go'] ?? []),
+        ],
+      });
+      providerConfigs[OPENCODE_CONSOLE_PROVIDER_ID] = consoleProvider.config;
+      if (consoleProvider.attachment.length > 0) {
+        this.attachmentCapabilities[OPENCODE_CONSOLE_PROVIDER_ID] = consoleProvider.attachment;
+      }
+      if (consoleProvider.temperature.length > 0) {
+        this.temperatureCapabilities[OPENCODE_CONSOLE_PROVIDER_ID] = consoleProvider.temperature;
+      }
+      if (consoleProvider.structuredOutput.length > 0) {
+        this.structuredOutputCapabilities[OPENCODE_CONSOLE_PROVIDER_ID] = consoleProvider.structuredOutput;
+      }
+    }
+
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
@@ -397,6 +433,8 @@ export class ModelsDevGateway extends MastraModelGateway {
         // A per-model override wins over the provider default.
         const config = this.providerConfigs[providerId];
         const npm = override?.npm ?? config?.npm;
+        const consoleOptions =
+          providerId === OPENCODE_CONSOLE_PROVIDER_ID ? { fetch: createOpenCodeConsoleFetch(apiKey) } : {};
 
         // Pattern match for any alibaba variant (alibaba, alibaba-cn, alibaba-coding-plan, etc.)
         if (providerId.includes('alibaba')) {
@@ -406,7 +444,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+          return createAnthropic({ apiKey, baseURL, headers: mastraHeaders, ...consoleOptions })(modelId);
         }
 
         if (npm === '@ai-sdk/openai') {
@@ -416,7 +454,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/google') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
+          return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders, ...consoleOptions }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/mistral') {
