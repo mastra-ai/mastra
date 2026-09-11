@@ -38,12 +38,13 @@ export interface BackgroundToolResultParams {
  *   (presence-keyed) and runs under a MAPPING span — the policies differ on
  *   purpose.
  * - Transcript payload transforms remain an engine-supplied hook. Main
- *   supplies `transformForTranscript` from its run scope; durable's transform
- *   policy IS on its run registry (the sync tool-call path consumes it), but
- *   durable's background `onResult` does not wire this hook yet, so raw
- *   args/result are recorded there (open parity item, PHASE3 ledger L22 —
- *   security-adjacent: a configured transcript redaction is skipped for
- *   background results on durable).
+ *   supplies `transformForTranscript` from its run scope (dispatch-time
+ *   capture, valid for its request-bound lifetime); durable supplies it too
+ *   (PHASE3 ledger L22 port), resolving the policy and tool-level transform
+ *   at completion time from the live run registry because the entry may be
+ *   rebuilt after a process restart. The run-level policy carries a closure
+ *   and does not survive a restart on durable — only tool-level transforms
+ *   do, via registry re-resolution.
  */
 export async function applyBackgroundToolResult(deps: {
   params: BackgroundToolResultParams;
@@ -60,7 +61,7 @@ export async function applyBackgroundToolResult(deps: {
    * round-trips on recall, matching the sync path. */
   approvalGrant?: Record<string, unknown>;
   baseProviderMetadata: ProviderMetadata | undefined;
-  /** Optional transcript payload transforms (main loop only for now). */
+  /** Optional transcript payload transforms (supplied by both engines; see docblock). */
   transformForTranscript?: (result: unknown) => Promise<{
     transcriptArgs: unknown;
     transcriptResult: unknown;

@@ -17,6 +17,11 @@ import type { ProcessorState } from '../../../../processors';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
+import {
+  getTransformedToolPayload,
+  hasTransformedToolPayload,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
@@ -1216,7 +1221,8 @@ export function createDurableToolCallStep() {
             // Resolve the mapping tool at completion time: the registry entry
             // may have been rebuilt (or expired) if the task finished after a
             // process restart.
-            const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+            const liveEntry = globalRunRegistry.get(runId);
+            const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
             await applyBackgroundToolResult({
               params,
               currentRunId: runId,
@@ -1225,7 +1231,63 @@ export function createDurableToolCallStep() {
               messageList,
               approvalGrant: approvalGrant as Record<string, unknown> | undefined,
               baseProviderMetadata: typedInput.providerMetadata as any,
+              // Transcript payload transforms (L22 parity port). The policy and
+              // tool-level transform are resolved at completion time from the
+              // live registry — NOT captured at dispatch — because the entry may
+              // be rebuilt after a process restart. The run-level policy carries
+              // a closure and cannot be rehydrated across restarts (only
+              // tool-level transforms survive via registry re-resolution) — a
+              // limitation shared with the sync tool-call path.
+              transformForTranscript: async result => {
+                const failed = params.status === 'failed';
+                const transformCarrier = await applyToolPayloadTransformToChunk(
+                  {
+                    type: failed ? 'tool-error' : 'tool-result',
+                    payload: {
+                      toolCallId: params.toolCallId,
+                      toolName: params.toolName,
+                      args: cleanedArgs,
+                      ...(failed ? { error: params.error } : { result: params.result }),
+                    },
+                    metadata: {} as Record<string, any>,
+                  },
+                  {
+                    policy: liveEntry?.toolPayloadTransform,
+                    toolTransform: (mappingTool as { transform?: any })?.transform,
+                    tools: liveEntry?.tools,
+                    logger: logger as any,
+                    transformInput: {
+                      providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                    },
+                  },
+                );
+                const transcriptArgsTransform = getTransformedToolPayload(
+                  transformCarrier.metadata,
+                  'transcript',
+                  'input-available',
+                );
+                const transcriptResultTransform = getTransformedToolPayload(
+                  transformCarrier.metadata,
+                  'transcript',
+                  failed ? 'error' : 'output-available',
+                );
+                return {
+                  transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                    ? transcriptArgsTransform.transformed
+                    : cleanedArgs,
+                  transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                    ? transcriptResultTransform.transformed
+                    : result,
+                  providerMetadata: withToolPayloadTransformProviderMetadata(
+                    typedInput.providerMetadata as any,
+                    transformCarrier.metadata,
+                  ) as any,
+                };
+              },
               toModelOutput: mappingTool.toModelOutput,
+              // Respect a custom idGenerator for the fallback appended message —
+              // parity with main, which reads generateId from its run scope.
+              generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
               logger: logger as any,
               flush: async () => {
                 if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
