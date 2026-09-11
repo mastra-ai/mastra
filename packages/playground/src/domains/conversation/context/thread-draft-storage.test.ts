@@ -30,6 +30,45 @@ afterEach(async () => {
 });
 
 describe('complete draft storage', () => {
+  describe('when retention runs while editing an attachment draft', () => {
+    it('enforces limits without reading every stored attachment', async () => {
+      await writeThreadDraft('existing', withFile());
+      const getAll = vi.spyOn(IDBObjectStore.prototype, 'getAll');
+      await writeThreadDraft('edited', withFile());
+      expect(getAll).not.toHaveBeenCalled();
+      expect((await readThreadDraft('existing')).attachments).toHaveLength(1);
+    });
+  });
+
+  describe('when upgrading an existing draft database', () => {
+    it('indexes existing attachment drafts without losing their bytes', async () => {
+      const db = await openDB(DATABASE, 1, {
+        upgrade(database) {
+          database.createObjectStore('drafts', { keyPath: 'key' });
+        },
+      });
+      const draft = withFile();
+      await db.put('drafts', {
+        key: 'legacy',
+        ...draft,
+        updatedAt: Date.now(),
+        attachments: draft.attachments.map(attachment => ({
+          ...attachment,
+          fileName: attachment.file.name,
+          lastModified: attachment.file.lastModified,
+        })),
+      });
+      db.close();
+      await writeThreadDraft('new', textDraft('New'));
+      const restored = await readThreadDraft('legacy');
+      expect(restored.text).toBe(draft.text);
+      expect(new Uint8Array(await restored.attachments[0].file.arrayBuffer())).toEqual(new Uint8Array(4));
+      const upgraded = await openDB(DATABASE);
+      expect(await upgraded.countFromIndex('drafts', 'retention')).toBe(2);
+      upgraded.close();
+    });
+  });
+
   it('atomically rejects competing writes and stale clears', async () => {
     const revision = await writeThreadDraft('one', withFile());
     const results = await Promise.allSettled([

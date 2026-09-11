@@ -40,6 +40,7 @@ function createState(initialKey?: string): DraftState {
   let storedRevision: string | undefined;
   let handoffFrom: string | undefined;
   let writes: Promise<unknown> = Promise.resolve();
+  let queuedSave: { target: string; draft: ThreadDraft } | undefined;
   const waiting: (() => void)[] = [];
   const listeners = new Set<() => void>();
   const release = () =>
@@ -108,8 +109,16 @@ function createState(initialKey?: string): DraftState {
     snapshot = { ...snapshot, drafts };
     notify();
     if (storageKey !== undefined && key === PERSISTED && !restorationFailed) {
-      const target = storageKey;
-      void save(() => persist(target, next));
+      if (queuedSave?.target === storageKey) {
+        queuedSave.draft = next;
+      } else {
+        const queued = { target: storageKey, draft: next };
+        queuedSave = queued;
+        void save(async () => {
+          if (queuedSave === queued) queuedSave = undefined;
+          await persist(queued.target, queued.draft);
+        });
+      }
     }
   };
   const load = async () => {

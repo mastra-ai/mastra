@@ -20,6 +20,7 @@ const recordSchema = z.object({
   revision: z.string().optional(),
   text: z.string().max(MAX_LENGTH),
   updatedAt: z.number().finite(),
+  bytes: z.number().nonnegative().finite().optional(),
   attachments: z
     .array(
       z.object({
@@ -37,7 +38,7 @@ const recordSchema = z.object({
 });
 type DraftRecord = z.infer<typeof recordSchema>;
 interface DraftDatabase extends DBSchema {
-  drafts: { key: string; value: DraftRecord };
+  drafts: { key: string; value: DraftRecord; indexes: { retention: [number, number] } };
 }
 type DraftStore = IDBPObjectStore<DraftDatabase, ['drafts'], 'drafts', 'readwrite'>;
 interface DraftVersion {
@@ -63,9 +64,16 @@ const byteSize = (record: DraftRecord) =>
 let pending: Promise<unknown> = Promise.resolve();
 function transaction<T>(operation: (store: DraftStore) => Promise<T>): Promise<T> {
   const result = pending.then(async () => {
-    const db = await openDB<DraftDatabase>(DATABASE, 1, {
-      upgrade(db) {
-        db.createObjectStore('drafts', { keyPath: 'key' });
+    const db = await openDB<DraftDatabase>(DATABASE, 2, {
+      async upgrade(db, oldVersion, _newVersion, tx) {
+        const store = oldVersion < 1 ? db.createObjectStore('drafts', { keyPath: 'key' }) : tx.objectStore('drafts');
+        store.createIndex('retention', ['updatedAt', 'bytes']);
+        let cursor = await store.openCursor();
+        while (cursor) {
+          const parsed = recordSchema.safeParse(cursor.value);
+          if (parsed.success) await cursor.update({ ...parsed.data, bytes: byteSize(parsed.data) });
+          cursor = await cursor.continue();
+        }
       },
     });
     const tx = db.transaction('drafts', 'readwrite');
@@ -138,21 +146,21 @@ async function putDraft(store: DraftStore, key: string, draft: ThreadDraft): Pro
   };
   let bytes = byteSize(record);
   if (bytes > MAX_DRAFT_BYTES) throw new DraftLimitError('Draft exceeds the 10 MB local storage limit.');
+  record.bytes = bytes;
   let count = 1;
-  const others = (await store.getAll()).filter(entry => entry.key !== key).sort((a, b) => b.updatedAt - a.updatedAt);
-  for (const entry of others) {
-    const parsed = recordSchema.safeParse(entry);
-    if (
-      !parsed.success ||
-      !isFresh(parsed.data.updatedAt) ||
-      count >= MAX_DRAFTS ||
-      bytes + byteSize(parsed.data) > MAX_TOTAL_BYTES
-    ) {
-      await store.delete(entry.key);
-    } else {
-      bytes += byteSize(parsed.data);
-      count++;
+  // Index keys contain only timestamps and byte counts, not cloned attachment blobs.
+  let cursor = await store.index('retention').openKeyCursor(undefined, 'prev');
+  while (cursor) {
+    if (cursor.primaryKey !== key) {
+      const [updatedAt, size] = cursor.key;
+      if (!isFresh(updatedAt) || count >= MAX_DRAFTS || bytes + size > MAX_TOTAL_BYTES) {
+        await store.delete(cursor.primaryKey);
+      } else {
+        bytes += size;
+        count++;
+      }
     }
+    cursor = await cursor.continue();
   }
   await store.put(record);
   return revision;

@@ -99,6 +99,21 @@ describe('complete draft lifecycle', () => {
     expect(second.state.getDraft('thread').text).toBe('Updated elsewhere');
   });
 
+  describe('when rapid edits are followed by immediate navigation', () => {
+    it('persists only the newest pending draft without waiting for a debounce', async () => {
+      const { state, unmount } = mount();
+      await ready(state);
+      const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+      for (let index = 0; index < 100; index++) {
+        state.updateDraft('thread', { text: `Edit ${index}`, attachments: [] });
+      }
+      unmount();
+      await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
+      expect((await readThreadDraft('scope')).text).toBe('Edit 99');
+      expect(put).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('reports queued saves until the newest text has been committed', async () => {
     const { state } = mount();
     await ready(state);
