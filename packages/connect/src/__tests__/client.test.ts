@@ -226,16 +226,18 @@ describe('getCredential', () => {
 });
 
 describe('proxyRequest', () => {
-  it('builds the proxy URL with query params and strips leading slashes', async () => {
+  it('builds the proxy URL with scalar and repeated query params and strips leading slashes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await proxyRequest(client, 'c_1', {
       method: 'GET',
       path: '/issues',
-      query: { page: 2, q: 'bug fix', skip: undefined },
+      query: { page: 2, q: 'bug fix', labels: ['bug', 'help wanted'], empty: [], skip: undefined },
     });
     const [url] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('https://example.test/v2/connections/c_1/proxy/issues?page=2&q=bug+fix');
+    expect(url).toBe(
+      'https://example.test/v2/connections/c_1/proxy/issues?page=2&q=bug+fix&labels=bug&labels=help+wanted',
+    );
   });
 
   it('rejects literal and encoded dot segments before building the URL', async () => {

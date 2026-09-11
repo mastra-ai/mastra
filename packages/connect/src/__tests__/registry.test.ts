@@ -11,6 +11,7 @@ describe('shipped provider registry', () => {
     // Extend this list when generated provider branches land.
     expect(integrationIds).toEqual([
       'anthropic',
+      'clerk',
       'incident-io',
       'linear',
       'neon',
@@ -18,6 +19,7 @@ describe('shipped provider registry', () => {
       'openai',
       'resend',
       'supabase',
+      'workos',
     ]);
   });
 
