@@ -128,7 +128,7 @@ describe('Tab', () => {
     expect(screen.queryByRole('tab', { name: 'Second' })).toBeNull();
   });
 
-  it('closes an overflowed tab without selecting it', () => {
+  it('closes an overflowed tab by keyboard without selecting it', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
     const onClose = vi.fn();
@@ -147,7 +147,9 @@ describe('Tab', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close tab' }));
+    const closeItem = screen.getByRole('menuitem', { name: 'Close Second' });
+    closeItem.focus();
+    fireEvent.keyDown(closeItem, { key: 'Enter', code: 'Enter' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onClick).not.toHaveBeenCalled();

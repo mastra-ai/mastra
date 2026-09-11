@@ -2,7 +2,7 @@ import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { ChevronDown, X } from 'lucide-react';
-import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
@@ -167,38 +167,23 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
               </DropdownMenu.Trigger>
               <DropdownMenu.Content>
                 {hiddenTabs.map(tab => (
-                  <DropdownMenu.Item
-                    key={tab.value}
-                    disabled={tab.disabled}
-                    onClick={() => {
-                      tabs?.select(tab.value);
-                      tab.onClick?.();
-                    }}
-                  >
-                    <span className="min-w-0 flex-1">{tab.label}</span>
+                  <Fragment key={tab.value}>
+                    <DropdownMenu.Item
+                      disabled={tab.disabled}
+                      onClick={() => {
+                        tabs?.select(tab.value);
+                        tab.onClick?.();
+                      }}
+                    >
+                      {tab.label}
+                    </DropdownMenu.Item>
                     {tab.onClose ? (
-                      <button
-                        type="button"
-                        aria-label="Close tab"
-                        className={cn(
-                          'ml-auto',
-                          'shrink-0',
-                          'rounded',
-                          'p-0.5',
-                          'text-neutral3',
-                          'transition-colors',
-                          'hover:bg-surface5',
-                          'hover:text-neutral5',
-                        )}
-                        onClick={event => {
-                          event.stopPropagation();
-                          tab.onClose?.();
-                        }}
-                      >
+                      <DropdownMenu.Item className="text-neutral3" onClick={tab.onClose}>
                         <X aria-hidden="true" className="size-3" />
-                      </button>
+                        <span>Close {tab.label}</span>
+                      </DropdownMenu.Item>
                     ) : null}
-                  </DropdownMenu.Item>
+                  </Fragment>
                 ))}
               </DropdownMenu.Content>
             </DropdownMenu>
