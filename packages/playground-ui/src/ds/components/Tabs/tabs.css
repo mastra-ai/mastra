@@ -222,6 +222,7 @@
         background: var(--surface4);
         padding: var(--tab-inset);
       }
+
       [data-slot='tabs-content'][data-flush] {
         padding: 0;
         grid-template-rows: minmax(0, 1fr);
@@ -229,11 +230,13 @@
         flex: 1 1 auto;
         min-height: 0;
       }
+
       [data-slot='tabs-content'][data-flush] [data-slot='tabs-content-body'] {
         display: contents;
         background: none;
         padding: 0;
       }
+
       [data-slot='tabs-content-body'] {
         display: block;
         min-width: 0;
