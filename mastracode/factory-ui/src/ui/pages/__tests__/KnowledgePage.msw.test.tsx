@@ -260,7 +260,9 @@ function stubKnowledgeRoute(
             {
               id: 'message-1',
               role: 'assistant',
-              content: 'Integrated repository history.',
+              preview: 'Integrated repository history.',
+              truncated: false,
+              omittedBytes: 0,
               createdAt: '2026-08-13T03:00:02.000Z',
             },
           ],
