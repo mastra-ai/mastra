@@ -1,8 +1,25 @@
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
-import { KNOWLEDGE_TABLE_NAMES, KnowledgeSchemaResetRequiredError } from '@mastra/core/storage';
+import {
+  KNOWLEDGE_ACTIVITY_SCHEMA,
+  KNOWLEDGE_CURSORS_SCHEMA,
+  KNOWLEDGE_MENTIONS_SCHEMA,
+  KNOWLEDGE_NODES_SCHEMA,
+  KNOWLEDGE_RECORDS_SCHEMA,
+  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
+  KNOWLEDGE_TABLE_NAMES,
+  KnowledgeSchemaResetRequiredError,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_CURSORS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+} from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { PostgresStore } from '../..';
+import { generateTableSQL } from '../../db';
 import { connectionString } from '../../test-utils';
 import { KnowledgePG, postgresSql } from '.';
 
@@ -22,31 +39,73 @@ describe('PostgreSQL knowledge SQL normalization', () => {
 });
 
 const pool = new Pool({ connectionString });
+const KNOWLEDGE_V1_TABLE_COLUMNS_TEST_COUNT = 6;
 const createStore = (schemaName?: string) => new KnowledgePG({ pool, schemaName });
 createKnowledgeStorageTests(createStore);
 
+async function seedPublishedKnowledgeV1(schemaName: string): Promise<void> {
+  for (const statement of [
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_NODES,
+      schema: KNOWLEDGE_NODES_SCHEMA,
+      schemaName,
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_RECORDS,
+      schema: KNOWLEDGE_RECORDS_SCHEMA,
+      schemaName,
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_MENTIONS,
+      schema: KNOWLEDGE_MENTIONS_SCHEMA,
+      schemaName,
+      compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_CURSORS,
+      schema: KNOWLEDGE_CURSORS_SCHEMA,
+      schemaName,
+      compositePrimaryKey: ['sourceThreadId', 'agent'],
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_ACTIVITY,
+      schema: KNOWLEDGE_ACTIVITY_SCHEMA,
+      schemaName,
+      includeAllConstraints: true,
+    }),
+    generateTableSQL({
+      tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+      schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
+      schemaName,
+      includeAllConstraints: true,
+    }),
+    `CREATE UNIQUE INDEX idx_knowledge_nodes_identity ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" ("type", "scopeKey", "canonicalName")`,
+    `CREATE INDEX idx_knowledge_nodes_scope ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" ("scopeKey", "type")`,
+    `CREATE INDEX idx_knowledge_records_node_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_RECORDS}" ("node", "id" DESC)`,
+    `CREATE INDEX idx_knowledge_records_thread_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_RECORDS}" ("sourceThreadId", "id" DESC)`,
+    `CREATE INDEX idx_knowledge_mentions_record ON "${schemaName}"."${TABLE_KNOWLEDGE_MENTIONS}" ("recordId", "sourceType", "sourceId")`,
+    `CREATE INDEX idx_knowledge_activity_latest ON "${schemaName}"."${TABLE_KNOWLEDGE_ACTIVITY}" ("id" DESC)`,
+    `CREATE UNIQUE INDEX idx_knowledge_outbox_idempotency ON "${schemaName}"."${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" ("idempotencyKey")`,
+    `CREATE INDEX idx_knowledge_outbox_claim ON "${schemaName}"."${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" ("status", "availableAt", "createdAt")`,
+  ]) {
+    await pool.query(statement);
+  }
+}
+
 describe('PostgreSQL knowledge legacy schema boundary', () => {
-  it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
+  it('replaces recognized populated v1 only during explicit activation and preserves unrelated tables', async () => {
     const schemaName = 'knowledge_legacy_boundary';
     await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const storage = new PostgresStore({ id: 'legacy-boundary', pool, schemaName });
     try {
+      await seedPublishedKnowledgeV1(schemaName);
       await pool.query(`CREATE TABLE "${schemaName}".knowledge_unrelated_domain (id TEXT PRIMARY KEY)`);
       await pool.query(`INSERT INTO "${schemaName}".knowledge_unrelated_domain (id) VALUES ('preserved')`);
-      await pool.query(`CREATE TABLE "${schemaName}"."mastra_knowledge_nodes" (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        name TEXT NOT NULL,
-        "canonicalName" TEXT NOT NULL,
-        kind TEXT,
-        content TEXT,
-        scope JSONB NOT NULL,
-        "scopeKey" TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        "mergedInto" TEXT,
-        "createdAt" TIMESTAMP NOT NULL,
-        "updatedAt" TIMESTAMP NOT NULL
-      )`);
       await pool.query(
         `INSERT INTO "${schemaName}"."mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
         [
@@ -59,18 +118,80 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
         ],
       );
 
-      const store = createStore(schemaName);
-      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      await storage.init();
       expect((await pool.query(`SELECT content FROM "${schemaName}".mastra_knowledge_nodes`)).rows[0]?.content).toBe(
         'legacy body',
       );
+      const direct = createStore(schemaName);
+      expect(await direct.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
 
-      await store.dangerouslyReset();
-      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      await expect(Promise.all([storage.getStore('knowledge'), direct.init()])).resolves.toEqual([
+        expect.anything(),
+        undefined,
+      ]);
+      expect(await direct.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect((await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes`)).rows).toEqual([]);
       expect((await pool.query(`SELECT id FROM "${schemaName}".knowledge_unrelated_domain`)).rows[0]?.id).toBe(
         'preserved',
       );
+    } finally {
+      await storage.close();
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('rejects an unrecognized v1 layout without mutation', async () => {
+    const schemaName = `knowledge_unknown_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await seedPublishedKnowledgeV1(schemaName);
+      await pool.query(`CREATE INDEX unexpected_knowledge_index ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (name)`);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+      );
+
+      await expect(createStore(schemaName).init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows[0]?.id).toBe(
+        'legacy',
+      );
+      expect(
+        (
+          await pool.query('SELECT indexname FROM pg_indexes WHERE schemaname=$1 AND indexname=$2', [
+            schemaName,
+            'unexpected_knowledge_index',
+          ])
+        ).rows,
+      ).toHaveLength(1);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('rolls back replacement when an external dependency blocks a drop and permits retry', async () => {
+    const schemaName = `knowledge_dependency_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await seedPublishedKnowledgeV1(schemaName);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+      );
+      await pool.query(
+        `CREATE VIEW "${schemaName}".knowledge_dependency AS SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`,
+      );
+
+      await expect(createStore(schemaName).init()).rejects.toThrow();
+      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows[0]?.id).toBe(
+        'legacy',
+      );
+      const tablesAfterRollback = await pool.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_name LIKE 'mastra_knowledge_%'`,
+        [schemaName],
+      );
+      expect(tablesAfterRollback.rows).toHaveLength(KNOWLEDGE_V1_TABLE_COLUMNS_TEST_COUNT);
+
+      await pool.query(`DROP VIEW "${schemaName}".knowledge_dependency`);
+      await expect(createStore(schemaName).init()).resolves.toBeUndefined();
+      expect(await createStore(schemaName).inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     }

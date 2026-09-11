@@ -318,7 +318,10 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   private getStoresToInit() {
-    return Object.values(this.stores).filter(Boolean);
+    return Object.entries(this.stores)
+      .filter(([name]) => name !== 'knowledge')
+      .map(([, store]) => store)
+      .filter(Boolean);
   }
 
   private async initDomainsSequentially(): Promise<boolean> {
