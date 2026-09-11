@@ -305,6 +305,8 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
+  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
+  knowledge?: { key: string; instance: Knowledge };
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -779,10 +781,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
+  const configuredKnowledgeKey = config?.knowledge?.key.trim();
+  if (config?.knowledge && !configuredKnowledgeKey) {
+    throw new Error('knowledge.key must be a non-empty string.');
+  }
   const knowledge =
-    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+    config?.knowledge?.instance ??
+    (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
-      : undefined;
+      : undefined);
+  const knowledgeKey = configuredKnowledgeKey ?? 'default';
   const memory =
     config?.memory === false
       ? undefined
@@ -1650,6 +1658,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     observability,
     memory,
     knowledge,
+    knowledgeKey,
     mcpManager,
     hookManager,
     pluginManager,
@@ -1979,7 +1988,7 @@ export async function prepareAgentControllerMount(
           },
         }
       : {}),
-    ...(base.knowledge ? { knowledge: { default: base.knowledge } } : {}),
+    ...(base.knowledge ? { knowledge: { [base.knowledgeKey]: base.knowledge } } : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay
