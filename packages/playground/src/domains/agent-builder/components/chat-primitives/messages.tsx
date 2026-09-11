@@ -5,6 +5,20 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { ReasoningStreamingLine } from '@mastra/playground-ui/domains/chat/messages/reasoning-streaming-line';
+import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
+import {
+  WarningStatusRenderer,
+  TripwireStatusRenderer,
+} from '@mastra/playground-ui/domains/chat/messages/renderers/status-renderers';
+import { SignalBadge } from '@mastra/playground-ui/domains/chat/messages/signal-badge';
+import {
+  getSignalType,
+  isSignalData,
+  isUserSignalType,
+  toReactiveSignalData,
+} from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -33,12 +47,6 @@ import {
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
-import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
-import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
-import {
-  WarningStatusRenderer,
-  TripwireStatusRenderer,
-} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
 import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
@@ -56,9 +64,6 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
-import { ReasoningStreamingLine } from '@/lib/ai-ui/messages/reasoning-streaming-line';
-import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
-import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
   message: MastraDBMessage;

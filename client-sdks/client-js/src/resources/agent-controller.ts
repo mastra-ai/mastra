@@ -440,6 +440,9 @@ export class AgentControllerSession extends BaseResource {
         while (!cancelled) {
           const { done, value } = await reader.read();
           if (done) return cancelled ? { kind: 'cancelled' } : { kind: 'done' };
+          // A read() that resolved just before unsubscribe() must not deliver its
+          // frame: cancellation happened while we were awaiting.
+          if (cancelled) return { kind: 'cancelled' };
           buffer += decoder.decode(value, { stream: true });
 
           let separator: { index: number; length: number } | null;
@@ -456,6 +459,9 @@ export class AgentControllerSession extends BaseResource {
               } catch {
                 continue;
               }
+              // An earlier onEvent in this same buffered chunk may have called
+              // unsubscribe(); stop before delivering any further frames.
+              if (cancelled) return { kind: 'cancelled' };
               try {
                 options.onEvent(event);
               } catch (cause) {
@@ -527,6 +533,9 @@ export class AgentControllerSession extends BaseResource {
         let attempts = 0;
         let reconnectedResponse: Response | undefined;
         while (!reconnectedResponse) {
+          // A requestStream() that rejected after unsubscribe() must not surface
+          // as a terminal onError: honor cancellation before exhausting the budget.
+          if (cancelled) return;
           if (attempts >= reconnectOptions.maxRetries) {
             reportTerminalError(result);
             return;
@@ -551,6 +560,13 @@ export class AgentControllerSession extends BaseResource {
           options.onReconnect?.();
         } catch {
           // Consumer callback failures must not kill the stream loop.
+        }
+        // onReconnect may have called unsubscribe(). The new response has not yet
+        // acquired a reader (pump() runs on the next iteration), so unsubscribe()
+        // had nothing to cancel — cancel its body here before the loop exits.
+        if (cancelled) {
+          void response.body?.cancel().catch(() => {});
+          return;
         }
       }
     };

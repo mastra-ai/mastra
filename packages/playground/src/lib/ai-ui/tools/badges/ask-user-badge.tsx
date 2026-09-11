@@ -1,6 +1,6 @@
 import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserResult, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
-import { useToolCall } from '@/services/tool-call-provider';
+import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 
 export interface AskUserBadgeProps {
   toolCallId: string;
