@@ -917,6 +917,9 @@ describe('Standalone thread page', () => {
       cleanup();
       renderAt(savedPath);
       expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      expect((await screen.findByRole('radio', { name: 'Stream' })).getAttribute('aria-checked')).toBe('true');
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
       const input = await screen.findByRole('textbox');
       fireEvent.change(input, { target: { value: 'Use my saved settings' } });
       fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
