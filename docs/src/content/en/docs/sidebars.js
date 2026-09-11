@@ -710,6 +710,11 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/alerts',
+      label: 'Alerts',
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/trace-intelligence',
       label: 'Trace Intelligence',
     },

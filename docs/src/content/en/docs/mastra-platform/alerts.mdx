@@ -1,0 +1,113 @@
+---
+title: "Alerts | Mastra platform"
+description: "Configure Mastra platform alerts for failed deploys, service crashes, and out-of-memory events, then send notifications to Slack, email, or a webhook."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Alerts
+
+Alerts notify your team when a deploy fails or a running service stops. You configure alerts at the organization level, then choose which projects and environments each alert covers.
+
+Organization admins can create and manage alerts. Other organization roles have read-only access to the alert settings.
+
+Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**.
+
+![Alerts overview showing an active alert and its Slack and email destinations.](/img/mastra-platform/alerts/alerts-overview.png)
+
+## Add a destination
+
+A destination defines where Mastra sends notifications. Add at least one destination before creating an alert.
+
+| Destination | Configuration |
+| - | - |
+| **Slack** | Connect a Slack workspace and select one or more channels. Mastra creates a separate destination for each selected channel. |
+| **Email** | Select organization roles, individual members, or up to 10 email addresses. Role-based recipient groups update when organization membership changes. |
+| **Webhook** | Enter an HTTPS endpoint. Mastra signs each request and shows the signing secret once after the destination is created. |
+
+<Steps>
+  <StepItem>
+    On the **Destinations** tab, select **Add destination**.
+  </StepItem>
+
+  <StepItem>
+    Select **Slack**, **Email**, or **Webhook**, then enter a name for the destination.
+  </StepItem>
+
+  <StepItem>
+    Configure the selected destination:
+
+    - For Slack, connect or select a workspace and choose the channels that should receive alerts. The Mastra Alerts app joins public channels automatically. Invite `@Mastra Alerts` before selecting a private channel.
+    - For email, choose **All organization members**, one or more roles, individual members, or external email addresses.
+    - For a webhook, enter an endpoint that starts with `https://`.
+  </StepItem>
+
+  <StepItem>
+    Select **Create destination**. For a webhook destination, copy the signing secret before closing the page. The secret can't be shown again.
+  </StepItem>
+</Steps>
+
+![Slack destination form with workspace and channel selectors.](/img/mastra-platform/alerts/add-destination.png)
+
+Use the destination's actions menu to send a test notification. You can also edit, pause, or delete a destination. Pausing a destination stops notifications without removing it from existing alerts.
+
+For webhook destinations, **Rotate secret** replaces the current signing secret immediately. Update the receiving endpoint with the new secret before sending another alert.
+
+## Create an alert
+
+An alert combines triggers, scope, destinations, and repeat-alert pacing.
+
+<Steps>
+  <StepItem>
+    On the **Alerts** tab, select **Create Alert**.
+  </StepItem>
+
+  <StepItem>
+    Enter an alert name and leave **Enabled** on if the alert should start monitoring immediately.
+  </StepItem>
+
+  <StepItem>
+    Select one or more triggers:
+
+    - **Deploy failed**: A build or deploy doesn't reach a running state.
+    - **Service crashed**: A running service exhausts its restart policy and stops.
+    - **Service out of memory**: A service is stopped after running out of memory.
+  </StepItem>
+
+  <StepItem>
+    Set the alert scope to **All projects** or **Specific projects**. When you select specific projects, you can narrow the scope to individual environments. Leaving the environment selection empty includes every environment in that project.
+  </StepItem>
+
+  <StepItem>
+    Select one or more destinations. You can add or edit a destination without leaving the alert setup.
+  </StepItem>
+
+  <StepItem>
+    Under **Repeat alerts**, choose how often Mastra can resend an alert for the same incident: every event, every 5 minutes, every 15 minutes, or every hour. The first notification, recovery notifications, and severity increases send immediately.
+  </StepItem>
+
+  <StepItem>
+    Select **Create Alert**.
+  </StepItem>
+</Steps>
+
+![Alert setup with the deploy failure trigger, all projects scope, Slack and email destinations, and five-minute repeat pacing.](/img/mastra-platform/alerts/create-alert.png)
+
+## Manage alerts
+
+The **Alerts** tab shows each alert's scope, destinations, and current state. Use the switch to pause or enable an alert.
+
+Open an alert's actions menu to:
+
+- **Edit** its triggers, scope, destinations, pacing, or name.
+- **Test** every destination assigned to the alert.
+- **Delete** the alert. Existing incidents and delivery history remain available.
+
+## Review alert activity
+
+The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers.
+
+Expand an incident to inspect the notification sent to each destination. Delivery attempts show statuses such as **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
+
+![Alert activity grouped by incident with child delivery attempts and their statuses.](/img/mastra-platform/alerts/alert-activity.png)
