@@ -285,10 +285,12 @@ export function createDurableLLMMappingStep() {
         output: {
           text: llmOutput.text,
           toolCalls: llmOutput.toolCalls,
+          // Preserve "unknown" when no usage was reported rather than fabricating
+          // zero counts, so downstream accumulation can keep the total unknown.
           usage: llmOutput.stepResult.totalUsage ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
+            inputTokens: undefined,
+            outputTokens: undefined,
+            totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
         },

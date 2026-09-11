@@ -40,9 +40,9 @@ export const modelListEntrySchema = z.object({
  * Schema for accumulated usage across iterations
  */
 export const accumulatedUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
 });
 
 /**

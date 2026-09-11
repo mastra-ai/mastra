@@ -705,6 +705,88 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should leave totalTokens undefined when outputTokens is missing (V2)', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 10,
+        } as StreamPart['usage'],
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.inputTokens).toBe(10);
+        expect(result.payload.output.usage.outputTokens).toBeUndefined();
+        expect(result.payload.output.usage.totalTokens).toBeUndefined();
+      }
+    });
+
+    it('should leave totalTokens undefined when inputTokens is missing (V2)', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: {
+          outputTokens: 20,
+        } as StreamPart['usage'],
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.totalTokens).toBeUndefined();
+      }
+    });
+
+    it('should derive totalTokens when both input and output are known (V2)', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 20,
+        } as StreamPart['usage'],
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.totalTokens).toBe(30);
+      }
+    });
+
+    it('should preserve measured zero counts (V2)', () => {
+      const chunk: StreamPart = {
+        type: 'finish',
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+        } as StreamPart['usage'],
+        providerMetadata: {},
+        messages: { all: [], user: [], nonUser: [] },
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('finish');
+      if (result?.type === 'finish') {
+        expect(result.payload.output.usage.inputTokens).toBe(0);
+        expect(result.payload.output.usage.outputTokens).toBe(0);
+        expect(result.payload.output.usage.totalTokens).toBe(0);
+      }
+    });
+
     it('should preserve providerMetadata for AI SDK v6 finish chunks', () => {
       const providerMetadata = {
         anthropic: {

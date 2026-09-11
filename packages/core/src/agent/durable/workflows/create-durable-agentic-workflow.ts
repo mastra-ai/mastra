@@ -5,6 +5,7 @@ import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
+import type { LanguageModelUsage } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createWorkflow } from '../../../workflows/create';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
@@ -625,7 +626,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             logger,
             outputResult: {
               text: finalText ?? '',
-              usage: state.accumulatedUsage,
+              usage: state.accumulatedUsage as LanguageModelUsage,
               finishReason: state.lastStepResult?.reason ?? 'unknown',
               steps: state.accumulatedSteps,
             },
@@ -645,7 +646,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             },
             output: {
               text: finalText,
-              usage: state.accumulatedUsage,
+              usage: state.accumulatedUsage as LanguageModelUsage,
               steps: state.accumulatedSteps,
             },
             state: state.state,
@@ -675,7 +676,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 modelSpan?.createTracker()?.endGeneration({
                   output: { text: finalText },
                   attributes: { finishReason: finalOutput.stepResult?.reason },
-                  usage: state.accumulatedUsage,
+                  usage: state.accumulatedUsage as LanguageModelUsage,
                 });
               }
               if (agentSpanData) {

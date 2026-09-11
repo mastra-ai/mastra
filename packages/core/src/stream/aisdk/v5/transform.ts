@@ -688,6 +688,16 @@ function getAnthropicCacheCreationUsage(providerMetadata?: SharedV2ProviderMetad
   };
 }
 
+// Derive a total only when both contributing counts are known. If either input
+// or output is missing, the total remains unknown (undefined) rather than being
+// fabricated from zero-filled parts.
+function deriveTotalTokens(inputTokens: number | undefined, outputTokens: number | undefined): number | undefined {
+  if (inputTokens === undefined || outputTokens === undefined) {
+    return undefined;
+  }
+  return inputTokens + outputTokens;
+}
+
 function normalizeUsage(
   usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
   providerMetadata?: SharedV2ProviderMetadata,
@@ -713,7 +723,7 @@ function normalizeUsage(
     return {
       inputTokens,
       outputTokens,
-      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      totalTokens: deriveTotalTokens(inputTokens, outputTokens),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
       cacheCreationInputTokens: usage.inputTokens.cacheWrite,
@@ -727,7 +737,7 @@ function normalizeUsage(
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
-    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
+    totalTokens: v2Usage.totalTokens ?? deriveTotalTokens(v2Usage.inputTokens, v2Usage.outputTokens),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,

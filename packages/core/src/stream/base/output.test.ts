@@ -902,6 +902,109 @@ describe('MastraModelOutput', () => {
     });
   });
 
+  describe('incomplete usage aggregation', () => {
+    it('keeps a primary aggregate unknown when a later step omits it', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+        // Second step omits inputTokens — the input aggregate can no longer be known.
+        createStepFinishChunk(runId, undefined, { outputTokens: 5, totalTokens: 5 }),
+        createFinishChunk(runId, undefined, { outputTokens: 5, totalTokens: 5 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBeUndefined();
+      expect(finishPayload?.totalUsage?.outputTokens).toBe(25);
+    });
+
+    it('keeps a primary aggregate unknown when the first step omits it', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        // First step omits inputTokens.
+        createStepFinishChunk(runId, undefined, { outputTokens: 20, totalTokens: 20 }),
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 5, totalTokens: 15 }),
+        createFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 5, totalTokens: 15 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBeUndefined();
+      expect(finishPayload?.totalUsage?.outputTokens).toBe(25);
+    });
+
+    it('does not let late finish metadata certify an invalidated aggregate', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        // Step omits inputTokens, but the finish chunk reports a full number.
+        createStepFinishChunk(runId, undefined, { outputTokens: 20, totalTokens: 20 }),
+        createFinishChunk(runId, undefined, { inputTokens: 999, outputTokens: 20, totalTokens: 1019 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBeUndefined();
+    });
+
+    it('preserves measured zero as a known aggregate', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+        createFinishChunk(runId, undefined, { inputTokens: 0, outputTokens: 0, totalTokens: 0 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBe(0);
+      expect(finishPayload?.totalUsage?.outputTokens).toBe(0);
+      expect(finishPayload?.totalUsage?.totalTokens).toBe(0);
+    });
+  });
+
   describe('client tool observability carriers', () => {
     it('preserves observability on synthetic tool calls created from streaming input', async () => {
       const runId = 'test-run';

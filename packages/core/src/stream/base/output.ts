@@ -275,6 +275,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     outputTokens: undefined,
     totalTokens: undefined,
   };
+  // Primary usage counters that a contributing step omitted. Once a step fails to
+  // report a primary count, the aggregate for that counter can no longer be known,
+  // so it is held at undefined instead of being summed from the steps that did
+  // report it.
+  #incompleteUsageKeys = new Set<'inputTokens' | 'outputTokens' | 'totalTokens'>();
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
@@ -1015,9 +1020,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
               chunk.payload.output.usage = {
-                inputTokens: self.#usageCount.inputTokens ?? 0,
-                outputTokens: self.#usageCount.outputTokens ?? 0,
-                totalTokens: self.#usageCount.totalTokens ?? 0,
+                inputTokens: self.#usageCount.inputTokens,
+                outputTokens: self.#usageCount.outputTokens,
+                totalTokens: self.#deriveTotalTokens(),
                 ...(self.#usageCount.reasoningTokens !== undefined && {
                   reasoningTokens: self.#usageCount.reasoningTokens,
                 }),
@@ -1573,13 +1578,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
-    if (usage.inputTokens !== undefined) {
+    // A primary counter stays known only while every contributing step reports it.
+    // The first step that omits one permanently invalidates that aggregate.
+    for (const key of ['inputTokens', 'outputTokens', 'totalTokens'] as const) {
+      if (usage[key] === undefined) {
+        this.#incompleteUsageKeys.add(key);
+        this.#usageCount[key] = undefined;
+      }
+    }
+
+    if (usage.inputTokens !== undefined && !this.#incompleteUsageKeys.has('inputTokens')) {
       this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
     }
-    if (usage.outputTokens !== undefined) {
+    if (usage.outputTokens !== undefined && !this.#incompleteUsageKeys.has('outputTokens')) {
       this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
     }
-    if (usage.totalTokens !== undefined) {
+    if (usage.totalTokens !== undefined && !this.#incompleteUsageKeys.has('totalTokens')) {
       this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
     }
     if (usage.reasoningTokens !== undefined) {
@@ -1612,13 +1626,27 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
-    if (usage.inputTokens !== undefined && this.#usageCount.inputTokens === undefined) {
+    // A primary counter invalidated by a step that omitted it stays unknown; do
+    // not let late finish metadata retroactively certify it as complete.
+    if (
+      usage.inputTokens !== undefined &&
+      this.#usageCount.inputTokens === undefined &&
+      !this.#incompleteUsageKeys.has('inputTokens')
+    ) {
       this.#usageCount.inputTokens = usage.inputTokens;
     }
-    if (usage.outputTokens !== undefined && this.#usageCount.outputTokens === undefined) {
+    if (
+      usage.outputTokens !== undefined &&
+      this.#usageCount.outputTokens === undefined &&
+      !this.#incompleteUsageKeys.has('outputTokens')
+    ) {
       this.#usageCount.outputTokens = usage.outputTokens;
     }
-    if (usage.totalTokens !== undefined && this.#usageCount.totalTokens === undefined) {
+    if (
+      usage.totalTokens !== undefined &&
+      this.#usageCount.totalTokens === undefined &&
+      !this.#incompleteUsageKeys.has('totalTokens')
+    ) {
       this.#usageCount.totalTokens = usage.totalTokens;
     }
     if (usage.reasoningTokens !== undefined && this.#usageCount.reasoningTokens === undefined) {
@@ -1917,20 +1945,29 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     });
   }
 
-  #getTotalUsage(): LanguageModelUsage {
-    let total = this.#usageCount.totalTokens;
-
-    if (total === undefined) {
-      const input = this.#usageCount.inputTokens ?? 0;
-      const output = this.#usageCount.outputTokens ?? 0;
-      const reasoning = this.#usageCount.reasoningTokens ?? 0;
-      total = input + output + reasoning;
+  // Derive totalTokens only when it can be known: use a reported total if present,
+  // otherwise derive it only when both input and output counts are known. If any
+  // contributing primary count is missing, the total remains unknown (undefined)
+  // rather than being fabricated from zero-filled parts.
+  #deriveTotalTokens(): number | undefined {
+    if (this.#usageCount.totalTokens !== undefined) {
+      return this.#usageCount.totalTokens;
     }
 
+    const input = this.#usageCount.inputTokens;
+    const output = this.#usageCount.outputTokens;
+    if (input === undefined || output === undefined) {
+      return undefined;
+    }
+
+    return input + output + (this.#usageCount.reasoningTokens ?? 0);
+  }
+
+  #getTotalUsage(): LanguageModelUsage {
     return {
       inputTokens: this.#usageCount.inputTokens,
       outputTokens: this.#usageCount.outputTokens,
-      totalTokens: total,
+      totalTokens: this.#deriveTotalTokens(),
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
       cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens,

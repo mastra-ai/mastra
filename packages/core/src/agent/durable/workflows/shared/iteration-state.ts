@@ -29,10 +29,20 @@ export function calculateAccumulatedUsage(
   currentUsage: AccumulatedUsage,
   executionUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
 ): AccumulatedUsage {
+  // A counter stays known only while every contribution reports it. If either the
+  // accumulator or the incoming step omits a count, that counter becomes unknown
+  // (undefined) and remains so, rather than being fabricated from zero.
+  const accumulate = (current: number | undefined, next: number | undefined): number | undefined => {
+    if (current === undefined || next === undefined) {
+      return undefined;
+    }
+    return current + next;
+  };
+
   return {
-    inputTokens: currentUsage.inputTokens + (executionUsage?.inputTokens || 0),
-    outputTokens: currentUsage.outputTokens + (executionUsage?.outputTokens || 0),
-    totalTokens: currentUsage.totalTokens + (executionUsage?.totalTokens || 0),
+    inputTokens: accumulate(currentUsage.inputTokens, executionUsage?.inputTokens),
+    outputTokens: accumulate(currentUsage.outputTokens, executionUsage?.outputTokens),
+    totalTokens: accumulate(currentUsage.totalTokens, executionUsage?.totalTokens),
   };
 }
 
