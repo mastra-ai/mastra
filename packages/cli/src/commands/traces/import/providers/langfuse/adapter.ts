@@ -421,10 +421,14 @@ function definedRecord(record: Record<string, unknown>): Record<string, unknown>
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function numericValue(record: Record<string, unknown> | null | undefined, ...keys: string[]): number | undefined {
   for (const key of keys) {
-    const value = record?.[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const value = finiteNumber(record?.[key]);
+    if (value !== undefined) return value;
   }
   return undefined;
 }
@@ -482,9 +486,11 @@ function buildAttributes(
 
 function mapUsage(observation: LangfuseObservation): Record<string, unknown> | undefined {
   const inputTokens =
-    observation.inputUsage ?? numericValue(observation.usageDetails, 'input', 'inputTokens', 'input_tokens');
+    finiteNumber(observation.inputUsage) ??
+    numericValue(observation.usageDetails, 'input', 'inputTokens', 'input_tokens');
   const outputTokens =
-    observation.outputUsage ?? numericValue(observation.usageDetails, 'output', 'outputTokens', 'output_tokens');
+    finiteNumber(observation.outputUsage) ??
+    numericValue(observation.usageDetails, 'output', 'outputTokens', 'output_tokens');
   const inputDetails = definedRecord({
     cacheRead: numericValue(
       observation.usageDetails,

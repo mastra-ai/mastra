@@ -100,6 +100,26 @@ describe('mapLangfuseSourceTrace', () => {
     expect(record.trace.spans[1]?.tags).toBeUndefined();
   });
 
+  it('falls back to valid usage details when direct usage values are malformed', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({
+          type: 'GENERATION',
+          inputUsage: 'invalid' as unknown as number,
+          outputUsage: Number.POSITIVE_INFINITY,
+          usageDetails: { input: 7, output: 3 },
+        }),
+      ]),
+      { importId: 'import-1', ...window },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans[0]?.attributes).toMatchObject({
+      usage: { inputTokens: 7, outputTokens: 3 },
+    });
+  });
+
   it.each([
     ['GENERATION', 'model_generation'],
     ['AGENT', 'agent_run'],
