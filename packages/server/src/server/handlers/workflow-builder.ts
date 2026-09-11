@@ -1,10 +1,16 @@
-import { MASTRA_IS_STUDIO_KEY, isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import { agentExecutionBodySchema, streamResponseSchema } from '../schemas/agents';
 import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId, validateBody } from './utils';
+import {
+  enforceThreadAccess,
+  getEffectiveResourceId,
+  getEffectiveThreadId,
+  mergeBodyRequestContext,
+  requireEffectiveResourceId,
+  validateBody,
+} from './utils';
 
 export const GET_WORKFLOW_BUILDER_SETTINGS_ROUTE = createRoute({
   method: 'GET',
@@ -59,18 +65,13 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
 
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (!isReservedRequestContextKey(key) && key !== MASTRA_IS_STUDIO_KEY) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
         const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        requireEffectiveResourceId(effectiveResourceId);
         const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         if (effectiveThreadId) {
