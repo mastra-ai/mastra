@@ -203,7 +203,7 @@ The same pattern applies to an external MCP server. Use the authenticated user's
 
 ## Forward identity to MCP tools
 
-By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object. Server tools can use this identity without parsing the request again:
+By default, when an `MCPServer` runs behind `server.auth`, Mastra places the authenticated caller in the MCP `authInfo` object, which tools read from the `authInfo` key of their request context. Server tools can use this identity without parsing the request again:
 
 ```typescript title="src/mastra/tools/get-customer-record.ts"
 import { createTool } from '@mastra/core/tools'
@@ -215,8 +215,11 @@ export const getCustomerRecord = createTool({
   id: 'get-customer-record',
   description: 'Get the authenticated customer record',
   inputSchema: z.object({}),
-  execute: async (_input, { mcp }) => {
-    const user = mcp?.extra.authInfo?.extra?.user as { id?: string } | undefined
+  execute: async (_input, { requestContext }) => {
+    const authInfo = requestContext?.get('authInfo') as
+      | { extra?: { user?: { id?: string } } }
+      | undefined
+    const user = authInfo?.extra?.user
 
     if (!user?.id) throw new Error('Authenticated MCP caller is missing')
     return customers.getByUserId(user.id)

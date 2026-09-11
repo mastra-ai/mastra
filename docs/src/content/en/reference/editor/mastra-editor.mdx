@@ -333,17 +333,17 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
         parameters: [
           {
             name: 'create',
-            type: '(input: StorageCreateMCPServerInput) => Promise<MCPServerBase>',
+            type: '(input: StorageCreateMCPServerInput) => Promise<MCPServerRegistryEntry>',
             description: 'Create a new stored MCP server configuration and return a hydrated server instance.',
           },
           {
             name: 'getById',
-            type: '(id: string, options?: GetByIdOptions) => Promise<MCPServerBase | null>',
+            type: '(id: string, options?: GetByIdOptions) => Promise<MCPServerRegistryEntry | null>',
             description: 'Return a hydrated MCP server for a given id.',
           },
           {
             name: 'update',
-            type: '(input: StorageUpdateMCPServerInput) => Promise<MCPServerBase>',
+            type: '(input: StorageUpdateMCPServerInput) => Promise<MCPServerRegistryEntry>',
             description: 'Partially update a stored MCP server configuration.',
           },
           {

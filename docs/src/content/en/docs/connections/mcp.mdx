@@ -49,6 +49,8 @@ For OAuth-protected servers, use `authenticate()` to complete the browser-based 
 
 :::
 
+`@mastra/mcp` 2.x speaks the MCP `2026-07-28` revision only. Remote servers must serve it on their Streamable HTTP endpoint. The client neither downgrades to an older revision nor falls back to the standalone HTTP+SSE transport. To connect to servers that only speak older revisions, use `@mastra/mcp` 1.x. Visit the [v2 migration guide](/reference/migrations/mcp-v2) for the differences.
+
 Pass tools from the configured servers to an agent:
 
 ```typescript {2,13} title="src/mastra/agents/assistant.ts"
@@ -193,7 +195,9 @@ Protect HTTP MCP servers with OAuth middleware. Visit [OAuth protection](/refere
 
 :::
 
-Visit the [`MCPServer` reference](/reference/tools/mcp-server) for prompts, resources, transports, and other server options.
+The Mastra server serves it over Streamable HTTP at `/api/mcp/my-mcp-server/mcp`, using the configured `id` verbatim. Every request is self-contained: clients that speak `2026-07-28` connect directly, and tools that need input from the caller answer with `input_required` instead of holding the request open.
+
+Visit the [`MCPServer` reference](/reference/tools/mcp-server) for prompts, resources, input-required continuation, and other server options.
 
 ### Publish a stdio server package
 
