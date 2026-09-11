@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createMCPTool } from '@mastra/core/mcp';
+import { createTool } from '@mastra/core/tools';
 import type { Client } from '@modelcontextprotocol/client';
 import { CLIENT_CAPABILITIES_META_KEY, createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +12,7 @@ import type { ServedHTTP } from '../server/__tests__/harness';
 import { MCPServer } from '../server/server';
 import { InternalMastraMCPClient } from './client';
 import { MCPClient } from './configuration';
-import type { LogMessage, MCPInputRequestHandler } from './types';
+import type { LogMessage, MCPInputRequestHandler, MCPTraceContext } from './types';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -22,7 +23,10 @@ vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
  * subscriptions).
  */
 
-type BookingState = { phase: 'address'; opKey: string } | { phase: 'confirm'; opKey: string; address: string };
+type BookingState =
+  | { phase: 'address'; opKey: string }
+  | { phase: 'confirm'; opKey: string; address: string }
+  | { phase: 'gate'; opKey: string };
 const codec = createRequestStateCodec<BookingState>({ key: 'k'.repeat(32) });
 
 function makeServer(journal: { writes: number; rounds: string[] }) {
@@ -81,17 +85,85 @@ function makeServer(journal: { writes: number; rounds: string[] }) {
     },
   });
 
+  const traceTool = createTool({
+    id: 'traceTool',
+    description: 'Echoes the W3C trace context a business tool sees on the request context',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ traceparent: z.string().optional(), baggage: z.string().optional() }),
+    execute: async (_input, context) => {
+      const trace = context?.requestContext?.get('traceContext') as MCPTraceContext | undefined;
+      return { traceparent: trace?.traceparent, baggage: trace?.baggage };
+    },
+  });
+
+  const nativeTraceTool = createMCPTool({
+    id: 'nativeTraceTool',
+    description: 'Echoes the W3C trace context a native tool sees on the request metadata',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ traceparent: z.string().optional() }),
+    execute: async (_input, { request }) => ({
+      kind: 'completed',
+      value: { traceparent: request.metadata?.traceparent as string | undefined },
+    }),
+  });
+
   return new MCPServer({
     name: 'Lifecycle Server',
     version: '1.0.0',
-    tools: { bookDelivery },
+    tools: { bookDelivery, traceTool, nativeTraceTool },
     requestState: { verify: codec.verify },
     resources: {
-      listResources: async () => [{ uri: 'policy://public', name: 'Policy' }],
-      getResourceContent: async () => ({ text: 'policy' }),
+      listResources: async () => [
+        { uri: 'policy://public', name: 'Policy' },
+        { uri: 'policy://gated', name: 'Gated policy' },
+      ],
+      getResourceContent: async ({ uri, request }) => {
+        if (uri !== 'policy://gated') return { text: 'policy' };
+        const state = request.requestState as GateState | undefined;
+        if (!state) {
+          journal.rounds.push('resource:start');
+          return {
+            kind: 'input_required',
+            result: inputRequired({
+              inputRequests: { region: regionRequest },
+              requestState: await codec.mint({ phase: 'gate', opKey: uri }),
+            }),
+          };
+        }
+        journal.rounds.push('resource:gate');
+        const region = request.inputResponses?.region;
+        if (region?.action !== 'accept') return { text: 'policy: declined' };
+        return { text: `policy for ${(region.content as { region: string }).region}` };
+      },
+    },
+    prompts: {
+      listPrompts: async () => [{ name: 'gated-reply', description: 'Reply drafted for a region' }],
+      getPromptMessages: async ({ request }) => {
+        const state = request.requestState as GateState | undefined;
+        if (!state) {
+          journal.rounds.push('prompt:start');
+          return {
+            kind: 'input_required',
+            result: inputRequired({
+              inputRequests: { region: regionRequest },
+              requestState: await codec.mint({ phase: 'gate', opKey: 'gated-reply' }),
+            }),
+          };
+        }
+        journal.rounds.push('prompt:gate');
+        const region = request.inputResponses?.region;
+        const text = region?.action === 'accept' ? `Reply for ${(region.content as { region: string }).region}` : 'declined';
+        return [{ role: 'user', content: { type: 'text', text } }];
+      },
     },
   });
 }
+
+type GateState = { phase: 'gate'; opKey: string };
+const regionRequest = inputRequired.elicit({
+  message: 'Which region?',
+  requestedSchema: { type: 'object', properties: { region: { type: 'string' } }, required: ['region'] },
+});
 
 describe('InternalMastraMCPClient - native input rounds', () => {
   let journal: { writes: number; rounds: string[] };
@@ -215,6 +287,100 @@ describe('InternalMastraMCPClient - native input rounds', () => {
     await tools.bookDelivery!.execute!({ opKey: 'op-5' });
 
     expect(messages).toEqual([]);
+  });
+
+  it('continues native resources/read and prompts/get rounds through MCPClient', async () => {
+    const keys: string[] = [];
+    const mcpClient = new MCPClient({
+      id: 'continuation',
+      servers: {
+        lifecycle: {
+          url: served.url,
+          inputRequests: async ({ key }) => {
+            keys.push(key);
+            return { action: 'accept', content: { region: 'north' } };
+          },
+        },
+      },
+    });
+    try {
+      const resource = await mcpClient.resources.read('lifecycle', 'policy://gated');
+      expect(resource.contents).toEqual([{ uri: 'policy://gated', text: 'policy for north' }]);
+
+      const prompt = await mcpClient.prompts.get({ serverName: 'lifecycle', name: 'gated-reply' });
+      expect(prompt.messages).toEqual([{ role: 'user', content: { type: 'text', text: 'Reply for north' } }]);
+
+      expect(keys).toEqual(['region', 'region']);
+      expect(journal.rounds).toEqual(['resource:start', 'resource:gate', 'prompt:start', 'prompt:gate']);
+      // Ungated reads never open a round.
+      const plain = await mcpClient.resources.read('lifecycle', 'policy://public');
+      expect(plain.contents).toEqual([{ uri: 'policy://public', text: 'policy' }]);
+      expect(keys).toHaveLength(2);
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
+  it('returns the declined branch when a resource or prompt round is declined', async () => {
+    const mcpClient = new MCPClient({
+      id: 'continuation-decline',
+      servers: { lifecycle: { url: served.url, inputRequests: async () => ({ action: 'decline' }) } },
+    });
+    try {
+      const resource = await mcpClient.resources.read('lifecycle', 'policy://gated');
+      expect(resource.contents).toEqual([{ uri: 'policy://gated', text: 'policy: declined' }]);
+      const prompt = await mcpClient.prompts.get({ serverName: 'lifecycle', name: 'gated-reply' });
+      expect(prompt.messages[0]!.content).toEqual({ type: 'text', text: 'declined' });
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
+  it('fails a gated resource read when no inputRequests handler is configured', async () => {
+    const mcpClient = new MCPClient({ id: 'continuation-none', servers: { lifecycle: { url: served.url } } });
+    try {
+      await expect(mcpClient.resources.read('lifecycle', 'policy://gated')).rejects.toThrow();
+      expect(journal.rounds).toEqual(['resource:start']);
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
+  it('carries the client trace context to business and native tools on every request', async () => {
+    let calls = 0;
+    const traceContext = (): MCPTraceContext => {
+      calls += 1;
+      return {
+        traceparent: `00-${String(calls).padStart(32, '0')}-${String(calls).padStart(16, '0')}-01`,
+        baggage: `call=${calls}`,
+      };
+    };
+    const mcpClient = new MCPClient({ id: 'trace', servers: { lifecycle: { url: served.url, traceContext } } });
+    try {
+      const tools = await mcpClient.listTools();
+      const first = (await tools.lifecycle_traceTool!.execute!({})) as { traceparent?: string; baggage?: string };
+      const second = (await tools.lifecycle_traceTool!.execute!({})) as { traceparent?: string; baggage?: string };
+      const native = (await tools.lifecycle_nativeTraceTool!.execute!({})) as { traceparent?: string };
+
+      expect(first.traceparent).toMatch(/^00-0{31}\d-0{15}\d-01$/);
+      expect(first.baggage).toMatch(/^call=\d+$/);
+      // The provider is consulted per request, so consecutive calls carry distinct contexts.
+      expect(second.traceparent).not.toBe(first.traceparent);
+      expect(native.traceparent).toMatch(/^00-0{31}\d-0{15}\d-01$/);
+      expect(native.traceparent).not.toBe(second.traceparent);
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
+  it('leaves the trace context empty on the server when the client provides none', async () => {
+    const mcpClient = new MCPClient({ id: 'no-trace', servers: { lifecycle: { url: served.url } } });
+    try {
+      const tools = await mcpClient.listTools();
+      expect(await tools.lifecycle_traceTool!.execute!({})).toEqual({});
+    } finally {
+      await mcpClient.disconnect();
+    }
   });
 });
 
