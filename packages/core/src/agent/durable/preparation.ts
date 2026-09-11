@@ -25,6 +25,7 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import type { SerializedMessageListState } from '../message-list/state';
 import { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal } from '../signals';
@@ -177,6 +178,8 @@ export interface PreparationResult<_OUTPUT = undefined> {
  * Options for preparation phase
  */
 export interface PreparationOptions<OUTPUT = undefined> {
+  /** Already-processed native input used only to rebuild a saved run's runtime resources. */
+  resumeMessageListState?: SerializedMessageListState;
   /** The agent instance (wrapped agent — used for config resolution: tools, model, instructions, memory) */
   agent: Agent<string, any, OUTPUT>;
   /** User messages to process */
@@ -239,6 +242,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     methodType = 'stream',
     durableAgentId,
     durableAgentName,
+    resumeMessageListState,
   } = options;
 
   // Public-facing identity: use the durable wrapper's ID/name for all
@@ -353,6 +357,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Add user messages
   messageList.add(messages, 'input');
+  if (resumeMessageListState) messageList.deserialize(resumeMessageListState);
 
   // 6. Establish the memory/thread context BEFORE resolving input processors.
   //
@@ -458,7 +463,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // above, before processor resolution, so processors that need it (working
   // memory, OM, message history) can access it here.
   let tripwireData: RunRegistryEntry['tripwire'];
-  if (inputProcessors.length > 0) {
+  // A saved run already processed its input. Cold resume rebuilds live handles,
+  // not a new request; running these hooks again can repeat side effects or
+  // reject an empty input before the durable workflow restores its messages.
+  if (inputProcessors.length > 0 && !resumeMessageListState) {
     try {
       const { ProcessorRunner } = await import('../../processors/runner');
       const runner = new ProcessorRunner({
@@ -524,7 +532,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Client-executed results fire only after processors accept the request and
   // the required runtime model has resolved.
-  if (!tripwireData) {
+  if (!tripwireData && !resumeMessageListState) {
     await fireClientToolOutputHooks({
       messages,
       tools,
@@ -742,7 +750,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.
-    initialSignalEchoes: getInitialSignalEchoes(messageList),
+    initialSignalEchoes: resumeMessageListState ? [] : getInitialSignalEchoes(messageList),
     // Agent-level goal config (judge resolver, tools resolver, scorer).
     // Non-serializable — cross-process engines skip goal evaluation.
     goal: agent.__getGoalConfig(),
