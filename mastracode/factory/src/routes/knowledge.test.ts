@@ -27,6 +27,7 @@ async function createHarness(
     orgId?: string;
     knowledge?: KnowledgeStorage;
     knowledgeResolver?: (key: string) => Promise<KnowledgeStorage | undefined>;
+    defaultKnowledgeKey?: string;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -37,6 +38,7 @@ async function createHarness(
     auth: fakeRouteAuth(),
     projects: seed.projects,
     knowledge: options.knowledgeResolver ?? (async () => knowledge),
+    ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
   const app = new Hono();
@@ -136,6 +138,17 @@ describe('KnowledgeRoutes', () => {
     }
     expect(resolve.mock.calls.map(([key]) => key)).not.toContain('default');
   });
+
+  it('uses the host-selected key when the request omits knowledgeKey', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const resolve = vi.fn(async (key: string) => (key === 'mastra' ? store : undefined));
+    const h = await createHarness({ knowledge: store, knowledgeResolver: resolve, defaultKnowledgeKey: 'mastra' });
+    await node(store, 'Host runtime', h.projectScope);
+
+    expect((await graph(h)).body.nodes.map(item => item.name)).toEqual(['Host runtime']);
+    expect(resolve).toHaveBeenCalledWith('mastra');
+  });
+
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
     const absent = await createHarness({ knowledgeResolver: async () => undefined });
     const failed = await createHarness({
