@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -21,6 +21,7 @@ const nodeFixture: KnowledgeNodePayload = {
     name: 'Payments Service',
     kind: 'service',
     description: 'Handles charging flows through [[Deploy Runbook]].',
+    rung: 'resource',
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T01:00:00.000Z',
   },
@@ -71,6 +72,7 @@ const graphFixture: KnowledgeGraphPayload = {
       kind: 'service',
       description:
         'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
+      rung: 'resource',
       pinned: true,
       recordCount: 3,
       createdAt: '2026-08-13T00:00:00.000Z',
@@ -81,6 +83,7 @@ const graphFixture: KnowledgeGraphPayload = {
       reference: 'reference-ent-2',
       name: 'Deploy Runbook',
       kind: 'doc',
+      rung: 'resource',
       pinned: false,
       recordCount: 1,
       createdAt: '2026-08-13T00:00:00.000Z',
@@ -293,39 +296,6 @@ function stubKnowledgeRoute(
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
-      HttpResponse.json({
-        run: {
-          id: 'run-1',
-          importerId: 'github',
-          binding: 'kh_binding',
-          source: 'repo:mastra',
-          importKind: 'agentic',
-          triggerKind: 'webhook',
-          status: 'succeeded',
-          queuedAt: '2026-08-13T03:00:00.000Z',
-          startedAt: '2026-08-13T03:00:01.000Z',
-          completedAt: '2026-08-13T03:00:02.000Z',
-        },
-        activity: [
-          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
-        ],
-        transcript: {
-          threadId: 'thread-run-1',
-          available: true,
-          messages: [
-            {
-              id: 'message-1',
-              role: 'assistant',
-              preview: 'Integrated repository history.',
-              truncated: false,
-              omittedBytes: 0,
-              createdAt: '2026-08-13T03:00:02.000Z',
-            },
-          ],
-        },
-      }),
-
     http.get(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-reference-1`,
       () =>
@@ -535,10 +505,46 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText('Second authorized proposal')).toBeInTheDocument();
   });
 
-  it('shows importer runs and filtered run activity without private transcripts', async () => {
-
   it('shows importer runs, activity, and transcripts from the selected Knowledge runtime', async () => {
     stubKnowledgeRoute();
+    server.use(
+      http.get(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-reference-1`,
+        () =>
+          HttpResponse.json({
+            run: {
+              id: 'run-1',
+              reference: 'run-reference-1',
+              importerId: 'github',
+              binding: 'kh_binding',
+              source: 'repo:mastra',
+              importKind: 'agentic',
+              triggerKind: 'webhook',
+              status: 'succeeded',
+              queuedAt: '2026-08-13T03:00:00.000Z',
+              startedAt: '2026-08-13T03:00:01.000Z',
+              completedAt: '2026-08-13T03:00:02.000Z',
+            },
+            activity: [
+              { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+            ],
+            transcript: {
+              threadId: 'thread-run-1',
+              available: true,
+              messages: [
+                {
+                  id: 'message-1',
+                  role: 'assistant',
+                  preview: 'Integrated repository history.',
+                  truncated: false,
+                  omittedBytes: 0,
+                  createdAt: '2026-08-13T03:00:02.000Z',
+                },
+              ],
+            },
+          }),
+      ),
+    );
     const requests: URL[] = [];
     const observeRequest = ({ request }: { request: Request }) => {
       const url = new URL(request.url);
@@ -559,8 +565,8 @@ describe('KnowledgePage', () => {
       expect(screen.getByText('Integrated repository history.')).toBeInTheDocument();
       expect(requests.some(url => url.pathname.endsWith('/importers'))).toBe(true);
       expect(requests.some(url => url.pathname.endsWith('/github/runs'))).toBe(true);
-      expect(requests.some(url => url.pathname.endsWith('/github/runs/run-1'))).toBe(true);
-      // Importer surfaces are host-vouched: a stray client key never reaches the server.
+      expect(requests.some(url => url.pathname.endsWith('/github/runs/run-reference-1'))).toBe(true);
+      // Importer surfaces are host-vouched: the client never picks the runtime key.
       expect(requests.every(url => url.searchParams.get('knowledgeKey') === null)).toBe(true);
     } finally {
       server.events.removeListener('request:match', observeRequest);

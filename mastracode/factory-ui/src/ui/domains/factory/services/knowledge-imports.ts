@@ -39,6 +39,7 @@ export interface KnowledgeImportRunsPayload {
 export interface KnowledgeImportRunDetailPayload {
   run: KnowledgeImportRun;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  nextCursor?: string;
   transcript?: {
     threadId: string;
     available: boolean;

@@ -83,6 +83,7 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
+  rung: 'org' | 'resource' | 'thread';
   pinned: boolean;
   recordCount: number;
   createdAt: string;
@@ -149,6 +150,7 @@ export interface KnowledgeNodePayload {
     reference: string;
     name: string;
     kind: string;
+    rung: 'org' | 'resource' | 'thread';
     createdAt: string;
     updatedAt: string;
   };
@@ -262,6 +264,12 @@ interface ResolvedView {
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = metadata?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function rungForScopeIds(scopeIds: KnowledgeScopeIds, view: ResolvedView): 'org' | 'resource' | 'thread' {
+  if (view.threadScopeId && scopeIds.includes(view.threadScopeId)) return 'thread';
+  if (scopeIds.includes(view.resourceScopeId)) return 'resource';
+  return 'org';
 }
 
 function importBinding(binding: string): { source?: string; scopeAddress?: string } {
@@ -1445,20 +1453,24 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             membershipScopeIds: [selected.id],
             limit: 1,
           });
-          const graphNodes = [...nodes, ...boundaryNodes.values()].map(node => {
-            const description = metadataString(node.metadata, 'description');
-            return {
-              id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
-              reference: this.#mintReference(projectId, 'node', node.id),
-              name: node.name,
-              kind: node.kind ?? 'concept',
-              ...(description ? { description } : {}),
-              pinned: accented.has(node.id),
-              recordCount: recordCounts.get(node.id) ?? 0,
-              createdAt: node.createdAt.toISOString(),
-              updatedAt: node.updatedAt.toISOString(),
-            };
-          });
+          const graphNodes = await Promise.all(
+            [...nodes, ...boundaryNodes.values()].map(async node => {
+              const nodeScopeIds = await store.getNodeScopeIds(node.id);
+              const description = metadataString(node.metadata, 'description');
+              return {
+                id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
+                reference: this.#mintReference(projectId, 'node', node.id),
+                name: node.name,
+                kind: node.kind ?? 'concept',
+                ...(description ? { description } : {}),
+                rung: rungForScopeIds(nodeScopeIds, view),
+                pinned: accented.has(node.id),
+                recordCount: recordCounts.get(node.id) ?? 0,
+                createdAt: node.createdAt.toISOString(),
+                updatedAt: node.updatedAt.toISOString(),
+              };
+            }),
+          );
           const payload: KnowledgeGraphPayload = {
             view: view.view,
             scopeId: this.#mintHandle(projectId, view.perspectiveKey, 'scope', selected.id),
@@ -1562,6 +1574,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...(metadataString(node.metadata, 'description')
                 ? { description: metadataString(node.metadata, 'description') }
                 : {}),
+              rung: rungForScopeIds(await view.store.getNodeScopeIds(node.id), view),
               createdAt: node.createdAt.toISOString(),
               updatedAt: node.updatedAt.toISOString(),
             },
