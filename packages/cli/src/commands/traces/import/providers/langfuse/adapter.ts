@@ -74,8 +74,8 @@ interface OrderedLangfuseTrace {
 
 export interface MapLangfuseTraceOptions {
   importId: string;
-  cutoffAt: string;
-  snapshotAt: string;
+  cutoffMs: number;
+  snapshotMs: number;
 }
 
 export class LangfuseTraceImportProvider implements TraceImportProvider {
@@ -97,6 +97,9 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
   }
 
   async *read(context: TraceImportReadContext): AsyncIterable<TraceImportRecord> {
+    const importWindow = parseImportWindow(context.cutoffAt, context.snapshotAt);
+    if (context.source.projectId.trim().length === 0) throw new Error('Langfuse project ID is required.');
+
     const window: LangfuseReadWindow = {
       cutoffAt: context.cutoffAt,
       snapshotAt: context.snapshotAt,
@@ -129,8 +132,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
       const sourceTrace = await this.reader.readTrace(options);
       yield mapLangfuseSourceTrace(sourceTrace, {
         importId: context.importId,
-        cutoffAt: context.cutoffAt,
-        snapshotAt: context.snapshotAt,
+        ...importWindow,
       });
     }
   }
@@ -164,12 +166,6 @@ function validateAndOrderTrace(
   const observations = sourceTrace.observations;
   if (observations.length === 0) {
     return { skipped: createSkippedTrace(sourceTrace.traceId, observations, 'empty_trace') };
-  }
-
-  const cutoffMs = parseRequiredTimestamp(options.cutoffAt);
-  const snapshotMs = parseRequiredTimestamp(options.snapshotAt);
-  if (cutoffMs === null || snapshotMs === null || cutoffMs >= snapshotMs) {
-    throw new Error('Langfuse import window must contain valid timestamps with cutoffAt before snapshotAt.');
   }
 
   const projectIds = new Set(observations.map(observation => observation.projectId));
@@ -223,12 +219,7 @@ function validateAndOrderTrace(
     }
 
     if (observation.type === 'EVENT') {
-      if (observation.endTime && parseSourceTimestamp(observation.endTime) === null) {
-        return {
-          skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
-        };
-      }
-      if (startMs > snapshotMs) {
+      if (startMs > options.snapshotMs) {
         return {
           skipped: createSkippedTrace(
             sourceTrace.traceId,
@@ -252,7 +243,7 @@ function validateAndOrderTrace(
         skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
       };
     }
-    if (endMs > snapshotMs) {
+    if (endMs > options.snapshotMs) {
       return {
         skipped: createSkippedTrace(
           sourceTrace.traceId,
@@ -265,7 +256,7 @@ function validateAndOrderTrace(
   }
 
   const rootStartMs = parseSourceTimestamp(root.startTime)!;
-  if (rootStartMs < cutoffMs || rootStartMs >= snapshotMs) {
+  if (rootStartMs < options.cutoffMs || rootStartMs >= options.snapshotMs) {
     return { skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'root_outside_window') };
   }
 
@@ -396,8 +387,13 @@ function deriveVirtualRootEndTime(
   );
 }
 
-function parseRequiredTimestamp(value: string): number | null {
-  return parseSourceTimestamp(value);
+function parseImportWindow(cutoffAt: string, snapshotAt: string): { cutoffMs: number; snapshotMs: number } {
+  const cutoffMs = parseSourceTimestamp(cutoffAt);
+  const snapshotMs = parseSourceTimestamp(snapshotAt);
+  if (cutoffMs === null || snapshotMs === null || cutoffMs >= snapshotMs) {
+    throw new Error('Langfuse import window must contain valid timestamps with cutoffAt before snapshotAt.');
+  }
+  return { cutoffMs, snapshotMs };
 }
 
 function parseSourceTimestamp(value: string | null | undefined): number | null {

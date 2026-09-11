@@ -54,12 +54,15 @@ describe('LangfuseClient', () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(new Response(failedBody))
-      .mockResolvedValueOnce(Response.json({ data: [{ id: 'project-1', name: 'Customer project' }] }));
+      .mockResolvedValueOnce(Response.json({ data: [observation], meta: { cursor: null } }));
     const sleep = vi.fn().mockResolvedValue(undefined);
     const onRetry = vi.fn();
-    const client = new LangfuseClient(options, { fetch, sleep, maxAttempts: 2, onRetry });
+    const client = new LangfuseClient(options, { fetch, sleep, maxAttempts: 2 });
 
-    await expect(client.identifyProject()).resolves.toEqual({ id: 'project-1', name: 'Customer project' });
+    await expect(client.getObservationsPage({ fields: 'core', limit: 1000 }, onRetry)).resolves.toEqual({
+      data: [observation],
+      cursor: null,
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledOnce();
     expect(onRetry).toHaveBeenCalledOnce();
@@ -104,9 +107,9 @@ describe('LangfuseClient', () => {
       .mockResolvedValueOnce(Response.json({ data: [], meta: { cursor: null } }));
     const sleep = vi.fn().mockResolvedValue(undefined);
     const onRetry = vi.fn();
-    const client = new LangfuseClient(options, { fetch, sleep, onRetry });
+    const client = new LangfuseClient(options, { fetch, sleep });
 
-    await client.getObservationsPage({ fields: 'core', limit: 1000 });
+    await client.getObservationsPage({ fields: 'core', limit: 1000 }, onRetry);
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(rateLimit.cancel).toHaveBeenCalledOnce();

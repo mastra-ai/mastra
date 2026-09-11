@@ -15,6 +15,11 @@ const window = {
   snapshotAt: '2026-09-01T12:00:00.000Z',
 };
 
+const mappedWindow = {
+  cutoffMs: Date.parse(window.cutoffAt),
+  snapshotMs: Date.parse(window.snapshotAt),
+};
+
 function observation(overrides: Partial<LangfuseObservation> = {}): LangfuseObservation {
   return {
     id: 'root',
@@ -60,7 +65,7 @@ describe('mapLangfuseSourceTrace', () => {
 
     const record = mapLangfuseSourceTrace(sourceTrace([child, observation({ tags: ['trace-tag'] })]), {
       importId: 'import-1',
-      ...window,
+      ...mappedWindow,
     });
 
     expect(record.kind).toBe('trace');
@@ -110,7 +115,7 @@ describe('mapLangfuseSourceTrace', () => {
           usageDetails: { input: 7, output: 3 },
         }),
       ]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record.kind).toBe('trace');
@@ -134,7 +139,7 @@ describe('mapLangfuseSourceTrace', () => {
   ])('maps Langfuse type %s to Mastra span type %s', (langfuseType, spanType) => {
     const record = mapLangfuseSourceTrace(sourceTrace([observation({ type: langfuseType })]), {
       importId: 'import-1',
-      ...window,
+      ...mappedWindow,
     });
 
     expect(record.kind).toBe('trace');
@@ -153,11 +158,11 @@ describe('mapLangfuseSourceTrace', () => {
           metadata: { 'scope.name': '@mastra/langfuse', spanType: 'workflow_run' },
         }),
       ]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
     const ignored = mapLangfuseSourceTrace(sourceTrace([observation({ metadata: { spanType: 'workflow_run' } })]), {
       importId: 'import-1',
-      ...window,
+      ...mappedWindow,
     });
 
     expect(restored.kind).toBe('trace');
@@ -178,7 +183,7 @@ describe('mapLangfuseSourceTrace', () => {
           endTime: '2026-08-20T10:00:05.000Z',
         }),
       ]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record.kind).toBe('trace');
@@ -218,7 +223,7 @@ describe('mapLangfuseSourceTrace', () => {
     ['completed_after_snapshot', [observation({ endTime: '2026-09-02T00:00:00.000Z' })]],
     ['root_outside_window', [observation({ startTime: '2026-08-01T23:59:59.000Z' })]],
   ])('skips invalid traces with reason %s', (reason, observations) => {
-    const record = mapLangfuseSourceTrace(sourceTrace(observations), { importId: 'import-1', ...window });
+    const record = mapLangfuseSourceTrace(sourceTrace(observations), { importId: 'import-1', ...mappedWindow });
 
     expect(record).toMatchObject({
       kind: 'skipped',
@@ -233,7 +238,7 @@ describe('mapLangfuseSourceTrace', () => {
   it('detaches an imported logical root while keeping the source parent in metadata', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([observation({ parentObservationId: 'external-parent', isRootObservation: true })]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record.kind).toBe('trace');
@@ -252,7 +257,7 @@ describe('mapLangfuseSourceTrace', () => {
   it('uses start time as event end time and preserves provider warning state as metadata', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'EVENT', endTime: null, level: 'WARNING', statusMessage: 'fallback used' })]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record.kind).toBe('trace');
@@ -262,6 +267,21 @@ describe('mapLangfuseSourceTrace', () => {
       endedAt: '2026-08-20T10:00:00.000Z',
       error: null,
       metadata: { langfuse: { level: 'WARNING', statusMessage: 'fallback used' } },
+    });
+  });
+
+  it('ignores an event end time because events use their start time as an instantaneous duration', () => {
+    const record = mapLangfuseSourceTrace(sourceTrace([observation({ type: 'EVENT', endTime: 'not-a-timestamp' })]), {
+      importId: 'import-1',
+      ...mappedWindow,
+    });
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans[0]).toMatchObject({
+      startedAt: '2026-08-20T10:00:00.000Z',
+      endedAt: '2026-08-20T10:00:00.000Z',
+      isEvent: true,
     });
   });
 
@@ -277,7 +297,7 @@ describe('mapLangfuseSourceTrace', () => {
           endTime: null,
         }),
       ]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record).toMatchObject({
@@ -293,7 +313,7 @@ describe('mapLangfuseSourceTrace', () => {
   it('turns Langfuse error observations into Mastra span errors', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([observation({ type: 'GENERATION', level: 'ERROR', statusMessage: 'provider failed' })]),
-      { importId: 'import-1', ...window },
+      { importId: 'import-1', ...mappedWindow },
     );
 
     expect(record.kind).toBe('trace');
@@ -398,5 +418,29 @@ describe('LangfuseTraceImportProvider', () => {
 
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('validates the import window once at the provider boundary before making a request', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const provider = new LangfuseTraceImportProvider(clientOptions, { fetch });
+
+    await expect(
+      collect(
+        provider.read({
+          importId: 'import-1',
+          source: {
+            provider: 'langfuse',
+            baseUrl: 'https://cloud.langfuse.com',
+            projectId: 'project-1',
+            mapperVersion: 'langfuse-api-v2@1',
+            idAlgorithmVersion: 'langfuse-sha256-v1',
+          },
+          cutoffAt: '2026-09-02T00:00:00.000Z',
+          snapshotAt: '2026-09-01T00:00:00.000Z',
+          onRetry: vi.fn(),
+        }),
+      ),
+    ).rejects.toThrow('cutoffAt before snapshotAt');
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

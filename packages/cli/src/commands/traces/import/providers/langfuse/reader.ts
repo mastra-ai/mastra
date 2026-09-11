@@ -38,11 +38,9 @@ export interface LangfuseTraceReadOptions {
  */
 export class LangfuseObservationsReader {
   private readonly client: LangfuseClient;
-  private readonly onRetry?: () => void;
 
   constructor(options: LangfuseClientOptions, dependencies: LangfuseClientDependencies = {}) {
     this.client = new LangfuseClient(options, dependencies);
-    this.onRetry = dependencies.onRetry;
   }
 
   get baseUrl(): string {
@@ -59,7 +57,6 @@ export class LangfuseObservationsReader {
    * it can report them instead of silently dropping them.
    */
   async *discoverTraces(window: LangfuseReadWindow): AsyncGenerator<LangfuseTraceDiscovery> {
-    assertWindow(window);
     const seenTraceIds = new Set<string>();
 
     for await (const page of this.pages({
@@ -133,8 +130,7 @@ export class LangfuseObservationsReader {
           // The cursor identifies the last returned observation independently
           // of the requested limit, so the page can safely be retried smaller.
           limit = Math.max(1, Math.floor(limit / 2));
-          this.onRetry?.();
-          if (onRetry !== this.onRetry) onRetry?.();
+          onRetry?.();
         }
       }
       yield page.data;
@@ -148,15 +144,6 @@ export class LangfuseObservationsReader {
       }
     } while (cursor !== undefined);
   }
-}
-
-function assertWindow(window: LangfuseReadWindow): void {
-  const cutoff = Date.parse(window.cutoffAt);
-  const snapshot = Date.parse(window.snapshotAt);
-  if (!Number.isFinite(cutoff) || !Number.isFinite(snapshot) || cutoff >= snapshot) {
-    throw new Error('Langfuse import window must contain valid timestamps with cutoffAt before snapshotAt.');
-  }
-  if (window.projectId.trim().length === 0) throw new Error('Langfuse project ID is required.');
 }
 
 function assertProject(observation: LangfuseObservation, projectId: string): void {

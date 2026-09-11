@@ -18,7 +18,6 @@ export interface LangfuseClientDependencies {
   sleep?: Sleep;
   maxAttempts?: number;
   requestTimeoutMs?: number;
-  onRetry?: () => void;
 }
 
 export interface LangfuseObservationQuery {
@@ -59,7 +58,6 @@ export class LangfuseClient {
   private readonly sleep: Sleep;
   private readonly maxAttempts: number;
   private readonly requestTimeoutMs: number;
-  private readonly onRetry?: () => void;
 
   constructor(options: LangfuseClientOptions, dependencies: LangfuseClientDependencies = {}) {
     const publicKey = requireCredential(options.publicKey, 'Langfuse public key');
@@ -71,7 +69,6 @@ export class LangfuseClient {
     this.sleep = dependencies.sleep ?? sleep;
     this.maxAttempts = dependencies.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.requestTimeoutMs = dependencies.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-    this.onRetry = dependencies.onRetry;
 
     if (!Number.isInteger(this.maxAttempts) || this.maxAttempts < 1) {
       throw new Error('Langfuse max attempts must be a positive integer.');
@@ -114,9 +111,7 @@ export class LangfuseClient {
   }
 
   private async requestJson(url: URL, signal?: AbortSignal, onRetry?: () => void): Promise<unknown> {
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
+    for (let attempt = 0; ; attempt++) {
       signal?.throwIfAborted();
 
       let response: Response;
@@ -129,7 +124,6 @@ export class LangfuseClient {
         });
       } catch (error) {
         if (signal?.aborted) throw signal.reason ?? error;
-        lastError = error;
         if (attempt + 1 < this.maxAttempts) {
           await this.waitBeforeRetry(backoffMilliseconds(attempt), signal, onRetry);
           continue;
@@ -153,7 +147,6 @@ export class LangfuseClient {
         } catch (error) {
           if (error instanceof LangfuseReaderError) throw error;
           if (signal?.aborted) throw signal.reason ?? error;
-          lastError = error;
           if (attempt + 1 < this.maxAttempts) {
             await this.waitBeforeRetry(backoffMilliseconds(attempt), signal, onRetry);
             continue;
@@ -199,13 +192,10 @@ export class LangfuseClient {
         status: response.status,
       });
     }
-
-    throw new LangfuseReaderError('Langfuse request failed.', { retryable: true, cause: lastError });
   }
 
   private async waitBeforeRetry(milliseconds: number, signal?: AbortSignal, onRetry?: () => void): Promise<void> {
-    this.onRetry?.();
-    if (onRetry !== this.onRetry) onRetry?.();
+    onRetry?.();
     await this.sleep(milliseconds, signal);
   }
 }
