@@ -378,6 +378,46 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
+  it('reads structural scope nodes and members after reconciliation', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-scope-nodes-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const plan = {
+        scopes: [
+          { address: 'org:acme', name: 'mastra' },
+          { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+          { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+        ],
+      };
+      const { scopes } = await store.reconcileStructure(plan);
+
+      const nodes = await store.listScopeNodes();
+      expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
+      const mastra = nodes.find(node => node.name === 'mastra')!;
+      const features = nodes.find(node => node.name === 'features')!;
+      expect(features).toMatchObject({ kind: 'domain', parentIds: [mastra.id] });
+      expect(mastra.parentIds).toEqual([]);
+      expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
+
+      const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
+
+      // Content nodes never join structural scopes; deletion and unknown ids stay out of the read.
+      await client.execute(`UPDATE mastra_knowledge_nodes SET deletedAt=? WHERE id=?`, [
+        new Date().toISOString(),
+        features.id,
+      ]);
+      const afterDelete = await store.listScopeNodes();
+      expect(afterDelete.find(node => node.id === features.id)).toBeUndefined();
+      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('serializes reconciliation across clients sharing one database', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-reconcile-concurrent-'));
     const url = `file:${join(directory, 'knowledge.db')}`;

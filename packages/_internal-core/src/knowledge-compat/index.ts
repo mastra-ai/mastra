@@ -4,6 +4,20 @@ export const KNOWLEDGE_V2_MINIMUM_CORE_VERSION = '1.65.0-0';
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
 export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 
+/** Hard cap on scope nodes returned by one `listScopeNodes` read. */
+export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+/** A reconciled structural scope node with its containing scope nodes. */
+export interface KnowledgeScopeNodeSummary {
+  /** UUID of the `isScope` node. */
+  id: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  /** UUIDs of the scope nodes that contain this scope (membership edges). */
+  parentIds: string[];
+}
+
 const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
 const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
