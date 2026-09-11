@@ -60,6 +60,8 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Lazy handle to the knowledge storage domain; endpoints 503 when absent. */
   knowledge: (key: string) => Promise<KnowledgeStorage | undefined>;
+  /** Host-selected key used when the caller does not explicitly select another registered runtime. */
+  defaultKnowledgeKey?: string;
   limits?: Partial<KnowledgeRouteLimits>;
 }
 
@@ -330,7 +332,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
     let store: KnowledgeStorage | undefined;
     try {
-      const key = c.req.query('knowledgeKey') ?? 'default';
+      const key = c.req.query('knowledgeKey') ?? this.deps.defaultKnowledgeKey ?? 'default';
       store = key.trim() ? await this.deps.knowledge(key) : undefined;
     } catch {
       store = undefined;
