@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Improved workspace `grep` and `list_files` tool performance on remote filesystems. The `list_files` tree walk now issues directory listings concurrently instead of one at a time, and `WorkspaceFilesystem` providers can implement optional `walk()` and `grep()` methods to run tree walks and content searches natively in a single call. The workspace tools use these capabilities automatically when available and fall back to the existing host-side walk otherwise, so a grep over a remote sandbox filesystem no longer needs one network round trip per directory and file. Fixes https://github.com/mastra-ai/mastra/issues/22285
+Improved workspace `grep` and `list_files` tool performance on remote filesystems. The `list_files` tree walk now issues directory listings concurrently instead of one at a time, and `WorkspaceFilesystem` providers can implement optional `walk()` and `grep()` methods to run tree walks and content searches natively in a single call. The workspace tools use these capabilities automatically when available and fall back to the existing host-side walk otherwise, so a grep over a remote sandbox filesystem no longer needs one network round trip per directory and file. When a native capability fails and the tools fall back to the host-side walk, the downgrade is logged through the workspace logger (`info` for an unsupported grep pattern, `warn` for any other failure) so unexpected per-file round trips are visible. `Workspace` now exposes a read-only `logger` getter. Fixes https://github.com/mastra-ai/mastra/issues/22285
 
 ```ts
 import { UnsupportedGrepPatternError } from '@mastra/core/workspace';

@@ -21,6 +21,7 @@
  * ```
  */
 
+import type { IMastraLogger } from '../../logger';
 import { pMap } from '../../utils/p-map';
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 import type { IgnoreFilter } from '../gitignore';
@@ -52,6 +53,8 @@ export interface TreeOptions {
   ignoreFilter?: IgnoreFilter;
   /** Respect .gitignore entries in the listed directory (default: true). */
   respectGitignore?: boolean;
+  /** Logger used to report when a native `walk` capability fails and the slower readdir walk is used instead. */
+  logger?: Pick<IMastraLogger, 'warn'>;
 }
 
 export interface TreeResult {
@@ -182,8 +185,12 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         }
       }
       prefetched = true;
-    } catch {
+    } catch (error) {
       entriesByPath.clear();
+      options?.logger?.warn(
+        `Native walk failed on "${fs.provider}" filesystem; falling back to per-directory readdir walk for "${path}"`,
+        { error: error instanceof Error ? error.message : String(error) },
+      );
     }
   }
 

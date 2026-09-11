@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { pMap } from '../../utils/p-map';
 import { WORKSPACE_TOOLS } from '../constants';
+import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
 import { isTextFile } from '../filesystem/fs-utils';
 import { loadGitignore } from '../gitignore';
@@ -148,8 +149,21 @@ Usage:
                 maxTotalMatches: GLOBAL_CAP,
                 contextLines: normalizedContextLines,
               });
-            } catch {
+            } catch (error) {
               nativeResults = undefined;
+              // The fallback walk costs one round trip per directory and file on
+              // remote filesystems, so make the downgrade visible.
+              const reason = error instanceof Error ? error.message : String(error);
+              if (error instanceof UnsupportedGrepPatternError) {
+                workspace.logger?.info(
+                  `Native grep on "${filesystem.provider}" filesystem does not support pattern "${pattern}"; falling back to host-side search`,
+                );
+              } else {
+                workspace.logger?.warn(
+                  `Native grep failed on "${filesystem.provider}" filesystem; falling back to host-side search for "${searchPath}"`,
+                  { error: reason },
+                );
+              }
             }
           }
 

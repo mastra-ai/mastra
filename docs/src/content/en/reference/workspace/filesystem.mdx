@@ -486,7 +486,7 @@ const instructions = filesystem.getInstructions?.()
 
 ### `walk(path, options?)`
 
-Native recursive tree walk executed by the provider in as few calls as possible. When implemented, the workspace `list_files` tool uses it instead of issuing one `readdir` round trip per directory, which matters for remote providers (sandboxes, object stores). If `walk` throws, tools fall back to the `readdir`-based walk automatically.
+Native recursive tree walk executed by the provider in as few calls as possible. When implemented, the workspace `list_files` tool uses it instead of issuing one `readdir` round trip per directory, which matters for remote providers (sandboxes, object stores). If `walk` throws, tools fall back to the `readdir`-based walk automatically and log a warning through the workspace logger, since the fallback issues one round trip per directory.
 
 ```typescript
 const entries = await filesystem.walk?.('.', { maxDepth: 3 })
@@ -527,7 +527,7 @@ interface WalkEntry extends FileEntry {
 
 ### `grep(options)`
 
-Native content search executed by the provider (for example with `rg` or `grep` inside a sandbox). When implemented, the workspace `grep` tool delegates to it instead of downloading every file to search host-side. Throw `UnsupportedGrepPatternError` when a pattern can't run natively so that callers catch it and fall back to the host-side implementation.
+Native content search executed by the provider (for example with `rg` or `grep` inside a sandbox). When implemented, the workspace `grep` tool delegates to it instead of downloading every file to search host-side. Throw `UnsupportedGrepPatternError` when a pattern can't run natively so that callers catch it and fall back to the host-side implementation. That fallback is logged at `info` level; any other error from `grep` also triggers the fallback but is logged as a warning, since the host-side search reads every candidate file.
 
 ```typescript
 const results = await filesystem.grep?.({

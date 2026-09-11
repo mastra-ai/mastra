@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { UnsupportedGrepPatternError } from '../../errors';
@@ -164,6 +164,18 @@ describe('filesystem capability delegation', () => {
       expect(result).toEqual(expected);
     });
 
+    it('logs a warning when falling back from a failed native walk', async () => {
+      const capFs = new CapabilityFilesystem(tempDir);
+      capFs.walkError = new Error('boom');
+      const logger = { warn: vi.fn() };
+
+      await formatAsTree(capFs, '.', { logger });
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn.mock.calls[0]![0]).toMatch(/Native walk failed .*falling back/);
+      expect(logger.warn.mock.calls[0]![1]).toEqual({ error: 'boom' });
+    });
+
     it('still throws for a nonexistent root path', async () => {
       const capFs = new CapabilityFilesystem(tempDir);
       capFs.walkError = new Error('walk failed');
@@ -180,8 +192,10 @@ describe('filesystem capability delegation', () => {
   describe('grep tool with grep capability', () => {
     async function makeTools(filesystem: LocalFilesystem) {
       const workspace = new Workspace({ filesystem });
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      workspace.__setLogger(logger as any);
       const tools = await createWorkspaceTools(workspace);
-      return { workspace, grep: tools[WORKSPACE_TOOLS.FILESYSTEM.GREP] };
+      return { workspace, logger, grep: tools[WORKSPACE_TOOLS.FILESYSTEM.GREP] };
     }
 
     it('delegates to the native grep capability and does not walk or read files', async () => {
@@ -242,13 +256,30 @@ describe('filesystem capability delegation', () => {
     it('falls back to the host-side walk on UnsupportedGrepPatternError', async () => {
       const capFs = new CapabilityFilesystem(tempDir);
       capFs.grepError = new UnsupportedGrepPatternError('\\bfoo\\b');
-      const { workspace, grep } = await makeTools(capFs);
+      const { workspace, logger, grep } = await makeTools(capFs);
 
       const result = await grep.execute({ pattern: 'foo' }, { workspace });
 
       expect(capFs.grepCalls).toHaveLength(1);
       expect(capFs.readdirCalls.length).toBeGreaterThan(0);
       expect(result).toContain('index.ts');
+      // Expected downgrade: logged at info, not warn
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info.mock.calls[0]![0]).toMatch(/does not support pattern .*falling back to host-side search/);
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('warns when the native grep fails for any other reason', async () => {
+      const capFs = new CapabilityFilesystem(tempDir);
+      capFs.grepError = new Error('rate limited');
+      const { workspace, logger, grep } = await makeTools(capFs);
+
+      const result = await grep.execute({ pattern: 'foo' }, { workspace });
+
+      expect(result).toContain('index.ts');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn.mock.calls[0]![0]).toMatch(/Native grep failed .*falling back to host-side search/);
+      expect(logger.warn.mock.calls[0]![1]).toEqual({ error: 'rate limited' });
     });
   });
 });
