@@ -48,6 +48,10 @@ function createState(): TUIState {
       mode: {
         resolve: vi.fn(() => ({ id: 'build', metadata: {} })),
       },
+      om: {
+        observer: { modelId: () => undefined },
+        reflector: { modelId: () => undefined },
+      },
     },
   } as unknown as TUIState;
 }
@@ -1027,5 +1031,38 @@ describe('renderExistingMessages subagents', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('subagent fork openai/gpt-5.5');
     expect(rendered).toContain('summary text');
+  });
+});
+
+describe('renderExistingMessages session errors', () => {
+  it('renders a persisted session error without an empty assistant message', async () => {
+    const state = createState();
+    const message: MastraDBMessage = {
+      id: 'session-error-1',
+      role: 'assistant',
+      createdAt: new Date('2026-09-08T00:00:00.000Z'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-session-error',
+            data: { occurrenceId: 'error-1', name: 'Error', message: 'resume failed' },
+          } as never,
+        ],
+      },
+    };
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Error: resume failed');
+    expect(state.renderedSessionErrorIds).toEqual(new Set(['error-1']));
   });
 });

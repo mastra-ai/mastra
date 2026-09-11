@@ -19,6 +19,8 @@ function createMockState() {
     assistantRenderRegistry,
     assistantSegment,
     pendingNewThread: false,
+    liveSessionErrors: new Map([['old-error', { type: 'error', error: new Error('old failure') }]]),
+    renderedSessionErrorIds: new Set(['old-error']),
     currentThreadTitle: 'Current thread',
     options: { appName: 'Mastra Code' },
     chatContainer: { clear: vi.fn() },
@@ -89,6 +91,8 @@ describe('handleNewCommand', () => {
 
     await handleNewCommand(ctx);
 
+    expect(state.liveSessionErrors.size).toBe(0);
+    expect(state.renderedSessionErrorIds.size).toBe(0);
     expect(state.chatContainer.clear).toHaveBeenCalled();
     expect(state.pendingTools.clear).toHaveBeenCalled();
     expect(state.allToolComponents).toEqual([]);

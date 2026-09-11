@@ -18,7 +18,7 @@ import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
 import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
-import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerEvent, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import { AssistantRenderRegistry } from './assistant-render-registry.js';
@@ -205,6 +205,10 @@ export interface TUIState {
   taskToolInsertIndex: number;
   /** Track all tool IDs seen during current stream (prevents duplicates) */
   seenToolCallIds: Set<string>;
+  /** Stable session-error occurrence ids already rendered in the transcript. */
+  renderedSessionErrorIds: Set<string>;
+  /** Live errors retained until their persisted history entry is available. */
+  liveSessionErrors: Map<string, Extract<AgentControllerEvent, { type: 'error' }>>;
   /** Track subagent tool call IDs to skip in trailing content logic */
   subagentToolCallIds: Set<string>;
   /** Track streamed system reminders for the active assistant run */
@@ -412,6 +416,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingTaskToolIds: new Set(),
     taskToolInsertIndex: -1,
     seenToolCallIds: new Set(),
+    renderedSessionErrorIds: new Set(),
+    liveSessionErrors: new Map(),
     subagentToolCallIds: new Set(),
     currentRunSystemReminderKeys: new Set(),
     allToolComponents: [],

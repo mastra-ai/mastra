@@ -247,7 +247,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string }
-  | { type: 'run-failed'; runId: string; streamId?: string; error: string }
+  | { type: 'run-failed'; runId: string; streamId?: string; error: string; occurrenceId?: string; occurredAt?: number }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
 
 function createRuntimeState(): AgentThreadRuntimeState {
@@ -617,6 +617,13 @@ export class AgentThreadStreamRuntime {
   }
 
   async #publishAndWait(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
+    if (event.type === 'run-failed') {
+      event = {
+        ...event,
+        occurrenceId: event.occurrenceId ?? randomUUID(),
+        occurredAt: event.occurredAt ?? Date.now(),
+      };
+    }
     await this.#getPubSub(pubsub).publish(this.#threadTopic(key), {
       type: event.type,
       runId: event.runId,
@@ -667,7 +674,19 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
-      const part = sanitizeBroadcastPart(rawPart);
+      let part = sanitizeBroadcastPart(rawPart);
+      if (
+        part &&
+        typeof part === 'object' &&
+        'type' in part &&
+        (part.type === 'error' ||
+          part.type === 'finish' ||
+          part.type === 'data-om-observation-failed' ||
+          part.type === 'data-om-buffering-failed')
+      ) {
+        // Assign before local/remote fan-out so every consumer records the same occurrence.
+        part = { ...part, occurrenceId: randomUUID(), occurredAt: Date.now() };
+      }
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
@@ -2093,6 +2112,7 @@ export class AgentThreadStreamRuntime {
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
     const seenStreamIds = new Set<string>();
+    const failedStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
@@ -2264,6 +2284,7 @@ export class AgentThreadStreamRuntime {
 
     const startRemoteRunLeaseWatch = (runId: string, streamId: string) => {
       if (hasFallbackLeaseProvider || remoteRunLeaseTimers.has(streamId)) return;
+      let occurredAt: number | undefined;
 
       const checkLease = async () => {
         remoteRunLeaseTimers.delete(streamId);
@@ -2290,18 +2311,24 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
-        clearActiveIfCurrent(runId, streamId);
-        remoteRun.parts.push({
-          type: 'error',
-          payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
-        });
-        remoteRun.done = true;
-        while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
-        while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
-        remoteRuns.delete(streamId);
-        seenStreamIds.delete(streamId);
-        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
-        wake();
+        // Publish the watchdog failure so observers share its occurrence time as well as its identity.
+        occurredAt ??= Date.now();
+        try {
+          await this.#publishAndWait(resolvedPubSub, key, {
+            type: 'run-failed',
+            runId,
+            streamId,
+            occurrenceId: `lease-lost:${streamId}`,
+            occurredAt,
+            error: `Thread run ${runId} lost its lease before publishing a terminal event`,
+          });
+        } catch {
+          if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+          remoteRunLeaseTimers.set(
+            streamId,
+            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+          );
+        }
       };
 
       remoteRunLeaseTimers.set(
@@ -2408,6 +2435,8 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-failed') {
         const eventStreamId = data.streamId ?? data.runId;
+        if (failedStreamIds.has(eventStreamId)) return;
+        failedStreamIds.add(eventStreamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         if (deferredRunsByStreamId.has(eventStreamId)) {
@@ -2425,7 +2454,12 @@ export class AgentThreadStreamRuntime {
           remoteRun = remoteRuns.get(eventStreamId);
         }
         if (remoteRun) {
-          remoteRun.parts.push({ type: 'error', payload: { error: new Error(data.error) } });
+          remoteRun.parts.push({
+            type: 'error',
+            occurrenceId: data.occurrenceId ?? `run-failed:${eventStreamId}`,
+            occurredAt: data.occurredAt,
+            payload: { error: new Error(data.error) },
+          });
           remoteRun.done = true;
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();

@@ -1,5 +1,6 @@
+import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import { queryKeys } from '../../../api/keys';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -40,6 +42,7 @@ function dbMessage(id: string, role: MastraDBMessage['role'], text: string): Mas
 /** Thread transcript as the server holds it; the test grows it mid-run. */
 function stubThreadRoute(initialMessages: MastraDBMessage[]) {
   let messages = initialMessages;
+  const streams = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -92,9 +95,19 @@ function stubThreadRoute(initialMessages: MastraDBMessage[]) {
     http.get(
       `${AC}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.add(controller);
+            },
+            cancel() {
+              streams.clear();
+            },
+          }),
+          {
+            headers: { 'content-type': 'text/event-stream' },
+          },
+        ),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [{ id: SESSION_ID }] })),
@@ -108,7 +121,13 @@ function stubThreadRoute(initialMessages: MastraDBMessage[]) {
     ),
   );
 
-  return { runProduces: (next: MastraDBMessage[]) => (messages = [...messages, ...next]) };
+  return {
+    runProduces: (next: MastraDBMessage[]) => (messages = [...messages, ...next]),
+    connected: () => streams.size > 0,
+    emit: (event: AgentControllerEvent) => {
+      for (const stream of streams) stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
+  };
 }
 
 const THREAD_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`;
@@ -137,5 +156,68 @@ describe('ThreadPage revisit', () => {
     expect(await screen.findByText('here is the review')).toBeInTheDocument();
     expect(screen.getByText('reading the diff')).toBeInTheDocument();
     expect(screen.getByText('review this PR')).toBeInTheDocument();
+  });
+});
+
+describe('ThreadPage session error history', () => {
+  it('reconciles live SSE errors with fetched history in order, then restores them on a fresh client', async () => {
+    const serverThread = stubThreadRoute([]);
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [THREAD_PATH] });
+    const { client, unmount } = renderWithProviders(<RouterProvider router={router} />);
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(serverThread.connected()).toBe(true));
+    const emitFailure = (occurrenceId: string) =>
+      serverThread.emit({ type: 'error', occurrenceId, error: { name: 'Error', message: 'The provider failed.' } });
+    await act(async () => {
+      emitFailure('first');
+    });
+    expect(await screen.findByText('The provider failed.')).toBeInTheDocument();
+    const failureMessage = (occurrenceId: string): MastraDBMessage => ({
+      id: `stored-${occurrenceId}`,
+      role: 'assistant',
+      createdAt: new Date('2026-09-09T08:00:00Z'),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-session-error', data: { occurrenceId, name: 'Error', message: 'The provider failed.' } }],
+      },
+    });
+    serverThread.runProduces([dbMessage('before', 'user', 'Please try the provider'), failureMessage('first')]);
+    const refresh = () =>
+      client.invalidateQueries({ queryKey: queryKeys.agentControllerThreadMessages('code', SESSION_ID, SESSION_ID) });
+    await act(async () => {
+      await refresh();
+    });
+    await waitForMutationsIdle(client);
+    const before = await screen.findByText('Please try the provider');
+    const first = screen.getByText('The provider failed.');
+    expect(before.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText('The provider failed.')).toHaveLength(1);
+    await act(async () => {
+      emitFailure('first');
+      emitFailure('second');
+    });
+    await waitFor(() => expect(screen.getAllByText('The provider failed.')).toHaveLength(2));
+    serverThread.runProduces([failureMessage('second'), dbMessage('after', 'assistant', 'Recovered successfully')]);
+    await act(async () => {
+      await refresh();
+    });
+    await waitForMutationsIdle(client);
+    expect(screen.getAllByText('The provider failed.')).toHaveLength(2);
+    expect(await screen.findByText('Recovered successfully')).toBeInTheDocument();
+    unmount();
+    client.clear();
+    const freshRouter = createMemoryRouter(createAppRoutes(), { initialEntries: [THREAD_PATH] });
+    const fresh = renderWithProviders(<RouterProvider router={freshRouter} />);
+    await waitForMutationsIdle(fresh.client);
+    expect(await screen.findAllByText('The provider failed.')).toHaveLength(2);
+    const restored = screen.getAllByText('The provider failed.');
+    expect(
+      screen.getByText('Please try the provider').compareDocumentPosition(restored[0]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      restored[1]!.compareDocumentPosition(screen.getByText('Recovered successfully')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

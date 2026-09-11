@@ -141,6 +141,7 @@ export type ScenarioName =
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
   | 'setup-nested-model-selector'
+  | 'session-error-history-reload'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
   | 'shell-passthrough-during-run'

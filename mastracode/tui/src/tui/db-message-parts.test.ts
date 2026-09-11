@@ -52,6 +52,22 @@ describe('getAssistantRenderParts', () => {
     expect(getAssistantRenderParts(message)).toEqual([{ kind: 'thinking', text: 'why' }]);
   });
 
+  it('maps a persisted session error data part', () => {
+    const message = assistantMessage([
+      {
+        type: 'data-session-error',
+        data: { occurrenceId: 'error-1', name: 'Error', message: 'resume failed', retryable: true },
+      } as never,
+    ]);
+
+    expect(getAssistantRenderParts(message)).toEqual([
+      {
+        kind: 'session-error',
+        data: { occurrenceId: 'error-1', name: 'Error', message: 'resume failed', retryable: true },
+      },
+    ]);
+  });
+
   it('maps a tool-invocation part to a tool render item with result', () => {
     const message = assistantMessage([
       {

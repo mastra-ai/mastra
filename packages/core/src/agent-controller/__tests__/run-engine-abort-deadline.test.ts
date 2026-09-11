@@ -29,6 +29,7 @@ function createHarness() {
 
   const machinery: SessionMachinery = {
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
+    getRunScope: () => undefined,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these tests');
     },
@@ -40,6 +41,7 @@ function createHarness() {
     generateId: () => `msg-${++idCounter}`,
     resolveTransitionModeId: () => undefined,
     saveSystemReminder: vi.fn(async () => null),
+    saveSessionError: vi.fn(async () => null),
   };
 
   const engine = new SessionRunEngine(session, machinery);
@@ -51,6 +53,70 @@ function chunk(value: StreamChunk): StreamChunk {
 }
 
 describe('SessionRunEngine — abort deadline', () => {
+  it('keeps a replacement subscription attached when an old abort finishes after a terminal hook', async () => {
+    const { engine, session, events } = createHarness();
+    const blocked = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    session.onBeforeAgentEnd(async () => {
+      entered.resolve();
+      await blocked.promise;
+    });
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'abort', payload: {} });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await entered.promise;
+    session.thread.set({ threadId: 'thread-2' });
+    const replacement = { ...subscription, activeRunId: () => 'run-2', unsubscribe: vi.fn() };
+    session.stream.attach({ subscription: replacement, key: 'thread-2' });
+    session.run.nextOperation();
+    session.run.setRunId({ runId: 'run-2' });
+    blocked.resolve();
+    await processed;
+    expect(session.stream.isCurrent({ subscription: replacement })).toBe(true);
+    expect(session.run.getRunId()).toBe('run-2');
+    expect(events.some(event => event.type === 'agent_end')).toBe(false);
+  });
+
+  it('records a rejected old approval on its originating thread without ending the replacement run', async () => {
+    const { engine, session, events } = createHarness();
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const failure = Promise.withResolvers<void>();
+    const approve = vi.spyOn(session, 'approveToolCall').mockImplementationOnce(() => failure.promise);
+    const record = vi.spyOn(session, 'recordSessionError');
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'tool-call-approval', payload: { toolCallId: 'call-1', toolName: 'confirm', args: {} } });
+      })(),
+      activeRunId: () => 'run-1',
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+    const processed = engine.processSubscribedThreadStream(subscription);
+    await vi.waitFor(() => expect(approve).toHaveBeenCalled());
+    session.thread.set({ threadId: 'thread-2' });
+    const replacement = { ...subscription, activeRunId: () => 'run-2', unsubscribe: vi.fn() };
+    session.stream.attach({ subscription: replacement, key: 'thread-2' });
+    session.run.nextOperation();
+    session.run.setRunId({ runId: 'run-2' });
+    failure.reject(new Error('Approval dispatch failed'));
+    await processed;
+    expect(record).toHaveBeenCalledWith(
+      { type: 'error', error: expect.objectContaining({ message: 'Approval dispatch failed' }) },
+      { threadId: 'thread-1', resourceId: 'resource-1', runId: 'run-1' },
+    );
+    expect(events.some(event => event.type === 'error' || event.type === 'agent_end')).toBe(false);
+    expect(session.stream.isCurrent({ subscription: replacement })).toBe(true);
+    expect(session.run.getRunId()).toBe('run-2');
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -76,6 +142,26 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(events).toContainEqual({ type: 'agent_end', reason: 'aborted' });
     expect(session.run.isRunning()).toBe(false);
     expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
+  });
+
+  it('Given a stream error, When the stream is finalized, Then its occurrence identity is minted once at the run boundary', async () => {
+    const { engine, events } = createHarness();
+
+    await engine.processStream({
+      fullStream: (async function* () {
+        yield chunk({ type: 'error', payload: { error: new Error('stream failed') } });
+      })(),
+    });
+
+    const errors = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'error' }> => event.type === 'error',
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      error: expect.objectContaining({ message: 'stream failed' }),
+      occurrenceId: 'msg-2',
+    });
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'error' });
   });
 
   it('Given a run that ends on a terminal chunk, Then the source stream is still cleaned up', async () => {
@@ -300,10 +386,11 @@ describe('SessionRunEngine — abort deadline', () => {
     await engine.processSubscribedThreadStream(subscription);
 
     expect(events.filter(event => event.type === 'error')).toEqual([
-      {
+      expect.objectContaining({
         type: 'error',
         error: new Error('Thread run run-1 lost its lease before publishing a terminal event'),
-      },
+        occurrenceId: expect.any(String),
+      }),
     ]);
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
       { type: 'agent_end', reason: 'error' },

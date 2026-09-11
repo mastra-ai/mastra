@@ -187,9 +187,18 @@ export async function dispatchEvent(
       ectx.showInfo(event.message);
       break;
 
-    case 'error':
-      ectx.showFormattedError(event);
+    case 'error': {
+      state.renderedSessionErrorIds ??= new Set();
+      if (!event.occurrenceId || !state.renderedSessionErrorIds.has(event.occurrenceId)) {
+        ectx.showFormattedError(event);
+        if (event.occurrenceId) {
+          state.renderedSessionErrorIds.add(event.occurrenceId);
+          state.liveSessionErrors ??= new Map();
+          state.liveSessionErrors.set(event.occurrenceId, event);
+        }
+      }
       break;
+    }
 
     case 'mode_changed':
       await ectx.refreshModelAuthStatus();
@@ -202,6 +211,7 @@ export async function dispatchEvent(
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
+      state.liveSessionErrors?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
@@ -396,12 +406,38 @@ export async function dispatchEvent(
       break;
 
     case 'workspace_error':
-      ectx.showError(`Workspace: ${event.error.message}`);
+      state.renderedSessionErrorIds ??= new Set();
+      if (!event.occurrenceId || !state.renderedSessionErrorIds.has(event.occurrenceId)) {
+        ectx.showError(`Workspace: ${event.error.message}`);
+        if (event.occurrenceId) {
+          state.renderedSessionErrorIds.add(event.occurrenceId);
+          state.liveSessionErrors ??= new Map();
+          state.liveSessionErrors.set(event.occurrenceId, {
+            type: 'error',
+            occurrenceId: event.occurrenceId,
+            error: new Error(`Workspace: ${event.error.message}`),
+          });
+        }
+      }
       break;
 
     case 'workspace_status_changed':
-      if (event.status === 'error' && event.error) {
+      state.renderedSessionErrorIds ??= new Set();
+      if (
+        event.status === 'error' &&
+        event.error &&
+        (!event.occurrenceId || !state.renderedSessionErrorIds.has(event.occurrenceId))
+      ) {
         ectx.showError(`Workspace: ${event.error.message}`);
+        if (event.occurrenceId) {
+          state.renderedSessionErrorIds.add(event.occurrenceId);
+          state.liveSessionErrors ??= new Map();
+          state.liveSessionErrors.set(event.occurrenceId, {
+            type: 'error',
+            occurrenceId: event.occurrenceId,
+            error: new Error(`Workspace: ${event.error.message}`),
+          });
+        }
       }
       break;
 

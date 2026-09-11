@@ -3,10 +3,15 @@ import { join } from 'node:path';
 
 import type { McE2eScenario } from './types.js';
 
+const selectedModel = '302ai/subagent-config-e2e-model';
+
 export const subagentsCommandScenario = {
   name: 'subagents-command',
   description: 'Enables, configures, and disables subagents through the /subagents TUI command.',
   testName: 'persists subagent enablement and model configuration from the TUI',
+  env() {
+    return { '302AI_API_KEY': 'sk-subagent-config-e2e' };
+  },
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -46,13 +51,20 @@ export const subagentsCommandScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Select subagent model \(Explore · Global\)/i, terminal);
+    await runtime.waitForScreenText(/Type to search/i, terminal);
+    terminal.write(selectedModel);
+    await runtime.waitForScreenText(/Use: 302ai\/subagent-config-e2e-model/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Subagent model set for Explore · Global:/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Subagent model set for Explore · Global: 302ai\/subagent-config-e2e-model/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("SUBAGENT_EXPLORE_MODEL="+(s.models.subagentModels.explore||"missing"));'`,
     );
-    await runtime.waitForScreenText(/SUBAGENT_EXPLORE_MODEL=(?!missing)\S+/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SUBAGENT_EXPLORE_MODEL=302ai\/subagent-config-e2e-model/i, terminal, 8_000);
 
     terminal.submit('/subagents');
     await runtime.waitForScreenText(/Disable subagents/i, terminal);

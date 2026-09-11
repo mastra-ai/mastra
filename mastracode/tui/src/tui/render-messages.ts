@@ -52,6 +52,7 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
+import { showFormattedError } from './display.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
@@ -863,6 +864,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.renderedSessionErrorIds ??= new Set();
+  state.renderedSessionErrorIds.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
@@ -1106,6 +1109,20 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.allToolComponents.push(toolComponent);
           } else {
           }
+        } else if (part.kind === 'session-error') {
+          flushAccumulated();
+          if (!state.renderedSessionErrorIds.has(part.data.occurrenceId)) {
+            state.renderedSessionErrorIds.add(part.data.occurrenceId);
+            state.liveSessionErrors?.delete(part.data.occurrenceId);
+            showFormattedError(state, {
+              error: Object.assign(new Error(part.data.message), { name: part.data.name }),
+              ...(part.data.errorType ? { errorType: part.data.errorType } : {}),
+              ...(part.data.retryable !== undefined ? { retryable: part.data.retryable } : {}),
+              ...(part.data.retryDelay !== undefined ? { retryDelay: part.data.retryDelay } : {}),
+              ...(part.data.retryAttempt !== undefined ? { retryAttempt: part.data.retryAttempt } : {}),
+              ...(part.data.maxRetries !== undefined ? { maxRetries: part.data.maxRetries } : {}),
+            });
+          }
         } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
           if (part.event === 'start') continue;
@@ -1157,6 +1174,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       // Render any remaining text after the last tool call
       flushAccumulated(true);
     }
+  }
+
+  for (const [occurrenceId, event] of state.liveSessionErrors ?? []) {
+    if (state.renderedSessionErrorIds.has(occurrenceId)) continue;
+    state.renderedSessionErrorIds.add(occurrenceId);
+    showFormattedError(state, event);
   }
 
   // Restore or clear the pinned task list from history replay when the bounded

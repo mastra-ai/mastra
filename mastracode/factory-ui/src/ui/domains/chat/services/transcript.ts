@@ -2,7 +2,7 @@ import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart, SessionErrorData, TokenUsage } from '@mastra/core/agent-controller';
 
 import type { OMBudgets } from './runtime';
 import { sentByOther } from './message-author';
@@ -523,17 +523,41 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, omPhase: 'idle' };
 
     // Workspace lifecycle.
-    case 'workspace_error':
-      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
-    case 'workspace_status_changed':
+    case 'workspace_error': {
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      return pushNotice(
+        state,
+        'error',
+        `Workspace: ${event.error.message}`,
+        occurrenceId ? sessionErrorNoticeId(occurrenceId) : undefined,
+      );
+    }
+    case 'workspace_status_changed': {
       if (event.status !== 'error' || !event.error) return state;
-      return pushNotice(state, 'error', `Workspace: ${event.error.message}`);
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      return pushNotice(
+        state,
+        'error',
+        `Workspace: ${event.error.message}`,
+        occurrenceId ? sessionErrorNoticeId(occurrenceId) : undefined,
+      );
+    }
 
     // Notices.
     case 'info':
       return pushNotice(state, 'info', event.message);
-    case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+    case 'error': {
+      const occurrenceId =
+        'occurrenceId' in event && typeof event.occurrenceId === 'string' ? event.occurrenceId : undefined;
+      return pushNotice(
+        state,
+        'error',
+        describeErrorEvent(event),
+        occurrenceId ? sessionErrorNoticeId(occurrenceId) : undefined,
+      );
+    }
 
     default:
       return state;
@@ -551,6 +575,48 @@ function describeErrorEvent(event: { error: { message?: string } | string; error
   if (message) return message;
   if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
   return 'Run failed with an unknown error. Check the server logs for details.';
+}
+
+function sessionErrorNoticeId(occurrenceId: string): string {
+  return `session-error-${occurrenceId}`;
+}
+
+function sessionErrorData(part: MastraMessagePart): SessionErrorData | undefined {
+  if (part.type !== 'data-session-error') return undefined;
+  const data = part.data;
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !('occurrenceId' in data) ||
+    !('name' in data) ||
+    !('message' in data) ||
+    typeof data.occurrenceId !== 'string' ||
+    typeof data.name !== 'string' ||
+    typeof data.message !== 'string'
+  ) {
+    return undefined;
+  }
+  return data as SessionErrorData;
+}
+
+function persistedSessionErrorNotices(message: MastraDBMessage): NoticeEntry[] {
+  return message.content.parts.flatMap(part => {
+    const data = sessionErrorData(part);
+    return data
+      ? [
+          {
+            kind: 'notice' as const,
+            id: sessionErrorNoticeId(data.occurrenceId),
+            level: 'error' as const,
+            text: data.message,
+          },
+        ]
+      : [];
+  });
+}
+
+function hasNonSessionErrorPart(message: MastraDBMessage): boolean {
+  return message.content.parts.some(part => part.type !== 'data-session-error');
 }
 
 /**
@@ -584,7 +650,8 @@ export function createInitialTranscript({
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.flatMap(message => [
-    toMessageEntry(message, { streaming: false }),
+    ...(hasNonSessionErrorPart(message) ? [toMessageEntry(message, { streaming: false })] : []),
+    ...persistedSessionErrorNotices(message),
     ...persistedSuspensionPrompts(message),
   ]);
 }
@@ -654,7 +721,16 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   }
   entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...reconciled, entries };
+  return { ...reconciled, entries: dedupeEntriesById(entries) };
+}
+
+function dedupeEntriesById(entries: TimelineEntry[]): TimelineEntry[] {
+  const seen = new Set<string>();
+  return entries.filter(entry => {
+    if (seen.has(entry.id)) return false;
+    seen.add(entry.id);
+    return true;
+  });
 }
 
 /**
@@ -680,6 +756,17 @@ function claimOnScreenEntries(
   const claimedTexts = new Set<string>();
 
   for (const message of messages) {
+    if (!eligible && !hasNonSessionErrorPart(message)) {
+      const notices = persistedSessionErrorNotices(message);
+      const index = entries.findIndex(
+        entry => entry.kind === 'notice' && notices.some(notice => notice.id === entry.id),
+      );
+      if (index !== -1 && !claimedEntries.has(index)) {
+        anchors.set(message, index);
+        claimedEntries.add(index);
+        continue;
+      }
+    }
     const displayed = toMessageEntry(message).message;
     const toolCallIds = toolCallIdsOf(displayed.content.parts);
     const texts = drawableTexts(message);
@@ -1238,9 +1325,11 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
+function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string, id?: string): TranscriptState {
+  const noticeId = id ?? `notice-${Date.now()}-${noticeSeq++}`;
+  if (state.entries.some(entry => entry.kind === 'notice' && entry.id === noticeId)) return state;
   return {
     ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
+    entries: [...state.entries, { kind: 'notice', id: noticeId, level, text }],
   };
 }

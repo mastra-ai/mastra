@@ -51,6 +51,7 @@ export type {
   OMStatus,
   PermissionPolicy,
   PermissionRules,
+  SessionErrorData,
   ToolCategory,
   BuiltinToolId,
   TokenUsage,

@@ -77,6 +77,8 @@ function createMockCtx(controller: ReturnType<typeof createMockAgentController>)
         assistantRenderRegistry,
         assistantSegment,
         pendingNewThread: false,
+        liveSessionErrors: new Map([['old-error', { type: 'error', error: new Error('old failure') }]]),
+        renderedSessionErrorIds: new Set(['old-error']),
         chatContainer: { clear: vi.fn() },
         pendingTools: { clear: vi.fn() },
         allToolComponents: [] as any[],
@@ -163,6 +165,8 @@ describe('handleResourceCommand', () => {
 
       await handleResourceCommand(ctx, ['other-resource']);
 
+      expect(ctx.state.liveSessionErrors.size).toBe(0);
+      expect(ctx.state.renderedSessionErrorIds.size).toBe(0);
       expect(ctx.state.chatContainer.clear).toHaveBeenCalled();
       expect(ctx.state.pendingTools.clear).toHaveBeenCalled();
       expect(ctx.state.allToolComponents).toEqual([]);
