@@ -111,11 +111,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   #excludedModelMeta = new WeakMap<AnySpan, { provider?: string; model?: string }>();
 
+  readonly #supersededStorageExporterNames: string[];
+
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
     const exporters = config.exporters ?? [];
-    const effectiveExporters = shouldSupersedeStorageExporters()
+    const supersedeStorageExporters = shouldSupersedeStorageExporters();
+    this.#supersededStorageExporterNames = supersedeStorageExporters
+      ? exporters.filter(isBuiltInStorageExporter).map(exporter => exporter.name)
+      : [];
+    const effectiveExporters = supersedeStorageExporters
       ? exporters.filter(exporter => !isBuiltInStorageExporter(exporter))
       : exporters;
 
@@ -181,6 +187,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     this.logger.debug(
       `[Observability] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling?.type}] [bridge=${!!this.config.bridge}]`,
     );
+
+    if (this.#supersededStorageExporterNames.length > 0) {
+      this.logger.info(
+        `[Observability] Storage exporters superseded by Mastra Platform [service=${this.config.serviceName}] [instance=${this.config.name}] [exporters=${this.#supersededStorageExporterNames.join(',')}]`,
+      );
+    }
   }
 
   // ============================================================================
