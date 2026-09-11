@@ -39,14 +39,37 @@ const recordSchema = z.object({
 type DraftRecord = z.infer<typeof recordSchema>;
 interface DraftDatabase extends DBSchema {
   drafts: { key: string; value: DraftRecord; indexes: { retention: [number, number] } };
+  signouts: { key: string; value: string };
 }
-type DraftStore = IDBPObjectStore<DraftDatabase, ['drafts'], 'drafts', 'readwrite'>;
+type DraftStore = IDBPObjectStore<DraftDatabase, ['drafts', 'signouts'], 'drafts', 'readwrite'>;
+type SignoutStore = IDBPObjectStore<DraftDatabase, ['drafts', 'signouts'], 'signouts', 'readwrite'>;
 interface DraftVersion {
   revision: string | undefined;
+  logoutVersion?: string;
+}
+
+const draftKeySchema = z.tuple([z.string().nullish(), z.string().nullish(), z.string().min(1), z.string(), z.string()]);
+export function getDraftUserScope(key: string): string | undefined {
+  try {
+    const parsed = draftKeySchema.safeParse(JSON.parse(key));
+    return parsed.success ? JSON.stringify(parsed.data.slice(0, 3)) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export class DraftSignedOutError extends Error {
+  constructor() {
+    super('This draft was cleared because you signed out. Reload before composing again.');
+  }
 }
 
 export class DraftLimitError extends Error {}
-export class CorruptedDraftError extends Error {}
+export class CorruptedDraftError extends Error {
+  constructor(readonly logoutVersion?: string) {
+    super('The saved draft is unreadable.');
+  }
+}
 export class DraftConflictError extends Error {
   constructor() {
     super('This draft changed in another tab. Your edits are kept in this tab; copy them before reloading.');
@@ -63,24 +86,27 @@ const byteSize = (record: DraftRecord) =>
 
 // This queue preserves this tab's IO order; revision checks inside transactions protect other tabs.
 let pending: Promise<unknown> = Promise.resolve();
-function transaction<T>(operation: (store: DraftStore) => Promise<T>): Promise<T> {
+function transaction<T>(operation: (store: DraftStore, signouts: SignoutStore) => Promise<T>): Promise<T> {
   const result = pending.then(async () => {
-    const db = await openDB<DraftDatabase>(DATABASE, 2, {
+    const db = await openDB<DraftDatabase>(DATABASE, 3, {
       async upgrade(db, oldVersion, _newVersion, tx) {
+        if (oldVersion < 3) db.createObjectStore('signouts');
         const store = oldVersion < 1 ? db.createObjectStore('drafts', { keyPath: 'key' }) : tx.objectStore('drafts');
-        store.createIndex('retention', ['updatedAt', 'bytes']);
-        let cursor = await store.openCursor();
-        while (cursor) {
-          const parsed = recordSchema.safeParse(cursor.value);
-          if (parsed.success) await cursor.update({ ...parsed.data, bytes: byteSize(parsed.data) });
-          cursor = await cursor.continue();
+        if (oldVersion < 2) {
+          store.createIndex('retention', ['updatedAt', 'bytes']);
+          let cursor = await store.openCursor();
+          while (cursor) {
+            const parsed = recordSchema.safeParse(cursor.value);
+            if (parsed.success) await cursor.update({ ...parsed.data, bytes: byteSize(parsed.data) });
+            cursor = await cursor.continue();
+          }
         }
       },
     });
-    const tx = db.transaction('drafts', 'readwrite');
+    const tx = db.transaction(['drafts', 'signouts'], 'readwrite');
     const done = tx.done;
     try {
-      const value = await operation(tx.store);
+      const value = await operation(tx.objectStore('drafts'), tx.objectStore('signouts'));
       await done;
       return value;
     } catch (error) {
@@ -99,20 +125,23 @@ function transaction<T>(operation: (store: DraftStore) => Promise<T>): Promise<T
   return result;
 }
 
-export function loadThreadDraft(key: string): Promise<{ draft: ThreadDraft; revision: string | undefined }> {
-  return transaction(async store => {
+export function loadThreadDraft(key: string): Promise<{ draft: ThreadDraft } & DraftVersion> {
+  return transaction(async (store, signouts) => {
+    const scope = getDraftUserScope(key);
+    const logoutVersion = scope ? await signouts.get(scope) : undefined;
     const raw = await store.get(key);
-    if (!raw) return { draft: { text: '', attachments: [] }, revision: undefined };
+    if (!raw) return { draft: { text: '', attachments: [] }, revision: undefined, logoutVersion };
     const parsed = recordSchema.safeParse(raw);
-    if (!parsed.success) throw new CorruptedDraftError('The saved draft is unreadable.');
+    if (!parsed.success) throw new CorruptedDraftError(logoutVersion);
     const record = parsed.data;
     if (!isFresh(record.updatedAt)) {
       await store.delete(key);
-      return { draft: { text: '', attachments: [] }, revision: undefined };
+      return { draft: { text: '', attachments: [] }, revision: undefined, logoutVersion };
     }
     if (byteSize(record) > MAX_DRAFT_BYTES) throw new DraftLimitError('Saved draft exceeds the 10 MB limit.');
     return {
       revision: record.revision,
+      logoutVersion,
       draft: {
         text: record.text,
         attachments: record.attachments.map(({ fileName, lastModified, ...attachment }) => ({
@@ -124,8 +153,9 @@ export function loadThreadDraft(key: string): Promise<{ draft: ThreadDraft; revi
   });
 }
 
-export function discardCorruptedThreadDraft(key: string): Promise<void> {
-  return transaction(async store => {
+export function discardCorruptedThreadDraft(key: string, expected: DraftVersion): Promise<void> {
+  return transaction(async (store, signouts) => {
+    await checkSignedIn(signouts, key, expected);
     const raw = await store.get(key);
     if (raw && recordSchema.safeParse(raw).success) throw new DraftConflictError();
     await store.delete(key);
@@ -177,12 +207,29 @@ async function putDraft(store: DraftStore, key: string, draft: ThreadDraft): Pro
   return revision;
 }
 
+async function checkSignedIn(signouts: SignoutStore, key: string, expected?: DraftVersion) {
+  const scope = getDraftUserScope(key);
+  if (expected && scope && (await signouts.get(scope)) !== expected.logoutVersion) throw new DraftSignedOutError();
+}
+
+export function clearUserThreadDrafts(scope: string): Promise<string> {
+  return transaction(async (store, signouts) => {
+    const version = uuid();
+    await signouts.put(version, scope);
+    for (const key of await store.getAllKeys()) {
+      if (getDraftUserScope(key) === scope) await store.delete(key);
+    }
+    return version;
+  });
+}
+
 export function writeThreadDraft(
   key: string,
   draft: ThreadDraft,
   expected?: DraftVersion,
 ): Promise<string | undefined> {
-  return transaction(async store => {
+  return transaction(async (store, signouts) => {
+    await checkSignedIn(signouts, key, expected);
     if (expected && (await store.get(key))?.revision !== expected.revision) throw new DraftConflictError();
     return putDraft(store, key, draft);
   });
@@ -194,7 +241,9 @@ export function moveThreadDraft(
   current?: DraftVersion & { draft: ThreadDraft },
 ): Promise<string | undefined> {
   if (from === to) return Promise.resolve(undefined);
-  return transaction(async store => {
+  return transaction(async (store, signouts) => {
+    await checkSignedIn(signouts, from, current);
+    await checkSignedIn(signouts, to, current);
     const record = await store.get(from);
     if (current) {
       if (record?.revision !== current.revision || (await store.get(to))) throw new DraftConflictError();

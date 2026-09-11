@@ -191,6 +191,28 @@ describe('complete draft lifecycle', () => {
     expect(state.getDraft('thread').text).toBe('Keep this new text in memory');
   });
 
+  describe('when another tab signs out', () => {
+    it('clears mounted state and prevents stale pending edits from recreating drafts', async () => {
+      const scope = JSON.stringify(['http://localhost:4111', '/api', 'user']);
+      const key = JSON.stringify(['http://localhost:4111', '/api', 'user', 'agent', 'new']);
+      const first = mount(key);
+      await ready(first.state);
+      vi.resetModules();
+      const otherTab = await import('./thread-draft-state');
+      const second = otherTab.createThreadDraftState({ key, threadId: 'thread' });
+      unmounts.push(second.subscribe(() => {}));
+      await ready(second);
+      second.updateDraft('thread', { text: 'Pending edit', attachments: [] });
+      await otherTab.clearDraftsOnLogout(scope);
+      expect(second.getDraft('thread').text).toBe('');
+      second.updateDraft('thread', { text: 'Must not recreate', attachments: [] });
+      first.state.updateDraft('thread', { text: 'Stale other tab', attachments: [] });
+      await vi.waitFor(() => expect(first.state.getSnapshot().status.error).toContain('signed out'));
+      expect(first.state.getDraft('thread').text).toBe('');
+      expect((await readThreadDraft(key)).text).toBe('');
+    });
+  });
+
   describe('when a saved draft is corrupted', () => {
     it('preserves the record until explicitly discarded and then saves current edits', async () => {
       await writeThreadDraft('scope', { text: 'Original', attachments: [] });

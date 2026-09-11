@@ -3,7 +3,13 @@ import 'fake-indexeddb/auto';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { deleteDB, openDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { moveThreadDraft, readThreadDraft, writeThreadDraft } from './thread-draft-storage';
+import {
+  clearUserThreadDrafts,
+  loadThreadDraft,
+  moveThreadDraft,
+  readThreadDraft,
+  writeThreadDraft,
+} from './thread-draft-storage';
 import type { ThreadDraft } from './thread-draft-storage';
 
 const DATABASE = 'mastra-composer-drafts';
@@ -30,6 +36,32 @@ afterEach(async () => {
 });
 
 describe('complete draft storage', () => {
+  describe('when a user signs out', () => {
+    it('removes only their server-scoped drafts and fences even previously empty stale tabs', async () => {
+      const scope = ['http://localhost:4111', '/api', 'user-one'];
+      const key = JSON.stringify([...scope, 'agent', 'new']);
+      const emptyKey = JSON.stringify([...scope, 'agent', 'empty']);
+      const otherUser = JSON.stringify([scope[0], scope[1], 'user-two', 'agent', 'new']);
+      const anonymous = JSON.stringify([scope[0], scope[1], undefined, 'agent', 'new']);
+      const otherServer = JSON.stringify(['http://localhost:4222', scope[1], scope[2], 'agent', 'new']);
+      await writeThreadDraft(key, withFile());
+      for (const other of [otherUser, anonymous, otherServer]) await writeThreadDraft(other, withFile());
+      const saved = await loadThreadDraft(key);
+      const unsaved = await loadThreadDraft(emptyKey);
+      await clearUserThreadDrafts(JSON.stringify(scope));
+      expect(await readThreadDraft(key)).toEqual(empty);
+      for (const other of [otherUser, anonymous, otherServer]) {
+        expect((await readThreadDraft(other)).attachments).toHaveLength(1);
+      }
+      await expect(writeThreadDraft(key, withFile(), saved)).rejects.toThrow('signed out');
+      await expect(writeThreadDraft(emptyKey, withFile(), unsaved)).rejects.toThrow('signed out');
+      await expect(moveThreadDraft(key, emptyKey, { ...saved, draft: withFile() })).rejects.toThrow('signed out');
+      const fresh = await loadThreadDraft(key);
+      await writeThreadDraft(key, textDraft('After signing in again'), fresh);
+      expect((await readThreadDraft(key)).text).toBe('After signing in again');
+    });
+  });
+
   describe('when retention runs while editing an attachment draft', () => {
     it('enforces limits without reading every stored attachment', async () => {
       await writeThreadDraft('existing', withFile());

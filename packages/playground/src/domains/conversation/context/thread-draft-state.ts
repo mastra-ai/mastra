@@ -1,9 +1,12 @@
 import type { SetStateAction } from 'react';
 import {
+  clearUserThreadDrafts,
   CorruptedDraftError,
   discardCorruptedThreadDraft,
   DraftConflictError,
   DraftLimitError,
+  DraftSignedOutError,
+  getDraftUserScope,
   loadThreadDraft,
   moveThreadDraft,
   writeThreadDraft,
@@ -28,11 +31,38 @@ interface DraftState {
   subscribe: (listener: () => void) => () => void;
   move: (to: string) => Promise<void>;
   discardUnreadable: () => Promise<void>;
+  signedOut: (version: string) => void;
 }
 const EMPTY_DRAFT: ThreadDraft = { text: '', attachments: [] };
 const PERSISTED = Symbol('persisted-draft');
 // Keep mounted, pending, and unsaved drafts so navigation cannot discard edits after a storage failure.
 const activeDrafts = new Map<string, DraftState>();
+let signoutChannel: BroadcastChannel | undefined;
+const forgetUserDrafts = (scope: string, version: string) => {
+  for (const [key, state] of activeDrafts) {
+    if (getDraftUserScope(key) === scope) state.signedOut(version);
+  }
+};
+function listenForSignouts() {
+  if (signoutChannel || typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return;
+  try {
+    signoutChannel = new BroadcastChannel('mastra-composer-signouts');
+  } catch {
+    // The IndexedDB sign-out version still fences stale writes if notifications are blocked.
+    return;
+  }
+  signoutChannel.onmessage = ({ data }) => {
+    if (data && typeof data.scope === 'string' && typeof data.version === 'string') {
+      forgetUserDrafts(data.scope, data.version);
+    }
+  };
+}
+export async function clearDraftsOnLogout(scope: string) {
+  const version = await clearUserThreadDrafts(scope);
+  forgetUserDrafts(scope, version);
+  listenForSignouts();
+  signoutChannel?.postMessage({ scope, version });
+}
 
 function createState(initialKey?: string): DraftState {
   let storageKey = initialKey;
@@ -43,6 +73,8 @@ function createState(initialKey?: string): DraftState {
   let loading = Promise.resolve();
   let revision = 0;
   let storedRevision: string | undefined;
+  let logoutVersion: string | undefined;
+  let forgotten = false;
   let handoffFrom: string | undefined;
   let writes: Promise<unknown> = Promise.resolve();
   let queuedSave: { target: string; draft: ThreadDraft } | undefined;
@@ -70,23 +102,40 @@ function createState(initialKey?: string): DraftState {
   const getDraft = (key: PropertyKey) => snapshot.drafts.get(key) ?? EMPTY_DRAFT;
   const persist = async (key: string, draft: ThreadDraft) => {
     if (handoffFrom !== undefined) {
-      storedRevision = await moveThreadDraft(handoffFrom, key, { draft, revision: storedRevision });
+      storedRevision = await moveThreadDraft(handoffFrom, key, { draft, revision: storedRevision, logoutVersion });
       handoffFrom = undefined;
     } else {
-      storedRevision = await writeThreadDraft(key, draft, { revision: storedRevision });
+      storedRevision = await writeThreadDraft(key, draft, { revision: storedRevision, logoutVersion });
     }
+  };
+  const forget = () => {
+    forgotten = true;
+    queuedSave = undefined;
+    waiting.length = 0;
+    if (storageKey !== undefined && activeDrafts.get(storageKey) === state) activeDrafts.delete(storageKey);
+    snapshot = {
+      drafts: new Map(),
+      status: { restoring: false, saving: false, error: new DraftSignedOutError().message },
+    };
+    notify();
   };
   const save = (operation: () => Promise<void>) => {
     const savingRevision = ++revision;
     setStatus({ ...snapshot.status, restoring: false, saving: true });
-    const result = writes.then(operation);
+    const result = writes.then(() => {
+      if (!forgotten) return operation();
+    });
     writes = result.catch(() => {});
     return result.then(
       () => {
-        if (revision === savingRevision) setStatus({ restoring: false, saving: false });
+        if (!forgotten && revision === savingRevision) setStatus({ restoring: false, saving: false });
       },
       error => {
-        if (revision === savingRevision)
+        if (error instanceof DraftSignedOutError) {
+          forget();
+          return;
+        }
+        if (!forgotten && revision === savingRevision)
           setStatus({
             restoring: false,
             saving: false,
@@ -102,6 +151,7 @@ function createState(initialKey?: string): DraftState {
     );
   };
   const updateDraft = (key: PropertyKey, value: SetStateAction<ThreadDraft>) => {
+    if (forgotten) return;
     if (snapshot.status.restoring) {
       waiting.push(() => updateDraft(key, value));
       return;
@@ -131,12 +181,18 @@ function createState(initialKey?: string): DraftState {
     if (storageKey === undefined) return;
     try {
       const saved = await loadThreadDraft(storageKey);
+      if (forgotten) return;
       storedRevision = saved.revision;
+      logoutVersion = saved.logoutVersion;
       snapshot = { drafts: new Map([[PERSISTED, saved.draft]]), status: { restoring: false, saving: false } };
       notify();
     } catch (error) {
+      if (forgotten) return;
       restorationFailed = true;
-      if (error instanceof CorruptedDraftError) unreadableKey = storageKey;
+      if (error instanceof CorruptedDraftError) {
+        unreadableKey = storageKey;
+        logoutVersion = error.logoutVersion;
+      }
       setStatus({
         restoring: false,
         saving: false,
@@ -162,11 +218,14 @@ function createState(initialKey?: string): DraftState {
         release();
       };
     },
+    signedOut(version) {
+      if (logoutVersion !== version) forget();
+    },
     async discardUnreadable() {
       const key = unreadableKey;
-      if (key === undefined) return;
+      if (forgotten || key === undefined) return;
       await save(async () => {
-        await discardCorruptedThreadDraft(key);
+        await discardCorruptedThreadDraft(key, { revision: storedRevision, logoutVersion });
         unreadableKey = undefined;
         restorationFailed = false;
         storedRevision = undefined;
@@ -175,7 +234,7 @@ function createState(initialKey?: string): DraftState {
     },
     async move(to) {
       if (snapshot.status.restoring) await loading;
-      if (storageKey === undefined || storageKey === to) return;
+      if (forgotten || storageKey === undefined || storageKey === to) return;
       const from = storageKey;
       storageKey = to;
       activeDrafts.delete(from);
@@ -192,6 +251,7 @@ function createState(initialKey?: string): DraftState {
 }
 
 export function createThreadDraftState(persistence?: { key: string; threadId: string }) {
+  if (persistence) listenForSignouts();
   const state = persistence ? (activeDrafts.get(persistence.key) ?? createState(persistence.key)) : createState();
   if (persistence) activeDrafts.set(persistence.key, state);
   const keyFor = (threadId?: string) =>
