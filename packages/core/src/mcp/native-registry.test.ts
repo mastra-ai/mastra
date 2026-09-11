@@ -185,6 +185,25 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect(mastra.listTools()).not.toHaveProperty('business');
   });
 
+  it('replaces the business registration when a catalogue key is re-added', () => {
+    class DynamicServer extends NativeServer {
+      add(tools: Parameters<NativeServer['addTools']>[0]) {
+        this.addTools(tools);
+      }
+    }
+    const first = createTool({ id: 'business', description: 'First', execute: async () => 1 });
+    const second = createTool({ id: 'business', description: 'Second', execute: async () => 2 });
+    const server = new DynamicServer({ name: 'Dynamic', version: '2', tools: { ordinary: first } });
+    const mastra = new Mastra({ mcpServers: { server } });
+    expect(mastra.getToolById('business')).toBe(first);
+    server.add({ ordinary: second });
+    expect(server.tools().ordinary).toBe(second);
+    expect(mastra.getToolById('business')).toBe(second);
+    // Replacing a business tool with a native one leaves nothing in the business registry.
+    server.add({ ordinary: nativeTool() });
+    expect(mastra.listTools()).not.toHaveProperty('business');
+  });
+
   it('passes normal auth, cancellation and observability to ordinary tools without legacy MCP context', async () => {
     const ctx = context();
     ctx.requestContext.set('tenant', 'north');
