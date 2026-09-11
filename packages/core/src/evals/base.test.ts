@@ -948,6 +948,30 @@ describe('createScorer', () => {
       }
     });
 
+    it('forwards judge modelSettings to the V1 generateLegacy run', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+      try {
+        const scorer = createScorer({
+          id: 'v1-model-settings-scorer',
+          description: 'Forwards modelSettings on the V1 judge path',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            modelSettings: { temperature: 0.42 },
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
     it('retries the judge with jsonPromptInjection when the first attempt yields no structured object', async () => {
       // Regression guard: a judge model can resolve *without throwing* but
       // produce no parseable structured object. The judge must recover via the
