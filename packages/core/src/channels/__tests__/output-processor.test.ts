@@ -65,6 +65,7 @@ function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
     textFormat?: 'markdown' | 'plain';
+    onAbort?: 'flush' | 'discard';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
@@ -83,6 +84,7 @@ function makeChannels(
     streaming: opts.streaming ?? false,
   };
   if (opts.textFormat !== undefined) adapterConfig.textFormat = opts.textFormat;
+  if (opts.onAbort !== undefined) adapterConfig.onAbort = opts.onAbort;
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
@@ -2150,7 +2152,7 @@ describe('ChatChannelOutputProcessor', () => {
       expect(postArgs).toEqual([{ markdown: 'partial' }, '❌ Error: boom', { markdown: 'recovery' }]);
     });
 
-    it('does not post anything on abort but still flushes pending text', async () => {
+    it('flushes pending buffered text on abort by default', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -2162,6 +2164,34 @@ describe('ChatChannelOutputProcessor', () => {
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("flushes pending buffered text on abort when onAbort is 'flush'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'flush' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("discards buffered text on abort when onAbort is 'discard'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'discard' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([]);
     });
   });
 

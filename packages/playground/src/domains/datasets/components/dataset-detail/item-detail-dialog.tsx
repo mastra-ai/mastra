@@ -298,15 +298,18 @@ export function ItemDetailDialog({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action
-              onClick={event => {
-                event.preventDefault();
-                void handlePurgeConfirm();
-              }}
+            {/* Deliberately a Button rather than AlertDialog.Action: Action is a
+                Close that dismisses the dialog on click regardless of
+                preventDefault, which would hide the pending state and a failed
+                purge behind a toast. */}
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => void handlePurgeConfirm()}
               disabled={purgeItem.isPending}
             >
               {purgeItem.isPending ? 'Purging...' : 'Purge Data'}
-            </AlertDialog.Action>
+            </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>

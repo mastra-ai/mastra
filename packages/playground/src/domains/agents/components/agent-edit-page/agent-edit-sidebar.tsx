@@ -143,7 +143,7 @@ export function AgentEditSidebar({
 
               {/* Agent Name */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-name" className="text-icon5 text-xs">
+                <Label htmlFor="agent-name" className="text-icon5 text-ui-sm">
                   Name <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -154,12 +154,12 @@ export function AgentEditSidebar({
                   error={!!errors.name}
                   disabled={readOnly}
                 />
-                {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+                {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
               </div>
 
               {/* Description */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-description" className="text-icon5 text-xs">
+                <Label htmlFor="agent-description" className="text-icon5 text-ui-sm">
                   Description
                 </Label>
                 <Textarea
@@ -170,12 +170,12 @@ export function AgentEditSidebar({
                   error={!!errors.description}
                   disabled={readOnly}
                 />
-                {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+                {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
               </div>
 
               {/* Provider */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-xs">
+                <Label className="text-icon5 text-ui-sm">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -188,13 +188,13 @@ export function AgentEditSidebar({
                   )}
                 />
                 {errors.model?.provider && (
-                  <span className="text-accent2 text-xs">{errors.model.provider.message}</span>
+                  <span className="text-accent2 text-ui-sm">{errors.model.provider.message}</span>
                 )}
               </div>
 
               {/* Model */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-icon5 text-xs">
+                <Label className="text-icon5 text-ui-sm">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -211,7 +211,7 @@ export function AgentEditSidebar({
                     </div>
                   )}
                 />
-                {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
+                {errors.model?.name && <span className="text-accent2 text-ui-sm">{errors.model.name.message}</span>}
               </div>
             </div>
           </ScrollArea>

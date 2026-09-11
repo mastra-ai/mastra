@@ -16,14 +16,17 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { coreFeatures } from '@mastra/core/features';
-import { analyzeEntryProjectType } from '@mastra/deployer/build';
 import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
-import { writeBarLine } from '../../utils/clack-bar.js';
-import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
+import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
+import { abortableDelay } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -39,8 +42,10 @@ import {
 } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
+import { createServerProject } from '../server/platform-api.js';
+import type { ServerProjectRegion } from '../server/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
-import { createProject } from '../studio/platform-api.js';
+import { createProject, fetchProjects as fetchStudioProjects } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { maybeAutoProvisionDatabases } from './auto-provision-database.js';
 import { getOverwrittenEnvKeys } from './env-vars.js';
@@ -877,6 +882,132 @@ export async function resolveProject(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Project type + project creation                                   */
+/* ------------------------------------------------------------------ */
+
+function toServerProjectRegion(region: string | undefined): ServerProjectRegion | undefined {
+  return region === 'eu' || region === 'us' ? region : undefined;
+}
+
+/**
+ * Create the platform project for a first deploy.
+ *
+ * Factory projects go through the server project endpoint with
+ * `factoryEnabled: true`, the same call `create-factory` makes. The platform
+ * only provisions factory backing (workspace sandboxes, `<slug>.factory.*`
+ * route) for projects created with that flag, and the unified deploy path
+ * has no way to set it afterwards. Everything else keeps using the studio
+ * project endpoint.
+ */
+export async function createDeployProject(
+  token: string,
+  orgId: string,
+  projectName: string,
+  opts: { projectType?: string; region?: string } = {},
+): Promise<{ id: string; name: string; slug: string | null }> {
+  if (opts.projectType === 'factory') {
+    const region = toServerProjectRegion(opts.region);
+    return createServerProject(token, orgId, projectName, {
+      factoryEnabled: true,
+      ...(region ? { region } : {}),
+    });
+  }
+  return createProject(token, orgId, projectName);
+}
+
+/**
+ * Whether an existing project was created as a Factory project. Reads the
+ * studio project list, which is the only CLI-facing endpoint that returns
+ * the flag. `undefined` means it could not be determined (lookup failed or
+ * the project was not in the list), in which case the caller proceeds.
+ */
+export async function lookupProjectFactoryFlag(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<boolean | undefined> {
+  try {
+    const projects = await fetchStudioProjects(token, orgId);
+    const match = projects.find(project => project.id === projectId);
+    return typeof match?.factoryEnabled === 'boolean' ? match.factoryEnabled : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type NonFactoryTargetChoice = 'create' | 'deploy';
+
+/**
+ * A Factory build deployed into a project created without the factory flag
+ * runs as a plain server deployment: no workspace sandboxes, and the
+ * `<slug>.factory.*` route is never registered. The flag cannot be added
+ * afterwards on the unified path, so the useful way out is a new project.
+ * Offer that before touching the environment. Under `--yes` there is nobody
+ * to ask, so warn and keep the requested target.
+ */
+export async function resolveNonFactoryTarget(input: {
+  projectName: string;
+  /** Name for a replacement project; `null` when package.json has no name. */
+  newProjectName: string | null;
+  autoAccept: boolean;
+}): Promise<NonFactoryTargetChoice> {
+  const explanation = [
+    `This directory was scaffolded as a Mastra Factory, but the platform project "${input.projectName}" was created without Factory support, and that can't be added later.`,
+    `Deploying there runs it as a plain server: no workspace sandboxes, and the Factory URL will not work.`,
+  ];
+
+  if (input.autoAccept) {
+    p.log.warn(explanation.join('\n'));
+    return 'deploy';
+  }
+
+  // The explanation rides on the prompt message: clack wraps prompt text to
+  // the terminal width and keeps the guide bar on every line, which `log.*`
+  // does not do.
+  const choice = await p.select({
+    message: [...explanation, 'How do you want to continue?'].join('\n'),
+    options: [
+      ...(input.newProjectName
+        ? [
+            {
+              value: 'create' as const,
+              label: `Create a new Factory project "${input.newProjectName}" and deploy there`,
+              hint: 'recommended',
+            },
+          ]
+        : []),
+      { value: 'deploy' as const, label: `Deploy to "${input.projectName}" anyway as a plain server` },
+      { value: 'cancel' as const, label: 'Cancel' },
+    ],
+  });
+
+  if (p.isCancel(choice) || choice === 'cancel') {
+    p.cancel('Deploy cancelled.');
+    process.exit(0);
+  }
+
+  return choice;
+}
+
+async function promptDeployRegion(): Promise<string> {
+  const selectedRegion = await p.select({
+    message: 'Select a deployment region',
+    initialValue: 'us',
+    options: [
+      { value: 'us', label: 'United States' },
+      { value: 'eu', label: 'Europe' },
+    ],
+  });
+
+  if (p.isCancel(selectedRegion)) {
+    p.cancel('Deploy cancelled.');
+    process.exit(0);
+  }
+
+  return selectedRegion;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
 
@@ -922,21 +1053,7 @@ export async function resolveEnvironment(
 
   let region = requestedRegion;
   if (!region && !autoAccept) {
-    const selectedRegion = await p.select({
-      message: 'Select a deployment region',
-      initialValue: 'us',
-      options: [
-        { value: 'us', label: 'United States' },
-        { value: 'eu', label: 'Europe' },
-      ],
-    });
-
-    if (p.isCancel(selectedRegion)) {
-      p.cancel('Deploy cancelled.');
-      process.exit(0);
-    }
-
-    region = selectedRegion;
+    region = await promptDeployRegion();
   }
 
   return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
@@ -1038,11 +1155,26 @@ interface UnifiedDeployStatus {
   error: string | null;
 }
 
+interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: LogCollector;
+}
+
 /**
  * Poll the net-new env-scoped status endpoint until the deploy reaches a
  * terminal state. Kept inside the deploy command so the unified runtime
  * never reaches into ../studio/ for transport.
  */
+/** Set once the log stream has connected; a connected stream is drained before it is stopped. */
+interface StreamState {
+  connected: boolean;
+}
+
+/** How long a connected stream may keep delivering after the deploy reached a terminal state. */
+const SSE_DRAIN_MS = 500;
+
 async function streamEnvironmentDeployLogs(
   token: string,
   orgId: string,
@@ -1050,9 +1182,11 @@ async function streamEnvironmentDeployLogs(
   environmentId: string,
   deployId: string,
   signal: AbortSignal,
+  logWriter: DeployLogWriter,
+  state: StreamState,
 ): Promise<void> {
   // Small delay to let the deploy pipeline start before requesting logs
-  await new Promise(r => setTimeout(r, 2000));
+  await abortableDelay(2000, signal);
   if (signal.aborted) return;
 
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
@@ -1068,6 +1202,7 @@ async function streamEnvironmentDeployLogs(
   });
 
   if (!resp.ok || !resp.body) return;
+  state.connected = true;
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
@@ -1096,7 +1231,7 @@ async function streamEnvironmentDeployLogs(
         skipNextUrlMeta = false;
         if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
       }
-      await writeBarLine(data);
+      logWriter.write(data);
     }
   }
 }
@@ -1108,6 +1243,7 @@ async function pollEnvironmentDeploy(
   environmentId: string,
   deployId: string,
   maxWaitMs = 600_000,
+  options: PollDeployOptions = {},
 ): Promise<UnifiedDeployStatus> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
   const url = `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deployId}`;
@@ -1116,7 +1252,18 @@ async function pollEnvironmentDeploy(
 
   // Stream logs in parallel with status polling
   const logAbort = new AbortController();
-  streamEnvironmentDeployLogs(currentToken, orgId, projectId, environmentId, deployId, logAbort.signal).catch(() => {});
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
+  const streamState: StreamState = { connected: false };
+  const logsTask = streamEnvironmentDeployLogs(
+    currentToken,
+    orgId,
+    projectId,
+    environmentId,
+    deployId,
+    logAbort.signal,
+    logWriter,
+    streamState,
+  ).catch(() => {});
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -1151,7 +1298,13 @@ async function pollEnvironmentDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Give a connected stream a moment to deliver events already in flight,
+    // stop it, wait for the reader to settle, then draw whatever is queued so
+    // nothing is lost and nothing prints after the outcome message.
+    if (streamState.connected) await Promise.race([logsTask, abortableDelay(SSE_DRAIN_MS)]);
     logAbort.abort();
+    await logsTask;
+    logWriter.flush();
   }
 }
 
@@ -1185,6 +1338,9 @@ export interface DeployOptions {
 export async function unifiedDeployAction(dir: string | undefined, opts: DeployOptions) {
   if (opts.workers !== undefined && opts.workers !== 'dedicated' && opts.workers !== 'in-process') {
     throw new Error(`--workers must be "dedicated" or "in-process" (got "${String(opts.workers)}")`);
+  }
+  if (opts.region !== undefined && opts.region !== 'us' && opts.region !== 'eu') {
+    throw new Error(`--region must be "us" or "eu" (got "${String(opts.region)}")`);
   }
   const analytics = getAnalytics();
   if (!analytics) {
@@ -1231,6 +1387,10 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const packageName = getPackageName(targetDir);
   const gitBranch = getGitBranch(targetDir);
   const mastraVersion = getMastraVersion(targetDir);
+  // Detected up front: a new Factory project must be created with the
+  // factory flag, and the build step needs it for Factory UI staleness.
+  const projectType = await detectProjectType(targetDir);
+  const isFactoryProject = projectType === 'factory';
 
   // Step 1: Auth
   const token = await getToken();
@@ -1243,11 +1403,28 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project (does NOT create yet)
-  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
+  let resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
+
+  if (resolution.existing && isFactoryProject) {
+    const targetIsFactory = await lookupProjectFactoryFlag(token, orgId, resolution.projectId);
+    if (targetIsFactory === false) {
+      const choice = await resolveNonFactoryTarget({
+        projectName: resolution.projectName,
+        newProjectName: packageName,
+        autoAccept,
+      });
+      if (choice === 'create' && packageName) {
+        resolution = { existing: false, projectName: packageName };
+      }
+    }
+  }
 
   let projectId: string;
   let projectName: string;
   let projectSlug: string;
+  // Region for a newly created environment. A new Factory project asks for
+  // it once and reuses the answer for both the project and the environment.
+  let requestedRegion = opts.region;
 
   if (resolution.existing) {
     projectId = resolution.projectId;
@@ -1259,7 +1436,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.note(
       [
         `Organization:  ${orgName}`,
-        `Project:       ${projectName} (new)`,
+        `Project:       ${projectName} (new${isFactoryProject ? ' Factory project' : ''})`,
         `Environment:   ${envName}`,
         `Directory:     ${targetDir}`,
         ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
@@ -1279,11 +1456,18 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       }
     }
 
+    if (isFactoryProject && !requestedRegion && !autoAccept) {
+      requestedRegion = await promptDeployRegion();
+    }
+
     // Create the project
-    const project = await createProject(token, orgId, projectName);
+    const project = await createDeployProject(token, orgId, projectName, {
+      projectType,
+      region: requestedRegion,
+    });
     projectId = project.id;
     projectSlug = project.slug ?? project.name;
-    p.log.success(`Created project "${projectName}"`);
+    p.log.success(`Created ${isFactoryProject ? 'Factory ' : ''}project "${projectName}"`);
 
     // Save the project link
     await saveProjectConfig(
@@ -1295,7 +1479,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   // Step 5: Resolve environment (auto-create production if first deploy)
-  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, opts.region);
+  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, requestedRegion);
 
   let environment: Environment;
 
@@ -1361,12 +1545,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // Check build staleness
   const mastraDir = join(targetDir, 'src', 'mastra');
   const outputDirectory = join(targetDir, '.mastra');
-  // Detect project type so staleness hashing includes Factory UI inputs
-  const mastraEntryFile = findMastraEntryFile(mastraDir);
-  let projectType: string | undefined;
-  if (mastraEntryFile) {
-    projectType = await analyzeEntryProjectType(mastraEntryFile);
-  }
+  // Staleness hashing includes Factory UI inputs for factory projects.
   const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
   const workersManifestExists = await hasWorkersManifest(targetDir);
   const workerManifestChecked = await hasWorkerManifestCheck(targetDir);
@@ -1656,25 +1835,35 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   await rm(zipPath, { force: true });
 
   p.log.step('Waiting for deploy to finish...');
-  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
+  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.log.info(`  Studio: ${pc.cyan(publicUrls.studioUrl)}`);
     p.log.info(`  ${publicUrls.serverLabel}: ${pc.cyan(publicUrls.serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
+  } else {
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs: collectedLogs?.entries() ?? [],
+      dashboardUrl: deployDashboardUrl('environment', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     // Progressive discovery: only hint at `mastra env diagnosis` when the
     // command is actually registered (same feature gate as index.ts). The
     // failed-deploy webhook has already inserted a PENDING diagnosis row,
     // so the command returns "in progress" immediately rather than 404-ing
     // while the agent runs.
-    if (coreFeatures.has('deploy-diagnosis')) {
+    if (finalStatus.status === 'failed' && coreFeatures.has('deploy-diagnosis')) {
       p.log.info(`Run \`mastra env diagnosis ${deployResult.id}\` for suggestions.`);
     }
-    process.exit(1);
-  } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
     process.exit(1);
   }
 }

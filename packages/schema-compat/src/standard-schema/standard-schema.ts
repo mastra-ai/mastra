@@ -165,7 +165,7 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
 
   // Check for AI SDK Schema objects (Vercel's jsonSchema wrapper)
   if (isVercelSchema(schema)) {
-    return toStandardSchemaAiSdk(schema as Schema<T>);
+    return toStandardSchemaAiSdk(schema);
   }
 
   // At this point, assume it's a plain JSON Schema object

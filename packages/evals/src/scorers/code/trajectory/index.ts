@@ -52,7 +52,6 @@ function trajectoryStepToExpectedStep(step: TrajectoryStep): ExpectedStep {
  * suitable for comparison.
  */
 function expectationToExpectedSteps(expectation: TrajectoryExpectation): ExpectedStep[] | undefined {
-  if (!expectation.steps || expectation.steps.length === 0) return undefined;
   return expectation.steps;
 }
 
@@ -94,16 +93,11 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
 
   const { ordering = 'relaxed', allowRepeatedSteps = true } = comparisonOptions;
 
-  // Normalize the static expected trajectory into ExpectedStep[]
-  const staticExpectedSteps: ExpectedStep[] | undefined = staticExpectedTrajectory
-    ? Array.isArray(staticExpectedTrajectory) &&
-      staticExpectedTrajectory.length > 0 &&
-      !('steps' in staticExpectedTrajectory[0]! || false)
-      ? (staticExpectedTrajectory as ExpectedStep[])
-      : 'steps' in staticExpectedTrajectory
-        ? (staticExpectedTrajectory as Trajectory).steps.map(trajectoryStepToExpectedStep)
-        : undefined
-    : undefined;
+  // Normalize the static expected trajectory into ExpectedStep[].
+  // Preserve explicit empty arrays — they mean "expect no steps", not "unset".
+  const staticExpectedSteps: ExpectedStep[] | undefined = Array.isArray(staticExpectedTrajectory)
+    ? staticExpectedTrajectory
+    : staticExpectedTrajectory?.steps.map(trajectoryStepToExpectedStep);
 
   const getDescription = () => {
     if (staticExpectedSteps) {
@@ -130,7 +124,7 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
         resolvedExpectedSteps = expectationToExpectedSteps(expectation);
       }
 
-      if (!resolvedExpectedSteps || resolvedExpectedSteps.length === 0) {
+      if (!resolvedExpectedSteps) {
         return {
           actualTrajectory,
           expectedTrajectory: undefined,
@@ -195,6 +189,10 @@ export type NestedEvaluationResult = {
   nested?: NestedEvaluationResult[];
 };
 
+function hasBlacklistViolation(results: NestedEvaluationResult[]): boolean {
+  return results.some(result => result.blacklist?.score === 0 || hasBlacklistViolation(result.nested ?? []));
+}
+
 /**
  * Evaluates nested expectations: for each expected step with a `children` config,
  * finds the matching actual step and recursively evaluates its children.
@@ -220,8 +218,8 @@ function evaluateNestedExpectations(
     const actualStep = matchIndex >= 0 ? actualSteps[matchIndex] : undefined;
     if (matchIndex >= 0) matchedIndices.add(matchIndex);
 
-    if (!actualStep?.children || actualStep.children.length === 0) {
-      // Matched step has no children — nested evaluation fails
+    if (!actualStep) {
+      // A missing parent cannot satisfy a nested expectation.
       const expectedStepCount = expectedStep.children.steps?.length ?? 0;
       results.push({
         stepName: expectedStep.name,
@@ -244,14 +242,14 @@ function evaluateNestedExpectations(
     }
 
     const childTrajectory: Trajectory = {
-      steps: actualStep.children,
+      steps: actualStep.children ?? [],
       totalDurationMs: actualStep.durationMs,
     };
     const childConfig = expectedStep.children;
 
     // --- Accuracy ---
     let accuracy: TrajectoryComparisonResult | undefined;
-    if (childConfig.steps && childConfig.steps.length > 0) {
+    if (childConfig.steps) {
       accuracy = compareTrajectories(
         childTrajectory,
         { steps: childConfig.steps },
@@ -294,7 +292,9 @@ function evaluateNestedExpectations(
     });
 
     // --- Recursive nested evaluation ---
-    const nested = childConfig.steps ? evaluateNestedExpectations(childConfig.steps, actualStep.children, weights) : [];
+    const nested = childConfig.steps
+      ? evaluateNestedExpectations(childConfig.steps, childTrajectory.steps, weights)
+      : [];
 
     // Compute weighted score for this level
     const scores: Array<{ weight: number; value: number }> = [];
@@ -321,7 +321,7 @@ function evaluateNestedExpectations(
     let finalScore = levelScore;
     if (nested.length > 0) {
       // Hard fail if any nested level has a blacklist violation
-      const hasNestedBlacklistViolation = nested.some(r => r.blacklist && r.blacklist.score === 0);
+      const hasNestedBlacklistViolation = hasBlacklistViolation(nested);
       if (hasNestedBlacklistViolation) {
         results.push({ stepName: expectedStep.name, score: 0, accuracy, efficiency, blacklist, toolFailures, nested });
         continue;
@@ -450,7 +450,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
 
       // --- Accuracy ---
       let accuracy: TrajectoryComparisonResult | undefined;
-      if (config.steps && config.steps.length > 0) {
+      if (config.steps) {
         accuracy = compareTrajectories(
           actualTrajectory,
           { steps: config.steps },
@@ -545,7 +545,7 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       // Factor in nested scores
       if (nested && nested.length > 0) {
         // Hard fail if any nested level has a blacklist violation
-        const hasNestedBlacklistViolation = nested.some(r => r.blacklist && r.blacklist.score === 0);
+        const hasNestedBlacklistViolation = hasBlacklistViolation(nested);
         if (hasNestedBlacklistViolation) {
           return 0;
         }
@@ -577,8 +577,8 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
       }
 
       // Check nested blacklist hard fail
-      if (nested && nested.some(r => r.blacklist && r.blacklist.score === 0)) {
-        const violating = nested.filter(r => r.blacklist && r.blacklist.score === 0).map(r => r.stepName);
+      if (nested && hasBlacklistViolation(nested)) {
+        const violating = nested.filter(r => hasBlacklistViolation([r])).map(r => r.stepName);
         parts.push(`Nested blacklist violation in: ${violating.join(', ')}.`);
         return parts.join('\n');
       }

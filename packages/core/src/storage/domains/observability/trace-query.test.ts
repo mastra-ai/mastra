@@ -164,6 +164,11 @@ describe('planTraceQuery', () => {
     );
     expect(reversed.issues).toEqual([expect.objectContaining({ code: 'invalid_time_range', path: ['timeRange'] })]);
 
+    expect(planTraceQuery(parsed()).timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
+
     const tooLarge = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
     );
@@ -1059,6 +1064,23 @@ describe('queryThreads input and planning', () => {
     expect(invalidRange.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_time_range', path: ['traces', 'timeRange'] }),
     );
+
+    expect(planThreadQuery(parsedThreads()).traces.timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
+
+    const tooLarge = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+        }),
+      ),
+    );
+    expect(tooLarge.issues[0]).toMatchObject({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
+    });
 
     const invalidField = validationError(() =>
       planThreadQuery(

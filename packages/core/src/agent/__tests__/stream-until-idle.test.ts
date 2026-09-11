@@ -117,58 +117,75 @@ describe('Agent.streamUntilIdle', () => {
     expect(getCallCount()).toBe(1);
   });
 
-  it('re-invokes stream when a background task completes', async () => {
-    const memory = new MockMemory();
-    const { model, getCallCount } = makeScriptedModel([
-      textResponse('first response'),
-      textResponse('continuation response'),
-    ]);
+  it.each([false, true])(
+    'preserves signal exclusions across background continuations (excluded: %s)',
+    async excluded => {
+      const memory = new MockMemory();
+      const { model, getCallCount } = makeScriptedModel([
+        textResponse('first response'),
+        textResponse('continuation response'),
+      ]);
 
-    const agent = new Agent({
-      id: 'a2',
-      name: 'a2',
-      instructions: 'test',
-      model,
-      memory,
-    });
-    mastra.addAgent(agent, 'a2');
+      const agent = new Agent({
+        id: 'a2',
+        name: 'a2',
+        instructions: 'test',
+        model,
+        memory,
+        inputProcessors: [
+          {
+            id: 'continuation-reminder',
+            processInputStep: async ({ sendSignal }) => {
+              await sendSignal({ type: 'reactive', contents: 'every turn reminder' });
+            },
+          },
+        ],
+      });
+      mastra.addAgent(agent, 'a2');
 
-    // Emit task.running BEFORE calling streamUntilIdle so the outer state
-    // machine sees a pending task and stays open after the initial turn.
-    const bgManager = mastra.backgroundTaskManager!;
-    const publishEvent = (type: string, taskId: string) =>
-      (bgManager as any).publishLifecycleEvent(type, {
-        id: taskId,
-        toolName: 'dummy',
-        toolCallId: taskId,
-        runId: 'run-1',
-        agentId: 'a2',
-        threadId: 'thread-2',
-        resourceId: 'user-1',
-        status: type.split('.')[1],
-        result: {},
-        retryCount: 0,
-        maxRetries: 0,
-        timeoutMs: 1000,
-        createdAt: new Date(),
-        args: {},
+      // Emit task.running BEFORE calling streamUntilIdle so the outer state
+      // machine sees a pending task and stays open after the initial turn.
+      const bgManager = mastra.backgroundTaskManager!;
+      const publishEvent = (type: string, taskId: string) =>
+        (bgManager as any).publishLifecycleEvent(type, {
+          id: taskId,
+          toolName: 'dummy',
+          toolCallId: taskId,
+          runId: 'run-1',
+          agentId: 'a2',
+          threadId: 'thread-2',
+          resourceId: 'user-1',
+          status: type.split('.')[1],
+          result: {},
+          retryCount: 0,
+          maxRetries: 0,
+          timeoutMs: 1000,
+          createdAt: new Date(),
+          args: {},
+        });
+
+      const outer = await agent.streamUntilIdle('hi', {
+        memory: { thread: 'thread-2', resource: 'user-1' },
+        hideSignals: excluded ? ['system-reminder'] : [],
       });
 
-    const outer = await agent.streamUntilIdle('hi', {
-      memory: { thread: 'thread-2', resource: 'user-1' },
-    });
+      // Mark a task as running so the outer knows to wait for it.
+      await publishEvent('task.running', 'task-1');
+      // Now complete it. The state machine should re-invoke stream to process.
+      await new Promise(r => setTimeout(r, 50));
+      await publishEvent('task.completed', 'task-1');
 
-    // Mark a task as running so the outer knows to wait for it.
-    await publishEvent('task.running', 'task-1');
-    // Now complete it. The state machine should re-invoke stream to process.
-    await new Promise(r => setTimeout(r, 50));
-    await publishEvent('task.completed', 'task-1');
+      const chunks = await drain(outer.fullStream as ReadableStream<any>);
+      expect(chunks.filter(c => c.type === 'data-signal')).toHaveLength(excluded ? 0 : 2);
+      expect(chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text)).toEqual([
+        'first response',
+        'continuation response',
+      ]);
 
-    await drain(outer.fullStream as ReadableStream<any>);
-
-    // Initial turn + one continuation = 2 LLM calls
-    expect(getCallCount()).toBe(2);
-  });
+      // Initial turn + one continuation = 2 LLM calls
+      expect(getCallCount()).toBe(2);
+    },
+  );
 
   it('serializes continuations (only one inner stream at a time)', async () => {
     const memory = new MockMemory();

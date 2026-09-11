@@ -1,5 +1,12 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`80608ed`](https://github.com/mastra-ai/mastra/commit/80608ede1a9e5d7d8488ac511245bf327e8987e3)]:
+  - @mastra/schema-compat@1.3.10-alpha.0
+
 ## 0.14.9
 
 ### Patch Changes

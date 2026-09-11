@@ -130,7 +130,7 @@ export function PromptBlockEditSidebar({
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-name" className="text-neutral5 text-xs">
+            <Label htmlFor="prompt-block-name" className="text-neutral5 text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -140,12 +140,12 @@ export function PromptBlockEditSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+            {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
           </div>
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="prompt-block-description" className="text-neutral5 text-xs">
+            <Label htmlFor="prompt-block-description" className="text-neutral5 text-ui-sm">
               Description
             </Label>
             <Textarea
@@ -155,7 +155,7 @@ export function PromptBlockEditSidebar({
               {...register('description')}
               error={!!errors.description}
             />
-            {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+            {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
           </div>
         </div>
 

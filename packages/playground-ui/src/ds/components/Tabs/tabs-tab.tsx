@@ -1,5 +1,4 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { X } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
@@ -28,7 +27,7 @@ export const Tab = ({
   className,
 }: TabProps) => {
   const list = useContext(TabListContext);
-  const ref = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const register = list?.register;
   const unregister = list?.unregister;
   const overflowed = list?.hiddenValues.has(value) ?? false;
@@ -43,25 +42,30 @@ export const Tab = ({
         width: element.getBoundingClientRect().width,
         element,
         onClick,
+        onClose,
       });
+    measure();
+    if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    measure();
     return () => observer.disconnect();
-  }, [register, value, children, disabled, onClick]);
+  }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
   const tab = (
     <BaseTabs.Tab
       ref={ref}
+      render={<div />}
+      nativeButton={false}
       data-overflowed={overflowed || undefined}
       aria-hidden={overflowed || undefined}
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
+      data-closable={onClose ? '' : undefined}
       className={cn(
         'text-ui-md font-normal text-neutral3',
         attention && 'relative',
-        'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+        'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,
         focusRing.visible,
         'hover:text-neutral4',
@@ -80,22 +84,8 @@ export const Tab = ({
           <span className="sr-only"> Needs attention</span>
         </>
       )}
-      {onClose && (
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
-          aria-label="Close tab"
-        >
-          <X className="size-3" />
-        </button>
-      )}
     </BaseTabs.Tab>
   );
-
   if (disabled && disabledTooltip) {
     return (
       <Tooltip>

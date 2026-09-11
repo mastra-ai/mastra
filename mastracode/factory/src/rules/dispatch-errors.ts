@@ -23,6 +23,7 @@ const FAILURE_METADATA = {
   repository_commit_failed: { canRetry: true, label: 'Repository commit failed' },
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
+  run_configuration_invalid: { canRetry: false, label: 'Run configuration rejected by provider' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },

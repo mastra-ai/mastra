@@ -1,5 +1,116 @@
 # @mastra/playground-ui
 
+## 55.0.0-alpha.2
+
+### Minor Changes
+
+- Adds `TabbedContainer`, a contained tab composition for mixed panel types. `Panel` accepts arbitrary content. `DataList` renders a table and can place search and filter controls in the tab rail. Both types support the existing tab states and close behavior. Visited panels stay mounted, preserving their scroll position and local state. ([#23538](https://github.com/mastra-ai/mastra/pull/23538))
+
+  ```tsx
+  <TabbedContainer defaultTab="overview">
+    <TabbedContainer.Panel value="overview" label="Overview">
+      <Overview />
+    </TabbedContainer.Panel>
+    <TabbedContainer.DataList
+      value="runs"
+      label="Runs"
+      columns="auto minmax(0,1fr) auto"
+      search={{ label: 'Search runs', placeholder: 'Search runs', value: query, onSearch: setQuery }}
+      filter={{
+        'aria-label': 'Filter by status',
+        multiple: true,
+        options: statusOptions,
+        value: statuses,
+        onValueChange: setStatuses,
+      }}
+    >
+      {runRows}
+    </TabbedContainer.DataList>
+  </TabbedContainer>
+  ```
+
+  Contained tabs move extra items into a `+N` menu. Closable overflow items can now be closed from that menu without selecting them.
+
+  ```tsx
+  <Tabs defaultTab="runs">
+    <TabList>
+      <Tab value="runs" onClose={() => closeTab('runs')}>
+        Runs
+      </Tab>
+    </TabList>
+    <TabContent value="runs" flush keepMounted>
+      <RunsTable />
+    </TabContent>
+  </Tabs>
+  ```
+
+  Adds `DataList.SortableTopCell`, a controlled column header that switches between ascending and descending sort directions.
+
+  ```tsx
+  <DataList.SortableTopCell sortDirection={sortDirection} onSortChange={setSortDirection}>
+    Created at
+  </DataList.SortableTopCell>
+  ```
+
+  Multi-select comboboxes can show a `clearLabel` footer action, and combobox triggers accept an explicit `aria-label`.
+
+  ```tsx
+  <Combobox
+    aria-label="Filter by status"
+    multiple
+    options={statusOptions}
+    value={statuses}
+    onValueChange={setStatuses}
+    clearLabel="Clear filters"
+  />
+  ```
+
+  Also adds `flush` and `keepMounted` to `TabContent`. `flush` lets a panel component own the body surface. `keepMounted` keeps a visited panel in the DOM after a tab switch.
+
+### Patch Changes
+
+- Moved the tool-call classifier and grouping helpers (toolCardKind, badgeStatus, toolInteraction, collectToolGroups) and the first self-contained tool badges (ToolApprovalButtons, AskUserBadge, AskUserTool, CodeModeBadge) into playground-ui so hosts can render approval, ask-user and code-mode tool calls without depending on Studio internals. ([#23625](https://github.com/mastra-ai/mastra/pull/23625))
+
+- Added reusable tool-call approval context to playground-ui with stable provider values. ([#23604](https://github.com/mastra-ai/mastra/pull/23604))
+
+- Moved workspace tool constants, the submit-plan tool id, and Code Mode call detection into playground-ui so hosts can classify tool calls without depending on Studio internals. ([#23623](https://github.com/mastra-ai/mastra/pull/23623))
+
+- Studio now renders chat messages with the shared primitives from `@mastra/playground-ui/domains/chat` instead of its own copies. No visible change. ([#23594](https://github.com/mastra-ai/mastra/pull/23594))
+
+- Improved the span and trace panel headers in Studio: the ID is shown without a `#` prefix, the label and ID button are aligned, hovering shows the copy action, and clicking the ID copies it without an extra icon or layout shift, with a confirmation tooltip. The compact span panel on the Logs page now shows start, end and duration as icons with tooltips instead of `Started`/`Ended`/`Duration` rows, matching the main span panel. ([#23618](https://github.com/mastra-ai/mastra/pull/23618))
+
+- Added the chat message rendering primitives (text, reasoning, data/signal and file renderers, signal/tripwire/system-reminder badges, message metadata types) under `@mastra/playground-ui/domains/chat/messages/*`, and the attachment helpers (`classifyAttachment`, `isTextMimeType`, preview dialog entries) under `@mastra/playground-ui/domains/chat/attachments/*`. `MessageMetadata`, signal data helpers and `readToolPart`/`isToolPart` are also exported from `@mastra/playground-ui/domains/chat`. These were previously internal to the Studio app and can now be reused by other hosts. ([#23594](https://github.com/mastra-ai/mastra/pull/23594))
+
+- Unified Studio typography on design-system tokens. Tailwind text-xs…4xl utilities now map to DS sizes with paired line-heights, headings follow a consistent hierarchy, and arbitrary pixel sizes in badges, code views, and charts were replaced with token values. ([#23629](https://github.com/mastra-ai/mastra/pull/23629))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+  - @mastra/memory@1.30.0-alpha.2
+  - @mastra/client-js@1.46.0-alpha.2
+  - @mastra/react@1.4.13-alpha.2
+
+## 54.0.1-alpha.1
+
+### Patch Changes
+
+- Added a `chat` domain (`@mastra/playground-ui/domains/chat`) exposing the shared chat context hooks (`useChatRunning`, `useChatSend`, `useChatMessages`, `useChatTasks`) and the presentational tool-call badge primitives (`BadgeWrapper`, `SectionLabel`, `LoadingBadge`, `NetworkChoiceMetadataDialogTrigger`) so they can be reused outside of Studio. ([#23526](https://github.com/mastra-ai/mastra/pull/23526))
+
+- Updated dependencies [[`c5f65c1`](https://github.com/mastra-ai/mastra/commit/c5f65c1184d302ce94975353ab2f5fd4a7f90111), [`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`2b068cf`](https://github.com/mastra-ai/mastra/commit/2b068cf3c59c0d54f5cfdcc6b0a9a0a478b4f1f6), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/client-js@1.45.1-alpha.1
+  - @mastra/core@1.67.0-alpha.1
+  - @mastra/memory@1.30.0-alpha.1
+  - @mastra/react@1.4.13-alpha.1
+
+## 54.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`4da756a`](https://github.com/mastra-ai/mastra/commit/4da756a3bcf5f232d9fc0a4dcf184d26366c585e), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`4ac5da9`](https://github.com/mastra-ai/mastra/commit/4ac5da9d524aa18ec03c135a99e180411155ed2e), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580)]:
+  - @mastra/core@1.66.1-alpha.0
+  - @mastra/memory@1.29.1-alpha.0
+  - @mastra/client-js@1.45.1-alpha.0
+  - @mastra/react@1.4.13-alpha.0
+
 ## 54.0.0
 
 ### Minor Changes

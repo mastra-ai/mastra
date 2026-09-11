@@ -5,11 +5,11 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
-import { isSystemReminderSignalType } from '../memory/system-reminders';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
+import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
@@ -22,6 +22,7 @@ import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
+  AgentThreadIdentityOptions,
   AgentThreadSubscription,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -693,7 +694,9 @@ export class AgentThreadStreamRuntime {
       void (async () => {
         try {
           if (cancelled) return;
-          const source = output.fullStream as ReadableStream<unknown> | undefined;
+          const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
+            | ReadableStream<unknown>
+            | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -878,7 +881,7 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
-  getActiveThreadRunId(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): string | undefined {
+  getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const activeRunId = state.activeThreadRunIds.get(key);
@@ -1066,8 +1069,6 @@ export class AgentThreadStreamRuntime {
     resourceId: string,
     threadId: string,
   ) {
-    if (isSystemReminderSignalType(signal.type)) return;
-
     let finish!: () => void;
     const finished = new Promise<void>(resolve => {
       finish = resolve;
@@ -2592,7 +2593,9 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                yield partWithRunId;
+                if (!isSignalChunkExcluded(partWithRunId, options.hideSignals)) {
+                  yield partWithRunId;
+                }
                 if (done) break;
                 const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
                 const terminalBoundary =

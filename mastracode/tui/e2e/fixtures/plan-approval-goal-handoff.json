@@ -41,7 +41,7 @@
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
         "hasToolResult": true,
-        "toolCallId": "call_plan_goal_e2e_write"
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
@@ -63,9 +63,8 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "userMessage": "Create a concise goal implementation plan for the plan approval e2e test.",
         "hasToolResult": true,
-        "toolCallId": "call_plan_goal_e2e_submit"
+        "turnIndex": 2
       },
       "response": {
         "content": "Resumed plan output before goal startup."

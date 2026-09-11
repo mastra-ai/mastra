@@ -102,6 +102,10 @@ vi.mock('./platform-api.js', () => ({
   }),
 }));
 
+vi.mock('../../utils/detect-project-type.js', () => ({
+  detectProjectType: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../utils/run-build.js', () => ({
   runBuild: vi.fn().mockResolvedValue(undefined),
 }));
@@ -640,6 +644,48 @@ describe('serverDeployAction', () => {
       expect.objectContaining({ projectId: 'proj-real-id', projectName: 'brand-new', projectSlug: 'brand-new' }),
       undefined,
     );
+  });
+
+  it('--project <name> with --yes creates a Factory project and flags the deploy for Factory builds', async () => {
+    vi.resetModules();
+
+    const { detectProjectType } = await import('../../utils/detect-project-type.js');
+    vi.mocked(detectProjectType).mockResolvedValue('factory');
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([]);
+    vi.mocked(platform.createServerProject).mockResolvedValue({
+      id: 'proj-factory-id',
+      name: 'goo',
+      slug: 'goo',
+      organizationId: 'org-1',
+    } as never);
+
+    const { readdir, readFile } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+    await expect(serverDeployAction(undefined, { project: 'goo', yes: true })).resolves.toBeUndefined();
+
+    expect(platform.createServerProject).toHaveBeenCalledWith('test-token', 'org-1', 'goo', { factoryEnabled: true });
+    expect(platform.uploadServerDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-factory-id',
+      expect.anything(),
+      expect.objectContaining({ factoryEnabled: true }),
+    );
+
+    vi.mocked(detectProjectType).mockResolvedValue(undefined);
   });
 
   it('auto-accept with multiple projects and no name match throws a helpful error', async () => {

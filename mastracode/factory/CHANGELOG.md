@@ -1,5 +1,40 @@
 # @mastra/factory
 
+## 0.14.1-alpha.2
+
+### Patch Changes
+
+- Kept Factory chat status indicators, goal progress, and status commands consistent, and cleared the previous run's status when starting a new thread. ([#23605](https://github.com/mastra-ai/mastra/pull/23605))
+
+- Fixed reused managed Factory sessions keeping stale observational-memory models: when automation reuses an existing managed session, the project's current observer and reflector model settings are now reapplied before the run, instead of silently keeping the models the session was originally created with. Also, when a run is aborted by a permanent observational-memory failure (for example a provider rejecting an unsupported model), the real error is now surfaced and the decision is marked as a non-retryable configuration failure instead of being retried behind a generic "aborted" message. ([#23573](https://github.com/mastra-ai/mastra/pull/23573))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+  - @mastra/code-sdk@1.7.2-alpha.2
+
+## 0.14.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`3425cfd`](https://github.com/mastra-ai/mastra/commit/3425cfdd929801361e718839d8aa6443e9294513), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+  - @mastra/code-sdk@1.7.2-alpha.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- Fixed Factory web sessions using personal observational-memory defaults instead of the Factory project's configured models. ([#23529](https://github.com/mastra-ai/mastra/pull/23529))
+
+- Fixed `git push` over HTTPS failing in Factory issue, Linear, and manual sandbox sessions. The Git credential helper is now installed for every session type, not only pull request sessions. ([#23540](https://github.com/mastra-ai/mastra/pull/23540))
+
+- Fixed a Factory reconnect bug where reconnecting a sandbox after a role or token change could reauthorize a stale GitHub token refresh context, causing the current context to fail with "GitHub token refresh no longer matches the active Factory workspace role". Reconnects now preserve the existing token authority and only re-target token injection to the current sandbox (#23543). ([#23548](https://github.com/mastra-ai/mastra/pull/23548))
+
+- Updated dependencies [[`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`f0e51bb`](https://github.com/mastra-ai/mastra/commit/f0e51bbc09772b514666f5da42601ffc73bc0f04), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580)]:
+  - @mastra/core@1.66.1-alpha.0
+  - @mastra/auth-studio@1.3.6-alpha.0
+  - @mastra/code-sdk@1.7.2-alpha.0
+
 ## 0.14.0
 
 ### Minor Changes

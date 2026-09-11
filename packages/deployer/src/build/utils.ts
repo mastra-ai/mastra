@@ -52,6 +52,18 @@ export function detectRuntime(): RuntimePlatform {
   return 'node';
 }
 
+/**
+ * Whether the deployer should skip installing dependencies (and lockfile
+ * generation) in the build output directory. Enabled by setting
+ * MASTRA_BUILD_SKIP_INSTALL to "true" or "1". Useful for hermetic build
+ * systems (e.g. Bazel) that supply node_modules externally and run in a
+ * network-less sandbox where the output install would be redundant and fatal.
+ */
+export function shouldSkipInstall(): boolean {
+  const value = process.env.MASTRA_BUILD_SKIP_INSTALL;
+  return value === 'true' || value === '1';
+}
+
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
 

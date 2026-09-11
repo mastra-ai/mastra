@@ -41,7 +41,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2">
         {steps.map(step => (
-          <div className="bg-surface5 flex items-center gap-1.5 rounded-sm p-2 text-sm" key={step}>
+          <div className="bg-surface5 text-ui-md flex items-center gap-1.5 rounded-sm p-2" key={step}>
             <Footprints className="h-4 w-4 text-current" />
             <Txt variant="ui-xs" className="text-neutral6 capitalize">
               {step}
