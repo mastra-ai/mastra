@@ -226,11 +226,13 @@ export async function getCredential(client: ResolvedClient, connectionId: string
   return parsed.data;
 }
 
+type ProxyQueryPrimitive = string | number | boolean;
+
 export interface ProxyRequestOptions {
   method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Provider-relative path (no leading slash required; dot segments are rejected client-side, absolute URLs by the platform). */
   path: string;
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, ProxyQueryPrimitive | ProxyQueryPrimitive[] | undefined>;
   headers?: Record<string, string>;
   baseUrlOverride?: string;
   body?: unknown;
@@ -279,7 +281,12 @@ export async function proxyRequest(
   }
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(options.query ?? {})) {
-    if (value !== undefined) search.set(key, String(value));
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, String(item));
+    } else {
+      search.set(key, String(value));
+    }
   }
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
