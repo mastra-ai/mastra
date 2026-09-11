@@ -8,7 +8,7 @@ import type {
   SandboxFileInput,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox } from '@mastra/core/workspace';
+import { assertModesUnsupported, MastraSandbox } from '@mastra/core/workspace';
 import { CloudflareSandboxBridgeClient, type CloudflareSandboxBridgeClientOptions } from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -228,6 +228,7 @@ export class CloudflareSandbox extends MastraSandbox {
   }
 
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
     // The bridge writes one file per request.
     for (const file of files) {

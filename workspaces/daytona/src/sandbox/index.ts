@@ -32,7 +32,7 @@ import type {
   SandboxCloneOptions,
   SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { assertModesUnsupported, MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
@@ -687,8 +687,12 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Daytona');
     await this.ensureRunning();
     await this.daytona.fs.uploadFiles(
       files.map(file => ({

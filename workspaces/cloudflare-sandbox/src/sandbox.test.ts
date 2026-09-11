@@ -188,6 +188,17 @@ describe('CloudflareSandbox', () => {
     await expect(sandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/has not been started/);
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/has not been started/);
   });
+
+  it('rejects an explicit per-file mode without writing', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x', mode: 0o600 }])).rejects.toThrow(
+      /does not support per-file permission modes/,
+    );
+    expect(bridge.files.size).toBe(0);
+  });
 });
 
 describe('CloudflareSandbox conformance', () => {

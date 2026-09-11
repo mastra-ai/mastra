@@ -1437,4 +1437,25 @@ describe('DockerSandbox writeFiles', () => {
 
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxError);
   });
+
+  it('honors an explicit file mode on the tar entry', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: 'run.sh', content: '#!/bin/sh\n', mode: 0o600 }]);
+
+    const entries = await parsePutArchive();
+    expect(entries[0]!.mode).toBe(0o600);
+  });
+
+  it('rejects invalid modes without uploading', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+    mockContainer.putArchive.mockClear();
+
+    for (const bad of [0, 0o1000, -1]) {
+      await expect(sandbox.writeFiles([{ path: 'a', content: 'x', mode: bad }])).rejects.toBeInstanceOf(SandboxError);
+    }
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
 });

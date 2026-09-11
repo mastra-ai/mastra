@@ -26,7 +26,7 @@ import type {
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { assertModesUnsupported, MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
   BuildOptions,
@@ -599,8 +599,12 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'E2B');
     await this.ensureRunning();
     await this.e2b.files.write(
       files.map(f => ({

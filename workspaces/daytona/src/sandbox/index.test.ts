@@ -1413,6 +1413,17 @@ describe('DaytonaSandbox', () => {
         { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
       ]);
     });
+
+    it('writeFiles rejects an explicit per-file mode without uploading', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.fs.uploadFiles.mockClear();
+
+      await expect(
+        sandbox.writeFiles([{ path: '/home/daytona/app/a.txt', content: 'hello', mode: 0o600 }]),
+      ).rejects.toThrow(/does not support per-file permission modes/);
+      expect(mockSandbox.fs.uploadFiles).not.toHaveBeenCalled();
+    });
   });
 
   describe('Computer Use', () => {

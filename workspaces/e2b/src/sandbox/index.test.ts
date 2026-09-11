@@ -3230,6 +3230,15 @@ describe('writeFiles()', () => {
     expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
     expect(mockSandbox.files.write).toHaveBeenCalled();
   });
+
+  it('rejects an explicit per-file mode without uploading', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await expect(sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+      /does not support per-file permission modes/,
+    );
+    expect(mockSandbox.files.write).not.toHaveBeenCalled();
+  });
 });
 
 /**
