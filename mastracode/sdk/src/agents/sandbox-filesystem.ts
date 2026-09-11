@@ -499,7 +499,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * walker's no-recursion-into-symlinks behavior.
    */
   async walk(path: string, options?: WalkOptions): Promise<WalkEntry[]> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     const maxDepth =
       options?.maxDepth !== undefined && Number.isFinite(options.maxDepth)
@@ -551,7 +551,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * results are a superset of what any host-side filter would keep.
    */
   async grep(options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
-    const abs = this.resolve(options.path);
+    const abs = await this.resolveAsync(options.path);
     await this.assertContainedRealpath(abs, options.path);
     if (await this.hasRipgrep()) {
       return this.grepWithRipgrep(abs, options);
