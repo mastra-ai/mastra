@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
+import type { KnowledgeScopeNodeSummary } from '@internal/core/knowledge-compat';
 import {
+  MAX_KNOWLEDGE_SCOPE_NODES,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -758,6 +760,40 @@ export class KnowledgePG extends KnowledgeStorage {
         accessEpoch: Number(state.rows[0]?.epoch ?? 0),
       };
     });
+  }
+
+  override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+    const scopes = await this.#readExecutor.execute({
+      sql: `SELECT id,name,kind,description FROM "${TABLE_KNOWLEDGE_NODES}" WHERE "isScope" AND "deletedAt" IS NULL ORDER BY name LIMIT ${MAX_KNOWLEDGE_SCOPE_NODES}`,
+    });
+    if (scopes.rows.length === 0) return [];
+    const parents = await this.#readExecutor.execute({
+      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns."nodeId" WHERE c."isScope" AND c."deletedAt" IS NULL`,
+    });
+    const parentsByScopeId = new Map<string, string[]>();
+    for (const row of parents.rows as Array<Record<string, unknown>>) {
+      const scopeId = String(row.nodeId);
+      const parentId = String(row.scopeNodeId);
+      const existing = parentsByScopeId.get(scopeId);
+      if (existing) existing.push(parentId);
+      else parentsByScopeId.set(scopeId, [parentId]);
+    }
+    return (scopes.rows as Array<Record<string, unknown>>).map(row => ({
+      id: String(row.id),
+      name: String(row.name),
+      ...(row.kind == null ? {} : { kind: String(row.kind) }),
+      ...(row.description == null ? {} : { description: String(row.description) }),
+      parentIds: parentsByScopeId.get(String(row.id)) ?? [],
+    }));
+  }
+
+  override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 500);
+    const result = await this.#readExecutor.execute({
+      sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args: [input.scopeNodeId, limit],
+    });
+    return (result.rows as Array<Record<string, unknown>>).map(parseNode);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

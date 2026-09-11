@@ -14,6 +14,7 @@ import {
   KnowledgeStorage,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  MAX_KNOWLEDGE_SCOPE_NODES,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
 } from './base';
@@ -28,6 +29,7 @@ import type {
   KnowledgeRecord,
   KnowledgeMention,
   KnowledgeScope,
+  KnowledgeScopeNodeSummary,
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
@@ -82,7 +84,10 @@ function recordKey(name: string, scope: KnowledgeScope): string {
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
-  readonly #structureScopes = new Map<string, { id: string; name: string; deletedAt?: Date }>();
+  readonly #structureScopes = new Map<
+    string,
+    { id: string; name: string; kind?: string; description?: string; deletedAt?: Date }
+  >();
   readonly #structureParents = new Set<string>();
   readonly #structureGrants = new Set<string>();
   #accessEpoch = 0;
@@ -137,7 +142,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         continue;
       }
       const id = crypto.randomUUID();
-      this.#structureScopes.set(scope.address, { id, name: scope.name });
+      this.#structureScopes.set(scope.address, {
+        id,
+        name: scope.name,
+        ...(scope.kind ? { kind: scope.kind } : {}),
+        ...(scope.description ? { description: scope.description } : {}),
+      });
       scopes[scope.address] = id;
       createdAddresses.add(scope.address);
       createdScopeIds.push(id);
@@ -194,6 +204,44 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       changed: createdScopeIds.length > 0,
       accessEpoch: this.#accessEpoch,
     };
+  }
+
+  override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+    const parentsByScopeId = new Map<string, string[]>();
+    for (const edge of this.#structureParents) {
+      const [scopeId, parentId] = edge.split('\u0000');
+      if (!scopeId || !parentId) continue;
+      const parents = parentsByScopeId.get(scopeId);
+      if (parents) parents.push(parentId);
+      else parentsByScopeId.set(scopeId, [parentId]);
+    }
+    const summaries: KnowledgeScopeNodeSummary[] = [];
+    for (const scope of this.#structureScopes.values()) {
+      if (scope.deletedAt) continue;
+      summaries.push({
+        id: scope.id,
+        name: scope.name,
+        ...(scope.kind ? { kind: scope.kind } : {}),
+        ...(scope.description ? { description: scope.description } : {}),
+        parentIds: parentsByScopeId.get(scope.id) ?? [],
+      });
+    }
+    return summaries.sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_KNOWLEDGE_SCOPE_NODES);
+  }
+
+  override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 500);
+    const memberIds = new Set<string>();
+    for (const edge of this.#structureParents) {
+      const [scopeId, parentId] = edge.split('\u0000');
+      if (scopeId && parentId === input.scopeNodeId) memberIds.add(scopeId);
+    }
+    const members: KnowledgeNode[] = [];
+    for (const id of memberIds) {
+      const node = await this.getNode(id);
+      if (node && !node.mergedInto) members.push(node);
+    }
+    return members.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, limit);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
