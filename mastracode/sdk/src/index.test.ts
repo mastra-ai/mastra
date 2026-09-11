@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// createMastraCode() pulls in a large module graph, so these tests routinely
+// exceed the 5s default (matches the sibling headless/libsql suites).
+vi.setConfig({ testTimeout: 30_000 });
+
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
@@ -227,6 +231,42 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
+  });
+});
+
+describe('scores storage domain', () => {
+  it('keeps scorer results out of the default libsql store', async () => {
+    const { ScoresInMemory } = await import('@mastra/core/storage');
+    const { createMastraCode } = await import('./index.js');
+
+    const result = await createMastraCode();
+
+    // mastracode registers `outcome` and `efficiency` scorers that fire on every
+    // session, and core's scorer hook persists each result through the `scores`
+    // domain. Nothing in mastracode reads scores back, so the domain must be
+    // in-memory instead of falling through to the default libsql store — that
+    // fallthrough is what grew mastra.db without bound (#22056).
+    //
+    // This also catches the `scores: false` variant: a disabled domain resolves
+    // to undefined, and core's validateAndSaveScore() then throws
+    // MASTRA_SCORES_STORAGE_NOT_AVAILABLE on every scorer run.
+    const scores = await result.storage.getStore('scores');
+    expect(scores).toBeInstanceOf(ScoresInMemory);
+
+    // The domain is functional, not a stub: a saved score round-trips through
+    // memory and never reaches a durable store.
+    const saved = await scores!.saveScore({
+      scorerId: 'outcome',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(saved.score.id).toEqual(expect.any(String));
+    expect(await scores!.getScoreById({ id: saved.score.id })).toEqual(saved.score);
   });
 });
 
