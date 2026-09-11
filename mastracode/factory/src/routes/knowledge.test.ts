@@ -256,6 +256,34 @@ describe('KnowledgeRoutes', () => {
     expect(failed.status).toBe(500);
   });
 
+  it('excludes structural scope nodes from the default subgraph window', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    const parent = await node(store, 'Content', h.projectScope);
+    await record(store, parent, 'keeps the graph alive', h.projectScope);
+
+    // SQL adapters return global scope nodes (scope: null) from identity-scope
+    // listNodes reads; the route must exclude them instead of crashing in the
+    // wikilink resolver, which iterates every node's scope.
+    const listNodes = store.listNodes.bind(store);
+    store.listNodes = async query => [
+      ...(await listNodes(query)),
+      {
+        id: crypto.randomUUID(),
+        name: 'mastra',
+        kind: 'scope',
+        scope: null,
+        version: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as KnowledgeNode,
+    ];
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.nodes.map(item => item.name)).toEqual(['Content']);
+  });
+
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
     const absent = await createHarness({ knowledgeResolver: async () => undefined });
     const failed = await createHarness({
