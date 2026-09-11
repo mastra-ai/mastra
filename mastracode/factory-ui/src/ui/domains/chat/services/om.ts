@@ -1,6 +1,6 @@
 import type { AgentControllerOMProgress } from '@mastra/client-js';
 
-import type { TranscriptState } from './transcript';
+import type { ChatRuntimeState } from './runtime';
 
 export type OMBudgets = Pick<
   AgentControllerOMProgress,
@@ -26,7 +26,7 @@ function budgetWork(buffering: boolean, blocking: boolean): OMWork {
 }
 
 export function omWork(
-  state: Pick<TranscriptState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
+  state: Pick<ChatRuntimeState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
 ): OMWorkByBudget {
   return {
     messages: budgetWork(state.bufferingMessages, state.omPhase === 'observing'),

@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Consolidated Factory chat status tracking into the transcript so memory activity and token usage share one state.
+Kept Factory chat status indicators, goal progress, and status commands consistent, and cleared the previous run's status when starting a new thread.

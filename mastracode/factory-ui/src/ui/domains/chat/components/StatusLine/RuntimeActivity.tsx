@@ -13,7 +13,6 @@ function holdingLabel({ messages, observations }: OMWorkByBudget): string | unde
   return undefined;
 }
 
-/** Memory work that holds the turn, and decode throughput. Background memory work shimmers on its budget instead. */
 export function RuntimeActivity() {
   const runtime = useChatRuntime();
   const label = holdingLabel(omWork(runtime));
