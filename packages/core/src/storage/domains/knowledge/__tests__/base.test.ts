@@ -7,6 +7,8 @@ import {
   inspectKnowledgeSchema,
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
+  KnowledgeStorage,
+  KnowledgeUnsupportedCapabilityError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
 } from '../base';
@@ -27,6 +29,41 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('lists reconciled scope nodes with parent membership edges', async () => {
+    const store = createStore();
+    const plan = {
+      scopes: [
+        { address: 'org:acme', name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
+      ],
+    };
+    const { scopes } = await store.reconcileStructure(plan);
+
+    const nodes = await store.listScopeNodes();
+    expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'memory']);
+    const features = nodes.find(node => node.name === 'features')!;
+    const mastra = nodes.find(node => node.name === 'mastra')!;
+    const memory = nodes.find(node => node.name === 'memory')!;
+    expect(features).toMatchObject({ kind: 'domain', parentIds: [mastra.id] });
+    expect(memory).toMatchObject({ description: 'Memory scope', parentIds: [features.id] });
+    expect(mastra.parentIds).toEqual([]);
+    expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
+
+    await expect(store.listScopeMembers({ scopeNodeId: mastra.id })).resolves.toEqual([]);
+    await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+  });
+
+  it('throws a typed capability error for adapters without the structural scope read', async () => {
+    const bare = {} as KnowledgeStorage;
+    await expect(KnowledgeStorage.prototype.listScopeNodes.call(bare)).rejects.toBeInstanceOf(
+      KnowledgeUnsupportedCapabilityError,
+    );
+    await expect(
+      KnowledgeStorage.prototype.listScopeMembers.call(bare, { scopeNodeId: crypto.randomUUID() }),
+    ).rejects.toBeInstanceOf(KnowledgeUnsupportedCapabilityError);
   });
 
   it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {
