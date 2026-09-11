@@ -2,6 +2,7 @@ import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { ChatAgentContext, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { AskUserTool } from '@mastra/playground-ui/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@mastra/playground-ui/domains/chat/tools/badges/code-mode-badge';
+import { ObservationMarkerBadge } from '@mastra/playground-ui/domains/chat/tools/badges/observation-marker-badge';
 import {
   badgeStatus,
   codeModeCall,
@@ -14,7 +15,6 @@ import {
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
-import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';

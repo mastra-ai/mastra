@@ -1,10 +1,10 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, Eye } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ObservationRenderer } from './observation-renderer';
+import { Badge } from '@/ds/components/Badge';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -139,7 +139,7 @@ const ExtractedValuesPanel = ({
         onClick={onToggle}
         className="text-foreground text-ui-xs flex items-center gap-1 font-medium tracking-wide uppercase transition-opacity hover:opacity-80"
       >
-        {isExpanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+        {isExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
         Extractions ({entries.length}){failures.length > 0 ? ` · ${failures.length} failed` : ''}
       </button>
       {isExpanded && (
@@ -249,8 +249,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         <div
           className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${bgColor} ${textColor} text-ui-sm my-1 font-medium`}
         >
-          <Loader2 className="h-3 w-3 animate-spin" />
-          {isReflection ? <Brain className="h-3 w-3" /> : <ObservationIcon className="h-3 w-3" />}
+          <Loader2 className="size-3 animate-spin" />
+          {isReflection ? <Brain className="size-3" /> : <ObservationIcon className="size-3" />}
           <span>
             {actionLabel}
             {tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}
@@ -297,8 +297,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             onClick={handleToggle}
             className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-ui-sm font-medium ${completeHoverBgColor} cursor-pointer transition-colors`}
           >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {isReflection ? <Brain className="h-3 w-3" /> : <ObservationIcon className="h-3 w-3" />}
+            {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            {isReflection ? <Brain className="size-3" /> : <ObservationIcon className="size-3" />}
             <span>
               {completedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→
               {observationTokens ? formatTokens(observationTokens) : '?'} tokens
@@ -328,9 +328,9 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                         className="text-foreground text-ui-xs flex items-center gap-1 font-medium tracking-wide uppercase transition-opacity hover:opacity-80"
                       >
                         {isObservationsExpanded ? (
-                          <ChevronDown className="h-2.5 w-2.5" />
+                          <ChevronDown className="size-2.5" />
                         ) : (
-                          <ChevronRight className="h-2.5 w-2.5" />
+                          <ChevronRight className="size-2.5" />
                         )}
                         {isReflection ? 'Reflections' : 'Observations'}
                       </button>
@@ -349,11 +349,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     onClick={() => setIsTaskExpanded(!isTaskExpanded)}
                     className="text-foreground text-ui-xs flex items-center gap-1 font-medium tracking-wide uppercase transition-opacity hover:opacity-80"
                   >
-                    {isTaskExpanded ? (
-                      <ChevronDown className="h-2.5 w-2.5" />
-                    ) : (
-                      <ChevronRight className="h-2.5 w-2.5" />
-                    )}
+                    {isTaskExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
                     Current Task
                   </button>
                   {isTaskExpanded && (
@@ -369,11 +365,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     onClick={() => setIsResponseExpanded(!isResponseExpanded)}
                     className="text-foreground text-ui-xs flex items-center gap-1 font-medium tracking-wide uppercase transition-opacity hover:opacity-80"
                   >
-                    {isResponseExpanded ? (
-                      <ChevronDown className="h-2.5 w-2.5" />
-                    ) : (
-                      <ChevronRight className="h-2.5 w-2.5" />
-                    )}
+                    {isResponseExpanded ? <ChevronDown className="size-2.5" /> : <ChevronRight className="size-2.5" />}
                     Suggested Response
                   </button>
                   {isResponseExpanded && (
@@ -407,7 +399,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
         <div className="text-ui-sm my-1 inline-flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2 py-1 font-medium text-yellow-600">
-          <Unplug className="h-3 w-3" />
+          <Unplug className="size-3" />
           <span>
             {disconnectedLabel}
             {tokensToObserve ? ` (~${formatTokens(tokensToObserve)} tokens)` : ''}
@@ -432,8 +424,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             onClick={() => setIsExpanded(!isExpanded)}
             className="text-ui-sm inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-red-500/10 px-2 py-1 font-medium text-red-600 transition-colors hover:bg-red-500/20"
           >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <XCircle className="h-3 w-3" />
+            {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            <XCircle className="size-3" />
             <span>{failedLabel}</span>
           </button>
 
@@ -530,8 +522,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             onClick={() => setIsExpanded(!isExpanded)}
             className="text-ui-sm inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-red-400/40 bg-red-500/10 px-2 py-1 font-medium text-red-600 transition-colors hover:bg-red-500/20"
           >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <XCircle className="h-3 w-3" />
+            {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            <XCircle className="size-3" />
             <span>{failedLabel}</span>
           </button>
 
@@ -579,8 +571,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             onClick={handleToggle}
             className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${completeBgColor} ${completeTextColor} text-ui-sm font-medium ${completeHoverBgColor} cursor-pointer transition-colors`}
           >
-            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {isReflection ? <Brain className="h-3 w-3" /> : <ObservationIcon className="h-3 w-3" />}
+            {isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            {isReflection ? <Brain className="size-3" /> : <ObservationIcon className="size-3" />}
             <span>
               {activatedLabel} {tokensActivated ? formatTokens(tokensActivated) : '?'}→
               {observationTokens ? formatTokens(observationTokens) : '?'} tokens
@@ -618,7 +610,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
       data-om-type={isReflection ? 'reflection' : 'observation'}
     >
       <div className="text-ui-sm my-1 inline-flex items-center gap-1.5 rounded-md bg-gray-500/10 px-2 py-1 font-medium text-gray-600">
-        <Brain className="h-3 w-3" />
+        <Brain className="size-3" />
         <span>{toolName}</span>
       </div>
     </div>
