@@ -146,6 +146,16 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
+          // A pending client-side / HITL call: no result, no error, not
+          // provider-executed. Leave it as `call` for the client to answer —
+          // mirrors the non-durable llm-mapping-step's `hasPendingHITL`.
+          // Recording it as a `result` here would overwrite the pending
+          // invocation with an undefined value and feed the model a fabricated
+          // tool output on the next turn (issue #23295).
+          if (toolResult.result === undefined && !toolResult.error && !toolResult.providerExecuted) {
+            continue;
+          }
+
           const result = toolResult.error ? toolResult.error.message : toolResult.result;
 
           // Compute toModelOutput for successful tool results (Bug 9 parity).
@@ -261,7 +271,15 @@ export function createDurableLLMMappingStep() {
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
-      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      // A pending client-side / HITL call ends the turn so the client can answer
+      // it — the durable counterpart of the non-durable llm-mapping-step's
+      // `hasPendingHITL`. Without this the loop re-invoked the model on a result
+      // nobody produced. Denied approvals are resolved rather than pending, so
+      // they are excluded.
+      const hasPendingHITL = toolResults.some(
+        r => r.result === undefined && !r.error && !r.providerExecuted && !isDeniedApproval(r),
+      );
+      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips
