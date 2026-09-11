@@ -47,7 +47,7 @@ describe('Express Server Adapter', () => {
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Express app
       const app = express();
-      app.use(express.json());
+      app.use(express.json({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -98,7 +98,7 @@ describe('Express Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };

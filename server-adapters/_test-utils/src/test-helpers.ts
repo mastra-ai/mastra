@@ -1338,6 +1338,10 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
 } {
   const routePath = route.path;
 
+  if (routePath === '/agents/:agentId/signals') {
+    return { query: { threadId: 'test-thread', resourceId: 'test-resource' } };
+  }
+
   // File operations need file paths
   if (
     routePath.includes('/fs/read') ||

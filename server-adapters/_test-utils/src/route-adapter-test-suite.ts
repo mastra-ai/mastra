@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { z } from 'zod';
 
 import {
   AdapterTestContext,
@@ -36,6 +37,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
   describe(suiteName, () => {
     let context: AdapterTestContext;
     let app: any;
+    let setup: Awaited<ReturnType<typeof setupAdapter>>;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -47,8 +49,42 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       }
 
       // Setup adapter and app
-      const setup = await setupAdapter(context);
+      setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    describe('Scalar JSON body validation', () => {
+      beforeEach(async () => {
+        const route = createRoute({
+          method: 'DELETE',
+          path: '/test/scalar-body',
+          responseType: 'json',
+          bodySchema: z
+            .union([z.null(), z.literal(false), z.literal(0), z.literal('')])
+            .transform(value => ({ value })),
+          handler: async ({ value }) => ({ value }),
+          onValidationError: () => ({ status: 400, body: { error: 'Scalar schema rejected body' } }),
+        });
+        await setup.adapter.registerRoute(app, route);
+      });
+      it.each([null, false, 0, ''])('validates scalar JSON through the route schema: %j', async body => {
+        const accepted = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body,
+        });
+        expect(accepted.status).toBe(200);
+        expect(accepted.data).toEqual({ value: body });
+      });
+      it('returns the route validation response for an invalid scalar', async () => {
+        const rejected = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/test/scalar-body',
+          body: true,
+        });
+        expect(rejected.status).toBe(400);
+        expect(rejected.data).toEqual({ error: 'Scalar schema rejected body' });
+      });
     });
 
     describe('Pending signal DELETE body validation', () => {

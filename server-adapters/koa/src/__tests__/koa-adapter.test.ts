@@ -46,7 +46,7 @@ describe('Koa Server Adapter', () => {
     setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Koa app
       const app = new Koa();
-      app.use(bodyParser());
+      app.use(bodyParser({ strict: false }));
 
       // Create adapter
       const adapter = new MastraServer({
@@ -97,7 +97,7 @@ describe('Koa Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
+            ...(httpRequest.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(httpRequest.headers || {}),
           },
         };
