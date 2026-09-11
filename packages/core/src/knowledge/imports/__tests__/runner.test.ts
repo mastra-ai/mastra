@@ -424,6 +424,47 @@ describe('Knowledge importer runner', () => {
     });
   });
 
+  it('bounds agentic import payloads in the prompt and discloses omissions', async () => {
+    const executions: string[] = [];
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: async (prompt: string) => {
+        executions.push(prompt);
+        return { text: 'Done. <import-complete checkpoint="message-99" />' };
+      },
+    } as unknown as Agent;
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'import-runner-agentic-budget' }),
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async ctx => {
+            await ctx.agentImport!({
+              instructions: 'Integrate evidence.',
+              data: { blob: 'x'.repeat(200_000) },
+              checkpoint: 'message-99',
+            });
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const run = await knowledge.getImporter('slack-distiller')!.run(one);
+
+    expect(run.status).toBe('succeeded');
+    const prompt = executions[0]!;
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(80_000);
+    expect(prompt).toContain('[Truncated:');
+    expect(prompt).toContain('do not invent omitted evidence');
+    expect(prompt).not.toContain('x'.repeat(200_000));
+  });
+
   it('fails agentic runs without checkpoint evidence and keeps staged state uncommitted', async () => {
     const agent = {
       getMemory: async () => ({
