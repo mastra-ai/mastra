@@ -404,6 +404,30 @@ describe('AgentController signal messages', () => {
     );
   });
 
+  it('forwards an explicit false untilIdle into idle-run stream options', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-without-until-idle',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const result = session.sendSignal({ content: 'do not wait for background work', untilIdle: false });
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({ untilIdle: false }),
+        }),
+      }),
+    );
+  });
+
   it('starts a fresh run for a signal sent while a deferred abort is still tearing down', async () => {
     const activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
