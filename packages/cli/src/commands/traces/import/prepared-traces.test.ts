@@ -17,7 +17,6 @@ const source = {
   provider: 'test-provider',
   baseUrl: 'https://source.example',
   projectId: 'source-project',
-  mapperVersion: '1',
   idAlgorithmVersion: '1',
 };
 

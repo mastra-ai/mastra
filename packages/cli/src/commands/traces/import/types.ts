@@ -59,13 +59,12 @@ export interface TraceImportWindow {
 
 /**
  * Non-secret source identity persisted with an import so resume can confirm it
- * is still reading the same project with the same mapping and ID strategies.
+ * is still reading the same project with the same ID strategy.
  */
 export interface TraceImportSourceIdentity {
   provider: string;
   baseUrl: string;
   projectId: string;
-  mapperVersion: string;
   idAlgorithmVersion: string;
 }
 
