@@ -320,7 +320,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private _roots: Root[];
   private hasElicitationCapability: boolean;
   private readonly requireToolApproval: RequireToolApproval | undefined;
-  private readonly onToolError: 'throw' | 'return';
+  private readonly onToolError: 'throw' | 'return' | 'returnEnvelope';
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -1244,10 +1244,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
-   * returns the full CallToolResult envelope when there is no structuredContent (and for
-   * in-band errors with `onToolError: 'return'`), which would never match the advertised
-   * outputSchema — so enforcement happens inside the execute wrapper, scoped to the
-   * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
+   * can return the full CallToolResult envelope when there is no structuredContent or when
+   * `onToolError: 'returnEnvelope'` handles an in-band error, which would never match the
+   * advertised outputSchema. Enforcement happens inside the execute wrapper on successful
+   * structuredContent results (see buildToolFromListEntry). The JSON schema is surfaced here
    * for documentation.
    */
   private convertOutputSchema(
@@ -1486,20 +1486,41 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 // Per the MCP spec, tool *execution* failures are reported in-band:
                 // the server returns a normal CallToolResult with `isError: true` and
-                // the failure details in `content`. Map that onto Mastra's failed-tool-call
-                // path (unless the consumer opted into the legacy `'return'` behaviour) so
-                // tool spans, stream chunks, scorers, and persisted message parts reflect the
-                // failure, and the model sees the error text so it can self-correct.
-                if (res.isError && this.onToolError === 'throw') {
+                // the failure details in `content`. Handle those before successful-result
+                // normalization so they are never validated or logged as successful.
+                if (res.isError) {
                   const errorText = extractToolErrorText(res.content);
                   this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
-                  throw new MastraError({
-                    id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
-                    domain: ErrorDomain.MCP,
-                    category: ErrorCategory.THIRD_PARTY,
-                    text: errorText,
-                    details: { toolName: tool.name, serverName: this.name },
-                  });
+
+                  if (this.onToolError === 'throw') {
+                    throw new MastraError({
+                      id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+                      domain: ErrorDomain.MCP,
+                      category: ErrorCategory.THIRD_PARTY,
+                      text: errorText,
+                      details: {
+                        toolName: tool.name,
+                        serverName: this.name,
+                        ...(res.structuredContent !== undefined
+                          ? { structuredContent: JSON.stringify(res.structuredContent) }
+                          : {}),
+                      },
+                    });
+                  }
+
+                  if (this.onToolError === 'returnEnvelope') {
+                    return res._meta ? { ...res, _meta: this.stampServerIdInMeta(res._meta) } : res;
+                  }
+
+                  if (res.structuredContent !== undefined) {
+                    return attachMcpCallToolContent(
+                      res.structuredContent,
+                      res.content,
+                      res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                    );
+                  }
+
+                  return res;
                 }
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
@@ -1510,9 +1531,8 @@ export class InternalMastraMCPClient extends MastraBase {
                   // cached catalog (which never populate the MCP SDK's tools/list output-schema
                   // cache, so the SDK's own AJV check does not fire for them). On mismatch,
                   // return the same structured ValidationError shape createTool produces so
-                  // the model can self-correct. Skipped for isError results, which are handled
-                  // above / by the `onToolError: 'return'` envelope path.
-                  if (!res.isError && outputValidator) {
+                  // the model can self-correct. Error results have already returned or thrown.
+                  if (outputValidator) {
                     const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
                     if (validation.error) {
                       this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
