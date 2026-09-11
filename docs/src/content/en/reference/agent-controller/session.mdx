@@ -355,7 +355,7 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 ### `session.thread.create({ title?, id?, metadata? })`
 
-Create a thread, bind the session to it, and open its event stream. Pass `metadata` to persist values as part of the initial thread record. Session scope metadata takes precedence over matching keys supplied by the caller.
+Create a thread, bind the session to it, and open its event stream. Pass `metadata` to persist non-reserved values as part of the initial thread record. Session scope metadata takes precedence over matching keys supplied by the caller. Session-managed keys such as `currentModeId`, `tokenUsage`, and `modeModelId_*` are ignored when supplied by the caller.
 
 ```typescript
 const thread = await session.thread.create({

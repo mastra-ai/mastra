@@ -5,6 +5,7 @@ import type { SlashCommandContext } from './types.js';
 
 export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
+  const previousThreadId = state.session.thread.getId();
 
   // Detach from the old thread's event stream so cross-process events
   // don't leak into the new conversation. Unlike bare abort(), this also
@@ -19,9 +20,18 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
     await state.session.thread.create({ metadata: { [EXPLICIT_NEW_THREAD_SETTING]: true } });
   } catch (error) {
     try {
-      await state.session.thread.ensureCurrentSubscription();
+      const currentThreadId = state.session.thread.getId();
+      if (currentThreadId !== previousThreadId) {
+        if (previousThreadId) {
+          await state.session.thread.switch({ threadId: previousThreadId });
+        } else {
+          await state.session.thread.clearAndReleaseLock();
+        }
+      } else {
+        await state.session.thread.ensureCurrentSubscription();
+      }
     } catch {
-      // Preserve the thread creation error if restoring the old subscription fails.
+      // Preserve the thread creation error if restoring the old binding fails.
     }
     throw error;
   }

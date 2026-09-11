@@ -34,8 +34,11 @@ function createMockState() {
     session: {
       state: { set: vi.fn(async () => {}) },
       thread: {
+        getId: vi.fn(() => 'old-thread'),
         detachFromCurrent: vi.fn(),
         create: vi.fn(async () => ({ id: 'new-thread' })),
+        switch: vi.fn(async () => {}),
+        clearAndReleaseLock: vi.fn(async () => {}),
         ensureCurrentSubscription: vi.fn(async () => {}),
       },
       displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
@@ -93,6 +96,22 @@ describe('handleNewCommand', () => {
 
     expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
     expect(state.session.thread.ensureCurrentSubscription).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).not.toHaveBeenCalled();
+  });
+
+  it('restores the previous thread binding when creation fails after rebinding', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+    const error = new Error('subscription failed');
+    state.session.thread.create.mockImplementation(async () => {
+      state.session.thread.getId.mockReturnValue('new-thread');
+      throw error;
+    });
+
+    await expect(handleNewCommand(ctx)).rejects.toBe(error);
+
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'old-thread' });
+    expect(state.session.thread.ensureCurrentSubscription).not.toHaveBeenCalled();
     expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
