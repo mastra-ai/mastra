@@ -118,6 +118,12 @@ You can use this history in two ways:
 - **Automatic inclusion**: Mastra automatically includes recent messages in the context window. The default of 10 messages keeps agents grounded in the conversation. Adjust it with `lastMessages` when needed.
 - [**Manual querying**](#querying): For more control, query threads and messages directly with `recall()`. Use the results to choose which memories enter the context window or to render conversation history in your UI.
 
+:::note
+
+`lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/harness/signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
+
+:::
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
