@@ -4,13 +4,28 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const listProjectsInputSchema = z.object({
-  cursor: z.string().optional(),
-  limit: z.number().int().min(1).max(400).optional(),
-  search: z.string().optional(),
-  org_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).optional(),
-  timeout: z.number().int().min(100).max(30000).optional(),
-  recoverable: z.boolean().optional(),
+export const listSharedProjectsInputSchema = z.object({
+  cursor: z
+    .string()
+    .describe('Specify the cursor value from the previous response to get the next batch of projects.')
+    .optional(),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(400)
+    .describe('Specify a value from 1 to 400 to limit number of projects in the response.')
+    .optional(),
+  search: z.string().describe('Search query by name or id.').optional(),
+  timeout: z
+    .number()
+    .int()
+    .min(100)
+    .max(30000)
+    .describe(
+      'Specify an explicit timeout in milliseconds to limit response delay.\nAfter timing out, the incomplete list of project data fetched so far will be returned.\nProjects still being fetched when the timeout occurred are listed in the "unavailable" attribute of the response.\nIf not specified, an implicit implementation defined timeout is chosen with the same behaviour as above\n',
+    )
+    .optional(),
 });
 
 const ProviderResponseSchema = z
@@ -95,31 +110,28 @@ const ProviderResponseSchema = z
       .object({ cursor: z.string().min(1) })
       .passthrough()
       .optional(),
-    applications: z.object({}).catchall(z.array(z.enum(['vercel', 'github', 'datadog', 'opentelemetry']))),
-    integrations: z.object({}).catchall(z.array(z.enum(['vercel', 'github', 'datadog', 'opentelemetry']))),
   })
   .passthrough();
 
-export const listProjectsOutputSchema = ProviderResponseSchema.extend({ next_cursor: z.string().optional() });
+export const listSharedProjectsOutputSchema = ProviderResponseSchema.extend({ next_cursor: z.string().optional() });
 
-export function listProjectsTool(proxy: PlatformProxy) {
+export function listSharedProjectsTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_list_projects',
-    description: 'List projects in Neon. Returns one page; pass next_cursor as cursor to continue.',
-    inputSchema: listProjectsInputSchema,
-    outputSchema: listProjectsOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof listProjectsOutputSchema>> => {
+    id: 'neon_list_shared_projects',
+    description:
+      'List shared projects. Retrieves a list of projects shared with your Neon account.\nFor more information, see [Manage projects](https://neon.com/docs/manage/projects/).\n Returns one page; pass next_cursor as cursor to continue.',
+    inputSchema: listSharedProjectsInputSchema,
+    outputSchema: listSharedProjectsOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof listSharedProjectsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string | number> = {};
       if (input['cursor'] !== undefined) params['cursor'] = input['cursor'];
       if (input['limit'] !== undefined) params['limit'] = input['limit'];
       if (input['search'] !== undefined) params['search'] = input['search'];
-      if (input['org_id'] !== undefined) params['org_id'] = input['org_id'];
       if (input['timeout'] !== undefined) params['timeout'] = input['timeout'];
-      if (input['recoverable'] !== undefined) params['recoverable'] = String(input['recoverable']);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects`,
+        endpoint: `/v2/projects/shared`,
         retries: 3,
         params,
       };

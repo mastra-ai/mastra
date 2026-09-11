@@ -1261,5 +1261,83 @@
         }
       ]
     }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_regions",
+    "method": "GET",
+    "path": "/v2/regions",
+    "input": {},
+    "response": {
+      "regions": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_auth_details",
+    "method": "GET",
+    "path": "/v2/auth",
+    "input": {},
+    "response": {
+      "account_id": "example",
+      "auth_method": "keycloak"
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_organizations",
+    "method": "GET",
+    "path": "/v2/users/me/organizations",
+    "input": {},
+    "response": {
+      "organizations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_shared_projects",
+    "method": "GET",
+    "path": "/v2/projects/shared",
+    "input": {},
+    "response": {
+      "projects": [
+        {
+          "id": "shiny-wind-028834",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "shiny-wind-028834",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100
+        },
+        {
+          "id": "winter-boat-259881",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "winter-boat-259881",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:52:25Z",
+          "updated_at": "2022-11-23T17:52:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100
+        }
+      ]
+    }
   }
 ]
