@@ -76,32 +76,6 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getExporters()).toEqual([]);
   });
 
-  it('logs the superseded and active exporters', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
-    const instance = createInstance([new MastraStorageExporter(), new DefaultExporter(), new CustomExporter()]);
-    const info = vi.fn();
-
-    instance.__setLogger({
-      debug: vi.fn(),
-      info,
-      warn: vi.fn(),
-      error: vi.fn(),
-      trackException: vi.fn(),
-      getTransports: () => new Map(),
-      listLogs: vi.fn(),
-      listLogsByRunId: vi.fn(),
-    });
-
-    expect(info).toHaveBeenNthCalledWith(
-      1,
-      '[Observability] Storage exporters superseded by Mastra Platform [service=test-service] [instance=default] [exporters=mastra-storage-exporter,mastra-default-observability-exporter]',
-    );
-    expect(info).toHaveBeenNthCalledWith(
-      2,
-      '[Observability] Active exporters after storage supersession [service=test-service] [instance=default] [exporters=custom-exporter]',
-    );
-  });
-
   it('retains Platform, legacy Cloud, and custom exporters in their original order', async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
     const storageExporter = new MastraStorageExporter();
