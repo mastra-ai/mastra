@@ -53,18 +53,16 @@ export const Tab = ({
   useEffect(() => () => unregister?.(value), [unregister, value]);
   const tab = (
     <BaseTabs.Tab
-      ref={ref}
       render={<div />}
       nativeButton={false}
-      data-overflowed={overflowed || undefined}
-      aria-hidden={overflowed || undefined}
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
+      data-closable={onClose ? '' : undefined}
       className={cn(
         'text-ui-md font-normal text-neutral3',
         attention && 'relative',
-        'flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
+        'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,
         focusRing.visible,
         'hover:text-neutral4',
@@ -83,30 +81,38 @@ export const Tab = ({
           <span className="sr-only"> Needs attention</span>
         </>
       )}
-      {onClose && (
+    </BaseTabs.Tab>
+  );
+  const tabWithTooltip =
+    disabled && disabledTooltip ? (
+      <Tooltip>
+        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    ) : (
+      tab
+    );
+
+  return (
+    <div
+      ref={ref}
+      data-slot="tab-item"
+      data-overflowed={overflowed || undefined}
+      aria-hidden={overflowed || undefined}
+      className="relative flex shrink-0 items-center"
+    >
+      {tabWithTooltip}
+      {onClose ? (
         <button
           type="button"
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
+          data-slot="tab-close"
+          onClick={onClose}
           className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
           aria-label="Close tab"
         >
           <X className="size-3" />
         </button>
-      )}
-    </BaseTabs.Tab>
+      ) : null}
+    </div>
   );
-
-  if (disabled && disabledTooltip) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{tab}</TooltipTrigger>
-        <TooltipContent>{disabledTooltip}</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return tab;
 };

@@ -1,8 +1,15 @@
 [data-slot='tabs'] {
-  [data-slot='tab'][data-overflowed] {
+  [data-slot='tab-item'][data-overflowed] {
     position: absolute;
     visibility: hidden;
     pointer-events: none;
+  }
+
+  [data-slot='tab-close'] {
+    position: absolute;
+    z-index: 30;
+    top: 50%;
+    transform: translateY(-50%);
   }
 
   &[data-appearance='default'] {
@@ -11,11 +18,27 @@
       border-bottom: 2px solid transparent;
     }
 
+    [data-variant='line'] [data-slot='tab'][data-closable] {
+      padding-right: 42px;
+    }
+
+    [data-variant='line'] [data-slot='tab-close'] {
+      right: 20px;
+    }
+
     :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'] {
       position: relative;
       z-index: 10;
       padding: 4px 12px;
       border-radius: 9999px;
+    }
+
+    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-closable] {
+      padding-right: 34px;
+    }
+
+    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab-close'] {
+      right: 12px;
     }
   }
 
@@ -57,7 +80,15 @@
       padding: 6px 16px;
     }
 
-    [data-slot='tab']:not(:first-child) {
+    [data-slot='tab'][data-closable] {
+      padding-right: 38px;
+    }
+
+    [data-slot='tab-close'] {
+      right: 16px;
+    }
+
+    [data-slot='tab-item']:not(:first-child) [data-slot='tab'] {
       margin-left: -1px;
     }
     [data-slot='tab']:hover {
@@ -138,7 +169,7 @@
         left: 100%;
         --corner: top right;
       }
-      [data-slot='tab']:first-child::before {
+      [data-slot='tab-item']:first-child [data-slot='tab']::before {
         display: none;
       }
     }
@@ -261,7 +292,7 @@
       padding-right: 56px;
     }
 
-    [data-slot='tab'][data-overflowed] {
+    [data-slot='tab-item'][data-overflowed] {
       position: absolute;
       visibility: hidden;
       width: max-content;

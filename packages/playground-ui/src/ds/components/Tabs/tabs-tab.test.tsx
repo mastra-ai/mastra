@@ -336,8 +336,12 @@ describe('Tab', () => {
         </Tabs>,
       );
 
+      const tab = screen.getByRole('tab', { name: 'Second' });
       const closeButton = screen.getByRole('button', { name: 'Close tab' });
-      expect(closeButton.closest('[role="tab"]')?.tagName).toBe('DIV');
+      expect(tab.contains(closeButton)).toBe(false);
+      expect(closeButton.parentElement).toBe(tab.parentElement);
+      closeButton.focus();
+      expect(document.activeElement).toBe(closeButton);
       fireEvent.click(closeButton);
 
       expect(onClose).toHaveBeenCalledTimes(1);
