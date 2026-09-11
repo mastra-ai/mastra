@@ -176,10 +176,11 @@ export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any().optional(),
   error: z.any().optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
-  // so downstream leaves the call incomplete. Must be declared or Zod strips it. See tool-call-step.ts.
+  // so downstream leaves the call incomplete. See tool-call-step.ts. Declared for schema
+  // honesty — no engine validates step outputs today, but Zod would strip an undeclared
+  // field if validation is ever (re-)enabled (see schema.test.ts).
   aborted: z.boolean().optional(),
   // HITL approval decision, present when the tool required approval and was resumed.
-  // Without this field Zod would strip `approval` from the step output before persistence.
   approval: z
     .object({
       id: z.string(),

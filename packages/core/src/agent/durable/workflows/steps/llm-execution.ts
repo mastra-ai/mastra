@@ -123,18 +123,27 @@ const durableLLMInputSchema = z.object({
 });
 
 /**
- * Output schema for the durable LLM execution step
+ * Output schema for the durable LLM execution step.
+ *
+ * Declared for type/schema honesty: no engine validates step outputs today
+ * (`validateInputs: false` in both loop builders, no output-side validation
+ * in the workflows engine), but Zod would strip undeclared fields if
+ * validation is ever (re-)enabled — declare new output fields here.
  */
 const durableLLMOutputSchema = z.object({
   messageListState: z.any(),
   text: z.string().optional(),
+  // Element shape mirrors DurableToolCallInput / the tool-call step's input schema.
   toolCalls: z.array(
     z.object({
       toolCallId: z.string(),
       toolName: z.string(),
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
+      providerExecuted: z.boolean().optional(),
+      output: z.any().optional(),
       activeTools: z.array(z.string()).nullable().optional(),
+      stepSpanData: z.any().optional(),
     }),
   ),
   stepResult: z.object({
@@ -153,6 +162,10 @@ const durableLLMOutputSchema = z.object({
   modelSpanData: z.any().optional(),
   stepSpanData: z.any().optional(),
   stepFinishPayload: z.any().optional(),
+  // Deferred step-finish chunk for intermediate steps: llm-execution defers
+  // emission so llm-mapping can emit it AFTER tool-result chunks, matching
+  // the regular agent's chunk ordering.
+  deferredStepFinishChunk: z.any().optional(),
 });
 
 /**

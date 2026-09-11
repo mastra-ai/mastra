@@ -67,17 +67,25 @@ const durableAgenticInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
+  // Exact stored version id the run resolved to at start time; resume()/recover()
+  // read it from the persisted workflow input to pin the run to that version
+  // (#22128). Absent for purely code-defined agents.
+  agentVersionId: z.string().optional(),
   messageListState: z.any(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
   // Model list for fallback support (when agent configured with array of models)
   modelList: z.array(modelListEntrySchema).optional(),
+  // Serializable scorers configuration, resolved from Mastra by name at runtime
+  scorers: z.record(z.string(), z.any()).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
   // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // Starting step index for continuation across iterations
+  stepIndex: z.number().optional(),
   // JSON-safe snapshot of requestContext.entries() so durable steps can read
   // it (e.g. is-task-complete scorers pass it as customContext).
   requestContextEntries: z.record(z.string(), z.any()).optional(),

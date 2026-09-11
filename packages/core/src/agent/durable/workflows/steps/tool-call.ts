@@ -66,18 +66,26 @@ const durableToolCallInputSchema = z.object({
 });
 
 /**
- * Output schema for the durable tool call step
+ * Output schema for the durable tool call step.
+ *
+ * NOTE on field declarations: nothing strips undeclared fields today — both
+ * loop builders run with `validateInputs: false` and the workflows engine has
+ * no output-side validation — so undeclared fields still cross step
+ * boundaries at runtime. Every field the step emits is declared anyway for
+ * type/schema honesty and so the contract survives if validation is ever
+ * (re-)enabled (e.g. by the Phase 2 evented port, which may use different
+ * validation defaults). If validation is enabled, an undeclared field would
+ * be silently stripped at the boundary — declare new output fields here.
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
-  // so the mapping step leaves the call incomplete. Must be declared or Zod strips it.
+  // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema (ledger L7).
   aborted: z.boolean().optional(),
   // Set when a processToolResult processor blocked the result via tripwire; no result
-  // crosses the boundary and the mapping step leaves the call incomplete. Must be
-  // declared or Zod strips it.
+  // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
   error: z
     .object({
@@ -86,8 +94,8 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       stack: z.string().optional(),
     })
     .optional(),
-  // Approval decision for a `requireApproval` tool. Without this field Zod would strip the
-  // approval off the step output, so a declined call would lose its `output-denied` marker.
+  // Approval decision for a `requireApproval` tool; a declined call carries its
+  // `output-denied` marker across the boundary in this field.
   approval: z
     .object({
       id: z.string(),
@@ -99,7 +107,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // during this tool call. The tool-call step's messageList is a local copy whose
   // mutations don't cross the step boundary, so these are carried on the output
   // record and persisted into the authoritative messageList by the mapping step
-  // (#19375 parity port). Must be declared or Zod strips it.
+  // (#19375 parity port).
   processorDataParts: z
     .array(
       z.object({
@@ -109,6 +117,10 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       }),
     )
     .optional(),
+  // Payload-transform metadata captured from the emitted tool-result/tool-error
+  // chunk (L18b): merged into providerMetadata by the mapping step before
+  // commitToolResult so transcript/display targets apply on recall.
+  transformMetadata: z.record(z.string(), z.any()).optional(),
 });
 
 /**
