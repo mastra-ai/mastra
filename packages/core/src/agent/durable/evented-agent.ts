@@ -124,6 +124,14 @@ export class EventedAgent<
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
         .then(async result => {
+          // A failure the loop itself didn't catch resolves (not rejects) with
+          // status 'failed' — mirror DurableAgent.executeWorkflow and publish
+          // an ERROR event, otherwise the caller's stream never terminates
+          // (#17727's idle-start gap on the evented transport).
+          if (result?.status === 'failed') {
+            const error = new Error((result as any).error?.message || 'Workflow execution failed');
+            await this.emitError(runId, error);
+          }
           // Reaching any non-suspended terminal status means the run is done and
           // its persisted snapshot rows will never be resumed. Delete them so
           // finished runs stop showing up in listActiveRuns() and being re-driven
