@@ -1023,6 +1023,18 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     expect(out.required).toEqual(expect.arrayContaining(['a', 'b', 'id']));
   });
 
+  it('treats duplicate properties with different key order as identical', () => {
+    const schema = {
+      allOf: [
+        { type: 'object', properties: { id: { type: 'string', description: 'id', enum: ['a', 'b'] } } },
+        { type: 'object', properties: { id: { enum: ['a', 'b'], description: 'id', type: 'string' } } },
+      ],
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(out.properties).toEqual({ id: { type: 'string', description: 'id', enum: ['a', 'b'] } });
+  });
+
   it('rejects allOf branches that define the same property differently', () => {
     const schema = {
       allOf: [
