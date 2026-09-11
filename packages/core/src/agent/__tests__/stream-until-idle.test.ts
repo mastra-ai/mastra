@@ -522,7 +522,13 @@ describe('Agent.streamUntilIdle', () => {
         },
       });
     const { model } = makeScriptedModel([blockingStream]);
-    const agent = new Agent({ id: 'a-pending-idle', name: 'a-pending-idle', instructions: 'test', model });
+    const agent = new Agent({
+      id: 'a-pending-idle',
+      name: 'a-pending-idle',
+      instructions: 'test',
+      model,
+      memory: new MockMemory(),
+    });
     mastra.addAgent(agent, 'a-pending-idle');
 
     const publishLifecycle = (event: 'task.running' | 'task.completed', taskId: string) =>
@@ -547,14 +553,19 @@ describe('Agent.streamUntilIdle', () => {
       memory: { thread: 'thread-pending-idle', resource: 'user-1' },
       maxIdleMs: 100,
     });
+    const drainPromise = drain(result.fullStream as ReadableStream<any>);
+    await new Promise(resolve => setTimeout(resolve, 0));
     await publishLifecycle('task.running', 'task-completed');
     await publishLifecycle('task.running', 'task-stalled');
     await publishLifecycle('task.completed', 'task-completed');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const start = Date.now();
     finishInitialTurn();
 
-    const start = Date.now();
-    await drain(result.fullStream as ReadableStream<any>);
-    expect(Date.now() - start).toBeLessThan(2_000);
+    await drainPromise;
+    const elapsedMs = Date.now() - start;
+    expect(elapsedMs).toBeGreaterThanOrEqual(100);
+    expect(elapsedMs).toBeLessThan(2_000);
   });
 
   it('does not close mid-turn when inner stream is slow (idle timer only runs between turns)', async () => {
