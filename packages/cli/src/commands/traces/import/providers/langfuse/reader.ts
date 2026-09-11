@@ -34,7 +34,7 @@ export interface LangfuseTraceReadOptions {
 
 /**
  * Reads raw Langfuse observations. Tree validation and conversion into Mastra
- * spans belong to the Langfuse adapter implemented by the next ticket.
+ * spans belong to the Langfuse provider adapter.
  */
 export class LangfuseObservationsReader {
   private readonly client: LangfuseClient;
