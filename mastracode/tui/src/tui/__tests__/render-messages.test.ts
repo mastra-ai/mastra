@@ -28,6 +28,7 @@ function createState(): TUIState {
     allSlashCommandComponents: [],
     allToolComponents: [],
     pendingTools: new Map(),
+    pendingTaskToolIds: new Set(),
     pendingSubagents: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
@@ -412,34 +413,47 @@ describe('addUserMessage', () => {
 
   it('renders one latest-position completion card for a stable background event id', () => {
     const state = createState();
-    const message = createSignal({
-      id: 'background-task:task-1:completed',
-      type: 'notification',
-      tagName: 'notification',
-      contents: 'mastra_expert completed in background',
-      attributes: {
-        source: 'background-work',
-        kind: 'background-task-completed',
-        priority: 'low',
-        status: 'completed',
-      },
-      metadata: {
-        backgroundCompletion: {
-          eventId: 'background-task:task-1:completed',
-          taskId: 'task-1',
-          originRunId: 'run-1',
-          originToolCallId: 'call-1',
-          toolName: 'mastra_expert',
+    const createCompletionMessage = (id: string) =>
+      createSignal({
+        id,
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'mastra_expert completed in background',
+        attributes: {
+          source: 'background-work',
+          kind: 'background-task-completed',
+          priority: 'low',
           status: 'completed',
         },
-      },
-    }).toDBMessage();
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:task-1:completed',
+            taskId: 'task-1',
+            originRunId: 'run-1',
+            originToolCallId: 'call-1',
+            toolName: 'mastra_expert',
+            status: 'completed',
+          },
+        },
+      }).toDBMessage();
 
-    addUserMessage(state, message);
-    addUserMessage(state, message);
+    addUserMessage(state, createCompletionMessage('completion-message-1'));
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: 'Intervening notification', source: 'test', kind: 'test', priority: 'low', status: 'delivered' },
+        'notification-between-completions',
+      ),
+    );
+    addUserMessage(state, createCompletionMessage('completion-message-2'));
 
-    expect(state.messageComponentsById.get(message.id)).toBeInstanceOf(NotificationComponent);
-    expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
+    const completionComponents = state.chatContainer.children.filter(
+      child =>
+        child instanceof NotificationComponent &&
+        child !== state.messageComponentsById.get('notification-between-completions'),
+    );
+    expect(completionComponents).toHaveLength(1);
+    expect(state.chatContainer.children.at(-1)).toBe(completionComponents[0]);
   });
 
   it.each(['work-deferred', 'work-awaited'] as const)(
@@ -498,6 +512,7 @@ describe('addUserMessage', () => {
     const state = createState();
     const cancelBackground = vi.fn();
     state.pendingTools.set('call-1', { cancelBackground } as never);
+    state.pendingTaskToolIds.add('call-1');
 
     addUserMessage(
       state,
@@ -512,6 +527,8 @@ describe('addUserMessage', () => {
     );
 
     expect(cancelBackground).toHaveBeenCalledOnce();
+    expect(state.pendingTools.has('call-1')).toBe(false);
+    expect(state.pendingTaskToolIds.has('call-1')).toBe(false);
     expect(state.messageComponentsById.has('work-cancelled-1')).toBe(false);
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
   });
@@ -1308,6 +1325,8 @@ describe('renderExistingMessages subagents', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('■ background · task-plugin-cancelled');
     expect(rendered).not.toContain('◌ background');
+    expect(state.pendingTools.has('tool-background-plugin-cancelled')).toBe(false);
+    expect(state.pendingTaskToolIds.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
   });
 

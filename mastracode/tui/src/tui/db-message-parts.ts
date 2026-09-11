@@ -358,6 +358,7 @@ export function getBackgroundWorkLifecycleView(message: MastraDBMessage): Backgr
 }
 
 export interface BackgroundCompletionView {
+  eventId?: string;
   taskId: string;
   originToolCallId: string;
   toolName?: string;
@@ -373,6 +374,7 @@ export function getBackgroundCompletionView(message: MastraDBMessage): Backgroun
   const originToolCallId = asString(completion?.originToolCallId);
   if (!taskId || !originToolCallId) return undefined;
   return {
+    eventId: asString(completion?.eventId),
     taskId,
     originToolCallId,
     toolName: asString(completion?.toolName),

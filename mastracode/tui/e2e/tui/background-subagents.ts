@@ -26,19 +26,20 @@ function count(text: string, value: string): number {
   return text.split(value).length - 1;
 }
 
+const delayedProbeInputSchema = z.object({
+  label: z.string(),
+  fail: z.boolean().optional(),
+});
+
 const delayedProbeTool = {
   id: 'background_probe',
   description: 'E2E-only deterministic tool for deferred, awaited, and failed background execution.',
   background: { enabled: true },
-  inputSchema: z.object({
-    label: z.string(),
-    fail: z.boolean().optional(),
-  }),
-  execute: async (input: unknown) => {
-    const values = delayedProbeTool.inputSchema.parse(input);
-    await new Promise(resolve => setTimeout(resolve, values.label === 'deferred' ? 20_000 : 100));
-    if (values.fail === true) throw new Error(`BACKGROUND_PROBE_FAILURE:${values.label}`);
-    return { marker: `BACKGROUND_PROBE_RESULT:${values.label}` };
+  inputSchema: delayedProbeInputSchema,
+  execute: async (input: z.infer<typeof delayedProbeInputSchema>) => {
+    await new Promise(resolve => setTimeout(resolve, input.label === 'deferred' ? 20_000 : 100));
+    if (input.fail === true) throw new Error(`BACKGROUND_PROBE_FAILURE:${input.label}`);
+    return { marker: `BACKGROUND_PROBE_RESULT:${input.label}` };
   },
 };
 
@@ -121,7 +122,7 @@ export const backgroundSubagentsScenario = {
     const newConversationOutput = terminal.serialize().view;
     check(
       !newConversationOutput.includes('Background activity') &&
-        !/Background .*running|completed|failed/i.test(newConversationOutput),
+        !/Background .*(?:running|completed|failed)/i.test(newConversationOutput),
       `Expected background activity to remain scoped to its origin thread.\n${newConversationOutput}`,
     );
     check(

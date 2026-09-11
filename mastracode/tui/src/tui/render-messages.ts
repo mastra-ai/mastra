@@ -558,6 +558,8 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       }
       if (backgroundWork.tagName === 'work-cancelled') {
         component?.cancelBackground?.();
+        state.pendingTools.delete(backgroundWork.originToolCallId);
+        state.pendingTaskToolIds?.delete(backgroundWork.originToolCallId);
         subagentComponent?.cancel();
         state.pendingSubagents.delete(backgroundWork.originToolCallId);
       } else if (
@@ -576,6 +578,18 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
 
     const notification = getNotificationView(message);
     const backgroundCompletion = getBackgroundCompletionView(message);
+    if (backgroundCompletion?.eventId) {
+      const previous = state.messageComponentsById.get(backgroundCompletion.eventId);
+      if (previous) {
+        state.chatContainer.removeChild(previous as never);
+        const toolIndex = state.allToolComponents.indexOf(previous as any);
+        if (toolIndex >= 0) state.allToolComponents.splice(toolIndex, 1);
+        for (const [messageId, component] of state.messageComponentsById) {
+          if (component === previous) state.messageComponentsById.delete(messageId);
+        }
+        reconcileChatBoundarySpacers(state.chatContainer);
+      }
+    }
     if (backgroundCompletion?.status === 'cancelled') {
       const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
       const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
@@ -585,6 +599,8 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
         true,
       );
       toolComponent?.cancelBackground?.();
+      state.pendingTools.delete(backgroundCompletion.originToolCallId);
+      state.pendingTaskToolIds?.delete(backgroundCompletion.originToolCallId);
       subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
       subagentComponent?.cancel();
       state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
@@ -602,6 +618,9 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     }
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
+    if (backgroundCompletion?.eventId) {
+      state.messageComponentsById.set(backgroundCompletion.eventId, component);
+    }
     state.ui.requestRender();
     return true;
   }
