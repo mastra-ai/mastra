@@ -2241,14 +2241,19 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    const nowStr = new Date().toISOString();
+    const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+    // Appends read the current chunk list and write back an extended list, so the
+    // read-modify-write must be serialized against concurrent appends. UPDLOCK +
+    // HOLDLOCK holds a key range lock on the row until the transaction commits.
+    const transaction = this.pool.transaction();
     try {
-      const nowStr = new Date().toISOString();
-      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
-      const request = this.pool.request();
+      await transaction.begin();
 
+      const request = transaction.request();
       request.input('id', input.id);
       const currentResult = await request.query(
-        `SELECT [bufferedObservationChunks] FROM ${tableName} WHERE id = @id`,
+        `SELECT [bufferedObservationChunks] FROM ${tableName} WITH (UPDLOCK, HOLDLOCK) WHERE id = @id`,
       );
 
       if (!currentResult.recordset || currentResult.recordset.length === 0) {
@@ -2294,7 +2299,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const newChunks = [...existingChunks, newChunk];
       const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
 
-      const updateRequest = this.pool.request();
+      const updateRequest = transaction.request();
       updateRequest.input('bufferedObservationChunks', JSON.stringify(newChunks));
       updateRequest.input('lastBufferedAtTime', lastBufferedAtTime);
       updateRequest.input('updatedAt', nowStr);
@@ -2307,7 +2312,14 @@ export class MemoryMSSQL extends MemoryStorage {
           [updatedAt] = @updatedAt
         WHERE id = @id`,
       );
+
+      await transaction.commit();
     } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // rollback can fail if the connection dropped or the transaction was already completed
+      }
       if (error instanceof MastraError) {
         throw error;
       }

@@ -145,6 +145,10 @@ export class MssqlDB extends MastraBase {
     'output', // evals.output - test output data
     'instructions', // evals.instructions - evaluation instructions
     'other', // traces.other - additional trace data
+    'activeObservations', // observational memory - can hold many observation lines
+    'activeObservationsPendingUpdate', // observational memory - pending observation content
+    'bufferedObservations', // observational memory - buffered observation content
+    'bufferedReflection', // observational memory - buffered reflection content
   ];
 
   protected getSqlType(
