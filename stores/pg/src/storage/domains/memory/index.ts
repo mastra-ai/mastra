@@ -532,6 +532,72 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single transaction and takes a `SELECT ... FOR UPDATE` row lock on the
+   * thread, so overlapping transfers of the same thread serialize and can never interleave
+   * the thread update with the message update. Either both the thread and every message move
+   * to the new resource, or neither does — there is no split-ownership window. The thread's
+   * `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    try {
+      return await this.#db.client.tx(async t => {
+        // Lock the thread row for the duration of the transaction. Concurrent transfers of the
+        // same thread block here until this transaction commits, so they cannot interleave.
+        const thread = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+          `SELECT * FROM ${threadsTable} WHERE id = $1 FOR UPDATE`,
+          [threadId],
+        );
+
+        if (!thread) {
+          throw new Error(`Thread "${threadId}" not found`);
+        }
+
+        const normalized: StorageThreadType = {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          createdAt: thread.createdAtZ || thread.createdAt,
+          updatedAt: thread.updatedAtZ || thread.updatedAt,
+        };
+
+        if (thread.resourceId === resourceId) {
+          return normalized;
+        }
+
+        await t.none(
+          `UPDATE ${threadsTable} SET "resourceId" = $1, "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $2`,
+          [resourceId, threadId],
+        );
+        await t.none(`UPDATE ${messagesTable} SET "resourceId" = $1 WHERE thread_id = $2`, [resourceId, threadId]);
+
+        return { ...normalized, resourceId, updatedAt: new Date() };
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
