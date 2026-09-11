@@ -1,13 +1,5 @@
 import {
-  assertKnowledgeCeilingRaised,
-  assertKnowledgeScopeWithinCeiling,
-  canonicalizeKnowledgeScope,
-  createKnowledgeUlid,
-  assertKnowledgeSchemaCompatible,
-  inspectKnowledgeSchema,
-  isKnowledgeScopeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
-  KNOWLEDGE_CURSORS_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
   KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
@@ -16,14 +8,33 @@ import {
   KNOWLEDGE_RECORD_SCOPES_SCHEMA,
   KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
-  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
+  createKnowledgeV2CoreLoader,
   KNOWLEDGE_V2_ACTIVITY_SCHEMA,
   KNOWLEDGE_V2_MENTIONS_SCHEMA,
   KNOWLEDGE_V2_NODES_SCHEMA,
   KNOWLEDGE_V2_RECORDS_SCHEMA,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+} from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import {
+  assertKnowledgeCeilingRaised,
+  assertKnowledgeScopeWithinCeiling,
+  canonicalizeKnowledgeScope,
+  createKnowledgeUlid,
+  isKnowledgeScopeVisible,
+  KNOWLEDGE_CURSORS_SCHEMA,
+  KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   knowledgeScopeKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
@@ -32,20 +43,11 @@ import {
   KnowledgeStorage,
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
-  TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
-  TABLE_KNOWLEDGE_IMPORT_RUNS,
-  TABLE_KNOWLEDGE_IMPORT_STATE,
   TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_NODE_ADDRESSES,
-  TABLE_KNOWLEDGE_NODE_SCOPES,
   TABLE_KNOWLEDGE_NODES,
-  TABLE_KNOWLEDGE_PROPOSALS,
-  TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_RECORDS,
-  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
-  TABLE_KNOWLEDGE_SCOPE_GRANTS,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
@@ -79,24 +81,11 @@ import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
-// #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
-// installed core fails feature-detection instead of breaking module load.
-let assertDescriptionWithinBound: ((description: string | undefined) => void) | undefined;
+const loadKnowledgeV2Core = createKnowledgeV2CoreLoader(coreFeatures, () => import('@mastra/core/storage'));
+
 async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
-  let assertWithinBound = assertDescriptionWithinBound;
-  if (!assertWithinBound) {
-    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
-    const resolvedAssert: (description: string | undefined) => void =
-      mod.assertKnowledgeDescriptionWithinBound ??
-      (value => {
-        if (value !== undefined && value.length > 400) {
-          throw new Error('Knowledge node description exceeds the 400 UTF-16 code unit limit');
-        }
-      });
-    assertDescriptionWithinBound = resolvedAssert;
-    assertWithinBound = resolvedAssert;
-  }
-  assertWithinBound(description);
+  const { assertKnowledgeDescriptionWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeDescriptionWithinBound(description);
 }
 
 interface QueryResult {
@@ -106,6 +95,7 @@ interface QueryResult {
 
 interface Executor {
   execute(statement: string | { sql: string; args?: QueryValues }): Promise<QueryResult>;
+  executeRaw(statement: string | { sql: string; args?: QueryValues }): Promise<QueryResult>;
 }
 
 const camelCaseColumns = [
@@ -187,13 +177,18 @@ export function postgresSql(sql: string, schemaName?: string): string {
 }
 
 function createExecutor(client: Pick<DbClient, 'query'> | TxClient, schemaName?: string): Executor {
+  const execute = async (
+    statement: string | { sql: string; args?: QueryValues },
+    qualifyWithSchema: boolean,
+  ): Promise<QueryResult> => {
+    const sql = typeof statement === 'string' ? statement : statement.sql;
+    const args = typeof statement === 'string' ? [] : (statement.args ?? []);
+    const result = await client.query(postgresSql(sql, qualifyWithSchema ? schemaName : undefined), args);
+    return { rows: result.rows as Record<string, unknown>[], rowsAffected: result.rowCount ?? 0 };
+  };
   return {
-    async execute(statement) {
-      const sql = typeof statement === 'string' ? statement : statement.sql;
-      const args = typeof statement === 'string' ? [] : (statement.args ?? []);
-      const result = await client.query(postgresSql(sql, schemaName), args);
-      return { rows: result.rows as Record<string, unknown>[], rowsAffected: result.rowCount ?? 0 };
-    },
+    execute: statement => execute(statement, true),
+    executeRaw: statement => execute(statement, false),
   };
 }
 
@@ -371,6 +366,90 @@ function knowledgeIndexDDL(schemaName?: string): string[] {
   return knowledgeIndexes(schemaName).map(index => index.sql);
 }
 
+const KNOWLEDGE_V1_TABLE_COLUMNS = new Map([
+  [
+    TABLE_KNOWLEDGE_NODES,
+    [
+      'id',
+      'type',
+      'name',
+      'canonicalName',
+      'kind',
+      'content',
+      'description',
+      'scope',
+      'scopeKey',
+      'version',
+      'mergedInto',
+      'createdAt',
+      'updatedAt',
+      'createdAtZ',
+      'updatedAtZ',
+    ],
+  ],
+  [
+    TABLE_KNOWLEDGE_RECORDS,
+    [
+      'id',
+      'node',
+      'text',
+      'scope',
+      'scopeKey',
+      'sourceThreadId',
+      'capturedAt',
+      'when',
+      'maxScope',
+      'metadata',
+      'deletedAt',
+      'deletedBy',
+      'capturedAtZ',
+      'whenZ',
+      'deletedAtZ',
+    ],
+  ],
+  [TABLE_KNOWLEDGE_MENTIONS, ['sourceType', 'sourceId', 'recordId']],
+  [TABLE_KNOWLEDGE_CURSORS, ['sourceThreadId', 'agent', 'lastKnowledgeId', 'updatedAt', 'updatedAtZ']],
+  [
+    TABLE_KNOWLEDGE_ACTIVITY,
+    ['id', 'action', 'recordType', 'recordId', 'scope', 'scopeKey', 'sourceThreadId', 'createdAt', 'createdAtZ'],
+  ],
+  [
+    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+    [
+      'id',
+      'idempotencyKey',
+      'documentId',
+      'documentType',
+      'operation',
+      'scope',
+      'scopeKey',
+      'status',
+      'attempts',
+      'availableAt',
+      'claimedAt',
+      'claimedBy',
+      'createdAt',
+      'completedAt',
+      'availableAtZ',
+      'claimedAtZ',
+      'createdAtZ',
+      'completedAtZ',
+    ],
+  ],
+] as const);
+
+const KNOWLEDGE_V1_INDEXES = new Set([
+  ...[...KNOWLEDGE_V1_TABLE_COLUMNS.keys()].map(table => `${table}_pkey`),
+  'idx_knowledge_nodes_identity',
+  'idx_knowledge_nodes_scope',
+  'idx_knowledge_records_node_latest',
+  'idx_knowledge_records_thread_latest',
+  'idx_knowledge_mentions_record',
+  'idx_knowledge_activity_latest',
+  'idx_knowledge_outbox_idempotency',
+  'idx_knowledge_outbox_claim',
+]);
+
 const knowledgeTableDefinitions: Array<{
   tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
   schema: Record<string, StorageColumn>;
@@ -465,69 +544,14 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override async inspectSchema() {
+    const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
     try {
       const snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
-      let tableNames: string[];
-      let columns: Map<string, Set<string>>;
-
       if (snapshot) {
-        tableNames = KNOWLEDGE_TABLE_NAMES.filter(table => snapshot.tables.has(table));
-        columns = snapshot.columns;
-      } else {
-        const tableResult = await this.#client.query(
-          `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
-          [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
-        );
-        tableNames = tableResult.rows.map(row => String(row.table_name));
-        const columnResult = await this.#client.query(
-          `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE($1, current_schema()) AND table_name = ANY($2::text[])`,
-          [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
-        );
-        columns = new Map<string, Set<string>>();
-        for (const row of columnResult.rows) {
-          const table = String(row.table_name);
-          const names = columns.get(table) ?? new Set<string>();
-          names.add(String(row.column_name));
-          columns.set(table, names);
-        }
+        const tableNames = KNOWLEDGE_TABLE_NAMES.filter(table => snapshot.tables.has(table));
+        return this.#classifySchema(this.#executor, tableNames, snapshot.columns);
       }
-
-      if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
-      const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
-      if (missingTables.length > 0) {
-        return inspectKnowledgeSchema({
-          available: true,
-          tableNames,
-          reason: `Missing Knowledge v2 tables: ${missingTables.join(', ')}`,
-        });
-      }
-
-      for (const { tableName: table, schema } of knowledgeTableDefinitions) {
-        const actual = columns.get(table) ?? new Set<string>();
-        const missing = Object.keys(schema).filter(column => !actual.has(column));
-        if (missing.length > 0) {
-          return inspectKnowledgeSchema({
-            available: true,
-            tableNames,
-            reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
-          });
-        }
-      }
-      const accessState = await this.#executor.execute(
-        `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`,
-      );
-      if (Number(accessState.rows[0]?.schemaVersion) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
-        return inspectKnowledgeSchema({
-          available: true,
-          tableNames,
-          reason: 'Knowledge schema version marker is missing or incompatible',
-        });
-      }
-      return inspectKnowledgeSchema({
-        available: true,
-        tableNames,
-        schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
-      });
+      return this.#inspectSchemaWithExecutor(this.#executor);
     } catch (error) {
       return inspectKnowledgeSchema({
         available: false,
@@ -537,18 +561,129 @@ export class KnowledgePG extends KnowledgeStorage {
     }
   }
 
-  async init(): Promise<void> {
-    assertKnowledgeSchemaCompatible(await this.inspectSchema());
-    for (const definition of knowledgeTableDefinitions) {
-      await this.#db.createTable(definition);
-    }
-    await Promise.all(
-      knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
-    );
-    await this.#executor.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?) ON CONFLICT (id) DO NOTHING`,
-      args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+  async #inspectSchemaWithExecutor(executor: Executor) {
+    const tableResult = await executor.execute({
+      sql: `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
     });
+    const tableNames = tableResult.rows.map(row => String(row.table_name));
+    const columnResult = await executor.execute({
+      sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
+    });
+    const columns = new Map<string, Set<string>>();
+    for (const row of columnResult.rows) {
+      const table = String(row.table_name);
+      const names = columns.get(table) ?? new Set<string>();
+      names.add(String(row.column_name));
+      columns.set(table, names);
+    }
+    return this.#classifySchema(executor, tableNames, columns);
+  }
+
+  async #classifySchema(executor: Executor, tableNames: string[], columns: Map<string, Set<string>>) {
+    const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
+    if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
+    const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
+    if (missingTables.length > 0) {
+      return inspectKnowledgeSchema({
+        available: true,
+        tableNames,
+        reason: `Missing Knowledge v2 tables: ${missingTables.join(', ')}`,
+      });
+    }
+
+    for (const { tableName: table, schema } of knowledgeTableDefinitions) {
+      const actual = columns.get(table) ?? new Set<string>();
+      const missing = Object.keys(schema).filter(column => !actual.has(column));
+      if (missing.length > 0) {
+        return inspectKnowledgeSchema({
+          available: true,
+          tableNames,
+          reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
+        });
+      }
+    }
+    const accessState = await executor.execute(
+      `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`,
+    );
+    if (Number(accessState.rows[0]?.schemaVersion) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+      return inspectKnowledgeSchema({
+        available: true,
+        tableNames,
+        reason: 'Knowledge schema version marker is missing or incompatible',
+      });
+    }
+    return inspectKnowledgeSchema({
+      available: true,
+      tableNames,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+    });
+  }
+
+  async init(): Promise<void> {
+    await this.#transaction(async tx => {
+      await tx.execute({
+        sql: 'SELECT pg_advisory_xact_lock(hashtext(?))',
+        args: [`mastra-knowledge-v2:${this.#schemaName ?? 'current_schema'}`],
+      });
+      const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
+      const inspection = await this.#inspectSchemaWithExecutor(tx);
+      if (inspection.status === 'incompatible-reset-required') {
+        if (!(await this.#replaceRecognizedLegacySchema(tx))) assertKnowledgeSchemaCompatible(inspection);
+      } else {
+        assertKnowledgeSchemaCompatible(inspection);
+      }
+
+      for (const definition of knowledgeTableDefinitions) {
+        await tx.executeRaw(
+          generateTableSQL({ ...definition, schemaName: this.#schemaName, includeAllConstraints: true }),
+        );
+      }
+      for (const index of knowledgeIndexes(this.#schemaName)) await tx.executeRaw(index.sql);
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?) ON CONFLICT (id) DO NOTHING`,
+        args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+      });
+    });
+  }
+
+  async #replaceRecognizedLegacySchema(tx: Executor): Promise<boolean> {
+    const columnResult = await tx.execute({
+      sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%' ORDER BY table_name, ordinal_position`,
+      args: [this.#schemaName ?? null],
+    });
+    const columns = new Map<string, string[]>();
+    for (const row of columnResult.rows) {
+      const table = String(row.table_name);
+      const names = columns.get(table) ?? [];
+      names.push(String(row.column_name));
+      columns.set(table, names);
+    }
+    if (columns.size !== KNOWLEDGE_V1_TABLE_COLUMNS.size) return false;
+    for (const [table, expected] of KNOWLEDGE_V1_TABLE_COLUMNS) {
+      if (JSON.stringify(columns.get(table)) !== JSON.stringify(expected)) return false;
+    }
+
+    const indexResult = await tx.execute({
+      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[]) ORDER BY indexname`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()]],
+    });
+    const indexes = new Set(indexResult.rows.map(row => String(row.indexname)));
+    if (indexes.size !== KNOWLEDGE_V1_INDEXES.size || [...KNOWLEDGE_V1_INDEXES].some(index => !indexes.has(index))) {
+      return false;
+    }
+
+    const triggerResult = await tx.execute({
+      sql: `SELECT trigger_name FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[])`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()]],
+    });
+    if (triggerResult.rows.length > 0) return false;
+
+    for (const table of [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()].reverse()) {
+      await tx.execute(`DROP TABLE "${table}"`);
+    }
+    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
