@@ -106,8 +106,10 @@ const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra =>
  */
 const getRequestProtocolVersion = (extra: MCPRequestHandlerExtra, serverInstance: Server): string | undefined => {
   const envelope = extra.mcpReq.envelope as Record<string, unknown> | undefined;
-  const requestProtocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY];
-  if (typeof requestProtocolVersion === 'string') return requestProtocolVersion;
+  if (envelope) {
+    const requestProtocolVersion = envelope[PROTOCOL_VERSION_META_KEY];
+    return typeof requestProtocolVersion === 'string' ? requestProtocolVersion : undefined;
+  }
 
   return serverInstance.getNegotiatedProtocolVersion();
 };
