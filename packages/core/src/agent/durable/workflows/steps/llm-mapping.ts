@@ -365,6 +365,15 @@ export function createDurableLLMMappingStep() {
             ...deferredChunk,
             payload: {
               ...deferredChunk.payload,
+              // Stamp the value the loop actually decided on — the same one this step returns on
+              // `output.stepResult` and the dowhile predicate reads. It can disagree with the model's
+              // finish reason, because a tool error forces another turn so the model can self-correct,
+              // and the chunk must not claim otherwise: ChatChannelOutputProcessor closes its render
+              // queue on the first step-finish whose isContinued is not `true` (#23341).
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                isContinued,
+              },
               _durableStepContent: stepContent,
             },
           };
