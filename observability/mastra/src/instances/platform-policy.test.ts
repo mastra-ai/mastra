@@ -86,6 +86,21 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getExporters()).toEqual([]);
   });
 
+  it.each(['mastra-storage-exporter', 'mastra-default-observability-exporter'])(
+    'removes a built-in storage exporter from another package copy by name: %s',
+    exporterName => {
+      vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
+      const storageExporter = new CustomExporter();
+      storageExporter.name = exporterName;
+
+      const instance = createInstance([storageExporter]);
+
+      expect(instance.getExporters()).toEqual([]);
+      expect(instance.getConfig().exporters).toEqual([]);
+      expect(instance.getObservabilityBus().getExporters()).toEqual([]);
+    },
+  );
+
   it('retains Platform, legacy Cloud, and custom exporters in their original order', async () => {
     vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const storageExporter = new MastraStorageExporter();
