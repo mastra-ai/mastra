@@ -2696,6 +2696,33 @@ describe('Memory Handlers', () => {
           }),
         ).rejects.toMatchObject({ status: 403 });
       });
+
+      it('allows the transfer when neither auth nor an FGA provider is configured (open by design)', async () => {
+        // Intentional, documented posture: on a server with no auth mechanism the entire
+        // memory API is already open (thread update/delete are unauthenticated), so transfer
+        // treats an unscoped context as privileged rather than adding a route-specific gate.
+        // This locks in that behavior so a future change to fail closed here is a deliberate
+        // decision rather than an accident.
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        await mockMemory.createThread({ threadId: 'open-server-thread', resourceId: 'user-a', title: 'Src' });
+
+        // Privileged-looking context (no MASTRA_RESOURCE_ID_KEY) on a server with no auth/FGA.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          threadId: 'open-server-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        const reread = await mockMemory.getThreadById({ threadId: 'open-server-thread' });
+        expect(reread!.resourceId).toBe('user-b');
+      });
     });
 
     describe('DELETE_MESSAGES_ROUTE - ownership validation', () => {

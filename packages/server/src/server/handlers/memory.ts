@@ -1705,6 +1705,12 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         });
       }
 
+      // Intentional: when neither `server.auth` nor `server.fga` is configured the
+      // entire memory API is open by design (an unauthenticated server already exposes
+      // thread update/delete). Transfer grants no capability an attacker on such a
+      // server lacks, so an unscoped context is treated as privileged here — matching
+      // sibling mutation routes rather than adding a route-specific restriction.
+
       const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
       if (agent && (await isGatewayAgentAsync(agent))) {
         throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
