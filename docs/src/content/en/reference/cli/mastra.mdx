@@ -633,7 +633,7 @@ mastra env diagnosis --environment staging
 
 Omit `<deploy-id>` to diagnose the environment's latest deploy. The environment comes from `--environment`, or from the project when it has exactly one environment. Projects with several environments require `--environment` or a deploy ID. A deploy ID passed on its own works without a linked project.
 
-If the deploy is running successfully, the command reports that no suggestions are required and exits. Otherwise it starts a diagnosis when one doesn't already exist and polls until the result is ready, for up to five minutes. Rerunning the command is safe: an in-progress diagnosis is reused rather than restarted. The command exits with a non-zero code when the diagnosis itself fails.
+If the deploy is running successfully, the command reports that no suggestions are required and exits. Otherwise it starts a diagnosis when one doesn't already exist and polls until the result is ready, for up to five minutes. Rerunning the command reuses an in-progress diagnosis instead of restarting it. The command exits with a non-zero code when the diagnosis itself fails.
 
 After a failed `mastra deploy`, the CLI prints the exact `mastra env diagnosis <deploy-id>` command to run.
 
@@ -643,7 +643,7 @@ Project name, slug, or ID. Defaults to the linked project, as described in [`mas
 
 #### `--environment`
 
-Environment name, slug, or ID. Defaults to the project's only environment; required when the project has more than one and no deploy ID is passed.
+Environment name, slug, or ID. Defaults to the project's only environment. Required when the project has more than one and no deploy ID is passed.
 
 ## `mastra studio deploy`
 
