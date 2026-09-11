@@ -16,7 +16,12 @@ const dateTimeSchema: JSONSchema7 = {
   description: 'RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z',
 };
 
-type KnowledgeWriteToolsMemory = { getKnowledgeStore?: () => Promise<KnowledgeStorage> };
+type KnowledgeWriteToolsMemory = {
+  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  storage?: {
+    getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
+  };
+};
 
 export interface KnowledgeWriteToolsOptions {
   scopeIds: KnowledgeScopeIds;
@@ -24,8 +29,10 @@ export interface KnowledgeWriteToolsOptions {
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
-  if (!memory.getKnowledgeStore) throw new Error('Knowledge write tools require a configured Knowledge instance.');
-  return memory.getKnowledgeStore();
+  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
+  const store = await memory.storage?.getStore('knowledge');
+  if (!store) throw new Error('Knowledge write tools require a configured knowledge storage domain.');
+  return store;
 }
 
 function resolveWriteScopeIds(
