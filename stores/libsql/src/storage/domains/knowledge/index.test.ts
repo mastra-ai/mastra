@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
@@ -10,35 +12,97 @@ import {
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_RECORDS,
 } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import * as coreStorage from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { KnowledgeLibSQL } from '.';
 
+const COMPAT_CONSTANTS = [
+  'KNOWLEDGE_ACCESS_STATE_SCHEMA',
+  'KNOWLEDGE_IMPORT_RUNS_SCHEMA',
+  'KNOWLEDGE_IMPORT_STATE_SCHEMA',
+  'KNOWLEDGE_NODE_ADDRESSES_SCHEMA',
+  'KNOWLEDGE_NODE_SCOPES_SCHEMA',
+  'KNOWLEDGE_PROPOSALS_SCHEMA',
+  'KNOWLEDGE_RECORD_SCOPES_SCHEMA',
+  'KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA',
+  'KNOWLEDGE_SCOPE_GRANTS_SCHEMA',
+  'KNOWLEDGE_STORAGE_CONTRACT_VERSION',
+  'KNOWLEDGE_STORAGE_SCHEMA_VERSION',
+  'KNOWLEDGE_TABLE_NAMES',
+  'KNOWLEDGE_V2_ACTIVITY_SCHEMA',
+  'KNOWLEDGE_V2_MENTIONS_SCHEMA',
+  'KNOWLEDGE_V2_NODES_SCHEMA',
+  'KNOWLEDGE_V2_RECORDS_SCHEMA',
+  'TABLE_KNOWLEDGE_ACCESS_STATE',
+  'TABLE_KNOWLEDGE_IMPORT_RUNS',
+  'TABLE_KNOWLEDGE_IMPORT_STATE',
+  'TABLE_KNOWLEDGE_NODE_ADDRESSES',
+  'TABLE_KNOWLEDGE_NODE_SCOPES',
+  'TABLE_KNOWLEDGE_PROPOSALS',
+  'TABLE_KNOWLEDGE_RECORD_SCOPES',
+  'TABLE_KNOWLEDGE_SCOPE_ADDRESSES',
+  'TABLE_KNOWLEDGE_SCOPE_GRANTS',
+] as const;
+
+describe('Knowledge v2 Core compatibility', () => {
+  it('keeps bundled constants byte-for-byte compatible with current Core', () => {
+    for (const name of COMPAT_CONSTANTS) {
+      expect(knowledgeCompat[name]).toEqual(coreStorage[name]);
+    }
+  });
+
+  it('rejects an old Core before loading its storage module', async () => {
+    const loadStorageModule = vi.fn();
+    const loadCore = knowledgeCompat.createKnowledgeV2CoreLoader(new Set(), loadStorageModule);
+
+    await expect(loadCore()).rejects.toThrow(
+      'Knowledge v2 requires @mastra/core >=1.65.0-0 with the "knowledge-v2" feature',
+    );
+    expect(loadStorageModule).not.toHaveBeenCalled();
+  });
+
+  it('coalesces successful loads and retries a failed load', async () => {
+    const storageModule = {
+      assertKnowledgeDescriptionWithinBound: vi.fn(),
+      assertKnowledgeSchemaCompatible: vi.fn(),
+      inspectKnowledgeSchema: vi.fn(() => ({ status: 'uninitialized', schemaVersion: null })),
+    };
+    const loadStorageModule = vi
+      .fn<() => Promise<unknown>>()
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValue(storageModule);
+    const loadCore = knowledgeCompat.createKnowledgeV2CoreLoader(new Set(['knowledge-v2']), loadStorageModule);
+
+    await expect(loadCore()).rejects.toThrow('temporary failure');
+    const [first, second] = await Promise.all([loadCore(), loadCore()]);
+
+    expect(first).toBe(second);
+    expect(loadStorageModule).toHaveBeenCalledTimes(2);
+  });
+});
+
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
+async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
+  const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
+  await client.batch(
+    sql
+      .split(';')
+      .map(statement => statement.trim())
+      .filter(Boolean),
+    'write',
+  );
+}
+
 describe('KnowledgeLibSQL initialization', () => {
-  it('detects legacy tables without mutation and resets only Knowledge storage', async () => {
+  it('destructively replaces a recognized populated v1 schema and preserves unrelated tables', async () => {
     const client = createClient({ url: ':memory:' });
     try {
+      await seedPublishedKnowledgeV1(client);
       await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
       await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
-      await client.execute(
-        `CREATE TABLE "mastra_knowledge_nodes" (
-          id TEXT PRIMARY KEY,
-          type TEXT NOT NULL,
-          name TEXT NOT NULL,
-          canonicalName TEXT NOT NULL,
-          kind TEXT,
-          content TEXT,
-          scope TEXT NOT NULL,
-          scopeKey TEXT NOT NULL,
-          version INTEGER NOT NULL,
-          mergedInto TEXT,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        )`,
-      );
       await client.execute({
         sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         args: [
@@ -59,12 +123,13 @@ describe('KnowledgeLibSQL initialization', () => {
 
       const store = new KnowledgeLibSQL({ client });
       expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-      expect((await client.execute('SELECT content FROM mastra_knowledge_nodes')).rows[0]?.content).toBe('legacy body');
-
-      await store.dangerouslyReset();
+      await expect(Promise.all([store.init(), new KnowledgeLibSQL({ client }).init()])).resolves.toEqual([
+        undefined,
+        undefined,
+      ]);
       expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
       expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
+      expect((await client.execute(`SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}"`)).rows).toEqual([]);
       const tables = await client.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
       );
@@ -72,6 +137,53 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(
         (await client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`)).rows[0]?.epoch,
       ).toBe(0);
+    } finally {
+      client.close();
+    }
+  });
+
+  it.each([
+    'CREATE TABLE mastra_knowledge_unknown (id TEXT)',
+    'CREATE TRIGGER custom_knowledge_trigger AFTER INSERT ON mastra_knowledge_nodes BEGIN SELECT 1; END',
+    'CREATE VIEW unrelated_view AS SELECT * FROM mastra_knowledge_nodes',
+  ])('rejects unknown or externally referenced v1 layouts without mutation: %s', async sql => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute(sql);
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rolls back destructive replacement on canonical creation failure and permits retry', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client);
+      await client.execute(
+        `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'now','now')`,
+      );
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
+      const execute = client.execute.bind(client);
+      const spy = vi.spyOn(client, 'execute').mockImplementation(async statement => {
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        if (sql.startsWith('CREATE TABLE') && sql.includes(TABLE_KNOWLEDGE_ACCESS_STATE)) {
+          throw new Error('injected schema creation failure');
+        }
+        return execute(statement);
+      });
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow();
+      spy.mockRestore();
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
+      expect((await client.execute('SELECT id FROM mastra_knowledge_nodes')).rows[0]?.id).toBe('legacy');
+
+      await expect(new KnowledgeLibSQL({ client }).init()).resolves.toBeUndefined();
+      expect(await new KnowledgeLibSQL({ client }).inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
     } finally {
       client.close();
     }

@@ -7852,6 +7852,9 @@ importers:
         specifier: ^0.18.0
         version: 0.18.0(bufferutil@4.1.0)
     devDependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -8131,6 +8134,9 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
     devDependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
