@@ -1,0 +1,329 @@
+import { createServer } from 'node:http';
+import type { Server as HttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { createMCPTool } from '@mastra/core/mcp';
+import { CLIENT_CAPABILITIES_META_KEY, createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { serveHTTP } from '../server/__tests__/harness';
+import type { ServedHTTP } from '../server/__tests__/harness';
+import { MCPServer } from '../server/server';
+import { InternalMastraMCPClient } from './client';
+import { MCPClient } from './configuration';
+import type { LogMessage, MCPInputRequestHandler } from './types';
+
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+
+/**
+ * End-to-end coverage of the Mastra v2 client against the Mastra v2 server:
+ * native input rounds answered by the keyed `inputRequests` handler, per-request
+ * logging and the modern-only wire (no initialize/session/SSE fallback/legacy
+ * subscriptions).
+ */
+
+type BookingState = { phase: 'address'; opKey: string } | { phase: 'confirm'; opKey: string; address: string };
+const codec = createRequestStateCodec<BookingState>({ key: 'k'.repeat(32) });
+
+function makeServer(journal: { writes: number; rounds: string[] }) {
+  const bookDelivery = createMCPTool({
+    id: 'bookDelivery',
+    description: 'Books a delivery after collecting an address and a confirmation',
+    inputSchema: z.object({ opKey: z.string() }),
+    outputSchema: z.object({ status: z.string(), address: z.string().optional(), writes: z.number() }),
+    execute: async ({ opKey }, { request }) => {
+      const state = request.requestState as BookingState | undefined;
+      const responses = request.inputResponses ?? {};
+      journal.rounds.push(state?.phase ?? 'start');
+      await request.log('info', { message: `round ${state?.phase ?? 'start'}` });
+      await request.log('warning', { message: `warn ${state?.phase ?? 'start'}` });
+
+      if (!state) {
+        return {
+          kind: 'input_required',
+          result: inputRequired({
+            inputRequests: {
+              address: inputRequired.elicit({
+                message: 'Delivery address?',
+                requestedSchema: { type: 'object', properties: { address: { type: 'string' } }, required: ['address'] },
+              }),
+            },
+            requestState: await codec.mint({ phase: 'address', opKey }),
+          }),
+        };
+      }
+      if (state.phase === 'address') {
+        const address = responses.address;
+        if (address?.action !== 'accept') return { kind: 'completed', value: { status: 'declined', writes: journal.writes } };
+        return {
+          kind: 'input_required',
+          result: inputRequired({
+            inputRequests: {
+              confirm: inputRequired.elicit({
+                message: 'Confirm?',
+                requestedSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
+              }),
+            },
+            requestState: await codec.mint({
+              phase: 'confirm',
+              opKey,
+              address: (address.content as { address: string }).address,
+            }),
+          }),
+        };
+      }
+      const confirm = responses.confirm;
+      if (confirm?.action !== 'accept' || !(confirm.content as { ok: boolean }).ok) {
+        return { kind: 'completed', value: { status: 'cancelled', writes: journal.writes } };
+      }
+      journal.writes += 1;
+      return { kind: 'completed', value: { status: 'booked', address: state.address, writes: journal.writes } };
+    },
+  });
+
+  return new MCPServer({
+    name: 'Lifecycle Server',
+    version: '1.0.0',
+    tools: { bookDelivery },
+    requestState: { verify: codec.verify },
+    resources: {
+      listResources: async () => [{ uri: 'policy://public', name: 'Policy' }],
+      getResourceContent: async () => ({ text: 'policy' }),
+    },
+  });
+}
+
+describe('InternalMastraMCPClient - native input rounds', () => {
+  let journal: { writes: number; rounds: string[] };
+  let server: MCPServer;
+  let served: ServedHTTP;
+  let client: InternalMastraMCPClient | undefined;
+
+  beforeEach(async () => {
+    journal = { writes: 0, rounds: [] };
+    server = makeServer(journal);
+    served = await serveHTTP(server);
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    client = undefined;
+    await served.close();
+  });
+
+  it('answers each keyed round through inputRequests and completes with one write', async () => {
+    const seen: string[] = [];
+    const inputRequests: MCPInputRequestHandler = async ({ key, params }) => {
+      seen.push(`${key}:${params.mode === 'url' ? 'url' : 'form'}`);
+      if (key === 'address') return { action: 'accept', content: { address: '1 Main St' } };
+      if (key === 'confirm') return { action: 'accept', content: { ok: true } };
+      return { action: 'decline' };
+    };
+    client = new InternalMastraMCPClient({ name: 'rounds', server: { url: served.url, inputRequests } });
+    await client.connect();
+
+    const tools = await client.tools();
+    const result = await tools.bookDelivery!.execute!({ opKey: 'op-1' });
+
+    expect(result).toEqual({ status: 'booked', address: '1 Main St', writes: 1 });
+    expect(seen).toEqual(['address:form', 'confirm:form']);
+    expect(journal.rounds).toEqual(['start', 'address', 'confirm']);
+  });
+
+  it('completes with the declined outcome when the handler declines a round', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'decline',
+      server: { url: served.url, inputRequests: async () => ({ action: 'decline' }) },
+    });
+    await client.connect();
+
+    const tools = await client.tools();
+    expect(await tools.bookDelivery!.execute!({ opKey: 'op-2' })).toEqual({ status: 'declined', writes: 0 });
+    expect(journal.rounds).toEqual(['start', 'address']);
+  });
+
+  it('surfaces input_required as a failure when no inputRequests handler is configured', async () => {
+    client = new InternalMastraMCPClient({ name: 'no-handler', server: { url: served.url } });
+    await client.connect();
+
+    const tools = await client.tools();
+    await expect(tools.bookDelivery!.execute!({ opKey: 'op-3' })).rejects.toThrow();
+    // The server never got past the first round; nothing was written.
+    expect(journal.rounds).toEqual(['start']);
+    expect(journal.writes).toBe(0);
+  });
+
+  it('advertises elicitation on the wire only when a handler is configured', async () => {
+    expect(
+      () => new InternalMastraMCPClient({ name: 'bad', server: { url: served.url, capabilities: { elicitation: {} } } }),
+    ).toThrow(/inputRequests/);
+
+    const advertised = async (inputRequests?: MCPInputRequestHandler) => {
+      const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
+      const probe = new InternalMastraMCPClient({
+        name: 'caps',
+        server: { url: served.url, fetch: fetchSpy, inputRequests },
+      });
+      await probe.connect();
+      await probe.disconnect();
+      const discover = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string);
+      return discover.params._meta[CLIENT_CAPABILITIES_META_KEY];
+    };
+
+    expect(await advertised(async () => ({ action: 'decline' }))).toMatchObject({ elicitation: { form: {} } });
+    expect((await advertised()).elicitation).toBeUndefined();
+    expect((await advertised()).roots).toBeUndefined();
+    expect((await advertised()).sampling).toBeUndefined();
+  });
+
+  it('forwards opted-in per-request server logs to the logger with severity filtering', async () => {
+    const messages: LogMessage[] = [];
+    client = new InternalMastraMCPClient({
+      name: 'logs',
+      server: {
+        url: served.url,
+        serverLogLevel: 'warning',
+        logger: message => {
+          if (message.message.includes('[MCP SERVER LOG]')) messages.push(message);
+        },
+        inputRequests: async () => ({ action: 'decline' }),
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    await tools.bookDelivery!.execute!({ opKey: 'op-4' });
+
+    expect(messages.map(m => m.level)).toEqual(['warning', 'warning']);
+    expect(messages.map(m => (m.details as any)?.data?.message)).toEqual(['warn start', 'warn address']);
+  });
+
+  it('receives nothing from the server log channel when server logs are disabled', async () => {
+    const messages: LogMessage[] = [];
+    client = new InternalMastraMCPClient({
+      name: 'no-logs',
+      server: {
+        url: served.url,
+        enableServerLogs: false,
+        logger: message => {
+          if (message.message.includes('[MCP SERVER LOG]')) messages.push(message);
+        },
+        inputRequests: async () => ({ action: 'decline' }),
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    await tools.bookDelivery!.execute!({ opKey: 'op-5' });
+
+    expect(messages).toEqual([]);
+  });
+});
+
+describe('InternalMastraMCPClient - modern-only wire', () => {
+  let served: ServedHTTP | undefined;
+  let client: InternalMastraMCPClient | undefined;
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    client = undefined;
+    await served?.close();
+    served = undefined;
+  });
+
+  function methodsSeen(fetchSpy: ReturnType<typeof vi.fn>): string[] {
+    return fetchSpy.mock.calls.flatMap(([, init]) => {
+      if (typeof init?.body !== 'string') return [];
+      const parsed = JSON.parse(init.body);
+      return Array.isArray(parsed) ? parsed.map(m => m.method) : [parsed.method];
+    });
+  }
+
+  it('discovers with self-contained requests: no initialize, no session header, no GET stream', async () => {
+    const journal = { writes: 0, rounds: [] };
+    served = await serveHTTP(makeServer(journal));
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
+    client = new InternalMastraMCPClient({ name: 'wire', server: { url: served.url, fetch: fetchSpy } });
+    await client.connect();
+    await client.tools();
+
+    const methods = methodsSeen(fetchSpy);
+    expect(methods).toContain('server/discover');
+    expect(methods).toContain('tools/list');
+    expect(methods).not.toContain('initialize');
+    expect(methods).not.toContain('notifications/initialized');
+    expect(fetchSpy.mock.calls.every(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'POST')).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => !new Headers(init?.headers).has('mcp-session-id'))).toBe(true);
+  });
+
+  it('opens subscriptions/listen for resource updates instead of resources/subscribe', async () => {
+    const journal = { writes: 0, rounds: [] };
+    served = await serveHTTP(makeServer(journal));
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit) => fetch(url, init));
+    client = new InternalMastraMCPClient({ name: 'listen', server: { url: served.url, fetch: fetchSpy } });
+    await client.connect();
+
+    const subscription = await client.listen({ resourceSubscriptions: ['policy://public'] });
+    expect(subscription.honoredFilter.resourceSubscriptions).toEqual(['policy://public']);
+    subscription.close();
+
+    const methods = methodsSeen(fetchSpy);
+    expect(methods).toContain('subscriptions/listen');
+    expect(methods).not.toContain('resources/subscribe');
+  });
+
+  it('fails against a legacy-only server without downgrading or falling back to SSE', async () => {
+    const methods: string[] = [];
+    const httpMethods: string[] = [];
+    const httpServer: HttpServer = createServer(async (req, res) => {
+      httpMethods.push(req.method ?? '');
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined;
+      if (body?.method) methods.push(body.method);
+      // A 2025-era server: only `initialize` is understood.
+      if (body?.method === 'initialize') {
+        res.writeHead(200, { 'content-type': 'application/json', 'mcp-session-id': 'legacy-session' }).end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: { protocolVersion: '2025-11-25', capabilities: {}, serverInfo: { name: 'legacy', version: '1' } },
+          }),
+        );
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({ jsonrpc: '2.0', id: body?.id ?? null, error: { code: -32601, message: 'Method not found' } }),
+      );
+    });
+    const url = await new Promise<URL>(resolve =>
+      httpServer.listen(0, '127.0.0.1', () =>
+        resolve(new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`)),
+      ),
+    );
+    try {
+      client = new InternalMastraMCPClient({ name: 'legacy-peer', server: { url } });
+      await expect(client.connect()).rejects.toThrow();
+      expect(methods).toEqual(['server/discover']);
+      expect(httpMethods).toEqual(['POST']);
+    } finally {
+      httpServer.closeAllConnections();
+      await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    }
+  });
+
+  it('does not expose the removed session, roots, elicitation or SSE surfaces', async () => {
+    const journal = { writes: 0, rounds: [] };
+    served = await serveHTTP(makeServer(journal));
+    client = new InternalMastraMCPClient({ name: 'surface', server: { url: served.url } });
+    const mcpClient = new MCPClient({ id: 'surface', servers: { lifecycle: { url: served.url } } });
+    try {
+      for (const target of [client, mcpClient] as unknown[]) {
+        for (const member of ['sessionId', 'sessionIds', 'roots', 'setRoots', 'sendRootsListChanged', 'elicitation']) {
+          expect((target as Record<string, unknown>)[member], member).toBeUndefined();
+        }
+      }
+      expect((client.resources as Record<string, unknown>).subscribe).toBeUndefined();
+      expect((client.resources as Record<string, unknown>).unsubscribe).toBeUndefined();
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+});

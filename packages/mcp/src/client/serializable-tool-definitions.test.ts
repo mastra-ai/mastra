@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
-import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
-import { McpServer } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -57,14 +57,10 @@ async function setupTestServer() {
     }),
   );
 
-  // Stateless mode: SDK 1.27+ requires a new transport per request, and it lets several
-  // clients talk to this server, which the cold-worker hydration test depends on.
-  httpServer.on('request', async (req: any, res: any) => {
-    await mcpServer.close().catch(() => {});
-    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcpServer.connect(transport);
-    await transport.handleRequest(req, res);
-  });
+  // Modern-only handler: every request is self-contained, so several clients can talk to
+  // this server, which the cold-worker hydration test depends on.
+  const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
+  httpServer.on('request', (req, res) => handler(req, res));
 
   const baseUrl = await new Promise<URL>(resolve => {
     httpServer.listen(0, '127.0.0.1', () => {

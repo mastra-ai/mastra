@@ -1,3 +1,11 @@
+/**
+ * Whether a failed MCP call is worth one transport reconnect and retry.
+ *
+ * Modern (2026-07-28) requests are self-contained, so only transport-level
+ * failures qualify: a detached SDK client, a gateway answering with an HTTP
+ * error while no backend is healthy, or a dropped/refused connection. Tool
+ * execution errors and protocol errors are never reconnectable.
+ */
 export function isReconnectableMCPError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -6,9 +14,6 @@ export function isReconnectableMCPError(error: unknown): boolean {
   const errorMessage = error.message.toLowerCase();
 
   return (
-    errorMessage.includes('no valid session') ||
-    errorMessage.includes('session') ||
-    errorMessage.includes('server not initialized') ||
     errorMessage.includes('not connected') ||
     errorMessage.includes('http 400') ||
     errorMessage.includes('http 401') ||
@@ -18,7 +23,6 @@ export function isReconnectableMCPError(error: unknown): boolean {
     errorMessage.includes('fetch failed') ||
     errorMessage.includes('connection refused') ||
     errorMessage.includes('connection closed') ||
-    errorMessage.includes('sse stream disconnected') ||
     errorMessage.includes('typeerror: terminated')
   );
 }
