@@ -13,7 +13,12 @@ import { KnowledgeGraph } from '../domains/factory/components/knowledge/Knowledg
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeRung, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type {
+  KnowledgeRung,
+  KnowledgeScopeNode,
+  KnowledgeScopeTreePayload,
+  KnowledgeSelection,
+} from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -29,12 +34,10 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
 export function KnowledgePage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
-  const [searchParams] = useSearchParams();
-  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return (
     <PageLayout variant="fit" {...slots}>
       <div className="flex min-h-0 flex-col p-4">
-        <KnowledgeContent key={JSON.stringify([factory.id, knowledgeKey])} factoryProjectId={factory.id} />
+        <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
       </div>
     </PageLayout>
   );
@@ -106,13 +109,47 @@ function Breadcrumb({
 
 function ScopeTree({
   scopes,
-  selectedLevel,
+  selection,
   onSelect,
 }: {
   scopes: KnowledgeScopeTreePayload | undefined;
-  selectedLevel: KnowledgeRung | undefined;
-  onSelect: (level: KnowledgeRung) => void;
+  selection: KnowledgeSelection | undefined;
+  onSelect: (selection: KnowledgeSelection) => void;
 }) {
+  // Nest the reconciled structural tree under its parent scope nodes. Roots of
+  // the structural forest are nodes without parents (or whose parents are not
+  // in the payload window).
+  const scopeNodes = scopes?.scopeNodes ?? [];
+  const byParent = new Map<string, KnowledgeScopeNode[]>();
+  const known = new Set(scopeNodes.map(node => node.id));
+  const structuralRoots: KnowledgeScopeNode[] = [];
+  for (const node of scopeNodes) {
+    const parents = node.parentIds.filter(id => known.has(id));
+    if (parents.length === 0) {
+      structuralRoots.push(node);
+      continue;
+    }
+    for (const parentId of parents) {
+      const siblings = byParent.get(parentId);
+      if (siblings) siblings.push(node);
+      else byParent.set(parentId, [node]);
+    }
+  }
+  const renderScopeNode = (node: KnowledgeScopeNode, depth: number) => (
+    <div key={node.id}>
+      <button
+        type="button"
+        aria-pressed={selection?.scopeNodeId === node.id}
+        className="hover:text-icon6 truncate text-left"
+        style={{ paddingLeft: `${depth * 12}px` }}
+        title={node.description ?? node.name}
+        onClick={() => onSelect({ scopeNodeId: node.id })}
+      >
+        {node.name}
+      </button>
+      {(byParent.get(node.id) ?? []).map(child => renderScopeNode(child, depth + 1))}
+    </div>
+  );
   return (
     <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
@@ -123,15 +160,20 @@ function ScopeTree({
           <button
             key={root.level}
             type="button"
-            aria-pressed={selectedLevel === root.level}
+            aria-pressed={selection?.scopeLevel === root.level}
             className="hover:text-icon6 truncate text-left"
             style={{ paddingLeft: `${index * 12}px` }}
-            onClick={() => onSelect(root.level)}
+            onClick={() => onSelect({ scopeLevel: root.level })}
           >
             {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
             {root.id.slice(0, 8)}
           </button>
         ))}
+        {structuralRoots.length > 0 ? (
+          <div className="border-surface5 mt-2 flex flex-col gap-1 border-t pt-2">
+            {structuralRoots.map(node => renderScopeNode(node, 0))}
+          </div>
+        ) : null}
       </div>
     </aside>
   );
@@ -150,7 +192,7 @@ function ActivityPanel({
   if (!scopeLevel) {
     return (
       <Txt as="p" variant="ui-md" className="text-icon3">
-        Select a scope to review its activity.
+        Activity is tracked per organization, project, and session — select one of those scopes.
       </Txt>
     );
   }
@@ -188,12 +230,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
   const requestedScope = searchParams.get('scope');
-  const scopeLevel: KnowledgeRung | undefined =
+  // `?scope=` is an identity rung (org/resource/thread) or a reconciled
+  // structural scope node id from the scope tree.
+  const selection: KnowledgeSelection | undefined =
     requestedScope === 'org' || requestedScope === 'resource' || (requestedScope === 'thread' && threadId)
-      ? requestedScope
-      : threadId
-        ? 'thread'
-        : undefined;
+      ? { scopeLevel: requestedScope }
+      : requestedScope
+        ? { scopeNodeId: requestedScope }
+        : threadId
+          ? { scopeLevel: 'thread' }
+          : undefined;
+  const scopeLevel = selection?.scopeLevel;
   const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
@@ -206,22 +253,23 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // under someone mid-interaction.
   const { idle, onActivity } = useInteractionIdle(10_000);
   const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
-  const graphQuery = useKnowledgeGraph(scopesQuery.data ? factoryProjectId : undefined, scopeLevel, threadId, {
+  const graphQuery = useKnowledgeGraph(scopesQuery.data ? factoryProjectId : undefined, selection, threadId, {
     paused: !idle,
   });
 
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
+  const selectionKey = selection?.scopeNodeId ?? selection?.scopeLevel;
   const baseline = useRef<DiffBaseline | null>(null);
   const nextBaseline = useMemo<DiffBaseline | undefined>(() => {
     if (!graphQuery.data) return undefined;
     return {
-      viewKey: `${scopeLevel}:${threadId ?? 'project'}`,
+      viewKey: `${selectionKey}:${threadId ?? 'project'}`,
       version: graphQuery.data.version,
       nodeIds: new Set(graphQuery.data.nodes.map(node => node.id)),
       edgeIds: new Set(graphQuery.data.edges.map(edge => edge.id)),
     };
-  }, [graphQuery.data, scopeLevel, threadId]);
+  }, [graphQuery.data, selectionKey, threadId]);
   const arrivals = useMemo<Arrivals | undefined>(
     () => (nextBaseline ? computeArrivals(baseline.current, nextBaseline) : undefined),
     [nextBaseline],
@@ -250,11 +298,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       return copy;
     });
   };
-  const selectScope = (level: KnowledgeRung) => {
+  const selectScope = (next: KnowledgeSelection) => {
     setSelected(null);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
-      copy.set('scope', level);
+      copy.set('scope', next.scopeLevel ?? next.scopeNodeId);
       return copy;
     });
   };
@@ -285,7 +333,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     body = <Notice variant="destructive">{message}</Notice>;
   } else if (scopesQuery.isPending) {
     body = <SkeletonRows label="Loading knowledge scopes" rows={3} />;
-  } else if (!scopeLevel) {
+  } else if (!selection) {
     body = (
       <Txt tone="muted" as="p" variant="body">
         Select a scope to explore its knowledge.
@@ -323,14 +371,23 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             const node = graphQuery.data?.nodes.find(entry => entry.id === id);
             setTrail([{ nodeId: id, name: node?.name ?? id }]);
           }}
-          onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
+          onNodeClick={node => {
+            // Inside a structural scope, members are child scopes — clicking
+            // one drills down instead of opening the record flyout.
+            if (selection.scopeNodeId) {
+              setTrail([]);
+              selectScope({ scopeNodeId: node.id });
+              return;
+            }
+            setSelected({ nodeId: node.id, name: node.name });
+          }}
           onEdgeClick={edge => {
             // Selecting an edge selects AND expands the supporting knowledge record (A7).
             const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
             setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
           }}
         />
-        {selected && factoryProjectId ? (
+        {selected && factoryProjectId && scopeLevel ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
@@ -403,7 +460,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         />
       </header>
       <div className="flex min-h-0 flex-1 gap-4">
-        <ScopeTree scopes={scopesQuery.data} selectedLevel={scopeLevel} onSelect={selectScope} />
+        <ScopeTree scopes={scopesQuery.data} selection={selection} onSelect={selectScope} />
         <div className="min-w-0 flex-1">
           {activeView === 'activity' ? (
             <ActivityPanel factoryProjectId={factoryProjectId} scopeLevel={scopeLevel} threadId={threadId} />
