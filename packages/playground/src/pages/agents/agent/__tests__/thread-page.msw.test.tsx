@@ -9,6 +9,14 @@ import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-r
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import {
+  preferenceModelProviders,
+  memoryConfig,
+  workingMemory,
+  voiceSpeakers,
+  mcpServers,
+  preferenceThread,
+} from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
@@ -847,6 +855,79 @@ describe('Standalone thread page', () => {
         expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
       );
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+    });
+  });
+
+  describe('when a thread has saved model preferences', () => {
+    it('retains real composer edits through the first send, navigation, and reload', async () => {
+      installHandlers();
+      const sent = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(preferenceModelProviders)),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, ({ params }) =>
+          HttpResponse.json({ ...preferenceThread, id: params.threadId }),
+        ),
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json(voiceSpeakers)),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(mcpServers)),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () => new HttpResponse('', { headers: { 'content-type': 'text/event-stream' } }),
+        ),
+      );
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.click(await screen.findByText('gpt-5-mini'));
+      fireEvent.click(await screen.findByRole('option', { name: /gpt-4o-mini/ }));
+      fireEvent.click(screen.getByTestId('composer-model-settings-trigger'));
+      fireEvent.click(await screen.findByRole('radio', { name: 'Stream' }));
+      // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
+      const temperature = screen.getAllByRole('slider', { hidden: true })[0];
+      fireEvent.change(temperature, { target: { value: '0.2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });
+      const firstInput = await screen.findByRole('textbox');
+      fireEvent.change(firstInput, { target: { value: 'Save my preferences' } });
+      fireEvent.keyDown(firstInput, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`/agents/${AGENT_ID}/threads/new`));
+      const savedPath = router.state.location.pathname;
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
+      expect(await screen.findByText('gpt-5-mini')).toBeTruthy();
+      await act(() => router.navigate(savedPath));
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      cleanup();
+      renderAt(savedPath);
+      expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
+      const input = await screen.findByRole('textbox');
+      fireEvent.change(input, { target: { value: 'Use my saved settings' } });
+      fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+      expect(sent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'openai/gpt-4o-mini',
+          maxSteps: 8,
+          modelSettings: expect.objectContaining({ temperature: 0.2 }),
+        }),
+      );
     });
   });
 

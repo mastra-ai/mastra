@@ -16,7 +16,7 @@ interface ModelSelection {
   explicit: boolean;
 }
 
-const PlaygroundModelContext = createContext<PlaygroundModelContextType | null>(null);
+export const PlaygroundModelContext = createContext<PlaygroundModelContextType | null>(null);
 
 interface PlaygroundModelProviderProps {
   children: ReactNode;
