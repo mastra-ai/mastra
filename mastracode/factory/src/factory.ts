@@ -97,6 +97,8 @@ import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
 import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { CustomProviderPresets } from './storage/domains/custom-providers/presets.js';
+import type { CustomProviderPreset } from './storage/domains/custom-providers/presets.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
@@ -197,6 +199,13 @@ export interface MastraFactoryConfig {
    * plaintext compatibility with a boot-time warning.
    */
   secretEncryption?: FactorySecretEncryption;
+  /**
+   * OpenAI-compatible providers configured on the deployment (an internal
+   * LLM proxy, for example). They are listed for every org as read-only
+   * custom providers; a preset without `models` discovers them from
+   * `GET {url}/models`.
+   */
+  customProviders?: CustomProviderPreset[];
   /**
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
@@ -430,6 +439,9 @@ export class MastraFactory {
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    if (this.#config.customProviders?.length) {
+      customProvidersStorage.usePresets(new CustomProviderPresets(this.#config.customProviders));
+    }
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.

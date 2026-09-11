@@ -54,6 +54,25 @@ describe('CustomProvidersSection', () => {
     });
   });
 
+  describe('when a provider is configured on the deployment', () => {
+    it('shows it as read-only without edit or remove actions', async () => {
+      server.use(
+        http.get(LIST_URL, () =>
+          listResponse([myLlm, { ...myLlm, id: 'team-proxy', name: 'Team Proxy', hasApiKey: false, readOnly: true }]),
+        ),
+      );
+
+      renderWithProviders(<CustomProvidersSection />);
+
+      const row = (await screen.findByText('Team Proxy')).closest('li')!;
+      expect(within(row).getByText('Deployment')).toBeInTheDocument();
+      expect(within(row).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(within(row).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+      const own = screen.getByText('my-llm').closest('li')!;
+      expect(within(own).getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    });
+  });
+
   describe('when the list is empty', () => {
     it('renders no provider rows and keeps the add affordance', async () => {
       server.use(http.get(LIST_URL, () => listResponse([])));

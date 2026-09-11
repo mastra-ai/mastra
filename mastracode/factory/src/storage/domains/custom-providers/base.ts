@@ -2,6 +2,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
+import type { CustomProviderPresets } from './presets.js';
 
 /**
  * A user-defined OpenAI-compatible provider. The DB-backed counterpart of the
@@ -21,6 +22,8 @@ export interface CustomProviderRecord {
   models: string[];
   createdAt: Date;
   updatedAt: Date;
+  /** Configured on the deployment (`CustomProviderPresets`): listed for every org, read-only. */
+  preset?: true;
 }
 
 export interface UpsertCustomProviderInput {
@@ -62,8 +65,19 @@ interface CustomProviderDbRow extends Record<string, unknown> {
 }
 
 export class CustomProvidersStorage extends FactoryStorageDomain {
+  #presets?: CustomProviderPresets;
+
   constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('custom-providers');
+  }
+
+  /** Deployment presets appended to every org's list. A preset shadows an org row with the same id. */
+  usePresets(presets: CustomProviderPresets): void {
+    this.#presets = presets;
+  }
+
+  isPreset(providerId: string): boolean {
+    return this.#presets?.has(providerId) ?? false;
   }
 
   async init(): Promise<void> {
@@ -233,7 +247,10 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
       { org_id: orgId },
       { orderBy: [['name', 'asc']] },
     );
-    return Promise.all(rows.map(row => this.#toRecord(row)));
+    const own = await Promise.all(rows.map(row => this.#toRecord(row)));
+    if (!this.#presets) return own;
+    const presets = await this.#presets.records(orgId);
+    return [...own.filter(record => !this.isPreset(record.providerId)), ...presets];
   }
 
   async delete({ orgId, providerId }: { orgId: string; providerId: string }): Promise<boolean> {

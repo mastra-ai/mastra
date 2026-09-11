@@ -30,6 +30,7 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import type { CustomProviderPreset } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
@@ -47,6 +48,18 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+function parseCustomProvidersEnv(raw: string | undefined): CustomProviderPreset[] | undefined {
+  if (!raw?.trim()) return undefined;
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('MASTRACODE_CUSTOM_PROVIDERS must be a JSON array.');
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || typeof entry.url !== 'string') {
+      throw new Error('MASTRACODE_CUSTOM_PROVIDERS entries need a string "name" and "url".');
+    }
+  }
+  return parsed as CustomProviderPreset[];
 }
 
 function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer {
@@ -287,6 +300,10 @@ export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
+  // OpenAI-compatible providers every org gets, e.g. an internal LLM proxy:
+  // a JSON array of { name, url, apiKey?, models? }. Models are discovered
+  // from the provider when omitted.
+  customProviders: parseCustomProvidersEnv(process.env.MASTRACODE_CUSTOM_PROVIDERS),
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
     const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
