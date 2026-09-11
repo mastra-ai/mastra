@@ -42,6 +42,21 @@ export function tracePayloadBytes(trace: TraceImportTrace): number {
   return EMPTY_PAYLOAD_BYTES + spanBytes.reduce((total, bytes) => total + bytes, 0) + Math.max(0, spanBytes.length - 1);
 }
 
+/** Serialize the exact collector request body represented by a prepared batch. */
+export function serializePreparedTraceBatch(batch: PreparedTraceBatch): string {
+  const spans = batch.traces.flatMap(trace => trace.spans);
+  if (spans.length !== batch.spanCount) {
+    throw new Error('Cannot upload an internally inconsistent trace batch.');
+  }
+
+  const body = JSON.stringify({ spans });
+  if (Buffer.byteLength(body) !== batch.payloadBytes) {
+    throw new Error('Prepared trace batch size does not match its upload payload.');
+  }
+
+  return body;
+}
+
 function traceBatchContribution(trace: TraceImportTrace): number {
   const spanBytes = serializedSpanBytes(trace);
   return spanBytes.reduce((total, bytes) => total + bytes, 0) + Math.max(0, spanBytes.length - 1);
