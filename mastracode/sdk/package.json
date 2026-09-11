@@ -69,6 +69,7 @@
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.236",
     "execa": "^9.6.1",
+    "firecrawl": "^4.18.4",
     "libsql": "^0.5.29",
     "posthog-node": "^5.46.1",
     "smol-toml": "1.7.0",

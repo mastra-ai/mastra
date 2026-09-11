@@ -81,7 +81,7 @@ export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
 export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
 /** Preferred model-independent web search/extract provider. */
-export type WebSearchProviderSetting = 'auto' | 'tavily' | 'parallel';
+export type WebSearchProviderSetting = 'auto' | 'tavily' | 'parallel' | 'firecrawl';
 
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
@@ -303,7 +303,7 @@ export interface GlobalSettings {
     quietModeMaxToolPreviewLines: number;
     /**
      * Default web search/extract provider. `auto` picks the first configured
-     * provider key (Tavily, then Parallel). An explicit provider is only
+     * provider key (Tavily, then Parallel, then Firecrawl). An explicit provider is only
      * honored while its API key is configured.
      */
     webSearchProvider: WebSearchProviderSetting;
@@ -445,7 +445,7 @@ const DEFAULTS: GlobalSettings = {
   observability: { resources: {}, localTracing: false },
 };
 
-export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
+export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel', 'firecrawl'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 

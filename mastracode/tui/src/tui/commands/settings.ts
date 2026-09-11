@@ -209,11 +209,13 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     // the choice comes back when the key does.
     webSearchProvider:
       (globalSettings.preferences.webSearchProvider === 'tavily' && !process.env.TAVILY_API_KEY) ||
-      (globalSettings.preferences.webSearchProvider === 'parallel' && !process.env.PARALLEL_API_KEY)
+      (globalSettings.preferences.webSearchProvider === 'parallel' && !process.env.PARALLEL_API_KEY) ||
+      (globalSettings.preferences.webSearchProvider === 'firecrawl' && !process.env.FIRECRAWL_API_KEY)
         ? 'auto'
         : globalSettings.preferences.webSearchProvider,
     tavilyKeyAvailable: !!process.env.TAVILY_API_KEY,
     parallelKeyAvailable: !!process.env.PARALLEL_API_KEY,
+    firecrawlKeyAvailable: !!process.env.FIRECRAWL_API_KEY,
   };
 
   return new Promise<void>(resolve => {

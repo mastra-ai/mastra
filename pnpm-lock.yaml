@@ -2652,6 +2652,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      firecrawl:
+        specifier: ^4.18.4
+        version: 4.25.1(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       libsql:
         specifier: ^0.5.29
         version: 0.5.29

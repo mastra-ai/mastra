@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../../tools/index.js', () => ({
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
+  hasFirecrawlKey: () => false,
 }));
 
 import { buildFullPrompt } from '../prompts/index.js';

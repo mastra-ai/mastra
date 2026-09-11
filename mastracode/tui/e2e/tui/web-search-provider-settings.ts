@@ -10,6 +10,7 @@ export const webSearchProviderSettingsScenario = {
     return {
       TAVILY_API_KEY: 'mc-e2e-tavily-key',
       PARALLEL_API_KEY: '',
+      FIRECRAWL_API_KEY: '',
     };
   },
   prepare({ appDataDir }) {

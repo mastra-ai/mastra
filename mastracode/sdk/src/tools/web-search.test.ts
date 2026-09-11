@@ -4,6 +4,15 @@ import { z } from 'zod';
 const providerMocks = vi.hoisted(() => ({
   parallelSearchExecute: vi.fn(),
   parallelExtractExecute: vi.fn(),
+  firecrawlSearch: vi.fn(),
+  firecrawlScrape: vi.fn(),
+}));
+
+vi.mock('firecrawl', () => ({
+  Firecrawl: class {
+    search = providerMocks.firecrawlSearch;
+    scrape = providerMocks.firecrawlScrape;
+  },
 }));
 
 vi.mock('@mastra/parallel', () => ({
@@ -40,6 +49,8 @@ vi.mock('../onboarding/settings.js', () => ({
 
 import {
   createConfiguredWebTools,
+  createFirecrawlWebExtractTool,
+  createFirecrawlWebSearchTool,
   createParallelWebExtractTool,
   createParallelWebSearchTool,
   resolveWebSearchProvider,
@@ -48,10 +59,12 @@ import {
 describe('createConfiguredWebTools', () => {
   const originalParallelKey = process.env.PARALLEL_API_KEY;
   const originalTavilyKey = process.env.TAVILY_API_KEY;
+  const originalFirecrawlKey = process.env.FIRECRAWL_API_KEY;
 
   beforeEach(() => {
     delete process.env.PARALLEL_API_KEY;
     delete process.env.TAVILY_API_KEY;
+    delete process.env.FIRECRAWL_API_KEY;
     settingsMock.webSearchProvider = 'auto';
   });
 
@@ -61,6 +74,9 @@ describe('createConfiguredWebTools', () => {
 
     if (originalTavilyKey === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = originalTavilyKey;
+
+    if (originalFirecrawlKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+    else process.env.FIRECRAWL_API_KEY = originalFirecrawlKey;
   });
 
   it('selects Tavily in auto mode when both provider keys are configured', () => {
@@ -102,7 +118,17 @@ describe('createConfiguredWebTools', () => {
     expect(tools?.web_extract.description).toBe('parallel extract');
   });
 
-  it('returns no model-independent tools when neither key is configured', () => {
+  it('selects Firecrawl in auto mode when only its key is configured', () => {
+    process.env.FIRECRAWL_API_KEY = 'firecrawl-key';
+
+    const tools = createConfiguredWebTools();
+
+    expect(tools?.web_search.id).toBe('web-search');
+    expect(tools?.web_extract.id).toBe('web-extract');
+    expect(resolveWebSearchProvider('auto')).toBe('firecrawl');
+  });
+
+  it('returns no model-independent tools when no key is configured', () => {
     expect(createConfiguredWebTools()).toBeUndefined();
   });
 
@@ -118,6 +144,53 @@ describe('createConfiguredWebTools', () => {
 
     delete process.env.TAVILY_API_KEY;
     expect(resolveWebSearchProvider('tavily')).toBeUndefined();
+
+    process.env.FIRECRAWL_API_KEY = 'firecrawl-key';
+    expect(resolveWebSearchProvider('firecrawl')).toBe('firecrawl');
+    delete process.env.FIRECRAWL_API_KEY;
+    expect(resolveWebSearchProvider('firecrawl')).toBeUndefined();
+  });
+});
+
+describe('Firecrawl web tool adapters', () => {
+  it('formats Firecrawl search results for Mastra Code', async () => {
+    providerMocks.firecrawlSearch.mockResolvedValueOnce({
+      web: [
+        { url: 'https://example.com/result', title: 'Example result', description: 'A relevant description.' },
+        { url: 'https://example.com/untitled' },
+      ],
+    });
+    const tool = createFirecrawlWebSearchTool();
+
+    const output = await tool.execute!({ query: 'example query' }, {} as never);
+
+    expect(output).toBe(
+      '## Example result\nhttps://example.com/result\nA relevant description.\n\n## https://example.com/untitled\nhttps://example.com/untitled',
+    );
+    expect(providerMocks.firecrawlSearch).toHaveBeenCalledWith('example query', { sources: ['web'] });
+  });
+
+  it('returns empty output when Firecrawl reports no web results', async () => {
+    providerMocks.firecrawlSearch.mockResolvedValueOnce({});
+    const tool = createFirecrawlWebSearchTool();
+
+    expect(await tool.execute!({ query: 'example query' }, {} as never)).toBe('');
+  });
+
+  it('reports failed URLs inline instead of failing the whole extraction', async () => {
+    providerMocks.firecrawlScrape
+      .mockResolvedValueOnce({ markdown: 'Page content.' })
+      .mockRejectedValueOnce(new Error('DNS resolution failed'));
+    const tool = createFirecrawlWebExtractTool();
+
+    const output = await tool.execute!(
+      { urls: ['https://example.com/page', 'https://example.com/missing'] },
+      {} as never,
+    );
+
+    expect(output).toBe(
+      '## https://example.com/page\nPage content.\n\n## https://example.com/missing\nError: DNS resolution failed',
+    );
   });
 });
 

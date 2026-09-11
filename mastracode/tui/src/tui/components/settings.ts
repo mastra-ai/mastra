@@ -32,6 +32,7 @@ export interface SettingsConfig {
   webSearchProvider: WebSearchProviderSetting;
   tavilyKeyAvailable: boolean;
   parallelKeyAvailable: boolean;
+  firecrawlKeyAvailable: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -196,6 +197,7 @@ function quietPreviewLinesLabel(lines: number): string {
 function webSearchProviderLabel(provider: WebSearchProviderSetting): string {
   if (provider === 'tavily') return 'Tavily';
   if (provider === 'parallel') return 'Parallel';
+  if (provider === 'firecrawl') return 'Firecrawl';
   return 'Auto';
 }
 
@@ -415,7 +417,7 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'auto',
                 label: '  Auto',
-                description: 'First configured provider key (Tavily, then Parallel)',
+                description: 'First configured provider key (Tavily, then Parallel, then Firecrawl)',
               },
               {
                 value: 'tavily',
@@ -431,12 +433,20 @@ export class SettingsComponent extends Box implements Focusable {
                   ? 'Always use Parallel'
                   : 'Missing PARALLEL_API_KEY — set it to use Parallel',
               },
+              {
+                value: 'firecrawl',
+                label: config.firecrawlKeyAvailable ? '  Firecrawl' : '  Firecrawl (unavailable)',
+                description: config.firecrawlKeyAvailable
+                  ? 'Always use Firecrawl'
+                  : 'Missing FIRECRAWL_API_KEY — set it to use Firecrawl',
+              },
             ],
             config.webSearchProvider,
             value => {
               // Providers without their API key are shown but not selectable.
               if (value === 'tavily' && !config.tavilyKeyAvailable) return;
               if (value === 'parallel' && !config.parallelKeyAvailable) return;
+              if (value === 'firecrawl' && !config.firecrawlKeyAvailable) return;
               config.webSearchProvider = value as WebSearchProviderSetting;
               callbacks.onWebSearchProviderChange(config.webSearchProvider);
               done(webSearchProviderLabel(config.webSearchProvider));

@@ -109,6 +109,7 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     webSearchProvider: 'auto',
     tavilyKeyAvailable: false,
     parallelKeyAvailable: false,
+    firecrawlKeyAvailable: false,
     ...overrides,
   };
 }
@@ -219,10 +220,12 @@ describe('SettingsComponent web search provider submenu', () => {
 
   it('always lists all providers, marking those missing their API key', () => {
     const { select } = openWebSearchSubmenu(createConfig({ tavilyKeyAvailable: true }));
-    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel']);
+    expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel', 'firecrawl']);
     expect(select.items[1].label).toBe('  Tavily');
     expect(select.items[2].label).toBe('  Parallel (unavailable)');
     expect(select.items[2].description).toContain('PARALLEL_API_KEY');
+    expect(select.items[3].label).toBe('  Firecrawl (unavailable)');
+    expect(select.items[3].description).toContain('FIRECRAWL_API_KEY');
   });
 
   it('persists the choice when the provider key is configured', () => {

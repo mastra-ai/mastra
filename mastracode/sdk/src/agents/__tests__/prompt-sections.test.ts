@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../tools/index.js', () => ({
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
+  hasFirecrawlKey: () => false,
 }));
 
 import { getDynamicInstructions, getDynamicInstructionSections } from '../instructions.js';

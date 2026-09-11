@@ -9,6 +9,7 @@ vi.mock('../tools/index.js', () => ({
   createConfiguredWebTools: () => undefined,
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
+  hasFirecrawlKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
