@@ -161,6 +161,20 @@ function sanitizeSpanName(name: string): string {
   return name.replace(/[^\p{L}\p{N}._ -]/gu, '');
 }
 
+/**
+ * The step id of a workflow step span, or undefined if it does not carry one.
+ *
+ * A step span sets its own entity, so entityId is the step id. entityType is
+ * absent only when no ancestor set one either, and in that case an entityId can
+ * only have come from this span, so it is still the step's own id.
+ */
+function getWorkflowStepId(span: AnyExportedSpan): string | undefined {
+  if (span.entityType === EntityType.WORKFLOW_STEP || span.entityType === undefined) {
+    return span.entityId;
+  }
+  return undefined;
+}
+
 function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
     case SpanType.MODEL_GENERATION: {
@@ -172,22 +186,20 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
       return attrs?.model;
     }
 
+    // These spans inherit entityName from the enclosing workflow, so it names
+    // the workflow rather than the step, and every sibling would share one name.
     case SpanType.WORKFLOW_STEP:
+      return getWorkflowStepId(span);
+
+    // The remaining control-flow spans set no entity of their own, so they fall
+    // through to their own name, which already identifies them.
     case SpanType.WORKFLOW_CONDITIONAL:
     case SpanType.WORKFLOW_CONDITIONAL_EVAL:
     case SpanType.WORKFLOW_PARALLEL:
     case SpanType.WORKFLOW_LOOP:
     case SpanType.WORKFLOW_SLEEP:
-    case SpanType.WORKFLOW_WAIT_EVENT: {
-      // These spans inherit entityName from the enclosing workflow, so it names
-      // the workflow and not the step, and every sibling would share one name.
-      // A step span sets its own entity, and its id is the step id; the other
-      // control-flow spans set none, so they keep their own name instead.
-      if (span.entityType === EntityType.WORKFLOW_STEP) {
-        return span.entityId;
-      }
+    case SpanType.WORKFLOW_WAIT_EVENT:
       return undefined;
-    }
 
     default:
       return span.entityName ?? span.entityId;
@@ -246,8 +258,11 @@ function addWorkflowAttributes(attributes: Attributes, span: AnyExportedSpan, sp
 
   // A step span carries its own step id as its entity id, and that is the only
   // place the step's identity survives on the exported span.
-  if (span.type === SpanType.WORKFLOW_STEP && span.entityType === EntityType.WORKFLOW_STEP && span.entityId) {
-    attributes[`mastra.${spanType}.step_id`] = span.entityId;
+  if (span.type === SpanType.WORKFLOW_STEP) {
+    const stepId = getWorkflowStepId(span);
+    if (stepId) {
+      attributes[`mastra.${spanType}.step_id`] = stepId;
+    }
   }
 
   const workflowAttrs = span.attributes as Record<string, unknown> | undefined;

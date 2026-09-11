@@ -309,6 +309,23 @@ describe('getSpanName - workflow control flow', () => {
     expect(getSpanName(second)).toBe('condition 1');
   });
 
+  it('still identifies a step span that carries an id but no entity type', () => {
+    // Both producers in the repo set entityType, but entityType is absent only
+    // when no ancestor set one either, so an entityId here is the step's own.
+    const step = createWorkflowSpan(
+      SpanType.WORKFLOW_STEP,
+      "workflow step: 'lone'",
+      {},
+      {
+        entityType: undefined,
+        entityId: 'lone',
+        entityName: undefined,
+      },
+    );
+
+    expect(getSpanName(step)).toBe('workflow_step lone');
+  });
+
   it('leaves span types that own their entity alone', () => {
     const run = createWorkflowSpan(
       SpanType.WORKFLOW_RUN,
@@ -403,6 +420,34 @@ describe('getAttributes - workflow control flow', () => {
       'mastra.workflow_sleep.duration_ms': 500,
       'mastra.workflow_sleep.until_date': until.toISOString(),
       'mastra.workflow_sleep.sleep_type': 'dynamic',
+    });
+  });
+
+  it('exports what a wait-event span was waiting for', () => {
+    const span = createWorkflowSpan(SpanType.WORKFLOW_WAIT_EVENT, 'wait', {
+      eventName: 'approval',
+      timeoutMs: 30000,
+    });
+
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_wait_event.event_name': 'approval',
+      'mastra.workflow_wait_event.timeout_ms': 30000,
+    });
+  });
+
+  it('exports the status of a workflow run', () => {
+    const span = createWorkflowSpan(
+      SpanType.WORKFLOW_RUN,
+      'workflow run',
+      { status: 'failed' },
+      {
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'demo-workflow',
+      },
+    );
+
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_run.status': 'failed',
     });
   });
 
