@@ -204,7 +204,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return {
       create: input => store.create({ agent: input }),
       getByIdResolved: async (id, options) => {
-        if (options?.versionId || options?.versionNumber) {
+        if (options?.versionId !== undefined || options?.versionNumber !== undefined) {
           // Fetch the agent metadata first
           const agent = await store.getById(id);
           if (!agent) return null;
