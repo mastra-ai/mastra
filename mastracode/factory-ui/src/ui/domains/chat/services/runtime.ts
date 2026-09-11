@@ -57,9 +57,10 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
       const usage = event.usage;
-      const stepTokens = usage.completionTokens + (usage.reasoningTokens ?? 0);
+      const stepTokens =
+        usage.completionTokens === undefined ? undefined : usage.completionTokens + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
-      if (state._decodeStartedAt > 0 && stepTokens > 0) {
+      if (state._decodeStartedAt > 0 && stepTokens !== undefined && stepTokens > 0) {
         const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
         const instantaneous = stepTokens / decodeSeconds;
         tokensPerSec =

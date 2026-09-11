@@ -1,7 +1,7 @@
 import type { SlashCommandContext } from './types.js';
 
 export function handleCostCommand(ctx: SlashCommandContext): void {
-  const formatNumber = (n: number) => n.toLocaleString();
+  const formatNumber = (n: number | undefined) => (n === undefined ? 'unknown' : n.toLocaleString());
 
   // Read from AgentController display state (canonical source)
   const ds = ctx.state.session.displayState.get();

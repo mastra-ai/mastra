@@ -698,6 +698,7 @@ export class AgentController<TState = {}> {
         }
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
+        session.setTokenUsage({});
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
       } else {
@@ -721,6 +722,7 @@ export class AgentController<TState = {}> {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
+        session.setTokenUsage({});
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
       }
@@ -2336,6 +2338,7 @@ export class AgentController<TState = {}> {
   private async persistTokenUsage(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
     if (!threadId || !this.#resolveStorage()) return;
+    const tokenUsage = session.getTokenUsage();
 
     try {
       const memoryStorage = await this.getMemoryStorage();
@@ -2344,7 +2347,7 @@ export class AgentController<TState = {}> {
         await memoryStorage.saveThread({
           thread: {
             ...thread,
-            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
+            metadata: { ...thread.metadata, tokenUsage },
             updatedAt: new Date(),
           },
         });

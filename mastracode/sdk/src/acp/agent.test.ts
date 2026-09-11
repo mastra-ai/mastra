@@ -96,6 +96,47 @@ describe('ACP Agent - StopReason Mapping', () => {
   });
 });
 
+describe('ACP Agent - Usage reporting', () => {
+  it.each([
+    {
+      name: 'complete usage',
+      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      expected: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    },
+    {
+      name: 'unknown usage',
+      usage: { promptTokens: undefined, completionTokens: undefined, totalTokens: undefined },
+      expected: undefined,
+    },
+  ])('reports $name honestly', async ({ usage, expected }) => {
+    let eventListener: ((event: AgentControllerEvent) => void) | undefined;
+    const session = {
+      subscribe: vi.fn(listener => {
+        eventListener = listener;
+        return vi.fn();
+      }),
+      thread: {
+        create: vi.fn().mockResolvedValue({ id: 'thread-1' }),
+        switch: vi.fn().mockResolvedValue(undefined),
+      },
+      mode: { get: vi.fn(() => 'default') },
+      model: { get: vi.fn(() => 'test-model') },
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Session;
+    const controller = { listAvailableModels: vi.fn().mockResolvedValue([]) } as unknown as AgentController;
+    const connection = { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection;
+    const agent = new MastraCodeAcpAgent(connection, controller, session, [] satisfies AgentControllerMode[]);
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+
+    const prompt = agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'hello' }] });
+    await vi.waitFor(() => expect(session.sendMessage).toHaveBeenCalledTimes(1));
+    eventListener?.({ type: 'usage_update', usage });
+    eventListener?.({ type: 'agent_end', reason: 'complete' });
+
+    await expect(prompt).resolves.toEqual({ stopReason: 'end_turn', ...(expected ? { usage: expected } : {}) });
+  });
+});
+
 describe('ACP Agent - Prompt concurrency', () => {
   it('serializes thread switching for concurrent prompts', async () => {
     let eventListener: ((event: AgentControllerEvent) => void) | undefined;

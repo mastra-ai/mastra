@@ -129,6 +129,28 @@ describe('chat runtime consumers', () => {
     expect(await screen.findByText('Observational memory phase: buffering')).toBeInTheDocument();
   });
 
+  it('keeps unknown token counts distinct from a measured zero', async () => {
+    const session = renderRuntime();
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Memory budgets/ });
+
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: { tokenUsage: {} },
+    });
+    await user.click(screen.getByRole('button', { name: 'Cost' }));
+    expect(
+      await screen.findByText('Tokens — prompt: unknown, completion: unknown, total: unknown'),
+    ).toBeInTheDocument();
+
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: { tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } },
+    });
+    await user.click(screen.getByRole('button', { name: 'Cost' }));
+    expect(await screen.findByText('Tokens — prompt: 0, completion: 0, total: 0')).toBeInTheDocument();
+  });
+
   it.each([
     { scenario: 'no snapshot', resetState: undefined, restoreSnapshot: false },
     { scenario: 'matching thread', resetState: { ...snapshot, threadId: 'next-thread' }, restoreSnapshot: true },

@@ -579,6 +579,46 @@ describe('ACP Event Mapper', () => {
         reasoningTokens: 10,
       });
     });
+
+    it.each([
+      {
+        name: 'known then unknown',
+        usages: [
+          { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+          { promptTokens: undefined, completionTokens: undefined, totalTokens: undefined },
+        ],
+      },
+      {
+        name: 'unknown then known',
+        usages: [
+          { promptTokens: undefined, completionTokens: undefined, totalTokens: undefined },
+          { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+        ],
+      },
+    ])('keeps $name primary counts unknown', ({ usages }) => {
+      const state = createPromptState('session-1');
+      for (const usage of usages) {
+        handleAgentControllerEvent({ type: 'usage_update', usage }, state, mockConnection, mockSession);
+      }
+
+      expect(state.usage?.promptTokens).toBeUndefined();
+      expect(state.usage?.completionTokens).toBeUndefined();
+      expect(state.usage?.totalTokens).toBeUndefined();
+    });
+
+    it('adopts the first usage update when the prompt has no prior measurements', () => {
+      const state = createPromptState('session-1');
+      state.usage = undefined;
+
+      handleAgentControllerEvent(
+        { type: 'usage_update', usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 } },
+        state,
+        mockConnection,
+        mockSession,
+      );
+
+      expect(state.usage).toEqual({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
+    });
   });
 
   describe('agent_end - stopReason mapping', () => {

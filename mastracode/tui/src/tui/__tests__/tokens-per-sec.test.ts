@@ -186,6 +186,25 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.latestRequestPromptTokens).toBe(90_000);
   });
 
+  it('does not invent request or rate measurements for unknown usage', async () => {
+    const state = createMinimalState({ decodeStartedAt: 1000, tokensPerSec: 25, latestRequestPromptTokens: 50 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(2000);
+    await dispatchEvent(
+      {
+        type: 'usage_update',
+        usage: { promptTokens: undefined, completionTokens: undefined, totalTokens: undefined },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.latestRequestPromptTokens).toBeUndefined();
+    expect(state.tokensPerSec).toBe(25);
+    expect(state.decodeStartedAt).toBe(0);
+  });
+
   it('records stream activity on assistant message updates', async () => {
     const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
     const ectx = createEctx();

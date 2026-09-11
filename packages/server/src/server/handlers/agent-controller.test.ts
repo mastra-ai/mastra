@@ -647,6 +647,25 @@ describe('agent-controller routes', () => {
       expect(res.running).toBe(false);
     });
 
+    it('returns unknown token counts without replacing them with zero', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      session.setTokenUsage({ totalTokens: 999 });
+      session.emit({ type: 'usage_update', usage: { totalTokens: 999 } });
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { tokenUsage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } };
+
+      expect(res.tokenUsage?.promptTokens).toBeUndefined();
+      expect(res.tokenUsage?.completionTokens).toBeUndefined();
+      expect(res.tokenUsage?.totalTokens).toBe(999);
+      expect(JSON.parse(JSON.stringify(res)).tokenUsage).toEqual({ totalTokens: 999 });
+    });
+
     it('reports running: true while a run is active', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

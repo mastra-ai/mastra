@@ -171,6 +171,7 @@ import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import { toolSuspensionSameRunResumeScenario } from './tool-suspension-same-run-resume.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
+import { unknownTokenUsageScenario } from './unknown-token-usage.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
@@ -358,6 +359,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,
+  'unknown-token-usage': unknownTokenUsageScenario,
   'update-command-prompt': updateCommandPromptScenario,
   'update-startup-prompt': updateStartupPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,

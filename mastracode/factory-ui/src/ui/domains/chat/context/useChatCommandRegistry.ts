@@ -47,6 +47,10 @@ function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null)
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
 
+function formatUsageCount(value: number | undefined): string {
+  return value === undefined ? 'unknown' : value.toLocaleString();
+}
+
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
@@ -182,9 +186,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       requiresSession: false,
       execute: async () => {
         pushNotice(
-          !usage?.totalTokens
+          usage === undefined
             ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            : `Tokens — prompt: ${formatUsageCount(usage.promptTokens)}, completion: ${formatUsageCount(usage.completionTokens)}, total: ${formatUsageCount(usage.totalTokens)}`,
         );
       },
     },

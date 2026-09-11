@@ -80,6 +80,14 @@ export type SessionSendNotificationSignalOptions = {
   requestContext?: RequestContext;
 };
 
+/** Primary usage fields remain unknown when any contributing step omits them. */
+type PrimaryUsageField = 'promptTokens' | 'completionTokens' | 'totalTokens';
+
+function addPrimaryUsageField(usage: TokenUsage, key: PrimaryUsageField, value: number | undefined): void {
+  const current = usage[key];
+  usage[key] = current !== undefined && value !== undefined ? current + value : undefined;
+}
+
 /** Usage fields that are summed across steps when present on a step's usage. */
 type OptionalUsageField =
   | 'reasoningTokens'
@@ -799,6 +807,9 @@ export class SessionThread {
     }
 
     this.set({ threadId });
+    if (previousThreadId !== threadId) {
+      session.setTokenUsage({});
+    }
 
     await this.loadMetadata();
 
@@ -838,8 +849,8 @@ export class SessionThread {
   /**
    * Hydrate the session's per-thread settings from the active thread's metadata:
    * token usage, the persisted mode (restored first), the per-mode model, and
-   * observer/reflector model ids + thresholds. Best-effort: on any failure the
-   * token tally is reset and the rest is left at defaults.
+   * observer/reflector model ids + thresholds. Best-effort: failures keep the
+   * caller-provided tally and leave the remaining settings at defaults.
    */
   async loadMetadata(): Promise<void> {
     const session = this.#owner;
@@ -857,16 +868,15 @@ export class SessionThread {
       const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
       if (savedUsage) {
         session.setTokenUsage({
-          ...createEmptyTokenUsage(),
           ...savedUsage,
-          promptTokens: savedUsage.promptTokens ?? 0,
-          completionTokens: savedUsage.completionTokens ?? 0,
-          totalTokens: savedUsage.totalTokens ?? 0,
+          promptTokens: savedUsage.promptTokens,
+          completionTokens: savedUsage.completionTokens,
+          totalTokens: savedUsage.totalTokens,
           cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
           cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
         });
       } else {
-        session.resetTokenUsage();
+        session.setTokenUsage({});
       }
 
       const meta = thread?.metadata as Record<string, unknown> | undefined;
@@ -960,7 +970,7 @@ export class SessionThread {
         }
       }
     } catch {
-      session.resetTokenUsage();
+      // Keep the current tally. Thread switches clear it to unknown before loading.
     }
   }
 }
@@ -4030,9 +4040,9 @@ export class Session<TState = unknown> {
 
   /** Fold a single step's usage into the running tally. */
   addUsage(stepUsage: TokenUsage): void {
-    this.#tokenUsage.promptTokens += stepUsage.promptTokens;
-    this.#tokenUsage.completionTokens += stepUsage.completionTokens;
-    this.#tokenUsage.totalTokens += stepUsage.totalTokens;
+    addPrimaryUsageField(this.#tokenUsage, 'promptTokens', stepUsage.promptTokens);
+    addPrimaryUsageField(this.#tokenUsage, 'completionTokens', stepUsage.completionTokens);
+    addPrimaryUsageField(this.#tokenUsage, 'totalTokens', stepUsage.totalTokens);
     addOptionalUsageField(this.#tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
     addOptionalUsageField(this.#tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
     addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);

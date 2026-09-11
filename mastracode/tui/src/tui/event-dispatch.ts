@@ -276,15 +276,18 @@ export async function dispatchEvent(
     case 'usage_update': {
       // Token accumulation handled by AgentController display state. Keep the
       // latest step separate for context auditing; cumulative usage is billing data.
-      state.latestRequestPromptTokens = event.usage.promptTokens ?? 0;
+      state.latestRequestPromptTokens = event.usage.promptTokens;
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta
       // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
       // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
       const now = Date.now();
-      const stepTokens = (event.usage.completionTokens ?? 0) + (event.usage.reasoningTokens ?? 0);
-      if (state.decodeStartedAt > 0 && stepTokens > 0) {
+      const stepTokens =
+        event.usage.completionTokens === undefined
+          ? undefined
+          : event.usage.completionTokens + (event.usage.reasoningTokens ?? 0);
+      if (state.decodeStartedAt > 0 && stepTokens !== undefined && stepTokens > 0) {
         const decodeSec = (now - state.decodeStartedAt) / 1000;
         if (decodeSec > 0) {
           const instantaneous = stepTokens / decodeSec;

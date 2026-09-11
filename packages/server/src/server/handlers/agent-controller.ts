@@ -306,9 +306,9 @@ const omProgressSummarySchema = z.object({
   projectedReflectionSavings: z.number(),
 });
 const tokenUsageSchema = z.object({
-  promptTokens: z.number(),
-  completionTokens: z.number(),
-  totalTokens: z.number(),
+  promptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
   cacheCreationInputTokens: z.number().optional(),

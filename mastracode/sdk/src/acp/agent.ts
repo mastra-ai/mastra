@@ -11,9 +11,20 @@ import type {
   ContentBlock,
 } from '@agentclientprotocol/sdk';
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
-import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerMode, Session, TokenUsage } from '@mastra/core/agent-controller';
 import { handleAgentControllerEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
+
+type CompleteTokenUsage = TokenUsage & Required<Pick<TokenUsage, 'promptTokens' | 'completionTokens' | 'totalTokens'>>;
+
+function hasCompleteTokenUsage(usage: TokenUsage | undefined): usage is CompleteTokenUsage {
+  return (
+    usage !== undefined &&
+    typeof usage.promptTokens === 'number' &&
+    typeof usage.completionTokens === 'number' &&
+    typeof usage.totalTokens === 'number'
+  );
+}
 
 /**
  * ACP Agent implementation that wraps a mastracode Controller.
@@ -144,21 +155,16 @@ export class MastraCodeAcpAgent implements Agent {
         reason: 'complete' | 'aborted' | 'error' | 'suspended';
         usage: PromptState['usage'];
       }>(resolve => {
-        const usage: PromptState['usage'] = {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-        };
-
-        this.currentPromptState = {
+        const promptState: PromptState = {
           sessionId,
           lastTextLength: 0,
-          usage,
+          usage: undefined,
           resolve: reason => {
-            resolve({ reason, usage });
+            resolve({ reason, usage: promptState.usage });
             this.currentPromptState = null;
           },
         };
+        this.currentPromptState = promptState;
       });
 
       // Send the message to the session
@@ -174,14 +180,18 @@ export class MastraCodeAcpAgent implements Agent {
 
       return {
         stopReason: mapStopReason(reason),
-        usage: {
-          inputTokens: usage.promptTokens,
-          outputTokens: usage.completionTokens,
-          totalTokens: usage.totalTokens,
-          thoughtTokens: usage.reasoningTokens,
-          cachedReadTokens: usage.cachedInputTokens,
-          cachedWriteTokens: usage.cacheCreationInputTokens,
-        },
+        ...(hasCompleteTokenUsage(usage)
+          ? {
+              usage: {
+                inputTokens: usage.promptTokens,
+                outputTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens,
+                thoughtTokens: usage.reasoningTokens,
+                cachedReadTokens: usage.cachedInputTokens,
+                cachedWriteTokens: usage.cacheCreationInputTokens,
+              },
+            }
+          : {}),
       };
     } finally {
       resolveMutex!();

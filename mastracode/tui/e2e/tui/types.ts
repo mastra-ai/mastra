@@ -170,6 +170,7 @@ export type ScenarioName =
   | 'plugins-streaming-tool-output'
   | 'tool-schema-compat'
   | 'tool-suspension-same-run-resume'
+  | 'unknown-token-usage'
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'

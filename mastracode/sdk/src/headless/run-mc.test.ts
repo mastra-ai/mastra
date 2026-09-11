@@ -13,7 +13,11 @@ import type { ResolutionPolicy } from './types.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop') {
+type TestUsage = { inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown };
+
+const completeUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+
+function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop', usage: TestUsage = completeUsage) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -24,14 +28,14 @@ function textStream(text: string, finishReason: 'stop' | 'tool-calls' = 'stop') 
       controller.enqueue({
         type: 'finish',
         finishReason,
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usage,
       });
       controller.close();
     },
   });
 }
 
-function toolCallStream() {
+function toolCallStream(usage: TestUsage = completeUsage) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -46,7 +50,7 @@ function toolCallStream() {
       controller.enqueue({
         type: 'finish',
         finishReason: 'tool-calls',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usage,
       });
       controller.close();
     },
@@ -123,6 +127,48 @@ describe('runMC', () => {
     expect(result.text).toBe('The answer is 4.');
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
     expect(result.threadId).toBeTruthy();
+  });
+
+  it.each([
+    {
+      name: 'two complete steps',
+      usages: [completeUsage, completeUsage],
+      expected: { inputTokens: 20, outputTokens: 40, totalTokens: 60 },
+    },
+    {
+      name: 'known then unknown',
+      usages: [completeUsage, { inputTokens: {}, outputTokens: {} }],
+      expected: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    },
+    {
+      name: 'unknown then known',
+      usages: [{ inputTokens: {}, outputTokens: {} }, completeUsage],
+      expected: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    },
+    {
+      name: 'independently incomplete fields',
+      usages: [{ inputTokens: 5, outputTokens: {} }, completeUsage],
+      expected: { inputTokens: 15, outputTokens: undefined, totalTokens: undefined },
+    },
+    {
+      name: 'measured zero then known',
+      usages: [{ inputTokens: 0, outputTokens: 0, totalTokens: 0 }, completeUsage],
+      expected: completeUsage,
+    },
+  ])('accumulates $name without inventing counts', async ({ usages, expected }) => {
+    let call = 0;
+    const { controller, session } = await makeHarness({
+      withReadFileTool: true,
+      doStream: async () => {
+        const usage = usages[call++]!;
+        return { stream: call === 1 ? toolCallStream(usage) : textStream('Done', 'stop', usage) };
+      },
+    });
+
+    const result = await runMC({ controller, session, prompt: 'Read then answer' }).result;
+
+    expect(result.status).toBe('completed');
+    expect(result.usage).toEqual(expected);
   });
 
   it('yields controller events while iterating, then resolves', async () => {

@@ -21003,9 +21003,9 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
     | undefined;
   tokenUsage?:
     | {
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
+        promptTokens?: number | undefined;
+        completionTokens?: number | undefined;
+        totalTokens?: number | undefined;
         reasoningTokens?: number | undefined;
         cachedInputTokens?: number | undefined;
         cacheCreationInputTokens?: number | undefined;

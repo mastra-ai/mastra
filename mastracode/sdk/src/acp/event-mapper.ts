@@ -63,7 +63,7 @@ function mapToolKind(
 export interface PromptState {
   sessionId: string;
   lastTextLength: number;
-  usage: TokenUsage;
+  usage: TokenUsage | undefined;
   resolve: (reason: 'complete' | 'aborted' | 'error' | 'suspended') => void;
 }
 
@@ -148,7 +148,11 @@ export function handleAgentControllerEvent(
       break;
 
     case 'usage_update':
-      accumulateUsage(state.usage, event.usage);
+      if (state.usage) {
+        accumulateUsage(state.usage, event.usage);
+      } else {
+        state.usage = { ...event.usage };
+      }
       break;
 
     case 'agent_end':
@@ -254,12 +258,18 @@ async function handleToolSuspended(
 }
 
 function accumulateUsage(target: TokenUsage, usage: TokenUsage): void {
-  target.promptTokens += usage.promptTokens;
-  target.completionTokens += usage.completionTokens;
-  target.totalTokens += usage.totalTokens;
-  if (usage.reasoningTokens) target.reasoningTokens = (target.reasoningTokens ?? 0) + usage.reasoningTokens;
-  if (usage.cachedInputTokens) target.cachedInputTokens = (target.cachedInputTokens ?? 0) + usage.cachedInputTokens;
-  if (usage.cacheCreationInputTokens) {
+  for (const field of ['promptTokens', 'completionTokens', 'totalTokens'] as const) {
+    const current = target[field];
+    const next = usage[field];
+    target[field] = current !== undefined && next !== undefined ? current + next : undefined;
+  }
+  if (usage.reasoningTokens !== undefined) {
+    target.reasoningTokens = (target.reasoningTokens ?? 0) + usage.reasoningTokens;
+  }
+  if (usage.cachedInputTokens !== undefined) {
+    target.cachedInputTokens = (target.cachedInputTokens ?? 0) + usage.cachedInputTokens;
+  }
+  if (usage.cacheCreationInputTokens !== undefined) {
     target.cacheCreationInputTokens = (target.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
   }
 }

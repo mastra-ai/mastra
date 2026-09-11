@@ -47,6 +47,21 @@ interface MutableResult {
   threadId?: string;
 }
 
+function accumulateUsage(
+  current: RunMCResult['usage'],
+  next: NonNullable<RunMCResult['usage']>,
+): NonNullable<RunMCResult['usage']> {
+  if (!current) return { ...next };
+
+  const accumulated = { ...current };
+  for (const field of ['inputTokens', 'outputTokens', 'totalTokens'] as const) {
+    const currentValue = current[field];
+    const nextValue = next[field];
+    accumulated[field] = currentValue !== undefined && nextValue !== undefined ? currentValue + nextValue : undefined;
+  }
+  return accumulated;
+}
+
 function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   switch (event.type) {
     case 'message_end':
@@ -68,11 +83,11 @@ function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
       break;
     }
     case 'usage_update':
-      acc.usage = {
+      acc.usage = accumulateUsage(acc.usage, {
         inputTokens: event.usage.promptTokens,
         outputTokens: event.usage.completionTokens,
         totalTokens: event.usage.totalTokens,
-      };
+      });
       break;
     case 'error':
       acc.error = {

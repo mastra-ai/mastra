@@ -781,17 +781,22 @@ export class SessionRunEngine {
           );
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
+        const promptTokens = usageRecord
+          ? (getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens'))
+          : undefined;
+        const completionTokens = usageRecord
+          ? (getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens'))
+          : undefined;
+        const reportedTotalTokens = usageRecord ? getUsageNumber(usageRecord, 'totalTokens') : undefined;
+        const totalTokens =
+          reportedTotalTokens ??
+          (promptTokens !== undefined && completionTokens !== undefined ? promptTokens + completionTokens : undefined);
+        const stepUsage: TokenUsage = {
+          promptTokens,
+          completionTokens,
+          totalTokens,
+        };
         if (usageRecord) {
-          const promptTokens =
-            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-          const completionTokens =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-          const stepUsage: TokenUsage = {
-            promptTokens,
-            completionTokens,
-            totalTokens,
-          };
           addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
           addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
           addOptionalUsageField(
@@ -812,12 +817,12 @@ export class SessionRunEngine {
           if (usageRecord.raw !== undefined) {
             stepUsage.raw = usageRecord.raw;
           }
-
-          this.#session.addUsage(stepUsage);
-
-          this.#machinery.persistTokenUsage().catch(() => {});
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
+
+        this.#session.addUsage(stepUsage);
+
+        this.#machinery.persistTokenUsage().catch(() => {});
+        this.#session.emit({ type: 'usage_update', usage: stepUsage });
         break;
       }
 
