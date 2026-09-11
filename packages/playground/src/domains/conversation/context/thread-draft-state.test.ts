@@ -122,6 +122,7 @@ describe('complete draft lifecycle', () => {
     const { state } = mount();
     state.updateDraft('thread', previous => ({ ...previous, text: previous.text + ' edit' }));
     await ready(state);
+    await vi.waitFor(() => expect(state.getSnapshot().status.saving).toBe(false));
     expect(state.getDraft('thread').text).toBe('Saved edit');
     expect(state.getDraft('thread').attachments).toHaveLength(1);
     expect((await readThreadDraft('scope')).text).toBe('Saved edit');
