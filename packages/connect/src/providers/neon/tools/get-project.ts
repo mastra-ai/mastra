@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 8d1f634fd53e — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 7c94e2fbfccf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 

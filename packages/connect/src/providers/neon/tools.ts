@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 8d1f634fd53e — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 7c94e2fbfccf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -16,6 +16,9 @@ import { listDatabasesTool } from './tools/list-databases.js';
 import { listEndpointsTool } from './tools/list-endpoints.js';
 import { listOperationsTool } from './tools/list-operations.js';
 import { listProjectsTool } from './tools/list-projects.js';
+import { setDefaultBranchTool } from './tools/set-default-branch.js';
+import { updateBranchTool } from './tools/update-branch.js';
+import { updateProjectTool } from './tools/update-project.js';
 
 export function createNeonTools(options?: ProviderToolsOptions) {
   const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
@@ -34,6 +37,9 @@ export function createNeonTools(options?: ProviderToolsOptions) {
     neon_list_endpoints: listEndpointsTool(platformProxy),
     neon_list_operations: listOperationsTool(platformProxy),
     neon_list_projects: listProjectsTool(platformProxy),
+    neon_set_default_branch: setDefaultBranchTool(platformProxy),
+    neon_update_branch: updateBranchTool(platformProxy),
+    neon_update_project: updateProjectTool(platformProxy),
   };
   return applyAllowTools(tools, options?.allowTools);
 }

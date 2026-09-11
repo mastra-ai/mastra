@@ -605,5 +605,114 @@
       "db_name": "example"
     },
     "response": {}
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_project",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}",
+    "input": {
+      "project_id": "example",
+      "body": {
+        "project": {}
+      }
+    },
+    "response": {
+      "operations": [],
+      "project": {
+        "id": "shiny-wind-028834",
+        "platform_id": "aws",
+        "region_id": "aws-us-east-2",
+        "name": "myproject",
+        "provisioner": "k8s-pod",
+        "pg_version": 15,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-12-04T02:39:25Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "branch_logical_size_limit": 0,
+        "cpu_used_sec": 213230,
+        "owner_id": "1232111",
+        "creation_source": "console",
+        "store_passwords": true,
+        "branch_logical_size_limit_bytes": 10500,
+        "data_storage_bytes_hour": 1040,
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "history_retention_seconds": 604800,
+        "consumption_period_start": "2023-02-01T00:00:00Z",
+        "consumption_period_end": "2023-03-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_branch",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "branch": {}
+      }
+    },
+    "response": {
+      "branch": {
+        "id": "br-icy-dream-250089",
+        "project_id": "shiny-wind-028834",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1E19478",
+        "name": "mybranch",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "cpu_used_sec": 100,
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_set_default_branch",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/set_as_default",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "branch": {
+        "cpu_used_sec": 1,
+        "active_time_seconds": 1,
+        "compute_time_seconds": 1,
+        "written_data_bytes": 100,
+        "data_transfer_bytes": 100,
+        "id": "br-icy-dream-250089",
+        "project_id": "shiny-wind-028834",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1E19478",
+        "name": "mybranch",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "operations": []
+    }
   }
 ]

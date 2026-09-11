@@ -24,7 +24,7 @@ The resolver discovers active project connections. Where multiple connections ma
 
 | Provider    | Tools | Initial scope                                                                                                         |
 | ----------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
-| Neon        | 14    | List/get/create projects; list/get/create/delete branches; list databases; list/get compute endpoints                 |
+| Neon        | 17    | List/get/create projects; list/get/create/delete branches; list databases; list/get compute endpoints                 |
 | Resend      | 8     | Send/get/list/cancel emails; create/get/list/verify domains                                                           |
 | incident.io | 11    | List/get/create incidents; list/get/create/update follow-ups; list/get actions; list severities and incident statuses |
 
@@ -57,3 +57,5 @@ See [maintainer generation commands](./scripts/README.md) and [third-party notic
 Neon operation completion: `neon_get_operation`, `neon_list_operations`.
 
 Neon schema inspection: `neon_get_branch_schema`, `neon_compare_branch_schema`.
+
+Neon project and branch configuration: `neon_update_project`, `neon_update_branch`, `neon_set_default_branch`.
