@@ -5,7 +5,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -354,6 +354,66 @@ describe('ChatProvider', () => {
 
     expect(captured).toHaveLength(1);
     expect(captured[0].url).toContain('/generate');
+  });
+
+  describe('when execution mode changes during an active request', () => {
+    it.each([
+      ['generate', { chatWithGenerate: true }],
+      ['network', { chatWithNetwork: true }],
+    ] as const)('still aborts the original %s request after switching to stream', async (mode, modelSettings) => {
+      const started = createDeferred();
+      const release = createDeferred();
+      const aborted = vi.fn();
+      server.use(
+        ...baseHandlers([]),
+        http.post(`${BASE_URL}/api/agents/agent-1/${mode}`, async ({ request }) => {
+          request.signal.addEventListener('abort', aborted);
+          started.resolve();
+          await release.promise;
+          return new HttpResponse(null, { status: 499 });
+        }),
+      );
+      const Controls = () => {
+        const send = useChatSend();
+        const { cancelRun } = useChatRunning();
+        return (
+          <>
+            <button onClick={() => send({ message: 'Start a request' })}>Send</button>
+            <button onClick={() => cancelRun?.()}>Stop</button>
+          </>
+        );
+      };
+      const ModeSwitchHarness = () => {
+        const [stream, setStream] = useState(false);
+        return (
+          <>
+            <button onClick={() => setStream(true)}>Switch to stream</button>
+            <ChatProvider
+              agentId="agent-1"
+              threadId="thread-1"
+              initialMessages={[]}
+              settings={{ modelSettings: stream ? {} : modelSettings }}
+            >
+              <Controls />
+            </ChatProvider>
+          </>
+        );
+      };
+      render(
+        <Wrapper>
+          <ModeSwitchHarness />
+        </Wrapper>,
+      );
+      try {
+        fireEvent.click(screen.getByRole('button', { name: 'Send', exact: true }));
+        await started.promise;
+        fireEvent.click(screen.getByRole('button', { name: 'Switch to stream' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Stop', exact: true }));
+        await waitFor(() => expect(aborted).toHaveBeenCalledOnce());
+      } finally {
+        release.resolve();
+      }
+    });
   });
 
   it('exposes a stable send handle and a cancelRun function', async () => {
