@@ -104,7 +104,7 @@ When the thread is idle, `queueMessage()` starts a run immediately. When the thr
 
 ### Inspect and cancel queued input
 
-Use `listPendingSignals()` to show this agent's queued signals on a thread, and `removePendingSignals()` to drop one or more before delivery. These methods are scoped to `agent.id`; they don't list or remove another agent's queued inputs on the same thread. Entries come back in delivery order with a `scope` of `pre-run`, `pending`, or `idle`, and each carries the same `signal.id` that `sendMessage()`, `queueMessage()`, and `sendSignal()` return.
+Use `listPendingSignals()` to show this agent's queued signals on a thread, and `removePendingSignals()` to drop one or more before delivery. These methods are scoped to `agent.id`. They don't list or remove another agent's queued inputs on the same thread. Entries come back in delivery order with a `scope` of `pre-run`, `pending`, or `idle`, and each carries the same `signal.id` that `sendMessage()`, `queueMessage()`, and `sendSignal()` return.
 
 The following example requires a run already active on `thread_456`. On an idle thread, `queueMessage()` starts a run immediately, and its initial signal isn't a cancellable queue entry.
 
@@ -126,7 +126,7 @@ const { removedSignalIds } = agent.removePendingSignals({
 
 `removePendingSignals()` accepts an array of IDs and returns `{ removedSignalIds: string[] }` with only those actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. A successful removal cancels queued delivery only: it doesn't abort a run, retract an `accepted` result, undo a state update from `sendStateSignal()`, or change a notification record's status. For example, a notification marked `delivered` at acceptance stays `delivered` even if you remove its queued signal.
 
-The queue is held in memory by the process that owns the thread, so these methods reflect only the current process; see [Distributed and serverless deployments](#distributed-and-serverless-deployments).
+The queue is held in memory by the process that owns the thread, so these methods reflect only the current process. See [Distributed and serverless deployments](#distributed-and-serverless-deployments).
 
 ## Signal context
 

@@ -195,7 +195,7 @@ await agent.queueMessage({
 
 ### `listPendingSignals()`
 
-List this agent's signals still queued for a thread, in delivery order. Other agent IDs' inputs are excluded, even on the same thread. Each entry reports its `scope` (`'pre-run'`, `'pending'`, or `'idle'`), the `runId` it is attached to, and the serialized `signal`. Only the in-memory queue of the server process that handles the request is reflected.
+List this agent's signals still queued for a thread, in delivery order. Other agent IDs' inputs are excluded, even on the same thread. Each entry reports its `scope` (`'pre-run'`, `'pending'`, or `'idle'`), the `runId` it's attached to, and the serialized `signal`. Only the in-memory queue of the server process that handles the request is reflected.
 
 ```typescript
 const { signals } = await agent.listPendingSignals({
@@ -206,7 +206,7 @@ const { signals } = await agent.listPendingSignals({
 
 ### `removePendingSignals()`
 
-Remove this agent's queued signals by ID. Pass `signalIds: string[]` containing 1–1,000 non-empty IDs alongside `threadId` and optional `resourceId`. Use a single-element array to remove one signal.
+Remove this agent's queued signals by ID. Pass `signalIds: string[]` containing 1 to 1,000 non-empty IDs alongside `threadId` and optional `resourceId`. Use a single-element array to remove one signal.
 
 Returns `{ removedSignalIds: string[] }` with only IDs actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. Removal doesn't abort a run or roll back state updates, notification status, or an earlier acceptance result. See [cancellation semantics](/reference/agents/agent#removependingsignalsoptions).
 
