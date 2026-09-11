@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 
-interface ToolCallContextValue {
+export interface ToolCallContextValue {
   approveToolcall: (toolCallId: string, resumeData?: unknown) => void;
   declineToolcall: (toolCallId: string) => void;
   approveToolcallGenerate: (toolCallId: string) => void;
@@ -15,17 +15,8 @@ interface ToolCallContextValue {
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
 
-interface ToolCallProviderProps {
+interface ToolCallProviderProps extends ToolCallContextValue {
   children: ReactNode;
-  approveToolcall: (toolCallId: string, resumeData?: unknown) => void;
-  declineToolcall: (toolCallId: string) => void;
-  approveToolcallGenerate: (toolCallId: string) => void;
-  declineToolcallGenerate: (toolCallId: string) => void;
-  approveNetworkToolcall: (toolName: string, runId?: string) => void;
-  declineNetworkToolcall: (toolName: string, runId?: string) => void;
-  isRunning: boolean;
-  toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
-  networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
 }
 
 export function ToolCallProvider({
@@ -40,25 +31,35 @@ export function ToolCallProvider({
   toolCallApprovals,
   networkToolCallApprovals,
 }: ToolCallProviderProps) {
-  return (
-    <ToolCallContext.Provider
-      value={{
-        approveToolcall,
-        declineToolcall,
-        approveToolcallGenerate,
-        declineToolcallGenerate,
-        approveNetworkToolcall,
-        declineNetworkToolcall,
-        isRunning,
-        toolCallApprovals,
-        networkToolCallApprovals,
-      }}
-    >
-      {children}
-    </ToolCallContext.Provider>
+  const value = useMemo<ToolCallContextValue>(
+    () => ({
+      approveToolcall,
+      declineToolcall,
+      approveToolcallGenerate,
+      declineToolcallGenerate,
+      approveNetworkToolcall,
+      declineNetworkToolcall,
+      isRunning,
+      toolCallApprovals,
+      networkToolCallApprovals,
+    }),
+    [
+      approveToolcall,
+      declineToolcall,
+      approveToolcallGenerate,
+      declineToolcallGenerate,
+      approveNetworkToolcall,
+      declineNetworkToolcall,
+      isRunning,
+      toolCallApprovals,
+      networkToolCallApprovals,
+    ],
   );
+
+  return <ToolCallContext.Provider value={value}>{children}</ToolCallContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- provider and its hook intentionally share this module
 export function useToolCall() {
   const context = useContext(ToolCallContext);
 
