@@ -319,22 +319,6 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
 
   const candidates = `WITH ${ctes.join(',\n  ')}`;
 
-  if (plan.result === 'groups') {
-    const pageCondition = plan.cursor ? `AND threadId > ?` : '';
-    if (plan.cursor) values.push(plan.cursor.threadId);
-    values.push(plan.limit + 1);
-    return {
-      sql: `${candidates}
-SELECT threadId
-FROM candidates
-WHERE threadId IS NOT NULL ${pageCondition}
-GROUP BY threadId
-ORDER BY threadId ASC
-LIMIT ?`,
-      values,
-    };
-  }
-
   const orderField = plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   let pageCondition = '';
@@ -364,20 +348,6 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   const query = compileDuckDBTraceQuery(plan);
   const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
   const visibleRows = rows.slice(0, plan.limit);
-
-  if (plan.result === 'groups') {
-    const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
-    const last = groups.at(-1);
-    return coreStorage.traceQueryResponseSchema.parse({
-      groups,
-      page: {
-        next:
-          rows.length > plan.limit && last
-            ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
-            : null,
-      },
-    });
-  }
 
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),

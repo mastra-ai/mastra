@@ -220,15 +220,6 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(3);
   });
 
-  it('compiles grouped queries as distinct non-null thread IDs', () => {
-    const compiled = compileDuckDBTraceQuery(plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
-
-    expect(compiled.sql).toContain('WHERE threadId IS NOT NULL');
-    expect(compiled.sql).toContain('GROUP BY threadId');
-    expect(compiled.sql).toContain('ORDER BY threadId ASC');
-    expect(compiled.values.at(-1)).toBe(5);
-  });
-
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {
@@ -252,13 +243,11 @@ describe('DuckDB advanced trace query', () => {
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
     });
-    if (!('traces' in response)) throw new Error('Expected trace results');
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
   });
 });
 
 function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
-  if (plan.result !== 'traces') throw new Error('Expected a trace plan');
   return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
 }
 

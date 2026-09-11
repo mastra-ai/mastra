@@ -47,22 +47,32 @@ describe('api command registration', () => {
     expect(agentGet?.helpInformation()).not.toContain('--schema');
   });
 
-  it('exposes verbose trace and span trace commands', () => {
+  it('exposes trace list, get, span, and query commands', () => {
     const program = new Command();
     registerApiCommand(program);
 
     const api = program.commands.find(command => command.name() === 'api');
     const trace = api?.commands.find(command => command.name() === 'trace');
     const traceGet = trace?.commands.find(command => command.name() === 'get');
+    const traceQuery = trace?.commands.find(command => command.name() === 'query');
 
     expect(trace?.commands.find(command => command.name() === 'list')?.helpInformation()).toContain('--verbose');
     expect(traceGet?.helpInformation()).toContain('--verbose');
     expect(trace?.commands.find(command => command.name() === 'span')?.description()).toBe('Get a trace span');
+    expect(traceQuery?.helpInformation()).toContain('--schema');
+    expect(traceQuery?.helpInformation()).not.toContain('--verbose');
     expect(API_COMMANDS.traceList).toMatchObject({ method: 'GET', path: '/observability/traces/light' });
     expect(API_COMMANDS.traceGet).toMatchObject({ method: 'GET', path: '/observability/traces/:traceId/light' });
     expect(API_COMMANDS.traceSpan).toMatchObject({
       method: 'GET',
       path: '/observability/traces/:traceId/spans/:spanId',
+    });
+    expect(API_COMMANDS.traceQuery).toMatchObject({
+      method: 'POST',
+      path: '/observability/traces/query',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
     });
   });
 });
@@ -572,6 +582,63 @@ describe('api command executor', () => {
       data: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
       page: { total: 1, page: 0, perPage: 1, hasMore: false },
     });
+  });
+
+  it('queries traces with a JSON body and preserves cursor pagination', async () => {
+    const input = {
+      timeRange: {
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-08T00:00:00.000Z',
+      },
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+              { op: 'exists', path: 'error' },
+            ],
+          },
+        },
+      },
+      page: { limit: 25, after: 'previous-cursor' },
+    };
+    const response = {
+      traces: [
+        {
+          traceId: 'trace-1',
+          rootSpanId: 'span-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          startedAt: '2026-08-02T00:00:00.000Z',
+          endedAt: '2026-08-02T00:00:01.000Z',
+          entityName: 'weather-agent',
+          entityType: 'agent',
+          environment: 'production',
+          status: 'error',
+        },
+      ],
+      page: { next: 'next-cursor' },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/traces/query', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
   });
 
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {

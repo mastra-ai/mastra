@@ -94,7 +94,7 @@ const result = await mastraClient.queryTraces({
 
 The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse queries have a configurable 15-second execution timeout.
 
-See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, grouping, cursor pagination, response shapes, and errors.
+See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, cursor pagination, response shape, and errors.
 
 ## Deleting traces
 

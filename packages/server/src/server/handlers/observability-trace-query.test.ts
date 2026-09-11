@@ -88,7 +88,6 @@ describe('QUERY_TRACES', () => {
     );
 
     expect(response).toMatchObject({ traces: [{ traceId: 'trace-a' }] });
-    if (!('traces' in response)) throw new Error('Expected trace results');
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
     expect(response.traces[0]).not.toHaveProperty('scores');
     expect(getStore).toHaveBeenCalledWith('observability');

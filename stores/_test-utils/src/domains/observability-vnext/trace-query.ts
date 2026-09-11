@@ -4,7 +4,6 @@ import {
   parseTraceQueryRequest,
   planTraceQuery,
   type NormalizedTraceQueryRequest,
-  type TraceQueryGroupResponse,
   type TraceQueryRequest,
   type TraceQueryResponse,
   type TraceQueryTrace,
@@ -897,11 +896,6 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     request: { timeRange: fullRange, where: { op: 'notExists', path: 'threadId' } },
     expected: [{ traceId: 'trace-d' }],
   },
-  {
-    name: 'returns distinct non-null thread groups',
-    request: { timeRange: fullRange, group: { by: ['threadId'] } },
-    expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
-  },
 ];
 
 export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
@@ -911,18 +905,6 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
     .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores));
-
-  if (plan.result === 'groups') {
-    let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
-      compareTraceQueryStrings,
-    );
-    if (plan.cursor) groups = groups.filter(threadId => compareTraceQueryStrings(threadId, plan.cursor!.threadId) > 0);
-    const visible = groups.slice(0, plan.limit + 1);
-    const hasNext = visible.length > plan.limit;
-    const page = visible.slice(0, plan.limit);
-    const next = hasNext ? encodeTraceQueryCursor(plan, { result: 'groups', threadId: page[page.length - 1]! }) : null;
-    return { groups: page.map(threadId => ({ threadId })), page: { next } } satisfies TraceQueryGroupResponse;
-  }
 
   let traces = roots.map(toTraceQueryTrace).sort((left, right) => compareTraces(left, right, plan));
   if (plan.cursor) traces = traces.filter(trace => isTraceAfterCursor(trace, plan));
@@ -945,19 +927,15 @@ export function evaluateTraceQueryRequest(data: TraceQueryFixtureData, request: 
   return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request)));
 }
 
-export function normalizeTraceQueryResponse(
-  response: TraceQueryResponse,
-): Array<{ traceId: string } | { threadId: string }> {
-  return 'traces' in response
-    ? response.traces.map(trace => ({ traceId: trace.traceId }))
-    : response.groups.map(group => ({ threadId: group.threadId }));
+export function normalizeTraceQueryResponse(response: TraceQueryResponse): Array<{ traceId: string }> {
+  return response.traces.map(trace => ({ traceId: trace.traceId }));
 }
 
 export async function collectTraceQueryPages(
   execute: (request: NormalizedTraceQueryRequest) => Promise<TraceQueryResponse>,
   request: TraceQueryRequest,
-): Promise<Array<{ traceId: string } | { threadId: string }>> {
-  const results: Array<{ traceId: string } | { threadId: string }> = [];
+): Promise<Array<{ traceId: string }>> {
+  const results: Array<{ traceId: string }> = [];
   let after: string | null | undefined;
   do {
     const normalized = parseTraceQueryRequest({
