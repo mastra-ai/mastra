@@ -1,8 +1,8 @@
 ---
-title: "Reference: Configuration"
-description: "Configure a Mastra instance with agents, workflows, storage, logging, observability, server options, processors, deployers, and other supported services."
+title: 'Reference: Configuration'
+description: 'Configure a Mastra instance with agents, workflows, storage, logging, observability, server options, processors, deployers, and other supported services.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Configuration
@@ -1057,7 +1057,7 @@ export const mastra = new Mastra({
 **Type:** `number`\
 **Default:** `5000` (5 seconds)
 
-Maximum time in milliseconds to drain in-flight requests after the server receives `SIGINT` or `SIGTERM`. The value must be finite and between `0` and `2147483647`. During this window the server stops accepting new connections and waits for in-flight requests (including active streams) to finish; if the deadline passes first, remaining HTTP connections are closed. Upgraded connections such as WebSockets end when the process exits. Either way, `mastra.shutdown({ drainTimeout })` then runs before the process exits. It gives in-flight workflow runs (including durable agent runs) the same window to reach a finished or suspended state before workers and pub/sub subscriptions are torn down, followed by up to 5 seconds for the remaining cleanup. Setting `0` skips both drains.
+Maximum time in milliseconds to drain in-flight requests after the server receives `SIGINT` or `SIGTERM`. The value must be finite and between `0` and `2147483647`. During this window the server stops accepting new connections and waits for in-flight requests (including active streams) to finish; if the deadline passes first, remaining HTTP connections are closed. Upgraded connections such as WebSockets end when the process exits. Either way, `mastra.shutdown({ drainTimeout })` then runs before the process exits. It gives in-flight workflow runs (including durable agent runs) the same window to reach a finished or suspended state before workers and pub/sub subscriptions are torn down; background task cancellation and worker teardown share that window. The generated server then allows up to 5 seconds for workspace and storage cleanup. Setting `0` skips both drains.
 
 Increase this when rolling deploys need to let long-running agent turns or workflow steps finish. The HTTP drain and the workflow drain run one after the other. Plan for a worst case of twice this value plus 5 seconds of cleanup and keep that total below your platform's grace period (for example `terminationGracePeriodSeconds` on Kubernetes):
 

@@ -764,10 +764,16 @@ export class BackgroundTaskManager {
     });
   }
 
-  shutdown(): Promise<void> {
+  /**
+   * @param options.deadline - Absolute wall-clock deadline (ms since epoch) to
+   *   bound teardown by. `Mastra.shutdown()` passes the deadline shared with
+   *   its workflow drain so the two do not stack. Defaults to
+   *   `SHUTDOWN_GRACE_PERIOD_MS` from now when called standalone.
+   */
+  shutdown(options?: { deadline?: number }): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
-    this.shutdownDeadline = Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
+    this.shutdownDeadline = options?.deadline ?? Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
     this.shutdownPromise = this.#shutdown();
     return this.shutdownPromise;
   }
@@ -868,11 +874,7 @@ export class BackgroundTaskManager {
     const remainingMs = this.#remainingShutdownBudgetMs();
     if (remainingMs <= 0) {
       void promise.catch(() => {});
-      this.#mastra
-        ?.getLogger?.()
-        ?.warn(
-          `${description} left running in the background: the ${SHUTDOWN_GRACE_PERIOD_MS}ms shutdown budget is spent`,
-        );
+      this.#mastra?.getLogger?.()?.warn(`${description} left running in the background: the shutdown budget is spent`);
       return undefined;
     }
 
@@ -895,9 +897,7 @@ export class BackgroundTaskManager {
     if (outcome.status === 'timed-out') {
       this.#mastra
         ?.getLogger?.()
-        ?.warn(
-          `${description} exhausted the remaining ${remainingMs}ms of the ${SHUTDOWN_GRACE_PERIOD_MS}ms graceful shutdown budget`,
-        );
+        ?.warn(`${description} exhausted the remaining ${remainingMs}ms of the graceful shutdown budget`);
       return undefined;
     }
     return outcome.value;

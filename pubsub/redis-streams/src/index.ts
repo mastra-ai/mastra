@@ -227,6 +227,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       return;
     }
 
+    // Track the whole remote publish, connect included, so close() can drain
+    // a publish that is still connecting and not only one already in XADD.
+    const promise = this.#publishRemote(topic, event);
+    this.#pendingPublishes.add(promise);
+    try {
+      await promise;
+    } finally {
+      this.#pendingPublishes.delete(promise);
+    }
+  }
+
+  async #publishRemote(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     await this.#ensureWriterConnected();
 
     const id = randomUUID();
@@ -270,12 +282,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
               }
             })
         : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
-    this.#pendingPublishes.add(promise);
-    try {
-      await promise;
-    } finally {
-      this.#pendingPublishes.delete(promise);
-    }
+    await promise;
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -640,6 +647,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const subs = [...this.#subscriptions.values()];
     await Promise.all(subs.map(sub => this.unsubscribe(sub.topic, sub.cb)));
     this.#localCallbacks.clear();
+
+    // Let publishes that were accepted before close() reach the stream. A
+    // workflow's terminal event is often the last thing written before
+    // shutdown; quitting the writer under it would drop the event and reject
+    // the caller with a ClosingError.
+    await this.flush();
 
     if (this.#writeClient.isOpen) {
       try {

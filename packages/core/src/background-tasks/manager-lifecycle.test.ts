@@ -174,6 +174,27 @@ describe('BackgroundTaskManager lifecycle', () => {
     mastra.__unregisterHooks();
   });
 
+  it('bounds shutdown by a caller-provided deadline instead of its own grace period', async () => {
+    vi.useFakeTimers();
+    const pubsub = new NeverSubscribePubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    void manager.init(pubsub);
+    await pubsub.subscribeStarted.promise;
+
+    // Mastra.shutdown() shares its drain deadline; the manager must not add
+    // a further 5 s on top of it.
+    const shutdownPromise = manager.shutdown({ deadline: Date.now() + 1_000 });
+    let settled = false;
+    void shutdownPromise.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(shutdownPromise).resolves.toBeUndefined();
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');

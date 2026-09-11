@@ -7113,7 +7113,7 @@ export class Mastra<
     // available so it can abort active tasks, preserve retry recovery, and
     // remove its subscriptions.
     if (this.#backgroundTaskManager) {
-      await this.#backgroundTaskManager.shutdown();
+      await this.#backgroundTaskManager.shutdown({ deadline });
     }
 
     // SchedulerWorker is stopped as part of stopWorkers().
