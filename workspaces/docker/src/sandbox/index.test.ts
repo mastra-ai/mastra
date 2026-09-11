@@ -17,7 +17,7 @@
  */
 
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
-import { SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import { SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import { extract as tarExtract } from 'tar-stream';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
@@ -1353,7 +1353,7 @@ async function parsePutArchive(): Promise<ParsedEntry[]> {
   const call = mockContainer.putArchive.mock.calls.at(-1);
   if (!call) throw new Error('putArchive was not called');
   const [stream, opts] = call as [NodeJS.ReadableStream, { path: string }];
-  expect(opts).toEqual({ path: '/' });
+  expect(opts.path).toBe('/');
 
   return await new Promise<ParsedEntry[]>((resolve, reject) => {
     const entries: ParsedEntry[] = [];
@@ -1436,5 +1436,66 @@ describe('DockerSandbox writeFiles', () => {
     mockContainer.putArchive.mockRejectedValueOnce(new Error('boom'));
 
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxError);
+  });
+
+  it('rejects with SandboxAbortError when the signal is already aborted, without uploading', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight upload and rejects with SandboxAbortError', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    // Model a real transfer: reject when the tar stream is destroyed (its body
+    // ends), which is what terminates the putArchive request.
+    mockContainer.putArchive.mockImplementationOnce((stream: NodeJS.ReadableStream) => {
+      return new Promise((_resolve, reject) => {
+        stream.on('error', err => reject(err));
+        stream.on('close', () => reject(new Error('stream closed')));
+      });
+    });
+
+    const controller = new AbortController();
+    const promise = sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes normally and forwards the signal when a non-aborted signal is supplied', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'ok.txt', content: 'done' }], { abortSignal: controller.signal });
+
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+    const opts = mockContainer.putArchive.mock.calls.at(-1)![1] as { path: string; abortSignal?: AbortSignal };
+    expect(opts.path).toBe('/');
+    expect(opts.abortSignal).toBe(controller.signal);
+    const entries = await parsePutArchive();
+    expect(entries[0]!.name).toBe('workspace/ok.txt');
+    expect(entries[0]!.content).toBe('done');
+  });
+
+  it('removes the abort listener after completion so a later abort is a no-op', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+
+    // Listener was detached; aborting now must not throw or affect anything.
+    expect(() => controller.abort()).not.toThrow();
   });
 });
