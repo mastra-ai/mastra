@@ -8,6 +8,7 @@ import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
 import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -21,7 +22,6 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   scope?: string;
-  /** Exact thread id to bind on session creation (see ChatSessionContextApi). */
   sessionThreadId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
@@ -42,8 +42,7 @@ export function useAgentControllerConnection({
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseStateRef = useRef<SseConnectionState>('never');
-  const taskEventGeneration = useRef(0);
-  const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
+  const liveState = useRef<AgentControllerLiveState>({ generation: 0 });
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -70,30 +69,22 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
-    taskEventGeneration,
-    liveTasks,
+    liveState,
   });
   const handleConnectedChange = (connected: boolean) => {
-    // Ref mirrors the state so back-to-back events see the true previous value
-    // even when React batches the renders in between.
+    // React can batch renders between consecutive connection events.
     const previous = sseStateRef.current;
     const next = nextSseConnectionState(previous, connected);
     if (next === previous) return;
     sseStateRef.current = next;
     setSseConnectionState(next);
     if (next !== 'connected') return;
-    // Events sent while the stream was down are gone for good (the server does
-    // not replay them), so a reconnect refetches the mounted message windows —
-    // mergeWindow folds whatever the gap dropped back into the transcript. A
-    // first connect retries only failed windows: the stream opens after the
-    // session is bound to its thread, so a read that raced that binding works now.
+    // The server does not replay events missed while disconnected.
     const reconnected = previous === 'dropped';
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       predicate: query => reconnected || query.state.status === 'error',
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
     if (reconnected) {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
@@ -109,11 +100,17 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
-    if (tasks) {
-      taskEventGeneration.current += 1;
-      liveTasks.current = { threadId: sessionThreadId, tasks };
-    }
-    if (typeof running === 'boolean' || tasks) {
+    if (running !== undefined || tasks) {
+      const updates = {
+        ...(running !== undefined ? { running } : {}),
+        ...(tasks ? { tasks } : {}),
+      };
+      liveState.current = {
+        ...(liveState.current.threadId === sessionThreadId ? liveState.current : {}),
+        generation: liveState.current.generation + 1,
+        threadId: sessionThreadId,
+        ...updates,
+      };
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
         resourceId,
@@ -123,14 +120,7 @@ export function useAgentControllerConnection({
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,
-        current =>
-          current
-            ? {
-                ...current,
-                ...(typeof running === 'boolean' ? { running } : {}),
-                ...(tasks ? { tasks } : {}),
-              }
-            : current,
+        current => (current ? { ...current, ...updates } : current),
         { updatedAt },
       );
     }
