@@ -44,22 +44,159 @@ const textFile = () => new File(['hello world'], 'notes.txt', { type: 'text/plai
 const pdfFile = () => new File(['pdf-bytes'], 'doc.pdf', { type: 'application/pdf' });
 
 describe('composer attachments', () => {
-  it('adds files and classifies them by kind', () => {
+  describe('when a text file is attached', () => {
+    it.each([
+      ['leads.csv', 'application/vnd.ms-excel'],
+      ['notes.txt', 'text/plain'],
+      ['data.json', 'application/json'],
+      ['notes.md', 'text/markdown'],
+      ['config.yaml', 'application/yaml'],
+    ])('sends %s as readable text with the existing collapsed attachment envelope', async (name, browserType) => {
+      const { ref } = renderProvider();
+      const text = 'name,note\r\nZoë,"hello\nworld"\r\n';
+      await act(async () => {
+        await ref.current!.addFiles([new File([text], name, { type: browserType })]);
+      });
+      expect(ref.current!.attachments[0]?.kind).toBe('text');
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: `<attachment name="${name}">${text}</attachment>` },
+      ]);
+    });
+  });
+  describe('when a file has an unrecognized text extension', () => {
+    it.each(['settings.ini', 'main.go', 'notebook.ipynb', '.env', 'README'])(
+      'accepts readable %s contents without requiring a MIME type',
+      async name => {
+        const { ref } = renderProvider();
+        await act(async () => {
+          await ref.current!.addFiles([
+            new File(['hello Zoë\r\n', '\t\f'], name, { type: 'application/octet-stream' }),
+          ]);
+        });
+        expect(await ref.current!.toCoreUserMessages()).toEqual([
+          { role: 'user', content: `<attachment name="${name}">hello Zoë\r\n\t\f</attachment>` },
+        ]);
+      },
+    );
+  });
+
+  describe('when an unknown file contains malformed encoded text', () => {
+    it.each([
+      [0xff, 0xfe, 0xfd],
+      [0xc3, 0x28],
+      [0xe2, 0x82],
+    ])('rejects invalid bytes %j', async (...bytes) => {
+      const { ref } = renderProvider();
+      let rejected;
+      await act(async () => {
+        rejected = await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
+      });
+      expect(rejected).toEqual(['unknown.bin']);
+      expect(ref.current!.attachments).toEqual([]);
+    });
+  });
+
+  describe('when valid Unicode text crosses the probe boundary', () => {
+    it.each(['é', '€', '😀'])('preserves a split %s character', async character => {
+      const { ref } = renderProvider();
+      const text = 'a'.repeat(8191) + character + '\n';
+      await act(async () => {
+        await ref.current!.addFiles([new File([text], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: `<attachment name="source.unknown">${text}</attachment>` },
+      ]);
+    });
+  });
+
+  describe('when an unknown text file has a UTF-16 byte-order mark', () => {
+    it.each([
+      ['little-endian', [0xff, 0xfe, 0x5a, 0, 0x6f, 0, 0xeb, 0]],
+      ['big-endian', [0xfe, 0xff, 0, 0x5a, 0, 0x6f, 0, 0xeb]],
+    ] as const)('preserves valid %s text', async (_encoding, bytes) => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="source.unknown">Zoë</attachment>' },
+      ]);
+    });
+  });
+
+  describe('when an unknown text file contains a literal replacement character', () => {
+    it('accepts its valid UTF-8 encoding', async () => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([new File(['literal �'], 'source.unknown')]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="source.unknown">literal �</attachment>' },
+      ]);
+    });
+  });
+
+  describe('when a local workbook name contains URL punctuation', () => {
+    it.each(['leads#2026.xlsx', 'leads.csv#2026.xlsx', 'leads.csv?2026.xls'])(
+      'rejects %s rather than reading its bytes as text',
+      async name => {
+        const { ref } = renderProvider();
+        let rejected;
+        await act(async () => {
+          rejected = await ref.current!.addFiles([new File(['fake workbook'], name)]);
+        });
+        expect(rejected).toEqual([name]);
+        expect(ref.current!.attachments).toEqual([]);
+      },
+    );
+  });
+
+  describe('when an empty text file has markup in its filename', () => {
+    it('escapes the envelope name without changing the empty content', async () => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([new File([], 'a&"<b>.txt', { type: 'text/plain' })]);
+      });
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="a&amp;&quot;&lt;b&gt;.txt"></attachment>' },
+      ]);
+    });
+  });
+
+  describe('when unsupported binary files are selected', () => {
+    it.each(['leads.xls', 'leads.xlsx', 'archive.zip', 'file.constructor'])(
+      'rejects %s while keeping supported files in the same selection',
+      async name => {
+        const { ref } = renderProvider();
+        let rejected: string[] = [];
+        await act(async () => {
+          rejected = await ref.current!.addFiles([textFile(), new File([new Uint8Array([80, 75, 0, 1, 2])], name)]);
+        });
+        expect(rejected).toEqual([name]);
+        expect(ref.current!.attachments.map(file => file.name)).toEqual(['notes.txt']);
+        expect(await ref.current!.toCoreUserMessages()).toEqual([
+          { role: 'user', content: '<attachment name="notes.txt">hello world</attachment>' },
+        ]);
+      },
+    );
+  });
+
+  it('adds files and classifies them by kind', async () => {
     const { ref } = renderProvider();
 
-    act(() => {
-      ref.current!.addFiles([imageFile(), textFile(), pdfFile()]);
+    await act(async () => {
+      await ref.current!.addFiles([imageFile(), textFile(), pdfFile()]);
     });
 
     const kinds = ref.current!.attachments.map(a => a.kind);
     expect(kinds).toEqual(['image', 'text', 'pdf']);
   });
 
-  it('removes a single attachment by id and clears all', () => {
+  it('removes a single attachment by id and clears all', async () => {
     const { ref } = renderProvider();
 
-    act(() => {
-      ref.current!.addFiles([imageFile(), textFile()]);
+    await act(async () => {
+      await ref.current!.addFiles([imageFile(), textFile()]);
     });
     const firstId = ref.current!.attachments[0]!.id;
 
@@ -77,8 +214,8 @@ describe('composer attachments', () => {
   it('converts image / pdf / text attachments to CoreUserMessages', async () => {
     const { ref } = renderProvider();
 
-    act(() => {
-      ref.current!.addFiles([imageFile(), pdfFile(), textFile()]);
+    await act(async () => {
+      await ref.current!.addFiles([imageFile(), pdfFile(), textFile()]);
     });
 
     const messages = await ref.current!.toCoreUserMessages();
@@ -100,8 +237,7 @@ describe('composer attachments', () => {
     // returns a full data URL, so it must not be prepended a second time.
     expect(pdfPart!.data).not.toMatch(/data:application\/pdf;base64,data:/);
 
-    // text -> plain string content
-    expect(text!.content).toBe('hello world');
+    expect(text!.content).toBe('<attachment name="notes.txt">hello world</attachment>');
   });
 
   it('adds a URL attachment whose data forwards the URL, not base64', async () => {
@@ -179,8 +315,8 @@ describe('composer attachments', () => {
   it('inlines a local video file as a data URI file part', async () => {
     const { ref } = renderProvider();
 
-    act(() => {
-      ref.current!.addFiles([new File(['video-bytes'], 'movie.mp4', { type: 'video/mp4' })]);
+    await act(async () => {
+      await ref.current!.addFiles([new File(['video-bytes'], 'movie.mp4', { type: 'video/mp4' })]);
     });
 
     const att = ref.current!.attachments[0] as ComposerAttachment;

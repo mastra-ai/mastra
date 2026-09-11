@@ -1396,6 +1396,11 @@ The pattern uses:
                     <div key={index} className="nested-agent">
                       <strong>Nested Agent: {id}</strong>
                       {data.text && <p>{data.text}</p>}
+                      {data.toolErrors?.map(toolError => (
+                        <p key={toolError.toolCallId} className="nested-agent-error">
+                          {toolError.toolName} failed: {toolError.errorText}
+                        </p>
+                      ))}
                     </div>
                   )
                 }
@@ -1424,6 +1429,8 @@ Key points:
 - Piping `fullStream` to `context.writer` creates `data-tool-agent` parts
 - Read `data-tool-agent-step` when you need the full payload for the nested step that finished
 - The `AgentDataPart` has `id` (on the part) and `data.text` (the current nested-agent text snapshot)
+- A tool that throws inside the nested agent is reported in `data.toolErrors`, each entry `{ toolCallId, toolName, args?, errorText, providerExecuted? }`. `errorText` is a JSON-safe string, so the failure survives serialization to the client instead of arriving as `{}`
+- `toolErrors` resets at each nested step boundary, like `toolCalls` and `toolResults`. For a finished step, read it from `data-tool-agent-step` (`data.step.toolErrors`) or from `data.steps[]` on the final snapshot
 - The tool still returns its own output after the stream completes
 
 For a complete implementation, see the [tool-nested-streams example](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx) in UI Dojo.

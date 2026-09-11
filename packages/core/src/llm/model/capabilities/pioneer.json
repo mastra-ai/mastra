@@ -14,9 +14,11 @@
     "claude-opus-4-7",
     "claude-opus-4-8",
     "claude-opus-5",
+    "claude-opus-5-fast",
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
     "claude-sonnet-5",
+    "devstral-small-2",
     "gemini-3-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro",
@@ -45,18 +47,22 @@
     "grok-4.5",
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta/muse-spark-1.1",
+    "ministral-14b",
     "mistral-large-3",
+    "mistral-medium",
     "mistral-medium-3.5",
     "mistralai/Mistral-Small-4-119B-2603",
     "mistralai/Pixtral-12B-2409",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3-Fast",
     "pioneer/auto",
     "qwen3.6-flash",
     "qwen3.6-plus",
     "qwen3.7-plus",
-    "sakana/fugu-ultra"
+    "sakana/fugu-ultra",
+    "thinkingmachines/inkling-small"
   ],
   "temperature": [
     "HuggingFaceTB/SmolLM3-3B-Base",
@@ -87,6 +93,7 @@
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Pro",
     "devstral-2",
+    "devstral-small-2",
     "fastino/gliguard-LLMGuardrails-300M",
     "fastino/gliner2-base-v1",
     "fastino/gliner2-large-v1",
@@ -116,6 +123,7 @@
     "gpt-5.4-mini",
     "gpt-5.4-nano",
     "grok-4.5",
+    "magistral-medium",
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.2-1B",
     "meta-llama/Llama-3.2-1B-Instruct",
@@ -123,7 +131,10 @@
     "meta-llama/Llama-3.2-3B-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta/muse-spark-1.1",
+    "ministral-14b",
+    "ministral-3b",
     "mistral-large-3",
+    "mistral-medium",
     "mistral-medium-3.5",
     "mistralai/Codestral-22B-v0.1",
     "mistralai/Magistral-Small-2506",
@@ -146,8 +157,10 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "thinkingmachines/inkling-small",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ],
   "structuredOutput": [
     "Qwen/Qwen3.5-9B",
@@ -186,6 +199,7 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3-Fast",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
@@ -193,6 +207,7 @@
     "qwen3.6-flash",
     "sakana/fugu-ultra",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ]
 }

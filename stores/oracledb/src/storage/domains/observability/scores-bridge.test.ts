@@ -2,7 +2,7 @@ import type { BatchCreateScoresArgs, ScoreRecord } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { OracleDB } from '../../db';
-import { batchCreateScores } from './scores-bridge';
+import { batchCreateScores, deleteScores } from './scores-bridge';
 
 function createOracleDb(connectionOverrides: Record<string, unknown> = {}) {
   const connection = {
@@ -65,6 +65,41 @@ describe('batchCreateScores transaction (CR-08)', () => {
   });
 });
 
+describe('deleteScores', () => {
+  it('deletes score IDs with optional tenant scope', async () => {
+    const { db, connection } = createOracleDb();
+
+    await deleteScores(db, 'MAStra', {
+      scoreIds: ['score-1', 'score-2'],
+      organizationId: 'org-1',
+      resourceId: 'resource-1',
+    });
+
+    expect(connection.execute).toHaveBeenCalledOnce();
+    const [sql, binds] = connection.execute.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(sql).toContain('DELETE FROM "MASTRA"."MASTRA_SCORERS"');
+    expect(sql).toContain('id IN (:scoreId0, :scoreId1)');
+    expect(sql).toContain('"organizationId" = :organizationId');
+    expect(sql).toContain('"organizationId" IS NULL');
+    expect(sql).toContain("JSON_VALUE(metadata, '$.organizationId'");
+    expect(sql).toContain('"resourceId" = :resourceId');
+    expect(binds).toEqual({
+      scoreId0: 'score-1',
+      scoreId1: 'score-2',
+      organizationId: 'org-1',
+      resourceId: 'resource-1',
+    });
+  });
+
+  it('does nothing when no score IDs are provided', async () => {
+    const { db, connection } = createOracleDb();
+
+    await deleteScores(db, undefined, { scoreIds: [] });
+
+    expect(connection.execute).not.toHaveBeenCalled();
+  });
+});
+
 describe('scoreRecordToTableRecord metadata folding (CR-13)', () => {
   it('keeps metadata keys that are only present on the original score.metadata', async () => {
     const batchInsert = vi.fn(async () => undefined);
@@ -85,6 +120,18 @@ describe('scoreRecordToTableRecord metadata folding (CR-13)', () => {
       entityName: 'original-entity-name',
       customField: 'kept',
     });
+  });
+
+  it('persists organizationId as a first-class column for scoped deletion', async () => {
+    const batchInsert = vi.fn(async () => undefined);
+    const db = { batchInsert } as unknown as OracleDB;
+
+    await batchCreateScores(db, undefined, {
+      scores: [createScoreRecord({ scoreId: 'score-1', organizationId: 'org-1' })],
+    });
+
+    const records = batchInsert.mock.calls[0]?.[0]?.records as Array<Record<string, unknown>>;
+    expect(records[0]?.organizationId).toBe('org-1');
   });
 
   it('lets a defined top-level contextual field override the same metadata key', async () => {

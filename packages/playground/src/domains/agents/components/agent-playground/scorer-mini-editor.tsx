@@ -524,7 +524,7 @@ export function ScorerMiniEditor({
                         {item.label && <Badge>{item.label}</Badge>}
                         <button
                           className={cn(
-                            'px-2 py-0.5 rounded text-xs font-medium transition-colors',
+                            'px-2 py-0.5 rounded text-ui-sm font-medium transition-colors',
                             item.expectedDirection === 'high' ? 'bg-success/20 text-success' : 'bg-error/20 text-error',
                           )}
                           onClick={() =>
@@ -562,7 +562,7 @@ export function ScorerMiniEditor({
                           value={typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}
                           onChange={e => updateTestItem(index, 'input', e.target.value)}
                           rows={3}
-                          className="text-sm"
+                          className="text-ui-md"
                         />
                       </div>
                       <div className="space-y-1">
@@ -574,7 +574,7 @@ export function ScorerMiniEditor({
                           value={typeof item.output === 'string' ? item.output : JSON.stringify(item.output, null, 2)}
                           onChange={e => updateTestItem(index, 'output', e.target.value)}
                           rows={3}
-                          className="text-sm"
+                          className="text-ui-md"
                         />
                       </div>
                     </div>

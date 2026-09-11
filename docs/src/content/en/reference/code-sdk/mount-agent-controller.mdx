@@ -30,6 +30,24 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 const session = await controller.createSession({ resourceId: 'user-123' })
 ```
 
+## Commit attribution
+
+Use `coAuthor` to set the `Co-Authored-By` trailer in coding-agent commit guidance:
+
+```typescript title="src/mastra/index.ts"
+const { mastra, controller } = await mountAgentControllerOnMastra({
+  cwd: process.cwd(),
+  coAuthor: {
+    name: 'my-coding-app',
+    email: 'my-coding-app@example.com',
+  },
+})
+```
+
+Both fields are optional. An omitted field uses the SDK default: `mastra-platform[bot]` for the name and `284800079+mastra-platform[bot]@users.noreply.github.com` for the email.
+
+The `mastracode` terminal app sets its name to `mastracode`, and Factory sets its name to `mastra-platform[bot]`. Both use the same default email, so GitHub resolves their trailers to the same bot account while the raw commit message retains the app name.
+
 Pass an existing `mastra` to mount the controller onto a Mastra instance that already hosts other primitives:
 
 ```typescript
@@ -51,6 +69,13 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     description: 'Working directory for project detection.',
     isOptional: true,
     defaultValue: 'process.cwd()',
+  },
+  {
+    name: 'coAuthor',
+    type: '{ name?: string; email?: string }',
+    description:
+      'Commit co-author identity included in coding-agent commit guidance. Omitted fields use the SDK defaults.',
+    isOptional: true,
   },
   {
     name: 'mastra',

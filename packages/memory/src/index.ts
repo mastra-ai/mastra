@@ -234,10 +234,55 @@ function isSystemReminderMessage(message: MastraDBMessage): boolean {
   return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
 }
 
+// Keep this union and the recall helpers in sync with core without requiring newer peer exports.
+type RecallSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+
+function isRecallSignalType(type: unknown): type is RecallSignalType {
+  return (
+    type === 'user' ||
+    type === 'state' ||
+    type === 'reactive' ||
+    type === 'notification' ||
+    type === 'user-message' ||
+    type === 'system-reminder'
+  );
+}
+
+function getRecallSignalType(message: MastraDBMessage): RecallSignalType | undefined {
+  if (!isRecord(message.content)) return undefined;
+
+  for (const part of message.content.parts) {
+    if (
+      (part.type === 'data-signal' || part.type === 'data-user-message') &&
+      isRecord(part.data) &&
+      isRecallSignalType(part.data.type)
+    ) {
+      return part.data.type;
+    }
+  }
+
+  const metadata = message.content.metadata;
+  if (message.role === 'signal' && isRecord(metadata) && isRecord(metadata.signal)) {
+    if (isRecallSignalType(metadata.signal.type)) return metadata.signal.type;
+  }
+
+  return isSystemReminderMessage(message) ? 'system-reminder' : undefined;
+}
+
 function filterSystemReminderMessages(
   messages: MastraDBMessage[],
   includeSystemReminders?: boolean,
+  hideSignals?: boolean | RecallSignalType[],
 ): MastraDBMessage[] {
+  if (hideSignals === false) return messages;
+  if (hideSignals !== undefined) {
+    return messages.filter(message => {
+      const type = getRecallSignalType(message);
+      return type === undefined || (hideSignals !== true && !hideSignals.includes(type));
+    });
+  }
+
+  // TODO: In the next breaking release, align the history default with streams (exclude none).
   if (includeSystemReminders) {
     return messages;
   }
@@ -292,8 +337,35 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
 const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
 
 /**
- * Concrete implementation of MastraMemory that adds support for thread configuration
- * and message injection.
+ * Gives Mastra agents conversation history, with optional working memory,
+ * semantic recall, and observational memory.
+ *
+ * @remarks
+ * Configure storage on this instance or its Mastra instance before use.
+ * See the bundled docs for setup and conversation identifiers.
+ *
+ * @example
+ * Attach memory to an agent; `yourModel` is your configured model.
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { Memory } from '@mastra/memory';
+ *
+ * const agent = new Agent({
+ *   id: 'assistant',
+ *   name: 'Assistant',
+ *   instructions: 'You are a helpful assistant.',
+ *   model: yourModel,
+ *   memory: new Memory(),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/memory/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Memory documentation](https://mastra.ai/docs/memory/overview)
+ * if packaged docs are unavailable.
  */
 export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
@@ -569,7 +641,10 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | RecallSignalType[];
       threadId: string;
       observabilityContext?: Partial<ObservabilityContext>;
     },
@@ -590,6 +665,7 @@ export class Memory extends MastraMemory {
       threadConfig,
       vectorSearchString,
       includeSystemReminders,
+      hideSignals,
       filter,
       includeTotal,
     } = args;
@@ -761,7 +837,7 @@ export class Memory extends MastraMemory {
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
 
       const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
@@ -2924,8 +3000,18 @@ Notes:
     memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
-    const result = await memoryStore.cloneThread(args);
     const config = this.getMergedThreadConfig(memoryConfig);
+
+    // The caller may opt out of hydrating message payloads (e.g. forked subagents that
+    // only need the new thread id). Force hydration when semantic recall is active, since
+    // embedding requires the cloned message payloads.
+    const requestedHydrate = args.options?.hydrateMessages ?? true;
+    const effectiveHydrate = requestedHydrate || Boolean(this.vector && this.embedder && config.semanticRecall);
+    const result = await memoryStore.cloneThread(
+      effectiveHydrate === requestedHydrate
+        ? args
+        : { ...args, options: { ...args.options, hydrateMessages: effectiveHydrate } },
+    );
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
@@ -2979,6 +3065,73 @@ Notes:
     }
 
     return result;
+  }
+
+  public async updateThreadResourceId({
+    threadId,
+    resourceId,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    const memoryStore = await this.getMemoryStore();
+
+    const config = this.getMergedThreadConfig(memoryConfig);
+    const migratesVectors = Boolean(this.vector && this.embedder && config.semanticRecall);
+
+    // Preserve the storage no-op contract when there is no vector migration to worry about:
+    // if the thread already belongs to the target resource there is nothing to move, so return
+    // it untouched. When vector migration IS configured we deliberately do NOT short-circuit on
+    // a same-resource call, because a previous attempt may have committed the storage move but
+    // failed to migrate the vectors — short-circuiting there would make the documented retry a
+    // no-op and leave the vectors stale. Re-running the (idempotent) migration repairs that state.
+    if (!migratesVectors) {
+      const existing = await memoryStore.getThreadById({ threadId });
+      if (existing && existing.resourceId === resourceId) {
+        return existing;
+      }
+    }
+
+    const thread = await memoryStore.updateThreadResourceId({ threadId, resourceId });
+
+    // Migrate semantic-recall message vectors so resource-scoped retrieval keeps
+    // surfacing the thread's messages under the new resourceId. The storage
+    // transfer already updated each message row's resource_id, so re-embedding
+    // the fetched messages rewrites the vector metadata with the new owner.
+    if (migratesVectors) {
+      try {
+        const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+        const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
+        await Promise.all(
+          messageIndexes.map(async indexName => {
+            await this.vector!.deleteVectors({ indexName, filter: { thread_id: threadId } });
+          }),
+        );
+        if (messages.length > 0) {
+          await this.embedClonedMessages(messages, config);
+        }
+      } catch (error) {
+        // The storage transfer already committed, but if vector migration fails the thread's
+        // messages can become unrecallable under resource-scoped semantic recall while the
+        // caller believes the transfer fully succeeded. Surface the failure instead of
+        // swallowing it so the caller can retry the migration rather than silently losing recall.
+        this.logger.error('Failed to migrate semantic-recall vectors during thread transfer', {
+          threadId,
+          resourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new Error(
+          `Thread "${threadId}" was transferred to resource "${resourceId}", but migrating its ` +
+            `semantic-recall vectors failed. The thread's messages may not surface under resource-scoped ` +
+            `recall until the vectors are re-indexed. Cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+    }
+
+    return thread;
   }
 
   /**

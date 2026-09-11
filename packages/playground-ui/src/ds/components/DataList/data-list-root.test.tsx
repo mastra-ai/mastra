@@ -334,4 +334,60 @@ describe('DataListRoot', () => {
       expect(row?.getAttribute('variant')).toBeNull();
     });
   });
+
+  describe('SortableTopCell', () => {
+    it('starts with the default direction and reverses the active direction', () => {
+      const onSortChange = vi.fn();
+      const { rerender } = render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell onSortChange={onSortChange}>Name</DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Name.*not sorted.*sort ascending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
+
+      rerender(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortDirection="ascending" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Name.*sorted ascending.*sort descending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('descending');
+
+      rerender(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortDirection="descending" onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+      fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
+      expect(onSortChange).toHaveBeenLastCalledWith('ascending');
+    });
+
+    it('supports descending as the first direction', () => {
+      const onSortChange = vi.fn();
+      render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell defaultSortDirection="descending" onSortChange={onSortChange}>
+              Date
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Date.*not sorted.*sort descending/i }));
+      expect(onSortChange).toHaveBeenCalledWith('descending');
+    });
+  });
 });

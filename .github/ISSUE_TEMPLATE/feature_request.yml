@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to suggest a new feature! Please provide as much detail as possible to help us understand your idea.
+        Thanks for taking the time to suggest a new feature! Please provide as much detail as possible to help us understand your idea. A maintainer needs to approve your feature request before you or other community members can open PRs for it.
 
   - type: textarea
     attributes:

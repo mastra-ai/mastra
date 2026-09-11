@@ -31,8 +31,8 @@ export function ScorersPage() {
     if (!scorers) return [];
     return Object.entries(scorers).map(([id, scorer]) => ({
       value: id,
-      label: (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id,
-      description: (scorer as { scorer?: { config?: { description?: string } } }).scorer?.config?.description || '',
+      label: scorer.scorer?.config?.name || id,
+      description: scorer.scorer?.config?.description || '',
     }));
   }, [scorers]);
 
@@ -217,7 +217,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-ui-sm">
           Sampling
         </Label>
         <RadioGroup
@@ -243,7 +243,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
 
         {samplingType === 'ratio' && (
           <div className="mt-2 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
+            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-ui-sm">
               Sample Rate (0-1)
             </Label>
             <Input

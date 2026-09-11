@@ -308,8 +308,6 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
-      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
-      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -432,6 +430,8 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'threads', loader: agentThreadsIndexLoader },
+          { path: 'threads/:threadId', element: <AgentThread /> },
           { path: 'overview', element: <Agent /> },
           { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures

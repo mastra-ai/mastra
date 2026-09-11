@@ -4,13 +4,14 @@ import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
+import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
 
 export interface CreateDatasetFormProps {
   onSuccess: (datasetId: string) => void;
   onCancel: () => void;
-  /** If provided, auto-attaches the dataset to this target on create */
   targetType?: DatasetTargetType;
   targetIds?: string[];
 }
@@ -21,6 +22,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
   const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(null);
+  const [scorerIds, setScorerIds] = useState<string[]>([]);
   const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
   const { createDataset } = useDatasetMutations();
 
@@ -43,7 +45,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     }
 
     try {
-      const result = (await createDataset.mutateAsync({
+      const result = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
@@ -51,7 +53,8 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         requestContextSchema,
         targetType,
         targetIds,
-      })) as { id: string };
+        scorerIds: scorerIds.length > 0 ? scorerIds : undefined,
+      });
 
       toast.success('Dataset created successfully');
 
@@ -81,10 +84,18 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         placeholder="Enter dataset description (optional)"
       />
 
+      <ScorerSelector
+        selectedScorers={scorerIds}
+        setSelectedScorers={setScorerIds}
+        disabled={createDataset.isPending}
+        label={DEFAULT_SCORERS_LABEL}
+        helperText={DEFAULT_SCORERS_HELPER_TEXT}
+      />
+
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className="text-neutral3 hover:text-accent1 text-xs transition-colors"
+          className="text-neutral3 hover:text-accent1 text-ui-sm transition-colors"
           onClick={() => setShowCustomSchema(true)}
         >
           + Custom schema

@@ -1,7 +1,9 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
+  TraceQueryFeedbackField,
   TraceQueryField,
+  TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
@@ -61,6 +63,18 @@ const SCORE_FIELDS = {
   rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
+const FEEDBACK_FIELDS = {
+  feedbackType: { sql: 's.feedbackType', parameterType: 'scalar' },
+  feedbackSource: { sql: 's.feedbackSource', parameterType: 'scalar' },
+  feedbackUserId: { sql: 's.feedbackUserId', parameterType: 'scalar' },
+  sourceId: { sql: 's.sourceId', parameterType: 'scalar' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'scalar' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'scalar' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'scalar' },
+  timestamp: { sql: 's.timestamp', parameterType: 'timestamp' },
+  comment: { sql: 's.comment', parameterType: 'scalar' },
+} satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
+
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
@@ -86,14 +100,19 @@ function parameterSql(type: ParameterType): string {
   return type === 'timestamp' ? 'CAST(? AS TIMESTAMP)' : '?';
 }
 
+function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
+  return field.startsWith('metadata.');
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
+  allowMetadata = false,
 ): SqlFragment {
   if (predicate.type === 'boolean') {
     const values: unknown[] = [];
     const parts = predicate.args.map(arg => {
-      const compiled = compileScalarPredicate(arg, registry);
+      const compiled = compileScalarPredicate(arg, registry, allowMetadata);
       values.push(...compiled.values);
       return `(${compiled.sql})`;
     });
@@ -101,47 +120,97 @@ function compileScalarPredicate<TField extends string>(
   }
 
   if (predicate.type === 'not') {
-    const compiled = compileScalarPredicate(predicate.arg, registry);
+    const compiled = compileScalarPredicate(predicate.arg, registry, allowMetadata);
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  const field = fieldDefinition(registry, predicate.field);
+  let field: FieldDefinition;
+  let fieldValues: unknown[] = [];
+  if (isMetadataField(predicate.field)) {
+    if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
+    const key = predicate.field.slice('metadata.'.length);
+    const path = `$.${JSON.stringify(key)}`;
+    field = {
+      sql: `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+      parameterType: 'scalar',
+    };
+    fieldValues = [path, path];
+  } else {
+    field = fieldDefinition(registry, predicate.field);
+  }
+
   if (predicate.type === 'presence') {
     return {
       sql: `${field.sql} IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`,
-      values: [],
+      values: fieldValues,
     };
   }
 
   if (predicate.type === 'membership') {
     const list = predicate.values.map(() => parameterSql(field.parameterType)).join(', ');
     if (predicate.operator === 'in') {
-      return { sql: `${field.sql} IS NOT NULL AND ${field.sql} IN (${list})`, values: predicate.values };
+      return {
+        sql: `${field.sql} IS NOT NULL AND ${field.sql} IN (${list})`,
+        values: [...fieldValues, ...fieldValues, ...predicate.values],
+      };
     }
-    return { sql: `${field.sql} IS NULL OR ${field.sql} NOT IN (${list})`, values: predicate.values };
+    return {
+      sql: `${field.sql} IS NULL OR ${field.sql} NOT IN (${list})`,
+      values: [...fieldValues, ...fieldValues, ...predicate.values],
+    };
   }
 
   const parameter = parameterSql(field.parameterType);
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
   if (predicate.operator === 'eq') {
-    return { sql: `${field.sql} IS NOT DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field.sql} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field.sql} IS DISTINCT FROM ${parameter}`, values: [predicate.value] };
+    return { sql: `${field.sql} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
   return {
     sql: `${field.sql} IS NOT NULL AND ${field.sql} ${operator} ${parameter}`,
-    values: [predicate.value],
+    values: [...fieldValues, ...fieldValues, predicate.value],
   };
+}
+
+function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileFeedbackScalarPredicate(arg);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+  if (predicate.type === 'not') {
+    const compiled = compileFeedbackScalarPredicate(predicate.arg);
+    return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+  }
+  if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
+  if (predicate.type === 'presence') {
+    return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
+  }
+  const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
+  const field = typeof sample === 'number' ? 'TRY_CAST(s.value AS DOUBLE)' : 's.value';
+  return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
 }
 
 function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
   if (predicate.type === 'relation') {
-    const registry = predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS;
-    const compiled = compileScalarPredicate(predicate.predicate, registry);
-    const table = predicate.collection === 'spans' ? 'current_spans' : 'current_scores';
+    const compiled =
+      predicate.collection === 'feedback'
+        ? compileFeedbackScalarPredicate(predicate.predicate)
+        : compileScalarPredicate(predicate.predicate, predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS);
+    const table =
+      predicate.collection === 'spans'
+        ? 'current_spans'
+        : predicate.collection === 'scores'
+          ? 'current_scores'
+          : 'current_feedback';
     const existence = `EXISTS (
       SELECT 1 FROM ${table} s
       WHERE s.traceId IS NOT NULL
@@ -169,13 +238,13 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate): SqlFragment {
     return { sql: `NOT (${compiled.sql})`, values: compiled.values };
   }
 
-  return compileScalarPredicate(predicate, TRACE_FIELDS);
+  return compileScalarPredicate(predicate, TRACE_FIELDS, true);
 }
 
 function collectRelatedCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores'>(),
-): Set<'spans' | 'scores'> {
+  collections = new Set<'spans' | 'scores' | 'feedback'>(),
+): Set<'spans' | 'scores' | 'feedback'> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -282,6 +351,14 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
       SELECT s.*
       FROM score_events s
       INNER JOIN root_scope roots ON roots.traceId = s.traceId
+    )`);
+  }
+
+  if (relatedCollections.has('feedback')) {
+    ctes.push(`current_feedback AS (
+      SELECT f.*
+      FROM feedback_events f
+      INNER JOIN root_scope roots ON roots.traceId = f.traceId
     )`);
   }
 

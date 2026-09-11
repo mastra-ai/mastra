@@ -9,12 +9,21 @@
  * @see https://docs.docker.com/engine/api/
  */
 
+import { posix as posixPath } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { RequestContext } from '@mastra/core/di';
-import type { SandboxInfo, ProviderStatus, MastraSandboxOptions, SandboxCloneOptions } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import type {
+  SandboxInfo,
+  ProviderStatus,
+  MastraSandboxOptions,
+  SandboxCloneOptions,
+  SandboxFileInput,
+  WriteFilesOptions,
+} from '@mastra/core/workspace';
+import { MastraSandbox, SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
+import { pack as tarPack } from 'tar-stream';
 import { DockerProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[DockerSandbox]';
@@ -262,6 +271,7 @@ export class DockerSandbox extends MastraSandbox {
       ...base,
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
+      ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
     });
   }
 
@@ -477,6 +487,86 @@ export class DockerSandbox extends MastraSandbox {
     this.processes.reset();
     this._container = null;
     this.logger.debug(`${LOG_PREFIX} Container destroyed`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // File Upload
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-write files into the container's filesystem using Docker's native
+   * archive upload (`putArchive`), the same mechanism as `docker cp`.
+   *
+   * Behavior:
+   * - Requires a started sandbox. Throws {@link SandboxNotReadyError} otherwise
+   *   (Docker containers are not auto-started by this method).
+   * - Absolute paths are used as-is; relative paths resolve against
+   *   {@link workingDirectory}.
+   * - Missing parent directories are created automatically.
+   * - Existing destinations are overwritten (contents and mode).
+   * - Exact bytes are preserved for both `string` and `Buffer` content,
+   *   including empty files and binary data.
+   * - New files are created with mode `0644`; directories created implicitly
+   *   default to Docker's `0755`. Overwriting a file replaces its mode with `0644`.
+   * - Not atomic across files: on failure the promise rejects and earlier or
+   *   partially written files may remain.
+   *
+   * Cancellation (`options.abortSignal`):
+   * - If the signal is already aborted, rejects with {@link SandboxAbortError}
+   *   before creating the archive or starting the upload.
+   * - If the signal aborts during transfer, the underlying `putArchive` request
+   *   is terminated by destroying the tar stream (which ends the request body),
+   *   and the promise rejects with {@link SandboxAbortError}.
+   * - Upload and cancellation race: an upload that completes before the abort is
+   *   observed resolves normally.
+   * - No rollback: files Docker already received or extracted may remain. The
+   *   daemon may continue extraction after rejection, so the caller is
+   *   responsible for any cleanup or sandbox disposal.
+   * - Behavior is unchanged when no signal is supplied.
+   *
+   * @throws {SandboxNotReadyError} If the sandbox has not been started.
+   * @throws {SandboxAbortError} If the write is cancelled via `options.abortSignal`.
+   * @throws {SandboxError} If the archive upload fails.
+   */
+  async writeFiles(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void> {
+    const container = this.container;
+
+    const signal = options?.abortSignal;
+    if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+
+    if (files.length === 0) return;
+
+    const pack = tarPack();
+    for (const file of files) {
+      const resolved = posixPath.isAbsolute(file.path)
+        ? posixPath.normalize(file.path)
+        : posixPath.resolve(this.workingDirectory, file.path);
+      const data = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
+      // tar entries are relative; strip the leading slash so extraction at `/`
+      // lands the file at its intended absolute path.
+      pack.entry({ name: resolved.replace(/^\/+/, ''), size: data.length, mode: 0o644 }, data);
+    }
+    pack.finalize();
+
+    // Destroying the tar stream ends the putArchive request body, which
+    // terminates the in-flight HTTP upload to the Docker daemon. The
+    // abortSignal is also forwarded to putArchive for transports that observe
+    // it; it is harmless when ignored.
+    const onAbort = () => pack.destroy();
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      await container.putArchive(pack, { path: '/', abortSignal: signal });
+    } catch (error) {
+      if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+      throw new SandboxError(
+        `Failed to write files to sandbox: ${error instanceof Error ? error.message : String(error)}`,
+        'EXECUTION_FAILED',
+        { reason: 'write_files_failed' },
+      );
+    } finally {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -220,7 +220,8 @@ jobs:
           const memoryChanged = affectedMemoryTests || changed(file =>
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
-          const e2eChanged = affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+          const { studioE2eChanged } = require('./.github/scripts/studio-e2e-routing.cjs');
+          const e2eChanged = studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
             (file.startsWith('e2e-tests/') &&
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||

@@ -85,7 +85,7 @@ async function importVerificationKey(
     return importSPKI(key, algorithm);
   }
 
-  return importJWK(key as JWK, algorithm);
+  return importJWK(key, algorithm);
 }
 
 export async function verifyAgentCardSignatureIfPresent(

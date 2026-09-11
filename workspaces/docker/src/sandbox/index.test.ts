@@ -17,7 +17,8 @@
  */
 
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
-import { SandboxNotReadyError } from '@mastra/core/workspace';
+import { SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import { extract as tarExtract } from 'tar-stream';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DockerSandbox } from './index';
@@ -56,6 +57,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
       State: { Status: 'running', Running: true },
     }),
     exec: vi.fn().mockResolvedValue(mockExec),
+    putArchive: vi.fn().mockResolvedValue(undefined),
   };
 
   const mockFollowProgress = vi.fn((_stream: any, onFinish: (err: Error | null) => void) => {
@@ -86,6 +88,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
       State: { Status: 'running', Running: true },
     });
     mockContainer.exec.mockReset().mockResolvedValue(mockExec);
+    mockContainer.putArchive.mockReset().mockResolvedValue(undefined);
     mockDocker.createContainer.mockReset().mockResolvedValue(mockContainer);
     mockDocker.getContainer.mockReset().mockReturnValue(mockContainer);
     mockDocker.getImage.mockReset().mockReturnValue({
@@ -1268,6 +1271,32 @@ describe('DockerSandbox Shared Conformance', () => {
 });
 
 describe('DockerSandbox.clone', () => {
+  it.each([
+    { options: { workingDirectory: '/original' }, expected: '/original' },
+    { options: { workingDir: '/legacy' }, expected: '/legacy' },
+    { options: {}, expected: '/workspace' },
+  ])('overrides the working directory for a $expected template', ({ options, expected }) => {
+    const template = new DockerSandbox(options);
+    const child = template.clone({ workingDirectory: '/clone' });
+
+    expect(child.workingDirectory).toBe('/clone');
+    expect(template.workingDirectory).toBe(expected);
+    expect(child.clone().workingDirectory).toBe('/clone');
+    expect(child.status).toBe('pending');
+  });
+
+  it.each([
+    { options: { workingDirectory: '/original' }, expected: '/original' },
+    { options: { workingDir: '/legacy' }, expected: '/legacy' },
+    { options: {}, expected: '/workspace' },
+  ])('inherits the $expected working directory without an override', ({ options, expected }) => {
+    const template = new DockerSandbox(options);
+
+    expect(template.clone().workingDirectory).toBe(expected);
+    expect(template.clone({ workingDirectory: undefined }).workingDirectory).toBe(expected);
+    expect(template.workingDirectory).toBe(expected);
+  });
+
   it('constructs an unstarted sibling without any I/O', () => {
     const template = new DockerSandbox({ image: 'node:22', workingDir: '/workspace' });
 
@@ -1306,5 +1335,178 @@ describe('DockerSandbox.clone', () => {
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ image: 'node:22', env: { BASE: '1' } });
+  });
+});
+
+// =============================================================================
+// writeFiles
+// =============================================================================
+
+interface ParsedEntry {
+  name: string;
+  mode?: number;
+  content: string;
+}
+
+/** Parse the tar stream passed to container.putArchive into entries. */
+async function parsePutArchive(): Promise<ParsedEntry[]> {
+  const call = mockContainer.putArchive.mock.calls.at(-1);
+  if (!call) throw new Error('putArchive was not called');
+  const [stream, opts] = call as [NodeJS.ReadableStream, { path: string }];
+  expect(opts.path).toBe('/');
+
+  return await new Promise<ParsedEntry[]>((resolve, reject) => {
+    const entries: ParsedEntry[] = [];
+    const ex = tarExtract();
+    ex.on('entry', (header, entryStream, next) => {
+      const chunks: Buffer[] = [];
+      entryStream.on('data', chunk => chunks.push(chunk as Buffer));
+      entryStream.on('end', () => {
+        entries.push({ name: header.name, mode: header.mode, content: Buffer.concat(chunks).toString('utf8') });
+        next();
+      });
+      entryStream.resume();
+    });
+    ex.on('finish', () => resolve(entries));
+    ex.on('error', reject);
+    stream.pipe(ex);
+  });
+}
+
+describe('DockerSandbox writeFiles', () => {
+  beforeEach(() => {
+    resetMockDefaults();
+  });
+
+  it('throws SandboxNotReadyError when the sandbox has not started', async () => {
+    const sandbox = new DockerSandbox();
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxNotReadyError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op for an empty file list', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    await sandbox.writeFiles([]);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('resolves relative paths against the working directory', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: 'src/index.js', content: 'console.log(1)' }]);
+
+    const entries = await parsePutArchive();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.name).toBe('srv/app/src/index.js');
+    expect(entries[0]!.content).toBe('console.log(1)');
+    expect(entries[0]!.mode).toBe(0o644);
+  });
+
+  it('keeps absolute paths and strips the leading slash for the tar entry', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([{ path: '/etc/config.json', content: '{}' }]);
+
+    const entries = await parsePutArchive();
+    expect(entries[0]!.name).toBe('etc/config.json');
+  });
+
+  it('preserves Buffer content and writes multiple files in one archive', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    await sandbox.writeFiles([
+      { path: 'script.js', content: 'run()' },
+      { path: 'data.bin', content: Buffer.from('binary') },
+    ]);
+
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+    const entries = await parsePutArchive();
+    expect(entries.map(e => e.name)).toEqual(['workspace/script.js', 'workspace/data.bin']);
+    expect(entries.find(e => e.name === 'workspace/data.bin')!.content).toBe('binary');
+  });
+
+  it('wraps putArchive failures in a SandboxError', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+    mockContainer.putArchive.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }])).rejects.toBeInstanceOf(SandboxError);
+  });
+
+  it('rejects with SandboxAbortError when the signal is already aborted, without uploading', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty write when the signal is already aborted', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(sandbox.writeFiles([], { abortSignal: controller.signal })).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight upload and rejects with SandboxAbortError', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    // Model a real transfer: reject when the tar stream is destroyed (its body
+    // ends), which is what terminates the putArchive request.
+    mockContainer.putArchive.mockImplementationOnce((stream: NodeJS.ReadableStream) => {
+      return new Promise((_resolve, reject) => {
+        stream.on('error', err => reject(err));
+        stream.on('close', () => reject(new Error('stream closed')));
+      });
+    });
+
+    const controller = new AbortController();
+    const promise = sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+  });
+
+  it('completes normally and forwards the signal when a non-aborted signal is supplied', async () => {
+    const sandbox = new DockerSandbox({ workingDirectory: '/workspace' });
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'ok.txt', content: 'done' }], { abortSignal: controller.signal });
+
+    expect(mockContainer.putArchive).toHaveBeenCalledTimes(1);
+    const opts = mockContainer.putArchive.mock.calls.at(-1)![1] as { path: string; abortSignal?: AbortSignal };
+    expect(opts.path).toBe('/');
+    expect(opts.abortSignal).toBe(controller.signal);
+    const entries = await parsePutArchive();
+    expect(entries[0]!.name).toBe('workspace/ok.txt');
+    expect(entries[0]!.content).toBe('done');
+  });
+
+  it('removes the abort listener after completion so a later abort is a no-op', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    await sandbox.writeFiles([{ path: 'a.txt', content: 'hi' }], { abortSignal: controller.signal });
+
+    // Listener was detached; aborting now must not throw or affect anything.
+    expect(() => controller.abort()).not.toThrow();
   });
 });

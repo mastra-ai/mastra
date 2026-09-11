@@ -55,7 +55,7 @@ export function SettingsLayout({
               ) : null}
             </div>
             {description !== undefined && description !== null ? (
-              <Txt as="p" variant="ui-md" className="text-neutral4 m-0 leading-tight wrap-break-word">
+              <Txt as="p" variant="ui-md" className="text-neutral4 m-0 wrap-break-word">
                 {description}
               </Txt>
             ) : null}

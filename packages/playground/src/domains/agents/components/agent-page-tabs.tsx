@@ -2,12 +2,13 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ExternalLink, EyeIcon, FlaskConical, ClipboardCheck, GitBranch, LayoutPanelLeft } from 'lucide-react';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { ExternalLink, FlaskConical, ClipboardCheck, GitBranch, LayoutPanelLeft, MessageSquare } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
-export type AgentPageTab = 'overview' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'overview' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -55,7 +56,7 @@ function AgentTab({
         {label}
       </Txt>
       {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center text-xs leading-[18px] font-medium text-white">
+        <span className="bg-accent1 text-ui-sm ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center leading-[18px] font-medium text-white">
           {badge}
         </span>
       )}
@@ -108,6 +109,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
+    chat: `/agents/${agentId}/threads/new`,
     overview: `/agents/${agentId}/overview`,
     versions: `/agents/${agentId}/editor`,
     evaluate: `/agents/${agentId}/evaluate`,
@@ -131,6 +133,7 @@ export function AgentPageTabs({
         className="min-w-0 flex-1 max-lg:flex-auto"
       >
         <TabList variant="pill-ghost">
+          <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab value="overview" icon={<LayoutPanelLeft />} label="Overview" />
           <AgentTab
             value="versions"
@@ -156,8 +159,8 @@ export function AgentPageTabs({
           />
           <AgentTab
             value="traces"
-            icon={<EyeIcon />}
-            label="Traces"
+            icon={<TraceIcon />}
+            label="Agent traces"
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />

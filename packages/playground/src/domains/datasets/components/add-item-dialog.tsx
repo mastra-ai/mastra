@@ -42,7 +42,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-destructive text-xs">
+        <p key={idx} className="text-destructive text-ui-sm">
           <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
