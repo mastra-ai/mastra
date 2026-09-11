@@ -5,15 +5,14 @@
 Added the observability storage contract for querying thread identities with cross-trace predicates.
 
 ```ts
-await observabilityStore.queryThreads({
-  result: 'threads',
+const input = parseQueryThreadsInput({
   traces: {
     timeRange: { from, to },
     where: eligibleTracePredicate,
   },
   where: threadPredicate,
-  orderBy: { field: 'threadId', direction: 'asc' },
-  limit: 100,
-  binding,
 });
+
+const plan = planThreadQuery(input);
+const result = await observabilityStore.queryThreads(plan);
 ```
