@@ -280,43 +280,6 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 }
 
 describe('KnowledgePage', () => {
-  it('keeps the selected Knowledge key on graph, activity, and detail requests', async () => {
-    stubKnowledgeRoute();
-    const requests: string[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
-        requests.push(`graph:${new URL(request.url).searchParams.get('knowledgeKey')}`);
-        return HttpResponse.json(graphFixture);
-      }),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
-        requests.push(`activity:${new URL(request.url).searchParams.get('knowledgeKey')}`);
-        return HttpResponse.json({ events: [] });
-      }),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, ({ request }) => {
-        requests.push(`node:${new URL(request.url).searchParams.get('knowledgeKey')}`);
-        return HttpResponse.json(nodeFixture);
-      }),
-    );
-    const user = userEvent.setup();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team`);
-    fireEvent.click(await screen.findByText('Payments Service'));
-    await waitFor(() => expect(requests).toContain('node:team'));
-    await user.click(screen.getByRole('tab', { name: 'activity' }));
-    await waitFor(() => expect(requests).toContain('activity:team'));
-    expect(requests).toContain('graph:team');
-    expect(requests.every(request => request.endsWith(':team'))).toBe(true);
-
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=second`));
-    await waitFor(() => expect(requests).toContain('graph:second'));
-    await screen.findByText('Payments Service');
-    expect(requests).not.toContain('node:second');
-    expect(
-      within(screen.getByRole('navigation', { name: 'Knowledge scope' })).queryByText('Payments Service'),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Payments Service'));
-    await waitFor(() => expect(requests).toContain('node:second'));
-  });
-
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -412,7 +375,8 @@ describe('KnowledgePage', () => {
       expect(requests.some(url => url.pathname.endsWith('/importers'))).toBe(true);
       expect(requests.some(url => url.pathname.endsWith('/github/runs'))).toBe(true);
       expect(requests.some(url => url.pathname.endsWith('/github/runs/run-1'))).toBe(true);
-      expect(requests.every(url => url.searchParams.get('knowledgeKey') === 'team')).toBe(true);
+      // Importer surfaces are host-vouched: a stray client key never reaches the server.
+      expect(requests.every(url => url.searchParams.get('knowledgeKey') === null)).toBe(true);
     } finally {
       server.events.removeListener('request:match', observeRequest);
     }

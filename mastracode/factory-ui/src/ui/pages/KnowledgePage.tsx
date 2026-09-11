@@ -30,11 +30,9 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
 export function KnowledgePage() {
-  const [searchParams] = useSearchParams();
-  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return (
     <FactoryPageShell>
-      {project => <KnowledgeContent key={JSON.stringify([project.id, knowledgeKey])} factoryProjectId={project.id} />}
+      {project => <KnowledgeContent key={project.id} factoryProjectId={project.id} />}
     </FactoryPageShell>
   );
 }

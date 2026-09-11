@@ -126,8 +126,8 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function knowledgeQuery(input: { knowledgeKey: string; threadId?: string; scopeId?: string; cursor?: string }): string {
-  const params = new URLSearchParams({ knowledgeKey: input.knowledgeKey });
+function knowledgeQuery(input: { threadId?: string; scopeId?: string; cursor?: string }): string {
+  const params = new URLSearchParams();
   if (input.threadId) params.set('threadId', input.threadId);
   if (input.scopeId) params.set('scopeId', input.scopeId);
   if (input.cursor) params.set('cursor', input.cursor);
@@ -141,10 +141,9 @@ export async function fetchKnowledgeScopes(
   scopeId?: string,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeScopeTreePayload> {
   return requestJson<KnowledgeScopeTreePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ knowledgeKey, threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }
@@ -155,10 +154,9 @@ export async function fetchKnowledgeGraph(
   scopeId: string,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery({ knowledgeKey, threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }
@@ -169,10 +167,9 @@ export async function fetchKnowledgeActivity(
   scopeId?: string,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ knowledgeKey, threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }
@@ -184,10 +181,9 @@ export async function fetchKnowledgeNode(
   scopeId: string,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeNodePayload> {
   return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery({ knowledgeKey, threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery({ threadId, scopeId })}`,
     { signal },
   );
 }
