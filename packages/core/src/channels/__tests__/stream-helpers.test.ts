@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { ToolTracker, editOrPostMessage, extractErrorMessage, postFileAttachment } from '../stream-helpers';
+import {
+  ToolTracker,
+  editOrPostMessage,
+  extractErrorMessage,
+  isBlankToolMessage,
+  postFileAttachment,
+  renderBuiltInToolEvent,
+} from '../stream-helpers';
+import { getChatModule } from '../chat-lazy';
 
 describe('ToolTracker', () => {
   it('tracks a tool start and returns enrichment', () => {
@@ -270,5 +278,134 @@ describe('extractErrorMessage', () => {
   it('returns null/undefined unchanged', () => {
     expect(extractErrorMessage(null)).toBe(null);
     expect(extractErrorMessage(undefined)).toBe(undefined);
+  });
+});
+
+describe('isBlankToolMessage', () => {
+  it('treats empty/whitespace-only strings as blank', () => {
+    expect(isBlankToolMessage('')).toBe(true);
+    expect(isBlankToolMessage('   ')).toBe(true);
+    expect(isBlankToolMessage('\n\t')).toBe(true);
+  });
+
+  it('treats non-blank strings as not blank', () => {
+    expect(isBlankToolMessage('hello')).toBe(false);
+    expect(isBlankToolMessage('  hi  ')).toBe(false);
+  });
+
+  it('treats empty/whitespace-only { markdown } as blank', () => {
+    expect(isBlankToolMessage({ markdown: '' })).toBe(true);
+    expect(isBlankToolMessage({ markdown: '   \n  ' })).toBe(true);
+  });
+
+  it('treats non-blank { markdown } as not blank', () => {
+    expect(isBlankToolMessage({ markdown: 'hi' })).toBe(false);
+  });
+
+  it('does not treat Block Kit Card objects as blank', () => {
+    expect(isBlankToolMessage({ children: [] } as any)).toBe(false);
+  });
+});
+
+describe('renderBuiltInToolEvent', () => {
+  it('renders an approved event as a plain text "Approved" message', async () => {
+    await getChatModule();
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'approved',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+      },
+      'text',
+    );
+    expect(typeof message).toBe('string');
+    expect(message).toContain('*weather*');
+    expect(message).toContain('✓ Approved');
+  });
+
+  it('renders an approved event as a card "Approved" message', async () => {
+    await getChatModule();
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'approved',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+      },
+      'cards',
+    );
+    expect(JSON.stringify(message)).toContain('✓ Approved');
+    expect(JSON.stringify(message)).toContain('weather');
+  });
+
+  it('renders a denied event with the user attribution', async () => {
+    await getChatModule();
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'denied',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+        byUser: 'alice',
+      },
+      'text',
+    );
+    expect(typeof message).toBe('string');
+    expect(message).toContain('*weather*');
+    expect(message).toContain('✗ Denied');
+    expect(message).toContain('by alice');
+  });
+
+  it('renders a denied event without a "by …" suffix when byUser is undefined', async () => {
+    await getChatModule();
+    const message = renderBuiltInToolEvent(
+      {
+        kind: 'denied',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+      },
+      'text',
+    );
+    expect(typeof message).toBe('string');
+    expect(message).not.toContain('by ');
+  });
+
+  it('still renders the existing kinds (running/result/error/approval)', async () => {
+    await getChatModule();
+    const running = renderBuiltInToolEvent(
+      {
+        kind: 'running',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+      },
+      'text',
+    );
+    expect(running).toContain('*weather*');
+
+    const approval = renderBuiltInToolEvent(
+      {
+        kind: 'approval',
+        toolCallId: 't1',
+        toolName: 'weather',
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        args: { city: 'NYC' },
+      },
+      'text',
+    );
+    expect(JSON.stringify(approval)).toContain('Requires approval');
   });
 });

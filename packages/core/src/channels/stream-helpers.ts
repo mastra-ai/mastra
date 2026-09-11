@@ -5,6 +5,8 @@ import {
   formatArgsSummary,
   formatResult,
   formatToolApproval,
+  formatToolApproved,
+  formatToolDenied,
   formatToolResult,
   formatToolRunning,
   stripToolPrefix,
@@ -361,9 +363,19 @@ export function renderBuiltInToolEvent(event: ToolDisplayEvent, mode: 'cards' | 
   if (event.kind === 'error') {
     return formatToolResult(event.displayName, event.argsSummary, event.errorText, true, event.durationMs, useCards);
   }
-  // Approval: always cards (need Approve/Deny buttons). `useCards: false`
-  // falls back to a plain "reply approve/deny" hint.
-  return formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true);
+  if (event.kind === 'approval') {
+    return formatToolApproval(event.displayName, event.argsSummary, event.toolCallId, true);
+  }
+  if (event.kind === 'approved') {
+    return formatToolApproved(event.displayName, event.argsSummary, useCards);
+  }
+  return formatToolDenied(event.displayName, event.argsSummary, event.byUser, useCards);
+}
+
+/** Returns true if `message` is an empty string or an empty `{ markdown }`. */
+export function isBlankToolMessage(message: PostableMessage): boolean {
+  if (typeof message === 'string') return message.trim().length === 0;
+  return 'markdown' in message && message.markdown.trim().length === 0;
 }
 
 /**

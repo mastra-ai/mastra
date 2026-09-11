@@ -36,6 +36,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { isBlankToolMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -49,6 +50,7 @@ import type {
   StreamingConfig,
   ThreadHistoryMessage,
   ToolDisplay,
+  ToolDisplayEvent,
   ToolDisplayFn,
 } from './types';
 import { defaultTypingStatus } from './typing-status';
@@ -615,28 +617,53 @@ export class AgentChannels {
               // Build the card header with tool name and args
               const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
               const argsSummary = toolArgs ? formatArgsSummary(toolArgs) : '';
-              // Resolve the tool display mode so the approve/deny edit matches
-              // the original card's rendering (cards → Block Kit, text → plain).
-              // Streaming is irrelevant here — we're outside the agent loop.
-              const { resolved: toolDisplay } = this.resolveToolDisplay(
+              const streamingEnabled = this.resolveStreaming(adapterConfig?.streaming).enabled;
+              const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
                 platform,
                 adapterConfig?.toolDisplay,
-                false,
+                streamingEnabled,
                 adapterConfig?.cards,
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              const renderMode: 'streaming' | 'static' = streamingEnabled ? 'streaming' : 'static';
+
+              const resolveResolvedMessage = (kind: 'approved' | 'denied', byUser?: string): PostableMessage | null => {
+                if (toolDisplayFn) {
+                  const result = toolDisplayFn(
+                    {
+                      kind,
+                      toolCallId,
+                      toolName: toolName ?? '',
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                      byUser,
+                    },
+                    { mode: renderMode, platform },
+                  );
+                  if (result == null) return null;
+                  if (result.kind === 'post') {
+                    return result.message == null || isBlankToolMessage(result.message) ? null : result.message;
+                  }
+                  return kind === 'approved'
+                    ? formatToolApproved(displayName, argsSummary, useCards)
+                    : formatToolDenied(displayName, argsSummary, byUser, useCards);
+                }
+                return kind === 'approved'
+                  ? formatToolApproved(displayName, argsSummary, useCards)
+                  : formatToolDenied(displayName, argsSummary, byUser, useCards);
+              };
 
               if (!approved) {
                 const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
-                try {
-                  await adapter.editMessage(
-                    chatThread.id,
-                    messageId,
-                    formatToolDenied(displayName, argsSummary, byUser, useCards),
-                  );
-                } catch (err) {
-                  this.log('debug', 'Failed to edit denied card', err);
+                const resolvedMessage = resolveResolvedMessage('denied', byUser);
+                if (resolvedMessage != null) {
+                  try {
+                    await adapter.editMessage(chatThread.id, messageId, resolvedMessage);
+                  } catch (err) {
+                    this.log('debug', 'Failed to edit denied card', err);
+                  }
                 }
 
                 // Resume the suspended run with a denial so the agent can produce a
@@ -682,14 +709,14 @@ export class AgentChannels {
               }
 
               // Immediately edit the card to show "Approved" and remove the buttons
-              try {
-                await adapter.editMessage(
-                  chatThread.id,
-                  messageId,
-                  formatToolApproved(displayName, argsSummary, useCards),
-                );
-              } catch (err) {
-                this.log('debug', 'Failed to edit approved card', err);
+              const approvedByUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+              const approvedMessage = resolveResolvedMessage('approved', approvedByUser);
+              if (approvedMessage != null) {
+                try {
+                  await adapter.editMessage(chatThread.id, messageId, approvedMessage);
+                } catch (err) {
+                  this.log('debug', 'Failed to edit approved card', err);
+                }
               }
 
               // Build request context for the resumed stream. Stash the render

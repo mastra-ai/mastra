@@ -148,11 +148,12 @@ export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) =
  * Per-event payload passed to {@link ToolDisplayFn}.
  *
  * Every variant carries `toolCallId` — a stable identifier for this
- * specific tool invocation. Use it to correlate `running`/`result`/`error`/
- * `approval` events for the same call (e.g. to edit a previously posted
- * message, or as the `id` on a streamed `task_update` so the SDK updates
- * the row in place rather than appending a new one). It is unique even
- * when the same tool is called in parallel.
+ * specific tool invocation. Use it to correlate events for the same call
+ * (e.g. to edit a previously posted message, or as the `id` on a streamed
+ * `task_update` so the SDK updates the row in place rather than appending
+ * a new one). It is unique even when the same tool is called in parallel.
+ *
+ * Lifecycle: `running` → (`result` | `error` | `approval` → (`approved` | `denied`) → (`result` | `error`)).
  */
 export type ToolDisplayEvent =
   | {
@@ -193,6 +194,26 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+    }
+  | {
+      /** Fires after the user clicks Approve. Return `{ kind: 'post', message }` to edit the card, or `undefined` to skip. */
+      kind: 'approved';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      byUser?: string;
+    }
+  | {
+      /** Fires after the user clicks Deny. Mirrors {@link approved}. */
+      kind: 'denied';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      byUser?: string;
     };
 
 /** Context about which driver is consuming the function-form result. */
