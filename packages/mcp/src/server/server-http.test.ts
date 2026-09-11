@@ -10,8 +10,9 @@ import {
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, rawRequest, serveHTTP, textOf } from './__tests__/harness';
+import { connectClient, rawRequest, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
+import type { MCPTraceContext } from '../shared/trace-context';
 import { MCPServer } from './server';
 import type { MCPServerHTTPOptions, MCPServerHTTPRequestOptions } from './types';
 
@@ -65,6 +66,26 @@ const makeTools = () => ({
       return { kind: 'completed', value: 'progressed' };
     },
   }),
+  traceTool: createTool({
+    id: 'traceTool',
+    description: 'Returns request trace metadata and the authenticated client id',
+    inputSchema: z.object({}),
+    execute: async (_input, context) => {
+      const auth = context.requestContext?.get('authInfo') as AuthInfo | undefined;
+      const trace = context.requestContext?.get('traceContext') as MCPTraceContext | undefined;
+      return JSON.stringify({ ...trace, clientId: auth?.clientId });
+    },
+  }),
+  nativeTraceTool: createMCPTool({
+    id: 'nativeTraceTool',
+    description: 'Returns request trace metadata from the native request context',
+    inputSchema: z.object({}),
+    outputSchema: z.string(),
+    execute: async (_input, { request, requestContext }) => {
+      const trace = requestContext.get('traceContext') as MCPTraceContext | undefined;
+      return { kind: 'completed', value: JSON.stringify({ ...trace, rawTraceparent: request.metadata?.traceparent }) };
+    },
+  }),
   nullTool: createTool({
     id: 'nullTool',
     description: 'Returns a null structured result',
@@ -87,7 +108,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
 
   beforeAll(async () => {
     server = new MCPServer({
-      name: 'Modern Test Server',
+      name: 'Test Server',
       version: '1.0.0',
       cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
       tools: makeTools(),
@@ -106,7 +127,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('serves discovery, listing and calls to a pinned client without any session', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       expect(client.getDiscoverResult()?.supportedVersions).toEqual(['2026-07-28']);
       const tools = await client.listTools();
@@ -114,9 +135,11 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
         'authTool',
         'echoTool',
         'loggingTool',
+        'nativeTraceTool',
         'nullTool',
         'progressTool',
         'structuredTool',
+        'traceTool',
         'tupleTool',
       ]);
       expect(tools.ttlMs).toBe(60_000);
@@ -136,7 +159,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('advertises JSON Schema 2020-12 and preserves null and tuple structured results', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const tools = (await client.listTools()).tools;
       const tuple = tools.find(tool => tool.name === 'tupleTool')?.outputSchema as Record<string, unknown>;
@@ -160,8 +183,73 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     }
   });
 
+  it('keeps W3C trace metadata request-scoped without using baggage for authorization', async () => {
+    const client = await connectClient(served.url);
+    const readTrace = async (name: string, _meta?: Record<string, unknown>) =>
+      JSON.parse(textOf(await client.callTool({ name, arguments: {}, _meta })));
+    try {
+      await expect(
+        readTrace('traceTool', {
+          traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+          tracestate: 'vendor=first',
+          baggage: 'clientId=attacker,tenant=one',
+        }),
+      ).resolves.toEqual({
+        traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+        tracestate: 'vendor=first',
+        baggage: 'clientId=attacker,tenant=one',
+        clientId: authInfo.clientId,
+      });
+      // The next request carries only its own fields: nothing leaks between requests.
+      await expect(
+        readTrace('traceTool', { traceparent: '00-22222222222222222222222222222222-2222222222222222-01' }),
+      ).resolves.toEqual({
+        traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+        clientId: authInfo.clientId,
+      });
+      await expect(readTrace('traceTool')).resolves.toEqual({ clientId: authInfo.clientId });
+      // Non-string values are not trace context; tracestate without traceparent is dropped.
+      await expect(readTrace('traceTool', { traceparent: 7, tracestate: 'vendor=x' })).resolves.toEqual({
+        clientId: authInfo.clientId,
+      });
+
+      // Native tools see the same request-scoped values plus the raw metadata.
+      const native = await client.callTool({
+        name: 'nativeTraceTool',
+        arguments: {},
+        _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01' },
+      });
+      expect(JSON.parse(native.structuredContent as string)).toEqual({
+        traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+        rawTraceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('exposes malformed and oversized W3C values opaquely without failing tool execution', async () => {
+    const client = await connectClient(served.url);
+    const baggage = `value=${'x'.repeat(9000)}`;
+    try {
+      const result = await client.callTool({
+        name: 'traceTool',
+        arguments: {},
+        _meta: { traceparent: 'not-a-traceparent', baggage },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(JSON.parse(textOf(result))).toEqual({
+        traceparent: 'not-a-traceparent',
+        baggage,
+        clientId: authInfo.clientId,
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
   it('advertises only supported capabilities', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const capabilities = client.getServerCapabilities()!;
       expect(capabilities.tools).toEqual({ listChanged: true });
@@ -179,7 +267,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('returns validation failures as tool errors the model can correct', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
       expect(result.isError).toBe(true);
@@ -193,7 +281,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('derives auth and the mapped user from the transport on every request', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe(
         'test-client/user-of-test-client',
@@ -204,7 +292,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     const anonymous = new MCPServer({ name: 'Anonymous', version: '1.0.0', tools: makeTools() });
     const anonymousServed = await serveHTTP(anonymous);
     try {
-      const client = await connectModern(anonymousServed.url);
+      const client = await connectClient(anonymousServed.url);
       try {
         expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe('anonymous/none');
       } finally {
@@ -216,7 +304,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('publishes catalogue changes through subscriptions/listen', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     const toolChanges: Array<() => void> = [];
     client.setNotificationHandler('notifications/tools/list_changed', async () => toolChanges.shift()?.());
     const nextToolChange = () => new Promise<void>(resolve => toolChanges.push(resolve));
@@ -264,7 +352,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     };
 
     it('delivers logs at or above the level the request opted into', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       const messages = collect(client);
       try {
         const info = await client.callTool({
@@ -291,7 +379,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     });
 
     it('delivers nothing without an opt-in and never leaks a previous opt-in to later requests', async () => {
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       const messages = collect(client);
       try {
         await client.callTool({
@@ -311,8 +399,8 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     });
 
     it('isolates concurrent requests on the same server', async () => {
-      const opted = await connectModern(served.url);
-      const silent = await connectModern(served.url);
+      const opted = await connectClient(served.url);
+      const silent = await connectClient(served.url);
       const optedMessages = collect(opted);
       const silentMessages = collect(silent);
       try {
@@ -331,7 +419,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     it('does not serve the deprecated session-level logging/setLevel', async () => {
       const response = await rawRequest(served.url, { method: 'logging/setLevel', params: { level: 'debug' } });
       expect(response.json().error.code).toBe(-32601);
-      const client = await connectModern(served.url);
+      const client = await connectClient(served.url);
       try {
         await expect(client.setLoggingLevel('debug')).rejects.toThrow();
       } finally {
@@ -341,7 +429,7 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   });
 
   it('reports progress on the request stream when the caller supplies a token', async () => {
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     const progress: Array<{ progress: number; total?: number; message?: string }> = [];
     try {
       const result = await client.callTool(

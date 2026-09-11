@@ -7,7 +7,7 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 describe('MCPServer over stdio (2026-07-28)', () => {
   const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
-  const fixturePath = path.join(__dirname, '..', '__fixtures__/modern-era-notification-server.ts');
+  const fixturePath = path.join(__dirname, '..', '__fixtures__/notification-server.ts');
 
   let client: Client | undefined;
 
@@ -22,9 +22,9 @@ describe('MCPServer over stdio (2026-07-28)', () => {
     client = undefined;
   });
 
-  it('serves discovery, subscriptions, per-request logs and native input rounds to a modern client', async () => {
+  it('serves discovery, subscriptions, per-request logs and native input rounds to a client', async () => {
     client = new Client(
-      { name: 'modern-stdio-client', version: '1.0.0' },
+      { name: 'stdio-client', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { elicitation: { form: {} } } },
     );
     client.setRequestHandler('elicitation/create', async () => ({ action: 'accept', content: { name: 'Ada' } }));
@@ -51,6 +51,34 @@ describe('MCPServer over stdio (2026-07-28)', () => {
     const greeted = await client.callTool({ name: 'askName', arguments: {}, _meta: { [LOG_LEVEL_META_KEY]: 'info' } });
     expect(greeted.structuredContent).toBe('hello Ada');
     expect(logs).toEqual([{ message: 'greeting' }]);
+  });
+
+  it('preserves distinct W3C trace metadata on consecutive stdio requests', async () => {
+    client = new Client(
+      { name: 'stdio-trace-client', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await client.connect(transport());
+
+    const call = async (_meta?: Record<string, unknown>) => {
+      const result = await client!.callTool({ name: 'traceContextTool', arguments: {}, _meta });
+      return JSON.parse((result.content as Array<{ text?: string }>)[0]?.text ?? '{}');
+    };
+    await expect(
+      call({
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+        tracestate: 'vendor=stdio',
+        baggage: 'tenant=first',
+      }),
+    ).resolves.toEqual({
+      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+      tracestate: 'vendor=stdio',
+      baggage: 'tenant=first',
+    });
+    await expect(call({ traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01' })).resolves.toEqual({
+      traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+    });
+    await expect(call()).resolves.toEqual({});
   });
 
   it('rejects a legacy client instead of serving the 2025 handshake', async () => {

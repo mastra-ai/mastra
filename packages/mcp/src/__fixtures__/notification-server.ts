@@ -45,10 +45,17 @@ const askName = createMCPTool({
   },
 });
 
+const traceContextTool = createTool({
+  id: 'traceContextTool',
+  description: 'Returns request trace metadata',
+  inputSchema: z.object({}),
+  execute: async (_input, context) => JSON.stringify(context.requestContext?.get('traceContext') ?? {}),
+});
+
 server = new MCPServer({
-  name: 'Modern Era Notification Server',
+  name: 'Notification Server',
   version: '1.0.0',
-  tools: { triggerToolListChanged, askName },
+  tools: { triggerToolListChanged, askName, traceContextTool },
 });
 
 await server.startStdio();

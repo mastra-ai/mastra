@@ -14,6 +14,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
@@ -147,7 +148,7 @@ describe('InternalMastraMCPClient - server instructions', () => {
   });
 });
 
-type ModernTestServer = {
+type TestServer = {
   httpServer: HttpServer;
   mcpServer: McpServer;
   baseUrl: URL;
@@ -163,15 +164,15 @@ function listen(httpServer: HttpServer): Promise<URL> {
 }
 
 /**
- * Serves an SDK `McpServer` over the modern-only (2026-07-28) Streamable HTTP handler.
+ * Serves an SDK `McpServer` over the 2026-07-28 Streamable HTTP handler.
  * Legacy peers are rejected outright; every request is self-contained.
  */
-function serveModern(httpServer: HttpServer, mcpServer: McpServer): void {
+function serveMcp(httpServer: HttpServer, mcpServer: McpServer): void {
   const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
   httpServer.on('request', (req, res) => handler(req, res));
 }
 
-async function setupTestServer(): Promise<ModernTestServer> {
+async function setupTestServer(): Promise<TestServer> {
   const httpServer: HttpServer = createServer();
   const mcpServer = new McpServer(
     { name: 'test-http-server', version: '1.0.0' },
@@ -223,7 +224,7 @@ async function setupTestServer(): Promise<ModernTestServer> {
     };
   });
 
-  serveModern(httpServer, mcpServer);
+  serveMcp(httpServer, mcpServer);
   const baseUrl = await listen(httpServer);
 
   return { httpServer, mcpServer, baseUrl };
@@ -2014,6 +2015,63 @@ describe('MastraMCPClient - Custom _meta', () => {
     );
   });
 
+  it('resolves fresh W3C trace context per request and keeps explicit caller precedence', async () => {
+    let activeTrace: Record<string, string> = {
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+      'io.modelcontextprotocol/protocolVersion': 'attacker-controlled',
+    };
+    client = new InternalMastraMCPClient({
+      name: 'trace-context-client',
+      server: {
+        url: testServer.baseUrl,
+        enableServerLogs: false,
+        traceContext: () => activeTrace as unknown as MCPTraceContext,
+      },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    const tools = await client.tools();
+    const sendSpy = vi.spyOn((sdkClient as any).transport, 'send');
+
+    await tools['echo']?.execute?.({ msg: 'first' });
+    activeTrace = {
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    };
+    await tools['echo']?.execute?.(
+      { msg: 'second' },
+      { _meta: { traceparent: '00-33333333333333333333333333333333-3333333333333333-01', custom: true } },
+    );
+    await client.listResources();
+
+    const sent = sendSpy.mock.calls.map(call => call[0] as { method?: string; params?: { _meta?: unknown } });
+    const callRequests = sent.filter(message => message.method === 'tools/call');
+    // Only the three W3C keys are taken from the provider; reserved SDK keys cannot be spoofed.
+    expect(callRequests[0]?.params?._meta).toMatchObject({
+      traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+      tracestate: 'vendor=first',
+      baggage: 'tenant=one',
+    });
+    expect((callRequests[0]?.params?._meta as Record<string, unknown>)['io.modelcontextprotocol/protocolVersion']).not.toBe(
+      'attacker-controlled',
+    );
+    expect(callRequests[1]?.params?._meta).toMatchObject({
+      traceparent: '00-33333333333333333333333333333333-3333333333333333-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+      custom: true,
+    });
+    expect(sent.find(message => message.method === 'resources/list')?.params?._meta).toMatchObject({
+      traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
+      tracestate: 'vendor=second',
+      baggage: 'tenant=two',
+    });
+  });
+
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-progress-client',
@@ -2961,7 +3019,7 @@ describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', 
 });
 
 describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', () => {
-  // Modern-only server behind a flaky front door. While `failing` is true every
+  // Server behind a flaky front door. While `failing` is true every
   // request gets a 404 — like a load balancer with no healthy backend during a
   // redeploy.
   let httpServer: HttpServer;

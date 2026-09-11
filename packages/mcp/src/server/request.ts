@@ -2,6 +2,7 @@ import type { MCPRequestContextV2 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { ProtocolError, ProtocolErrorCode, specTypeSchemas } from '@modelcontextprotocol/server';
 import type { ElicitResult, ServerContext } from '@modelcontextprotocol/server';
+import { traceContextFromMeta } from '../shared/trace-context';
 import type { MCPAuthInfoToUserMapperV2, MCPServerRequest } from './types';
 
 /**
@@ -45,14 +46,18 @@ function parseInputResponses(responses: Record<string, unknown>): Record<string,
 }
 
 /**
- * Builds the trusted application context for one request round. Auth is
- * re-derived from the transport every time; nothing is carried between rounds.
+ * Builds the application context for one request round. Auth is re-derived
+ * from the transport every time; nothing is carried between rounds. The W3C
+ * trace fields sent by the client are exposed under `traceContext` as opaque
+ * strings for observability only; they are never consulted for authorization.
  */
 export async function toMastraRequestContext(
   ctx: ServerContext,
   mapAuthInfoToUser: MCPAuthInfoToUserMapperV2 | undefined,
 ): Promise<RequestContext> {
   const requestContext = new RequestContext();
+  const traceContext = traceContextFromMeta(ctx.mcpReq._meta);
+  if (traceContext) requestContext.set('traceContext', traceContext);
   const authInfo = ctx.http?.authInfo;
   if (!authInfo) return requestContext;
   requestContext.set('authInfo', authInfo);
