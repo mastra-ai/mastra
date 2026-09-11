@@ -1,14 +1,15 @@
-import type { AgentControllerSessionState } from '@mastra/client-js';
-import { useQuery } from '@tanstack/react-query';
-import type { RefObject } from 'react';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 
 import { queryKeys } from '../api/keys';
-import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../ui/domains/chat/services/agentControllerClient';
 
-export type AgentControllerLiveState = Pick<AgentControllerSessionState, 'running' | 'tasks'> & {
-  generation: number;
-  threadId?: string;
-};
+type SessionStateUpdate = Pick<AgentControllerSessionState, 'running' | 'tasks'>;
 
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
@@ -18,7 +19,6 @@ interface UseAgentControllerSessionSyncArgs {
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
-  liveState: RefObject<AgentControllerLiveState>;
 }
 
 export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
@@ -35,8 +35,10 @@ export function useAgentControllerSessionSync({
   baseUrl = '',
   enabled = true,
   sseConnected,
-  liveState,
 }: UseAgentControllerSessionSyncArgs) {
+  const queryClient = useQueryClient();
+  const liveStateUpdates = useRef<{ threadId?: string; updates: SessionStateUpdate }>({ updates: {} });
+  const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId);
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
@@ -45,20 +47,62 @@ export function useAgentControllerSessionSync({
     enabled,
   });
 
-  return useQuery({
-    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
-    queryFn: async () => {
-      const generationAtRequestStart = liveState.current.generation;
-      liveState.current = { generation: generationAtRequestStart, threadId };
-      const state = await session!.state({ threadId });
-      const { generation, threadId: liveThreadId, ...updates } = liveState.current;
-      const liveEventOvertookRequest = generationAtRequestStart !== generation && liveThreadId === threadId;
-      return liveEventOvertookRequest ? { ...state, ...updates } : state;
-    },
+  async function readSessionState() {
+    liveStateUpdates.current = { threadId, updates: {} };
+    const serverState = await requireAgentControllerSession(session).state({ threadId });
+    if (liveStateUpdates.current.threadId !== threadId) return serverState;
+    return { ...serverState, ...liveStateUpdates.current.updates };
+  }
+
+  function recordLiveStateUpdate(update: SessionStateUpdate) {
+    if (liveStateUpdates.current.threadId !== threadId) {
+      liveStateUpdates.current = { threadId, updates: {} };
+    }
+    liveStateUpdates.current.updates = { ...liveStateUpdates.current.updates, ...update };
+  }
+
+  function updateCachedSessionState(update: SessionStateUpdate) {
+    const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
+    queryClient.setQueryData<AgentControllerSessionState>(
+      stateQueryKey,
+      current => (current ? { ...current, ...update } : current),
+      { updatedAt },
+    );
+  }
+
+  function applySessionEvent(event: AgentControllerEvent) {
+    const update = getSessionStateUpdate(event);
+    if (!update) return;
+    recordLiveStateUpdate(update);
+    updateCachedSessionState(update);
+  }
+
+  const stateQuery = useQuery({
+    queryKey: stateQueryKey,
+    queryFn: readSessionState,
     enabled: enabled && Boolean(session),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchInterval: query => reconnectRefetchInterval(sseConnected, query.state.fetchFailureCount),
   });
+
+  return { stateQuery, applySessionEvent };
+}
+
+function getSessionStateUpdate(event: AgentControllerEvent): SessionStateUpdate | undefined {
+  if (!isKnownAgentControllerEvent(event)) return undefined;
+
+  switch (event.type) {
+    case 'agent_start':
+      return { running: true };
+    case 'agent_end':
+      return { running: false };
+    case 'display_state_changed':
+      return { running: event.displayState.isRunning };
+    case 'task_updated':
+      return { tasks: event.tasks };
+    default:
+      return undefined;
+  }
 }

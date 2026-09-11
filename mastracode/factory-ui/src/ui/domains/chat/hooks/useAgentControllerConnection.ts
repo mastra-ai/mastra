@@ -1,5 +1,4 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
-import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
@@ -8,7 +7,6 @@ import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
 import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
-import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -42,7 +40,6 @@ export function useAgentControllerConnection({
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseStateRef = useRef<SseConnectionState>('never');
-  const liveState = useRef<AgentControllerLiveState>({ generation: 0 });
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -61,7 +58,7 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled,
   });
-  const syncQuery = useAgentControllerSessionSync({
+  const { stateQuery: syncQuery, applySessionEvent } = useAgentControllerSessionSync({
     agentControllerId,
     resourceId,
     scope,
@@ -69,7 +66,6 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
-    liveState,
   });
   const handleConnectedChange = (connected: boolean) => {
     // React can batch renders between consecutive connection events.
@@ -94,36 +90,7 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
-    const displayStateRunning =
-      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
-        ? event.displayState.isRunning
-        : undefined;
-    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
-    const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
-    if (running !== undefined || tasks) {
-      const updates = {
-        ...(running !== undefined ? { running } : {}),
-        ...(tasks ? { tasks } : {}),
-      };
-      liveState.current = {
-        ...(liveState.current.threadId === sessionThreadId ? liveState.current : {}),
-        generation: liveState.current.generation + 1,
-        threadId: sessionThreadId,
-        ...updates,
-      };
-      const stateQueryKey = queryKeys.agentControllerConnectionState(
-        agentControllerId,
-        resourceId,
-        scope,
-        sessionThreadId,
-      );
-      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
-      queryClient.setQueryData<AgentControllerSessionState>(
-        stateQueryKey,
-        current => (current ? { ...current, ...updates } : current),
-        { updatedAt },
-      );
-    }
+    applySessionEvent(event);
     onEvent(event);
   };
 
