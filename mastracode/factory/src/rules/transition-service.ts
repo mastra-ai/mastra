@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
+import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -24,6 +27,7 @@ import {
 } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
+  assertFactoryDecisionTarget,
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
 } from './validation.js';
@@ -45,6 +49,9 @@ export interface FactoryTransitionRequest {
   stage: FactoryRuleStage;
   expectedRevision: number;
   actor: FactoryRuleActor;
+  actorProfile?: AuditActorProfileInput;
+  /** Where a browser request came from; rules and agents carry none. */
+  context?: AuditContext;
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
@@ -60,6 +67,8 @@ export interface FactoryTransitionServiceOptions {
   configVersion: string;
   storage: WorkItemsStorage;
   boards?: BoardRegistry;
+  /** Every commit, accepted or rejected, lands here as `stage_moved` / `transition_rejected` under the request's actor. */
+  audit?: AuditRecorder;
   timeoutMs?: number;
   /**
    * Called after a transition commits into a phase the board declares
@@ -110,6 +119,19 @@ function actorId(actor: FactoryRuleActor): string {
       return `agent:${actor.bindingId}`;
     case 'github':
       return `github:${actor.login}`;
+  }
+}
+
+// The dispatcher executes an agent-approved decision as a human actor so its consent carries; the trail still names the agent.
+export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorType: AuditActorType } {
+  const id = actorId(actor);
+  switch (actor.type) {
+    case 'github':
+      return { actorId: id, actorType: 'human' };
+    case 'human':
+      return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
+    default:
+      return { actorId: id, actorType: actor.type };
   }
 }
 
@@ -198,11 +220,13 @@ export class FactoryTransitionService {
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
+  readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#configVersion = options.configVersion;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
+    this.#audit = options.audit;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
@@ -224,9 +248,69 @@ export class FactoryTransitionService {
     const transitionId = request.ingress.transitionId ?? randomUUID();
     const item = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
     if (!item) {
-      return this.#commitRejection(request, transitionId, 'invalid_transition', 'Work item not found.');
+      const rejection = await this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Work item not found.',
+      );
+      await this.#recordTransition(request, undefined, rejection);
+      return rejection;
     }
+    const result = await this.#evaluateAndCommit(request, transitionId, item);
+    await this.#recordTransition(request, item, result);
+    return result;
+  }
 
+  /** A rejection can outlive its work item: the row still names the id the caller asked for. */
+  async #recordTransition(
+    request: FactoryTransitionRequest,
+    item: WorkItemRow | undefined,
+    result: FactoryTransitionResult,
+  ): Promise<void> {
+    if (!this.#audit) return;
+    const from = item ? currentStage(item.stages) : undefined;
+    if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
+    const outcome =
+      result.status === 'accepted'
+        ? { action: 'factory.work_item.stage_moved' as const, to: result.stage, revision: result.revision }
+        : {
+            action: 'factory.work_item.transition_rejected' as const,
+            to: request.stage,
+            code: result.code,
+            reason: result.reason,
+          };
+    const { action, ...detail } = outcome;
+    await this.#audit
+      .record({
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        ...auditActorOf(request.actor),
+        actorProfile: request.actorProfile,
+        ...(request.context ? { context: request.context } : {}),
+        action,
+        idempotencyKey: result.transitionId,
+        targets: [{ type: 'work_item', id: item?.id ?? request.workItemId, ...(item ? { name: item.title } : {}) }],
+        metadata: {
+          transitionId: result.transitionId,
+          ingressType: request.ingress.type,
+          cause: request.cause,
+          configVersion: this.#configVersion,
+          ...(from ? { from } : {}),
+          ...(request.reenter ? { reenter: true } : {}),
+          ...detail,
+        },
+      })
+      .catch(error => {
+        console.warn(`[factory] audit failed for transition ${result.transitionId}:`, error);
+      });
+  }
+
+  async #evaluateAndCommit(
+    request: FactoryTransitionRequest,
+    transitionId: string,
+    item: WorkItemRow,
+  ): Promise<FactoryTransitionResult> {
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
       return this.#commitRejection(
         request,
@@ -391,6 +475,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            assertFactoryDecisionTarget(decision, this.#boards, itemBoard);
             if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }

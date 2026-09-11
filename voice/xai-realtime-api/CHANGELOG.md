@@ -1,5 +1,19 @@
 # @mastra/voice-xai-realtime
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.2.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
 ## 0.2.8
 
 ### Patch Changes

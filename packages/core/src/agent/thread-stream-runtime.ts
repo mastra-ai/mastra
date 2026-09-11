@@ -5,11 +5,13 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
-import { isSystemReminderSignalType } from '../memory/system-reminders';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
+import { isSignalChunkExcluded } from '../stream/signal-exclusions';
+import { ChunkFrom } from '../stream/types';
+import type { ChunkType } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
@@ -20,6 +22,7 @@ import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
+  AgentThreadIdentityOptions,
   AgentThreadSubscription,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -691,7 +694,9 @@ export class AgentThreadStreamRuntime {
       void (async () => {
         try {
           if (cancelled) return;
-          const source = output.fullStream as ReadableStream<unknown> | undefined;
+          const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
+            | ReadableStream<unknown>
+            | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -876,7 +881,7 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
-  getActiveThreadRunId(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): string | undefined {
+  getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const activeRunId = state.activeThreadRunIds.get(key);
@@ -1059,22 +1064,31 @@ export class AgentThreadStreamRuntime {
     pubsub: PubSub | undefined,
     key: string,
     runId: string,
+    agentId: string,
     signal: CreatedAgentSignal,
     resourceId: string,
     threadId: string,
   ) {
-    if (isSystemReminderSignalType(signal.type)) return;
-
     let finish!: () => void;
     const finished = new Promise<void>(resolve => {
       finish = resolve;
     });
+    // Mirror the shape every real `start` emitter uses (see loop/workflows/stream.ts).
+    // The messageId is derived from the signal id rather than reused verbatim so
+    // consumers keying messages by id don't collide with the persisted signal row.
+    const startChunk: ChunkType = {
+      type: 'start',
+      runId,
+      from: ChunkFrom.AGENT,
+      payload: { id: agentId, messageId: `persisted-signal:${signal.id}` },
+    };
     const parts: any[] = [
-      { type: 'start', runId },
+      startChunk,
       { ...signal.toDataPart(), runId },
       {
         type: 'finish',
         runId,
+        from: ChunkFrom.AGENT,
         payload: {
           stepResult: { reason: 'stop' },
           output: {
@@ -1163,7 +1177,7 @@ export class AgentThreadStreamRuntime {
     if (signal.transient) return;
 
     await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
-    this.#broadcastPersistedSignal(state, pubsub, key, runId, signal, resourceId, threadId);
+    this.#broadcastPersistedSignal(state, pubsub, key, runId, agent.id, signal, resourceId, threadId);
   }
 
   /**
@@ -2579,7 +2593,9 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                yield partWithRunId;
+                if (!isSignalChunkExcluded(partWithRunId, options.hideSignals)) {
+                  yield partWithRunId;
+                }
                 if (done) break;
                 const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
                 const terminalBoundary =

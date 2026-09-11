@@ -52,6 +52,7 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
   CreateScoreArgs,
+  DeleteScoresArgs,
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -65,6 +66,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -1000,6 +1002,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    try {
+      await scoresOps.deleteScores(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_SCORES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.scoreIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
     try {
       return await scoresOps.getScoreById(this.#client, scoreId);
@@ -1050,9 +1069,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    try {
+      await feedbackOps.deleteFeedback(this.#client, args, this.#replication);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_FEEDBACK', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: args.feedbackIds.length },
+        },
+        error,
+      );
+    }
+  }
+
   override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
     try {
-      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args);
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args, this.#replication);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

@@ -1,5 +1,6 @@
 import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentsMdAutoloadScenario } from './agents-md-autoload.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
@@ -158,6 +159,7 @@ import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
+import { subagentsCommandScenario } from './subagents-command.js';
 import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
@@ -190,6 +192,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agents-md-autoload': agentsMdAutoloadScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
@@ -342,6 +345,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,
+  'subagents-command': subagentsCommandScenario,
   'subagent-delegation': subagentDelegationScenario,
   'subagent-plan-execute-tools': subagentPlanExecuteToolsScenario,
   'subagent-model-startup-restore': subagentModelStartupRestoreScenario,

@@ -1,7 +1,6 @@
 import type { MessageList } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
-import { isSystemReminderSignalType } from '../memory/system-reminders';
 import type { ProcessorStreamWriter } from './index';
 
 export function createProcessorSendSignal(args: {
@@ -14,9 +13,7 @@ export function createProcessorSendSignal(args: {
     args.messageList.markResponseMessageBoundary();
     args.rotateResponseMessageId?.();
     const signalForTranscript = args.messageList.addSignal(signal);
-    if (!isSystemReminderSignalType(signalForTranscript.type)) {
-      await args.writer?.custom(signalForTranscript.toDataPart());
-    }
+    await args.writer?.custom(signalForTranscript.toDataPart());
     return signalForTranscript;
   };
 }

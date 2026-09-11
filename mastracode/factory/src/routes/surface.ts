@@ -23,9 +23,9 @@ import {
   resolveFactoryProjectForSession,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
-import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
@@ -78,12 +78,14 @@ export interface IntegrationRegistration {
 export interface FactoryApiRoutesDeps {
   controllerId: string;
   controller: AgentController<MastraCodeState>;
+  /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
+  liveSessions: LiveSessions;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
   /** Optional user directory for resolving persisted owners to display profiles. */
   users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
-  audit: AuditEmitter;
+  audit: AuditEmitter & AuditRecorder;
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
@@ -484,6 +486,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         configVersion: deps.configVersion,
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
+        audit: deps.audit,
       }))
     : undefined;
   const startCoordinator = transitionService
@@ -559,6 +562,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
+          boardRegistry: deps.boardRegistry,
+          // Relocation reads and writes work items, which init fail-soft separately from intake.
+          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),
@@ -582,7 +588,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
-          liveSessions: new LiveSessions(deps.controller),
+          liveSessions: deps.liveSessions,
         }).routes()
       : []),
   ];

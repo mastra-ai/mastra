@@ -113,7 +113,9 @@ Databases attached from project settings are project-scoped. Use the [CLI](#atta
 
 ## Connect from your code
 
-When a database is `ready`, the provider has finished provisioning and the platform has injected connection details as managed environment variables. Check status in **Project Settings → Database**, each attached database shows `provisioning` while setup runs in the background, then `ready` when you can connect. Open a `ready` database to view its environment variables and a copy-pasteable code snippet. Wire those variables into a Mastra storage adapter, with no manual configuration required.
+Check the database status in **Project Settings → Database**. An attached database shows `provisioning` while setup runs in the background. Once it's `ready`, the platform has injected its connection details as managed environment variables.
+
+Open a `ready` database to view those variables and a code snippet. Use the variables to configure a Mastra storage adapter, as shown below.
 
 ### Turso (LibSQL)
 

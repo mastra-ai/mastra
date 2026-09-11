@@ -551,6 +551,15 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 
+  it('caps the denial values so a hostile IdP response cannot inflate the /signin URL', async () => {
+    const { app } = buildApp();
+    const res = await app.request(`/auth/callback?error=${'e'.repeat(200)}&error_description=${'d'.repeat(1000)}`);
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get('location') ?? '', 'https://app.example');
+    expect(location.searchParams.get('error')).toBe('e'.repeat(64));
+    expect(location.searchParams.get('error_description')).toBe('d'.repeat(256));
+  });
+
   it('redirects callback back to login when the code exchange fails', async () => {
     mockHandleCallback.mockRejectedValue(new Error('expired code'));
     const { app } = buildApp();
@@ -597,6 +606,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       // No-org accounts are bootstrapped into a personal org during /auth/me.
       user: {
         userId: 'user_me',
@@ -622,6 +632,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
       provider: 'workos',
     });

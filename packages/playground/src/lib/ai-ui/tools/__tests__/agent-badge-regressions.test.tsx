@@ -25,7 +25,7 @@ vi.mock('../badges/agent-badge', () => ({
   AgentBadge: mockAgentBadge,
 }));
 
-vi.mock('../badges/loading-badge', () => ({
+vi.mock('@mastra/playground-ui/domains/chat/components/loading-badge', () => ({
   LoadingBadge: () => null,
 }));
 

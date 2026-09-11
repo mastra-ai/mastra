@@ -3,6 +3,7 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -11,7 +12,6 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChatRunning } from '../chat/chat-context';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
@@ -43,7 +43,7 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
-  /** Extra controls rendered under the message; only visible while hovering or focusing the row. */
+  /** Extra controls rendered under the message, alongside the assistant action bar. */
   footer?: ReactNode;
 }
 
@@ -315,11 +315,8 @@ export const MessageRow = memo(function MessageRow({
 
   if (dbMessage === null) return null;
 
-  const footerSlot = footer ? (
-    <div className="opacity-0 transition-opacity group-hover:opacity-100 has-[:focus-visible]:opacity-100">
-      {footer}
-    </div>
-  ) : null;
+  // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
+  const footerSlot = footer ? <div className="pr-1">{footer}</div> : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;

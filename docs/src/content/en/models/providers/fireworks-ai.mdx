@@ -7,7 +7,7 @@ description: "Browse Fireworks AI model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
 
-Access 21 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
+Access 23 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
 
 Learn more in the [Fireworks AI documentation](https://fireworks.ai/docs/).
 
@@ -80,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 1.32,
     "outputCost": 3.96
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/deepseek-v4p1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.22,
+    "outputCost": 0.66
   },
   {
     "model": "fireworks-ai/accounts/fireworks/models/glm-5p2",
@@ -188,6 +200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 512000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/mistral-large-3-fp8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "fireworks-ai/accounts/fireworks/models/muse-glimmer-30b",
@@ -335,5 +359,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

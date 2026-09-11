@@ -251,3 +251,67 @@ describe('execute structured output prompt handling', () => {
     expect(promptJson).toContain('suggestions');
   });
 });
+
+describe('execute sampling-param stripping (issue #23319)', () => {
+  function makeCapturingModel(provider: string, modelId: string) {
+    const captured: { options?: any } = {};
+    const model = new MockLanguageModelV2({
+      provider,
+      modelId,
+      doStream: async (options: any) => {
+        captured.options = options;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-strip', modelId, timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'ok' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    return { model, captured };
+  }
+
+  async function run(model: MockLanguageModelV2) {
+    const stream = execute({
+      runId: 'test-run-id-strip',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      modelSettings: { temperature: 0, topP: 0.5, topK: 10 } as any,
+    });
+    await readStream(stream);
+  }
+
+  it('strips temperature/topP/topK for provider-instance models that reject them', async () => {
+    // gpt-5-pro is not in openai's temperature capability list → sampling params dropped.
+    const { model, captured } = makeCapturingModel('openai', 'gpt-5-pro');
+    await run(model);
+    expect(captured.options.temperature).toBeUndefined();
+    expect(captured.options.topP).toBeUndefined();
+    expect(captured.options.topK).toBeUndefined();
+  });
+
+  it('keeps sampling params for models that support temperature', async () => {
+    const { model, captured } = makeCapturingModel('openai', 'gpt-4o');
+    await run(model);
+    expect(captured.options.temperature).toBe(0);
+    expect(captured.options.topP).toBe(0.5);
+    expect(captured.options.topK).toBe(10);
+  });
+
+  it('keeps sampling params when capability data is unknown (undefined, not false)', async () => {
+    const { model, captured } = makeCapturingModel('mock-provider', 'mock-model-id');
+    await run(model);
+    expect(captured.options.temperature).toBe(0);
+    expect(captured.options.topP).toBe(0.5);
+    expect(captured.options.topK).toBe(10);
+  });
+});

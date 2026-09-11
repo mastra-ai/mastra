@@ -51,8 +51,6 @@ export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 
 // Item detail components
-export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';
-export type { DatasetItemHeaderProps } from './components/dataset-detail/dataset-item-header';
 export { DatasetItemDetails } from './components/items/dataset-item-details';
 export type { DatasetItemDetailsProps } from './components/items/dataset-item-details';
 export { EditModeContent } from './components/dataset-detail/dataset-item-form';

@@ -2540,6 +2540,7 @@ export interface operations {
               organizationId: string;
               studioEnabled: boolean;
               serverEnabled: boolean;
+              factoryEnabled?: boolean;
               latestDeployId: string | null;
               latestDeployStatus:
                 | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
@@ -3155,6 +3156,9 @@ export interface operations {
       content: {
         'application/json': {
           name: string;
+          factoryEnabled?: boolean;
+          /** @enum {string} */
+          region?: 'eu' | 'us';
         };
       };
     };
@@ -3738,6 +3742,7 @@ export interface operations {
             [key: string]: string;
           };
           disablePlatformObservability?: boolean;
+          factoryEnabled?: boolean;
         };
       };
     };

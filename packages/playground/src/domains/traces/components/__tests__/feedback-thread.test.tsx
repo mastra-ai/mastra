@@ -14,11 +14,13 @@ const type = (value: string) => fireEvent.change(getInput(), { target: { value }
 const feedbackData = {
   feedback: [
     {
+      feedbackId: 'fb-1',
       traceId: 'trace-1',
       feedbackType: 'comment',
       feedbackSource: 'user',
       value: 'this span looks wrong',
       timestamp: new Date('2026-08-26T09:00:00Z'),
+      reviewStatus: 'needs-review',
     },
   ],
   pagination: { page: 0, perPage: 10, total: 1, hasMore: false },
@@ -27,6 +29,9 @@ const feedbackData = {
 const withAuthor = (author: { id: string; name?: string; email?: string; avatarUrl?: string }) =>
   ({ ...feedbackData, feedback: [{ ...feedbackData.feedback[0], author }] }) as unknown as ListFeedbackResponse;
 
+const withReviewStatus = (reviewStatus: 'needs-review' | 'reviewed') =>
+  ({ ...feedbackData, feedback: [{ ...feedbackData.feedback[0], reviewStatus }] }) as unknown as ListFeedbackResponse;
+
 describe('FeedbackThread', () => {
   it('renders existing feedback as comments', () => {
     render(<FeedbackThread feedbackData={feedbackData} onSubmit={vi.fn()} />);
@@ -34,8 +39,8 @@ describe('FeedbackThread', () => {
     expect(screen.getByText('this span looks wrong')).toBeTruthy();
     expect(screen.queryByText('user')).toBeNull();
     expect(document.querySelector('[data-slot="comment-item-author"]')).toBeNull();
-    // The gutter stays so bodies align, but it is empty.
-    expect(document.querySelector('[data-slot="comment-item-avatar"]')?.childElementCount).toBe(0);
+    // No author means no avatar gutter, otherwise the row is indented by an empty 24px column.
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')).toBeNull();
   });
 
   it('renders the author avatar and name when the feedback has an author', () => {
@@ -84,6 +89,14 @@ describe('FeedbackThread', () => {
     expect(screen.getByText('No feedback yet')).toBeTruthy();
   });
 
+  it('places the composer above the feedback list', () => {
+    render(<FeedbackThread feedbackData={withAuthor({ id: 'u1' })} onSubmit={vi.fn()} />);
+
+    const composer = screen.getByRole('form', { name: 'Leave feedback' });
+    const item = screen.getByText('u1');
+    expect(composer.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('disables the send button while the input is empty or whitespace-only', () => {
     render(<FeedbackThread onSubmit={vi.fn()} />);
 
@@ -122,6 +135,58 @@ describe('FeedbackThread', () => {
 
     rerender(<FeedbackThread onSubmit={vi.fn()} isSubmitting />);
     expect(getSubmit().disabled).toBe(true);
+  });
+
+  describe('review status', () => {
+    it('shows a "Needs review" badge on unreviewed feedback', () => {
+      render(<FeedbackThread feedbackData={withReviewStatus('needs-review')} onSubmit={vi.fn()} />);
+
+      expect(screen.getByText('Needs review').closest('[data-slot="feedback-review-status"]')).toBeTruthy();
+    });
+
+    it('shows a "Reviewed" badge on reviewed feedback and no action', () => {
+      render(
+        <FeedbackThread feedbackData={withReviewStatus('reviewed')} onMarkReviewed={vi.fn()} onSubmit={vi.fn()} />,
+      );
+
+      expect(screen.getByText('Reviewed')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+    });
+
+    it('offers "Mark reviewed" on unreviewed feedback and calls onMarkReviewed with the feedbackId', () => {
+      const onMarkReviewed = vi.fn();
+      render(
+        <FeedbackThread
+          feedbackData={withReviewStatus('needs-review')}
+          onMarkReviewed={onMarkReviewed}
+          onSubmit={vi.fn()}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+      expect(onMarkReviewed).toHaveBeenCalledWith('fb-1');
+    });
+
+    it('does not offer "Mark reviewed" when no handler is given', () => {
+      render(<FeedbackThread feedbackData={withReviewStatus('needs-review')} onSubmit={vi.fn()} />);
+
+      expect(screen.getByText('Needs review')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+    });
+
+    it('disables "Mark reviewed" for the feedback currently being updated', () => {
+      render(
+        <FeedbackThread
+          feedbackData={withReviewStatus('needs-review')}
+          onMarkReviewed={vi.fn()}
+          pendingFeedbackId="fb-1"
+          onSubmit={vi.fn()}
+        />,
+      );
+
+      expect((screen.getByRole('button', { name: 'Mark reviewed' }) as HTMLButtonElement).disabled).toBe(true);
+    });
   });
 
   it('pages through feedback when there is more than one page', () => {

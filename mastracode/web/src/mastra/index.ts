@@ -280,23 +280,24 @@ const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), 
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
-const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
-  key => Boolean(process.env[key]?.trim()),
-);
+const hasPlatformSandboxEnv =
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    if (hasPlatformSandboxEnv) {
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
 
-    if (process.env.E2B_API_KEY?.trim()) {
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
         template: createE2BRepoTemplate(ctx),
@@ -350,9 +351,13 @@ const preparedArgs = await factory.prepare();
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors).
+// `server` config (middleware + apiRoutes + cors). Keep the worker-relevant
+// properties explicit so deploy builds can statically detect the worker topology.
 export const mastra = new Mastra({
   ...preparedArgs,
+  storage: preparedArgs.storage,
+  pubsub: preparedArgs.pubsub,
+  workers: preparedArgs.workers,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

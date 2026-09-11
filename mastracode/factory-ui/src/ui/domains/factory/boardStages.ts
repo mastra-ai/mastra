@@ -1,4 +1,4 @@
-import type { FactoryRuleBoard, FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { FACTORY_RULE_STAGES, FactoryRuleBoard, FactoryRuleStage } from '@mastra/factory/rules/types';
 
 import type { WorkItem } from './services/workItems';
 import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
@@ -14,7 +14,7 @@ const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> 
   review: true,
   done: true,
   canceled: true,
-};
+} satisfies Record<(typeof FACTORY_RULE_STAGES)[number], boolean>;
 
 const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
   if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];
@@ -26,7 +26,7 @@ export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {
 }
 
 export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
-  return kind === 'review' ? item.source === 'github-pr' : item.source !== 'github-pr';
+  return itemBoard(item) === kind;
 }
 
 export function itemAppearsInStage(
@@ -58,8 +58,8 @@ export function boardLoadingStages({
   return loading;
 }
 
-export function itemBoard(item: WorkItem): 'work' | 'review' {
-  return item.source === 'github-pr' ? 'review' : 'work';
+export function itemBoard(item: WorkItem): string {
+  return item.board ?? (item.source === 'github-pr' ? 'review' : 'work');
 }
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {

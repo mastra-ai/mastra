@@ -3,8 +3,9 @@
  *
  * The consumer's deploy entry constructs deployment-specific config instances
  * (auth adapter, pubsub) and passes them here explicitly. The only provider
- * defaults constructed here are Platform GitHub and Linear integrations when
- * Platform credentials exist and the caller did not provide those integrations.
+ * defaults constructed here are Platform GitHub, incident.io, and Linear
+ * integrations when Platform credentials exist and the caller did not provide
+ * those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -53,11 +54,13 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { isValidGitRef } from './integrations/github/sandbox.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
+import { TelemetryRoutes } from './routes/telemetry.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
@@ -77,8 +80,10 @@ import { handleServerError } from './server-error.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { observeSessionRunEnd } from './session/run-audit.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -304,6 +309,16 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
   return undefined;
 }
 
+/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
+function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
+  const liveSessions = new LiveSessions(controller);
+  liveSessions.onParkedChanged(session => {
+    const { factoryOrgId, factoryProjectId } = session.state.get();
+    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
+  });
+  return liveSessions;
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   readonly #boards: BoardRegistry;
@@ -375,12 +390,18 @@ export class MastraFactory {
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
 
-    // Explicit integrations win. Platform credentials fill only missing GitHub
-    // and Linear slots so callers can override either provider independently.
+    // Explicit integrations win. Platform credentials fill only missing
+    // provider slots so callers can override each integration independently.
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformCredentials()) {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
+      }
+      if (
+        process.env.MASTRA_INCIDENT_IO_CONNECTION_ID?.trim() &&
+        !integrations.some(integration => integration.id === 'incidentio')
+      ) {
+        integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -601,6 +622,7 @@ export class MastraFactory {
           configVersion,
           boards: this.#boards,
           storage: workItemsStorage,
+          audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -715,6 +737,7 @@ export class MastraFactory {
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
+        coAuthor: { name: 'mastra-platform[bot]' },
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -822,7 +845,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
-                          audit: auditStorage,
+                          audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
                             ? {
@@ -897,10 +920,12 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`.
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
+            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -926,6 +951,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                audit: auditDomain,
                 boards: this.#boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
@@ -1031,6 +1057,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
+      observeSessionRunEnd(session, { audit: auditDomain });
     });
 
     // Supervisor sessions carry their project in the resourceId; re-stamp
@@ -1057,6 +1084,7 @@ export class MastraFactory {
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: sourceControlStorage.forIntegration('github'),
+          projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
       { blocking: true },

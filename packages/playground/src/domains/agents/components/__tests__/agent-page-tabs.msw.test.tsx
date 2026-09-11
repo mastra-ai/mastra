@@ -45,7 +45,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 
@@ -104,12 +103,22 @@ describe('AgentLayout tool tabs', () => {
     renderLayout();
 
     expect(await screen.findByText('Overview')).not.toBeNull();
-    expect(screen.getByText('Traces')).not.toBeNull();
-    expect(screen.queryByText('Chat')).toBeNull();
+    expect(screen.getByText('Agent traces')).not.toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chat' })).not.toBeNull();
 
     // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
     await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());
     expect(onPlatforms).not.toHaveBeenCalled();
+  });
+
+  it('highlights the Chat tab on the thread routes', async () => {
+    server.use(...commonHandlers());
+
+    renderLayout('/agents/agent-1/threads/new');
+
+    const chatTab = await screen.findByRole('tab', { name: 'Chat' });
+    expect(chatTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('false');
   });
 
   it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {

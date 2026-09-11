@@ -1,5 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalType } from '../agent/signals';
 import { MastraFGAPermissions } from '../auth/ee';
 import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
@@ -484,7 +485,10 @@ https://mastra.ai/en/docs/memory/overview`,
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | AgentSignalType[];
       observabilityContext?: Partial<ObservabilityContext>;
     },
   ): Promise<{

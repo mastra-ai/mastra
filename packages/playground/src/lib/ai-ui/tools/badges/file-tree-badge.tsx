@@ -1,13 +1,13 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';

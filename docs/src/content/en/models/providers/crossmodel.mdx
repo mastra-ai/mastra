@@ -150,8 +150,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.405,
-    "outputCost": 1.215
+    "inputCost": 0.27,
+    "outputCost": 1.08
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4-flash-vision-exp",
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.405,
-    "outputCost": 1.215
+    "inputCost": 0.27,
+    "outputCost": 1.08
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4-pro",
@@ -176,6 +176,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 1.215,
     "outputCost": 3.645
+  },
+  {
+    "model": "crossmodel/deepseek/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.27,
+    "outputCost": 1.08
   },
   {
     "model": "crossmodel/gemini/gemini-2.5-flash",
@@ -320,18 +332,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 512000,
     "inputCost": 0.33,
     "outputCost": 1.32
-  },
-  {
-    "model": "crossmodel/moonshot/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 262000,
-    "inputCost": 0.62,
-    "outputCost": 3.3
   },
   {
     "model": "crossmodel/moonshot/kimi-k2.6",
@@ -750,8 +750,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 0.075,
-    "outputCost": 0.25
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />
@@ -791,5 +791,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

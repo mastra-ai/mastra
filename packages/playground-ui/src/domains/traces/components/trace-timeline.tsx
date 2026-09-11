@@ -15,6 +15,8 @@ type TraceTimelineProps = {
   expandedSpanIds?: string[];
   setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
   featuredSpanIds?: string[];
+  /** Row scrolled into view once it is mounted (ancestors auto-expand when the span is featured). */
+  revealSpanId?: string;
   chartWidth?: 'wide' | 'default';
   /** Rendered full-width above the span type legend row. */
   leadingSlot?: ReactNode;
@@ -29,6 +31,7 @@ export function TraceTimeline({
   expandedSpanIds,
   setExpandedSpanIds,
   featuredSpanIds,
+  revealSpanId,
   chartWidth = 'default',
   leadingSlot,
 }: TraceTimelineProps) {
@@ -96,6 +99,7 @@ export function TraceTimeline({
                 overallStartTime={overallStartTime}
                 fadedTypes={fadedTypes}
                 featuredSpanIds={featuredSpanIds}
+                revealSpanId={revealSpanId}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}
                 chartWidth={chartWidth}

@@ -6,6 +6,7 @@ import {
   evaluateTraceQueryRequest,
   normalizeTraceQueryResponse,
   TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
   TRACE_QUERY_TIED_TIMESTAMP_CASES,
@@ -30,6 +31,21 @@ describe('trace-query reference evaluator', () => {
       ).toEqual(testCase.expected);
     });
   }
+
+  describe('feedback replacement contract', () => {
+    for (const scenario of TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS) {
+      it(scenario.name, () => {
+        for (const assertion of scenario.assertions) {
+          expect
+            .soft(
+              normalizeTraceQueryResponse(evaluateTraceQueryRequest(scenario.fixture, assertion.request)),
+              assertion.name,
+            )
+            .toEqual(assertion.expected);
+        }
+      });
+    }
+  });
 
   it('projects only fixed lightweight fields', () => {
     const response = evaluateTraceQueryRequest(TRACE_QUERY_FIXTURE_DATA, {

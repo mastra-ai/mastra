@@ -1,5 +1,172 @@
 # @mastra/memory
 
+## 1.29.1-alpha.0
+
+### Patch Changes
+
+- Improved diagnostics for Observational Memory model and provider failures. ([#23528](https://github.com/mastra-ai/mastra/pull/23528))
+
+- Fixed observational memory errors hiding provider diagnostics returned in a string detail field, including Codex rejection messages. ([#23534](https://github.com/mastra-ai/mastra/pull/23534))
+
+- Updated dependencies [[`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580)]:
+  - @mastra/core@1.66.1-alpha.0
+
+## 1.29.0
+
+### Minor Changes
+
+- Added transform hooks to Observational Memory so applications can intercept and reshape data before it reaches the Observer/Reflector models or storage. `observationalMemory.hooks` now accepts `beforeObservation` (filter or redact messages before observation; returning no messages skips the model call), `afterObservation` (rewrite observations before they are persisted), `beforeReflection` (rewrite the observations sent to the Reflector), and `afterReflection` (rewrite the reflection before it is persisted). Transform hooks are always awaited, `void` passes data through unchanged, and a thrown error fails the cycle before committing its transformed observation or reflection text. After hooks replace text only: they don't recompute separate structured extractor results or undo callbacks and other side effects that already ran. Per-call `observe({ hooks })` now accepts lifecycle hooks only. Fixes #15626. ([#23167](https://github.com/mastra-ai/mastra/pull/23167))
+
+  Previously, lifecycle hooks could report cycle activity but could not replace the messages sent to the Observer. Configure a transform hook to filter those messages:
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        hooks: {
+          beforeObservation: ({ messages }) => ({
+            messages: messages.filter(message => message.role === 'user'),
+          }),
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Preserve provider error messages, HTTP status codes, and nested causes in observational memory failure events instead of only displaying generic errors such as Bad Request. ([#23442](https://github.com/mastra-ai/mastra/pull/23442))
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Removed redundant type assertions without changing runtime behavior or public types. ([#23499](https://github.com/mastra-ai/mastra/pull/23499))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0
+
+## 1.29.0-alpha.2
+
+### Patch Changes
+
+- Removed redundant type assertions without changing runtime behavior or public types. ([#23499](https://github.com/mastra-ai/mastra/pull/23499))
+
+- Updated dependencies [[`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb)]:
+  - @mastra/core@1.66.0-alpha.3
+
+## 1.29.0-alpha.1
+
+### Patch Changes
+
+- Preserve provider error messages, HTTP status codes, and nested causes in observational memory failure events instead of only displaying generic errors such as Bad Request. ([#23442](https://github.com/mastra-ai/mastra/pull/23442))
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+
+## 1.29.0-alpha.0
+
+### Minor Changes
+
+- Added transform hooks to Observational Memory so applications can intercept and reshape data before it reaches the Observer/Reflector models or storage. `observationalMemory.hooks` now accepts `beforeObservation` (filter or redact messages before observation; returning no messages skips the model call), `afterObservation` (rewrite observations before they are persisted), `beforeReflection` (rewrite the observations sent to the Reflector), and `afterReflection` (rewrite the reflection before it is persisted). Transform hooks are always awaited, `void` passes data through unchanged, and a thrown error fails the cycle before committing its transformed observation or reflection text. After hooks replace text only: they don't recompute separate structured extractor results or undo callbacks and other side effects that already ran. Per-call `observe({ hooks })` now accepts lifecycle hooks only. Fixes #15626. ([#23167](https://github.com/mastra-ai/mastra/pull/23167))
+
+  Previously, lifecycle hooks could report cycle activity but could not replace the messages sent to the Observer. Configure a transform hook to filter those messages:
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        hooks: {
+          beforeObservation: ({ messages }) => ({
+            messages: messages.filter(message => message.role === 'user'),
+          }),
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
+## 1.28.3
+
+### Patch Changes
+
+- Fixed a memory tool reliability issue. ([#23042](https://github.com/mastra-ai/mastra/pull/23042))
+
+- Fixed observation indexing retries so temporary connection errors recover without duplicating stored observations. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Observational memory's observer and reflector passes now trace as memory operations rather than generic spans, appearing as `memory: observe` and `memory: reflect`. ([#22542](https://github.com/mastra-ai/mastra/pull/22542))
+
+  They also reported an output-step-processor entity type, which they are not — they wrap the model calls made inside the processor — so their runtimes were counted as processor overhead in `mastra_processor_duration_ms`.
+
+- Fixed observational memory buffering so transient database connection timeouts are retried instead of failing the buffer operation. ([#23019](https://github.com/mastra-ai/mastra/pull/23019))
+
+- Fixed Observational Memory to forward only images and PDFs to the observer by default. ([#22153](https://github.com/mastra-ai/mastra/pull/22153))
+
+  **Before:** Omitting `observeAttachments` forwarded every attachment type.
+
+  **After:** Omitting `observeAttachments` forwards images and PDFs. To retain the previous behavior and forward every attachment type, explicitly set `observeAttachments: true`:
+
+  ```ts
+  new ObservationalMemory({
+    observation: {
+      observeAttachments: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+  - @mastra/schema-compat@1.3.9
+
+## 1.28.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/schema-compat@1.3.9-alpha.0
+
 ## 1.28.3-alpha.3
 
 ### Patch Changes

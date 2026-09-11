@@ -48,9 +48,9 @@ describe('AgentsList keyboard navigation', () => {
     renderList();
 
     expect(interactiveRows().map(row => row.getAttribute('href'))).toEqual([
-      '/agents/agent-a',
-      '/agents/agent-b',
-      '/agents/agent-c',
+      '/agents/agent-a/threads/new',
+      '/agents/agent-b/threads/new',
+      '/agents/agent-c/threads/new',
     ]);
   });
 });

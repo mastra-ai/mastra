@@ -9,10 +9,10 @@ import {
 } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -73,7 +73,6 @@ export const ToolBadge = ({
   return (
     <BadgeWrapper
       data-testid="tool-badge"
-      toolCallId={toolCallId}
       header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} />}
       status={status}
       extraInfo={

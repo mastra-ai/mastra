@@ -31,7 +31,13 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
+import type {
+  OutputResult,
+  Processor,
+  ProcessorStepExecutor,
+  ProcessorStreamWriter,
+  ProcessorStreamWriterOptions,
+} from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -450,11 +456,7 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
   }
 
   if (isProcessor(params)) {
-    const step = createStepFromProcessor(params) as ReturnType<typeof createStepFromProcessor> & {
-      providesSkillDiscovery?: Processor['providesSkillDiscovery'];
-    };
-    step.providesSkillDiscovery = params.providesSkillDiscovery;
-    return step;
+    return createStepFromProcessor(params);
   }
 
   throw new Error('Invalid input: expected StepParams, Agent, ToolStep, or Processor');
@@ -629,7 +631,8 @@ function toEntryOptionFields(options?: StepFlowEntryOptions): StepFlowEntryOptio
   return out;
 }
 
-function createStepFromProcessor<TProcessorId extends string>(
+/** @internal Builds the adapter shared by processor workflows and direct stream execution. */
+export function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
 ): Step<
   `processor:${TProcessorId}`,
@@ -639,7 +642,10 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   unknown,
   DefaultEngineType
-> {
+> & {
+  execute: ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>;
+  providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+} {
   type ProcessorLoadedToolsProvider = {
     getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
   };
@@ -712,7 +718,13 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
-    execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
+    providesSkillDiscovery: processor.providesSkillDiscovery,
+    execute: async ({
+      inputData,
+      requestContext,
+      tracingContext,
+      outputWriter,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -1581,7 +1593,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     unknown,
     DefaultEngineType
-  >;
+  > & { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
 
   const toolProvider = processor as ProcessorLoadedToolsProvider;
   if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {

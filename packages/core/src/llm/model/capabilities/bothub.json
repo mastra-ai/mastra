@@ -1,5 +1,19 @@
 {
-  "attachment": ["gemma-4-31b-it:free"],
-  "temperature": ["gemma-4-31b-it:free", "nemotron-3-ultra-550b-a55b:free"],
-  "structuredOutput": ["gemma-4-31b-it:free"]
+  "attachment": ["gemma-4-31b-it:free", "glm-5.3-flash", "gpt-5.6-luna"],
+  "temperature": [
+    "deepseek-v4-flash-0731",
+    "deepseek-v4-pro-0813",
+    "gemma-4-31b-it:free",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "nemotron-3-ultra-550b-a55b:free"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash-0731",
+    "deepseek-v4-pro-0813",
+    "gemma-4-31b-it:free",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "gpt-5.6-luna"
+  ]
 }
