@@ -1,5 +1,6 @@
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
@@ -7,7 +8,6 @@ import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface CodeModeResult {
   success: boolean;

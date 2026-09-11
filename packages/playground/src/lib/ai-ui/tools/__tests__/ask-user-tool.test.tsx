@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MessageMetadata } from '../../messages/message-metadata';
 import { AskUserTool } from '../ask-user-tool';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 

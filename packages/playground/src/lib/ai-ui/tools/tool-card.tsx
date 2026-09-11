@@ -1,3 +1,4 @@
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { ChatAgentContext, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useCallback, useContext } from 'react';
 import { AskUserTool } from './ask-user-tool';
@@ -21,7 +22,6 @@ import {
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
 export interface DataMessagePart {
