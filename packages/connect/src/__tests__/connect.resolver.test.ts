@@ -293,7 +293,7 @@ describe('connect resolver caching and liveness', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('warns once for a registered provider with no connection yet, then picks it up once attached', async () => {
+  it('silently skips a registered provider with no connection, then picks it up once attached', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     installProvider('notion', 'MASTRA_NOTION_CONNECTION_ID');
@@ -305,15 +305,12 @@ describe('connect resolver caching and liveness', () => {
     const start = Date.now();
     const first = await tools();
     expect(Object.keys(first)).toEqual(['notion_fake_tool']);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will appear automatically'));
+    expect(warnSpy).not.toHaveBeenCalled();
 
     vi.setSystemTime(start + 1_001);
     await tools();
     await flush();
-    const missingWarns = warnSpy.mock.calls.filter((call: unknown[]) =>
-      String(call[0]).includes('will appear automatically'),
-    );
-    expect(missingWarns).toHaveLength(1);
+    expect(warnSpy).not.toHaveBeenCalled();
 
     connections = [notionConnection, makeConnection()];
     const after = await tools.refresh();

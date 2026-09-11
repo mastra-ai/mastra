@@ -62,9 +62,9 @@ const FAILURE_COOLDOWN_MS = 30_000;
  *
  * Configuration errors (missing project id, bad ttlMs, unknown provider in
  * `integrations`) throw here — at call time — so they surface at startup.
- * Per-integration problems during resolution (needs re-auth, ambiguity, not
- * attached yet) are downgraded to warn-and-skip so one bad integration never
- * takes down the whole toolset.
+ * Expected provider absence is silently skipped. Actionable per-integration
+ * problems during resolution (needs re-auth or ambiguity) are downgraded to
+ * warn-and-skip so one bad integration never takes down the whole toolset.
  */
 export function connect(options: ConnectOptions = {}): ConnectTools {
   const projectId = options.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
@@ -82,7 +82,6 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
   const client = resolveClient(options.client);
   const requests = buildRequests(options.integrations);
 
-  const warnedMissing = new Set<string>();
   let cache: { snapshot: ResolvedConnectTools; fetchedAt: number } | undefined;
   let inflight: Promise<ResolvedConnectTools> | undefined;
   let lastFailureAt: number | undefined;
@@ -93,7 +92,7 @@ export function connect(options: ConnectOptions = {}): ConnectTools {
       inflight = (async () => {
         try {
           const connections = await listProjectConnections(client, projectId);
-          const snapshot = mapTools(connections, requests, options, warnedMissing);
+          const snapshot = mapTools(connections, requests, options);
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
           return snapshot;
@@ -168,7 +167,6 @@ function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
   options: ConnectOptions,
-  warnedMissing: Set<string>,
 ): ResolvedConnectTools {
   const byIntegrationId = groupByIntegrationId(connections);
 
@@ -177,15 +175,7 @@ function mapTools(
     const integrationId = request.registration.integrationId;
     try {
       const candidates = byIntegrationId.get(integrationId) ?? [];
-      if (candidates.length === 0) {
-        if (!warnedMissing.has(integrationId)) {
-          warnedMissing.add(integrationId);
-          console.warn(
-            `[@mastra/connect] No ${integrationId} connection in this project yet; its tools will appear automatically once one is attached.`,
-          );
-        }
-        continue;
-      }
+      if (candidates.length === 0) continue;
       const connectionId = resolveProviderConnection(request, candidates);
       if (!connectionId) continue; // warned + skipped
       Object.assign(
