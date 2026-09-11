@@ -279,24 +279,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
-    if (this.#client.protocol !== 'file') {
-      await this.#transaction(tx => this.#initializeSchema(tx));
-      return;
-    }
-    await this.#db.executeWriteOperationWithRetry(
-      () =>
-        withClientWriteLock(this.#client, async () => {
-          await this.#client.execute('BEGIN IMMEDIATE');
-          try {
-            await this.#initializeSchema(this.#client);
-            await this.#client.execute('COMMIT');
-          } catch (error) {
-            await this.#client.execute('ROLLBACK');
-            throw error;
-          }
-        }),
-      'initialize knowledge schema',
-    );
+    await this.#transaction(tx => this.#initializeSchema(tx));
   }
 
   async #initializeSchema(tx: Executor): Promise<void> {
