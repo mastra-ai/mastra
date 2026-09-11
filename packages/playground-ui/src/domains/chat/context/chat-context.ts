@@ -46,10 +46,9 @@ export interface AgentContextValue {
   requestContext?: Record<string, unknown>;
 }
 
-// NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
-// consume the host application's tool-call provider, which the chat provider
-// renders directly with `useChat`'s handlers. That keeps every badge unchanged
-// and preserves the `approveNetworkToolCall(toolName, runId?)` contract.
+// NOTE: Tool/network approvals are NOT exposed here. They live in a separate
+// slice (`./tool-call-context`) for the same churn reasons, and the badge
+// approval buttons read it via `useToolCall()`.
 
 export const ChatMessagesContext = createContext<MessagesContextValue>({ messages: [] });
 export const ChatRunningContext = createContext<RunningContextValue>({

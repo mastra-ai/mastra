@@ -1,8 +1,8 @@
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CodeModeBadge, getCodeModeCall } from '../code-mode-badge';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 
 const renderWithProvider = (node: ReactNode) =>
   render(
