@@ -462,14 +462,8 @@ describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
     const starts: string[] = [];
     const results = await reclaimLibSQLDisk([dbFile], file => starts.push(file));
 
-    expect(results).toHaveLength(1);
-    expect(results[0]!.skipped).toBe('vector-index');
-    expect(results[0]!.bytesAfter).toBe(results[0]!.bytesBefore);
-    // onFileStart logs "vacuuming <file>…" — never emitted for a skipped file.
-    expect(starts).toEqual([]);
-    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
-    expect(existsSync(`${dbFile}.old`)).toBe(false);
-
+    // Assert the damage first, so this test's own red output names the defect
+    // (`row not in PRIMARY KEY order …`) rather than a missing result marker.
     const after = inspect(dbFile);
     expect(after.integrity).toBe('ok');
     expect(after.topK).toBeGreaterThan(0);
@@ -478,6 +472,14 @@ describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
     // a vacuum necessarily rewrites pages and reclaims the freelist.
     expect(after.pageCount).toBe(before.pageCount);
     expect(after.freelist).toBe(before.freelist);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.skipped).toBe('vector-index');
+    expect(results[0]!.bytesAfter).toBe(results[0]!.bytesBefore);
+    // onFileStart logs "vacuuming <file>…" — never emitted for a skipped file.
+    expect(starts).toEqual([]);
+    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
+    expect(existsSync(`${dbFile}.old`)).toBe(false);
   });
 
   it('still compacts an ordinary database (detection is not over-broad)', async () => {
@@ -502,6 +504,38 @@ describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.skipped).toBeUndefined();
     expect(results[0]!.bytesAfter).toBeLessThan(results[0]!.bytesBefore);
+  });
+
+  it('detects by schema, not filename: a vector index in the MAIN db is skipped', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-mainbd-'));
+    // Deliberately inverted names: the vector index lives in the main db, and
+    // the file called "mastra-vectors.db" has none. A filename shortcut fails.
+    const mainFile = path.join(dir, 'mastra.db');
+    const vectorsNamedFile = path.join(dir, 'mastra-vectors.db');
+    seedVectorDb(mainFile);
+    seedPlainDb(vectorsNamedFile);
+
+    const results = await reclaimLibSQLDisk([mainFile, vectorsNamedFile]);
+
+    expect(results.find(r => r.file === mainFile)!.skipped).toBe('vector-index');
+    expect(results.find(r => r.file === vectorsNamedFile)!.skipped).toBeUndefined();
+  });
+
+  it('skips an index written with a space before the parenthesis', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-space-'));
+    const dbFile = path.join(dir, 'spaced.db');
+    const db = new Database(dbFile);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, embedding F32_BLOB(384))');
+    // SQLite stores CREATE INDEX SQL verbatim — the space must not slip past.
+    db.exec('CREATE INDEX t_vector_idx ON t (libsql_vector_idx (embedding))');
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    db.exec('PRAGMA journal_mode = DELETE');
+    db.close();
+
+    const results = await reclaimLibSQLDisk([dbFile]);
+
+    expect(results[0]!.skipped).toBe('vector-index');
   });
 
   it('skips exactly the vector db and compacts exactly the plain one', async () => {
@@ -576,5 +610,29 @@ describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
     expect(output).not.toContain('/tmp/odd.db: skipped — it contains a vector index');
     expect(output).toContain('No database files were compacted;');
     expect(lines).not.toContain('Reclaimed 0 B.');
+  });
+
+  it('keeps the totals line truthful when some files compact and some are skipped', async () => {
+    const lines: string[] = [];
+    await runStorageMaintenance({
+      maintenance: {
+        backend: 'libsql',
+        retention: {},
+        prune: vi.fn().mockResolvedValue([]),
+        closeStorage: vi.fn().mockResolvedValue(undefined),
+        reclaimDisk: vi.fn().mockResolvedValue([
+          { file: '/tmp/a.db', bytesBefore: 10, bytesAfter: 10, skipped: 'vector-index' },
+          { file: '/tmp/b.db', bytesBefore: 20, bytesAfter: 20, skipped: 'vector-index' },
+          { file: '/tmp/main.db', bytesBefore: 2048, bytesAfter: 1024 },
+        ]),
+      },
+      vacuum: true,
+      log: line => lines.push(line),
+    });
+
+    const output = lines.join('\n');
+    // Savings count only the compacted file, and the skips stay visible.
+    expect(output).toContain('/tmp/main.db: 2.0 KB → 1.0 KB');
+    expect(output).toContain('Reclaimed 1.0 KB; 2 skipped because they contain a vector index.');
   });
 });

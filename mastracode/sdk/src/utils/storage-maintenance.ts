@@ -138,12 +138,15 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
  * `journal_mode = DELETE` fail with SQLITE_BUSY on files nobody else has open.
  *
  * Matched by schema, not filename — the main database can carry vector indexes
- * too. The trailing `(` keeps the pattern on the function-call form libsql
- * generates (`libsql_vector_idx(embedding)`).
+ * too. SQLite stores `CREATE INDEX` SQL verbatim, so the match is deliberately
+ * loose (no trailing `(`): an index written `libsql_vector_idx (embedding)`
+ * must not slip through. The two errors are not symmetric — a false positive
+ * costs one uncompacted file that we tell the user about, a false negative
+ * silently corrupts their vector index.
  */
 function hasVectorIndex(db: InstanceType<typeof Database>): boolean {
   const row = db
-    .prepare(`SELECT 1 AS hit FROM sqlite_master WHERE type = 'index' AND sql LIKE '%libsql_vector_idx(%' LIMIT 1`)
+    .prepare(`SELECT 1 AS hit FROM sqlite_master WHERE type = 'index' AND sql LIKE '%libsql_vector_idx%' LIMIT 1`)
     .get() as Record<string, unknown> | undefined;
   return row !== undefined;
 }
