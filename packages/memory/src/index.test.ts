@@ -3345,7 +3345,42 @@ describe('Memory', () => {
   });
 
   describe('updateThreadResourceId', () => {
-    it('is a no-op that skips vector migration when the thread already belongs to the target resource', async () => {
+    it('skips vector migration for a same-resource transfer when semantic recall is not configured', async () => {
+      const mockVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 1536 }),
+        id: 'mock-vector',
+      } as any;
+
+      // No embedder / no semanticRecall => nothing to migrate => storage no-op preserved.
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        options: { lastMessages: 10, generateTitle: false },
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: 'noop-thread',
+          resourceId: 'resource-a',
+          title: 'Noop',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await memory.updateThreadResourceId({ threadId: 'noop-thread', resourceId: 'resource-a' });
+
+      expect(result.resourceId).toBe('resource-a');
+      expect(mockVector.deleteVectors).not.toHaveBeenCalled();
+      expect(mockVector.upsert).not.toHaveBeenCalled();
+    });
+
+    it('re-runs vector migration on a same-resource call so a failed prior migration can be repaired', async () => {
       const mockVector = {
         createIndex: vi.fn().mockResolvedValue(undefined),
         upsert: vi.fn().mockResolvedValue(undefined),
@@ -3371,20 +3406,20 @@ describe('Memory', () => {
 
       await memory.saveThread({
         thread: {
-          id: 'noop-thread',
+          id: 'repair-thread',
           resourceId: 'resource-a',
-          title: 'Noop',
+          title: 'Repair',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
       });
 
-      const result = await memory.updateThreadResourceId({ threadId: 'noop-thread', resourceId: 'resource-a' });
+      const result = await memory.updateThreadResourceId({ threadId: 'repair-thread', resourceId: 'resource-a' });
 
       expect(result.resourceId).toBe('resource-a');
-      // A same-resource call must not delete or rebuild vectors.
-      expect(mockVector.deleteVectors).not.toHaveBeenCalled();
-      expect(mockVector.upsert).not.toHaveBeenCalled();
+      // With vector migration configured we must NOT short-circuit, so a retry after a
+      // storage-succeeded/migration-failed state can rebuild the stale vectors.
+      expect(mockVector.deleteVectors).toHaveBeenCalled();
     });
   });
 });

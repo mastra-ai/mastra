@@ -265,22 +265,39 @@ export abstract class MemoryStorage extends StorageDomain {
       // Restore only the messages that actually landed on the new resource before the failure.
       // Re-listing lets non-atomic adapters that applied a partial batch be reconciled precisely,
       // and avoids touching messages that never moved (so a failure that moved nothing does not
-      // produce a false split-ownership report).
-      const originalResourceById = new Map(
-        messagesToMove
-          .filter(message => typeof message.originalResourceId === 'string' && message.originalResourceId.length > 0)
-          .map(message => [message.id, message.originalResourceId as string]),
-      );
+      // produce a false split-ownership report). We retain EVERY original ownership value,
+      // including undefined/empty (legacy or agent-less rows), so an unscoped original can be
+      // detected during rollback.
+      const originalResourceById = new Map(messagesToMove.map(message => [message.id, message.originalResourceId]));
       try {
         const { messages: currentMessages } = await this.listMessages({ threadId, perPage: false });
-        const messagesToRestore = currentMessages
+        const movedMessages = currentMessages.filter(
+          message => originalResourceById.has(message.id) && message.resourceId === resourceId,
+        );
+        // A restorable message has a non-empty original resource we can write back via updateMessages.
+        const messagesToRestore = movedMessages
           .filter(message => {
             const originalResourceId = originalResourceById.get(message.id);
-            return message.resourceId === resourceId && originalResourceId && originalResourceId !== resourceId;
+            return typeof originalResourceId === 'string' && originalResourceId.length > 0;
           })
-          .map(message => ({ id: message.id, resourceId: originalResourceById.get(message.id)! }));
+          .map(message => ({ id: message.id, resourceId: originalResourceById.get(message.id) as string }));
         if (messagesToRestore.length > 0) {
           await this.updateMessages({ messages: messagesToRestore });
+        }
+        // Messages whose original resource was undefined/empty cannot be written back to an unscoped
+        // value through updateMessages, so if any such row actually moved it stays under the
+        // destination resource. Report this rather than dropping it silently.
+        const unrestorableCount = movedMessages.filter(message => {
+          const originalResourceId = originalResourceById.get(message.id);
+          return !(typeof originalResourceId === 'string' && originalResourceId.length > 0);
+        }).length;
+        if (unrestorableCount > 0) {
+          compensationErrors.push(
+            new Error(
+              `${unrestorableCount} message(s) for thread "${threadId}" had no original resource owner and could not be ` +
+                `reverted from resource "${resourceId}".`,
+            ),
+          );
         }
       } catch (messageRollbackError) {
         compensationErrors.push(messageRollbackError);

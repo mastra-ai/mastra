@@ -123,4 +123,35 @@ describe('MemoryStorage.updateThreadResourceId', () => {
       expect(message.resourceId).toBe('resource-a');
     }
   });
+
+  it('reports incomplete compensation when a moved message had no original owner to restore', async () => {
+    // A message whose original resourceId is unscoped (undefined) cannot be written back to an
+    // unscoped value via updateMessages, so if it moves and the batch then fails the rollback must
+    // surface an explicit incomplete-compensation error rather than silently dropping it.
+    await store.saveMessages({
+      messages: [
+        makeMessage({ id: 'm0', threadId: 'thread-a', resourceId: undefined as unknown as string, minute: 5 }),
+      ],
+    });
+
+    const original = store.updateMessages.bind(store);
+    let call = 0;
+    store.updateMessages = async (args: Parameters<typeof original>[0]) => {
+      call += 1;
+      if (call === 1) {
+        const unscoped = args.messages.find(m => m.id === 'm0') ?? args.messages[0]!;
+        await original({ messages: [unscoped] });
+        throw new Error('updateMessages failed mid-batch');
+      }
+      return original(args);
+    };
+
+    await expect(store.updateThreadResourceId({ threadId: 'thread-a', resourceId: 'resource-b' })).rejects.toThrow(
+      /could not be fully rolled back/,
+    );
+
+    // Thread ownership (the access gate) is still reverted.
+    const reread = await store.getThreadById({ threadId: 'thread-a' });
+    expect(reread!.resourceId).toBe('resource-a');
+  });
 });

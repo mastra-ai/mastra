@@ -3041,12 +3041,20 @@ Notes:
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
 
-    // Preserve the storage no-op contract: if the thread already belongs to the
-    // target resource there is nothing to move and no vectors to migrate, so
-    // return the existing thread untouched rather than deleting/rebuilding vectors.
-    const existing = await memoryStore.getThreadById({ threadId });
-    if (existing && existing.resourceId === resourceId) {
-      return existing;
+    const config = this.getMergedThreadConfig(memoryConfig);
+    const migratesVectors = Boolean(this.vector && this.embedder && config.semanticRecall);
+
+    // Preserve the storage no-op contract when there is no vector migration to worry about:
+    // if the thread already belongs to the target resource there is nothing to move, so return
+    // it untouched. When vector migration IS configured we deliberately do NOT short-circuit on
+    // a same-resource call, because a previous attempt may have committed the storage move but
+    // failed to migrate the vectors — short-circuiting there would make the documented retry a
+    // no-op and leave the vectors stale. Re-running the (idempotent) migration repairs that state.
+    if (!migratesVectors) {
+      const existing = await memoryStore.getThreadById({ threadId });
+      if (existing && existing.resourceId === resourceId) {
+        return existing;
+      }
     }
 
     const thread = await memoryStore.updateThreadResourceId({ threadId, resourceId });
@@ -3055,8 +3063,7 @@ Notes:
     // surfacing the thread's messages under the new resourceId. The storage
     // transfer already updated each message row's resource_id, so re-embedding
     // the fetched messages rewrites the vector metadata with the new owner.
-    const config = this.getMergedThreadConfig(memoryConfig);
-    if (this.vector && this.embedder && config.semanticRecall) {
+    if (migratesVectors) {
       try {
         const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
         const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
