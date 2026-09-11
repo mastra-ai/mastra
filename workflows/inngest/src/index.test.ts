@@ -10128,6 +10128,102 @@ describe('MastraInngestWorkflow', () => {
         srv.close();
       });
 
+      it('resumes a nested workflow that suspended inside a dountil loop (#23182)', async ctx => {
+        // The child's run id used to live only on `suspendPayload.__workflow_meta`,
+        // which core strips from the persisted snapshot before the nested branch
+        // runs — and Inngest re-executes the parent from that snapshot. The resume
+        // then looked up a run that never existed and failed with
+        // `No suspended steps found in nested workflow`, discarding a child run
+        // that had already succeeded on the delivery pass.
+        const inngest = new Inngest({
+          id: 'mastra',
+          baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        });
+
+        const { createWorkflow, createStep } = init(inngest);
+
+        const increment = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+          // Gate only the first iteration, so the loop must run again after the resume.
+          if (inputData.value === 0 && !resumeData) {
+            await suspend({});
+          }
+          return { value: inputData.value + 1 };
+        });
+        const incrementStep = createStep({
+          id: 'gated-increment',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ value: z.number() }),
+          resumeSchema: z.object({ approved: z.boolean() }),
+          execute: increment,
+        });
+
+        const nestedCounter = createWorkflow({
+          id: 'nested-counter-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ value: z.number() }),
+          options: { validateInputs: false },
+        })
+          .then(incrementStep)
+          .commit();
+
+        const parentWorkflow = createWorkflow({
+          id: 'dountil-nested-parent',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ value: z.number() }),
+          options: { validateInputs: false },
+        })
+          .dountil(nestedCounter, async ({ inputData }) => (inputData?.value ?? 0) >= 2)
+          .commit();
+
+        const mastra = new Mastra({
+          storage: new DefaultStorage({
+            id: 'test-storage',
+            url: ':memory:',
+          }),
+          workflows: {
+            'test-workflow': parentWorkflow,
+          },
+          server: {
+            apiRoutes: [
+              {
+                path: '/inngest/api',
+                method: 'ALL',
+                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+              },
+            ],
+          },
+        });
+
+        const app = await createHonoServer(mastra);
+
+        const srv = (globServer = serve({
+          fetch: app.fetch,
+          port: (ctx as any).handlerPort,
+        }));
+        await resetInngest();
+
+        const run = await parentWorkflow.createRun();
+        const result = await run.start({ inputData: { value: 0 } });
+
+        expect(increment).toHaveBeenCalledTimes(1);
+        expect(result.status).toBe('suspended');
+        expect(result.steps['nested-counter-workflow']).toMatchObject({ status: 'suspended' });
+
+        const resumedResults = await run.resume({
+          step: [nestedCounter, incrementStep],
+          resumeData: { approved: true },
+        });
+
+        // Iteration 1 finishes on resume (0 -> 1), then the loop runs a second
+        // iteration under the same derived child run id (1 -> 2) and exits.
+        expect(resumedResults.status).toBe('success');
+        // @ts-expect-error - testing dynamic workflow result
+        expect(resumedResults.result).toMatchObject({ value: 2 });
+        expect(increment).toHaveBeenCalledTimes(3);
+
+        srv.close();
+      });
+
       it('propagates a nested step resume label into the parent snapshot', async ctx => {
         // A step inside a nested workflow suspends with `resumeLabel`. That label
         // must survive the nested->parent suspend boundary, otherwise the parent
