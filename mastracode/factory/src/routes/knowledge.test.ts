@@ -34,6 +34,7 @@ async function createHarness(
     orgId?: string;
     knowledgeRuntime?: Knowledge;
     knowledgeResolver?: (key: string) => Promise<Knowledge | undefined>;
+    defaultKnowledgeKey?: string;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -45,6 +46,7 @@ async function createHarness(
     auth: fakeRouteAuth(),
     projects: seed.projects,
     knowledge: options.knowledgeResolver ?? (async () => runtime),
+    ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
   const app = new Hono();
@@ -151,31 +153,63 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
-  it('keeps graph, activity, and detail reads on the requested key without fallback', async () => {
+  it('ignores request-supplied knowledge keys and reads only the host-selected runtime', async () => {
     const first = new Knowledge({ id: 'first', storage: new InMemoryStore() });
     const second = new Knowledge({ id: 'second', storage: new InMemoryStore() });
-    const resolve = vi.fn(async (key: string) => (key === 'first' ? first : key === 'second' ? second : undefined));
+    const resolve = vi.fn(async (key: string) => (key === 'default' ? first : key === 'second' ? second : undefined));
     const h = await createHarness({ knowledgeRuntime: first, knowledgeResolver: resolve });
-    const firstStore = await first.getStorage();
+    const secondOrg = await second.materializeScope({
+      address: `org:${ORG}`,
+      contextualScopeAddress: `org:${ORG}`,
+    });
+    const secondResource = await second.materializeScope({
+      address: `resource:${h.projectId}`,
+      parentAddresses: [`org:${ORG}`],
+      contextualScopeAddress: `org:${ORG}`,
+    });
+    const secondScope = [secondOrg.scopes[`org:${ORG}`]!, secondResource.scopes[`resource:${h.projectId}`]!];
     const secondStore = await second.getStorage();
-    const secondView = await scopes(h, '?knowledgeKey=second');
-    expect(secondView.status).toBe(200);
-    const secondScope = [secondView.body.scope.id];
-    const a = await node(firstStore, 'First runtime', h.projectScope);
+    const a = await node(h.knowledge, 'First runtime', h.projectScope);
     const b = await node(secondStore, 'Second runtime', secondScope);
-    await record(firstStore, a, 'First evidence', h.projectScope);
+    await record(h.knowledge, a, 'First evidence', h.projectScope);
     await record(secondStore, b, 'Second evidence', secondScope);
-    expect((await graph(h, '?knowledgeKey=first')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
-    expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['Second runtime']);
-    expect((await nodeDetail(h, a.id, '?knowledgeKey=second')).status).toBe(404);
+
+    // The untrusted query parameter never switches runtimes: every read stays
+    // on the host-selected ('default') runtime, and content in other registered
+    // runtimes is unreachable.
+    expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await graph(h, '?knowledgeKey=missing')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await nodeDetail(h, b.id, '?knowledgeKey=second')).status).toBe(404);
     expect((await activity(h, '?knowledgeKey=second')).status).toBe(200);
-    for (const endpoint of ['scopes', 'subgraph', 'activity', `nodes/${a.id}`]) {
+    expect(new Set(resolve.mock.calls.map(([key]) => key))).toEqual(new Set(['default']));
+  });
+
+  it('fails closed on every endpoint when the host-selected key does not resolve', async () => {
+    const h = await createHarness({
+      knowledgeResolver: async () => undefined,
+      defaultKnowledgeKey: 'mastra',
+    });
+    for (const endpoint of ['scopes', 'subgraph', 'activity', 'nodes/018f6d3e-3f2a-4f9c-8c7a-2f0f4b0a0001']) {
+      // Even a valid alternative key in the query string cannot rescue the request.
       const response = await h.app.request(
-        `/web/factory/projects/${h.projectId}/knowledge/${endpoint}?knowledgeKey=missing`,
+        `/web/factory/projects/${h.projectId}/knowledge/${endpoint}?knowledgeKey=second`,
       );
       expect(response.status).toBe(503);
     }
-    expect(resolve.mock.calls.map(([key]) => key)).not.toContain('default');
+  });
+
+  it('uses the host-selected key when the request omits knowledgeKey', async () => {
+    const mastra = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const resolve = vi.fn(async (key: string) => (key === 'mastra' ? mastra : undefined));
+    const h = await createHarness({
+      knowledgeRuntime: mastra,
+      knowledgeResolver: resolve,
+      defaultKnowledgeKey: 'mastra',
+    });
+    await node(h.knowledge, 'Host runtime', h.projectScope);
+
+    expect((await graph(h)).body.nodes.map(item => item.name)).toEqual(['Host runtime']);
+    expect(resolve).toHaveBeenCalledWith('mastra');
   });
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
     const absent = await createHarness({ knowledgeResolver: async () => undefined });

@@ -576,6 +576,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
+          defaultKnowledgeKey: deps.knowledgeKey,
         }).routes()
       : []),
     ...(deps.factoryReady
