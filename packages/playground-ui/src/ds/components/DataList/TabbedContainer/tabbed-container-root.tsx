@@ -87,7 +87,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
                     <ListFilterIcon aria-hidden="true" />
                     {filterCount > 0 ? (
-                      <span aria-hidden="true" data-slot="tabbed-container-filter-count">
+                      <span aria-hidden="true" data-slot="tabbed-container-filter-count" className="text-ui-xs">
                         {filterCount}
                       </span>
                     ) : null}
