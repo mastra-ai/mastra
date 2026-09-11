@@ -360,6 +360,129 @@ describe('MessageList sealed message handling', () => {
     expect((newMessage?.content.parts[0] as { text?: string })?.text).toBe('New content after observation');
   });
 
+  it('should update a resumed tool invocation without duplicating sealed Anthropic reasoning', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add({ role: 'user', content: 'Run the workflow' }, 'input');
+
+    const assistantMessageId = 'assistant-msg-1';
+    const reasoningPart = {
+      type: 'reasoning',
+      reasoning: 'I should request approval before running this tool.',
+      details: [
+        {
+          type: 'text',
+          text: 'I should request approval before running this tool.',
+          signature: 'sig-anthropic-thinking',
+        },
+      ],
+      providerMetadata: { anthropic: { signature: 'sig-anthropic-thinking' } },
+    } as MastraMessagePart;
+    const pendingToolPart = {
+      type: 'tool-invocation',
+      toolInvocation: {
+        toolCallId: 'call-1',
+        toolName: 'runWorkflow',
+        args: { input: 'test' },
+        state: 'approval-requested',
+        approval: { id: 'approval-1' },
+      },
+      metadata: { mastra: { sealedAt: Date.now() } },
+    } as MastraMessagePart;
+
+    messageList.add(
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [reasoningPart, { type: 'text', text: 'May I run the workflow?' }, pendingToolPart],
+          metadata: { mastra: { sealed: true } },
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            reasoningPart,
+            { type: 'text', text: 'May I run the workflow?' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'runWorkflow',
+                args: { input: 'test' },
+                state: 'result',
+                result: 'complete',
+              },
+            } as MastraMessagePart,
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.content.parts.filter(part => part.type === 'reasoning')).toHaveLength(1);
+    expect(messageList.get.response.db().filter(message => message.role === 'assistant')).toEqual(assistantMessages);
+
+    const toolPart = assistantMessages[0]?.content.parts.find(part => part.type === 'tool-invocation');
+    expect(toolPart?.type === 'tool-invocation' && toolPart.toolInvocation).toMatchObject({
+      toolCallId: 'call-1',
+      state: 'result',
+      result: 'complete',
+    });
+    expect(assistantMessages[0]?.content.metadata).toMatchObject({ mastra: { sealed: true } });
+    expect(toolPart).toMatchObject({ metadata: { mastra: { sealedAt: expect.any(Number) } } });
+
+    // Streaming may later flush only the resumed invocation and new text,
+    // rather than another complete accumulated assistant snapshot.
+    messageList.add(
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'runWorkflow',
+                args: { input: 'test' },
+                state: 'result',
+                result: 'complete',
+              },
+            } as MastraMessagePart,
+            { type: 'text', text: 'The workflow completed.' },
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const messagesAfterPartialFlush = messageList.get.all.db().filter(message => message.role === 'assistant');
+    expect(messagesAfterPartialFlush).toHaveLength(2);
+    expect(
+      messagesAfterPartialFlush.flatMap(message => message.content.parts).filter(part => part.type === 'reasoning'),
+    ).toHaveLength(1);
+
+    const continuation = messagesAfterPartialFlush.find(message => message.id !== assistantMessageId);
+    expect(continuation?.content.parts).toEqual([
+      expect.objectContaining({ type: 'text', text: 'The workflow completed.' }),
+    ]);
+  });
+
   it('should not merge into messages at or before the latest sealed boundary', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 
