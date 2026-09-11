@@ -224,10 +224,42 @@ describe('Mastra shutdown lifecycle', () => {
       void run.start({ inputData: {} }).catch(() => {});
       await stepStarted.promise;
 
+      // drainTimeout is one shared deadline for the whole shutdown, not a
+      // per-phase allowance: the stuck run is the same promise the worker
+      // and push-event drains would wait on, so it must not be charged twice.
       const startedAt = Date.now();
-      await mastra.shutdown({ drainTimeout: 100 });
+      await mastra.shutdown({ drainTimeout: 500 });
 
-      expect(Date.now() - startedAt).toBeLessThan(2_000);
+      expect(Date.now() - startedAt).toBeLessThan(800);
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      gate.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('shares the drain deadline with the push-mode event drain', async () => {
+    const gate = deferred();
+    const stepStarted = deferred();
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new PushOnlyPubSub(),
+      workflows: { gated: makeGatedWorkflow(gate.promise, () => stepStarted.resolve()) } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run = await mastra.getWorkflow('gated').createRun();
+      void run.start({ inputData: {} }).catch(() => {});
+      await stepStarted.promise;
+
+      const startedAt = Date.now();
+      await mastra.shutdown({ drainTimeout: 500 });
+
+      expect(Date.now() - startedAt).toBeLessThan(800);
       expect(close).toHaveBeenCalledOnce();
     } finally {
       gate.resolve();

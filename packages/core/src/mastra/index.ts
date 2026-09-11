@@ -6673,6 +6673,11 @@ export class Mastra<
     if (!Number.isFinite(drainTimeout) || drainTimeout < 0) {
       throw new RangeError('stopWorkers drainTimeout must be a finite number of milliseconds >= 0');
     }
+    // One deadline for the whole call. Each worker's transport drain and the
+    // push-event drain below typically wait on the same stuck step, so giving
+    // each phase the full budget would multiply the worst-case stop time.
+    const deadline = Date.now() + drainTimeout;
+    const remaining = () => Math.max(0, deadline - Date.now());
     // Block new lazy starts immediately. Runtime signals that arrive during
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.
@@ -6694,7 +6699,7 @@ export class Mastra<
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
-        await worker.stop({ drainTimeout });
+        await worker.stop({ drainTimeout: remaining() });
       }
     }
 
@@ -6709,7 +6714,7 @@ export class Mastra<
     if (this.#inFlightPushEvents.size > 0) {
       await this.#awaitBounded(
         Promise.allSettled([...this.#inFlightPushEvents]),
-        drainTimeout,
+        remaining(),
         `${this.#inFlightPushEvents.size} in-flight workflow event(s)`,
       );
     }
@@ -7063,6 +7068,13 @@ export class Mastra<
       throw new RangeError('shutdown drainTimeout must be a finite number of milliseconds >= 0');
     }
 
+    // `drainTimeout` is a single deadline shared by every drain in this method
+    // (evented runs here, then worker transports and push events inside
+    // stopWorkers()). They all end up waiting on the same in-flight steps, so a
+    // stuck step must only be charged once — the deployer's shutdown deadline
+    // is sized as `drainTimeout + fixed teardown`, and stacking would break it.
+    const deadline = Date.now() + drainTimeout;
+
     // The scorer hook lives on a process-global emitter. Release it before any
     // awaited teardown so even a later cleanup failure cannot retain this
     // Mastra instance and its full component graph.
@@ -7097,7 +7109,7 @@ export class Mastra<
     }
 
     // SchedulerWorker is stopped as part of stopWorkers().
-    await this.stopWorkers({ drainTimeout });
+    await this.stopWorkers({ drainTimeout: Math.max(0, deadline - Date.now()) });
 
     // Stop — don't destroy — registered workspaces. Remote sandboxes
     // suspend/pause and stay resumable across process restarts, and
