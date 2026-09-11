@@ -61,7 +61,7 @@ Eligible tools default to `deferred` execution. Set `defaultDisposition: 'foregr
 
 ### Tool-level
 
-Set `background.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
+Set `background.enabled: true` on the tool definition. Tools opted in at this layer are eligible for background execution when called by an agent that has the manager enabled. Their configured default disposition determines whether each call runs inline or in the background unless the call includes a `_background` override.
 
 ```typescript title="src/mastra/tools/research.ts"
 import { createTool } from '@mastra/core/tools'

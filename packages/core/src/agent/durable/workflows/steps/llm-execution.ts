@@ -500,6 +500,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
+                        Boolean(registryEntry?.backgroundTaskManager),
                       );
                     } else {
                       convertedTools[name] = tool as CoreTool;

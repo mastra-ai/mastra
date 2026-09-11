@@ -37,6 +37,17 @@ const agent = new Agent({
   inputProcessors: [createBackgroundWorkSignalProcessor()],
 });
 
+const stream = await agent.stream('Research distributed systems');
+
+for await (const part of stream.fullStream) {
+  if (
+    part.type === 'data-signal' &&
+    (part.data.tagName === 'work-completed' || part.data.tagName === 'work-failed')
+  ) {
+    handleBackgroundSignal(part.data);
+  }
+}
+
 function handleBackgroundSignal(signal: { tagName?: string }) {
   if (signal.tagName === 'work-completed') {
     // Handle successful background work.

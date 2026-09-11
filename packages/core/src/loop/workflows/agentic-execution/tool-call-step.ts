@@ -1065,7 +1065,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       }
                     }
 
-                    return rawResult;
+                    return result;
                   },
                 },
 
@@ -1393,6 +1393,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             });
 
+            const awaitAuthoritativeBackgroundResult = async () => {
+              const completedTask = await bgTask.waitForCompletion();
+              if (completedTask.status !== 'completed') {
+                throw new Error(
+                  completedTask.error?.message ??
+                    `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
+                );
+              }
+
+              const reconciliation = await reconciliationComplete;
+              if (reconciliation.error) {
+                throw reconciliation.error;
+              }
+
+              return ensureSerializable(completedTask.result);
+            };
+
             const isSuspended = await bgTask.checkIfSuspended({
               toolCallId: inputData.toolCallId,
               runId,
@@ -1406,6 +1423,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             // `dispatch()` below, leaving the suspended task stranded and starting a second one.
             if (isSuspended && resumeDataToPassToToolOptions != null) {
               const task = await bgTask.resume(resumeDataToPassToToolOptions);
+
+              if (bgResolved.disposition === 'awaited') {
+                return {
+                  result: await awaitAuthoritativeBackgroundResult(),
+                  ...inputData,
+                  ...(approvalGrant ?? {}),
+                };
+              }
 
               return {
                 result: `Background task resumed. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
@@ -1447,21 +1472,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               }
 
               if (bgResolved.disposition === 'awaited') {
-                const completedTask = await bgTask.waitForCompletion();
-                if (completedTask.status !== 'completed') {
-                  throw new Error(
-                    completedTask.error?.message ??
-                      `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
-                  );
-                }
-
-                const reconciliation = await reconciliationComplete;
-                if (reconciliation.error) {
-                  throw reconciliation.error;
-                }
-
                 return {
-                  result: ensureSerializable(completedTask.result),
+                  result: await awaitAuthoritativeBackgroundResult(),
                   ...inputData,
                   ...(approvalGrant ?? {}),
                 };
