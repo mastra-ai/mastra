@@ -10,7 +10,7 @@ import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { ToolAnnotations } from '../tools/types';
 import { validateRequestContext, validateToolInput, validateToolOutput } from '../tools/validation';
 
@@ -130,24 +130,33 @@ const contextSchema = z
   })
   .refine(value => !('mcp' in value), 'Legacy MCP context is not supported by native tools');
 
-export interface MCPToolActionV2<TInput, TOutput> {
+/**
+ * Definition accepted by `createMCPTool`. Input and output types are inferred
+ * structurally from the schemas, the same way `createTool` infers them, so a
+ * consumer's schema library version does not have to match core's.
+ */
+export interface MCPToolActionV2<TInputSchema extends PublicSchema<any>, TOutputSchema extends PublicSchema<any>> {
   id: string;
   description: string;
-  inputSchema: PublicSchema<TInput>;
-  outputSchema: PublicSchema<TOutput>;
+  inputSchema: TInputSchema;
+  outputSchema: TOutputSchema;
   requestContextSchema?: PublicSchema;
   /** MCP tool annotations advertised on `tools/list`. */
   annotations?: ToolAnnotations;
   /** Arbitrary `_meta` advertised on `tools/list` (for example MCP Apps UI metadata). */
   _meta?: Record<string, unknown>;
   execute(
-    input: NoInfer<TInput>,
+    input: InferPublicSchema<TInputSchema>,
     context: MCPToolExecutionContextV2,
-  ): MCPToolOutcomeV2<NoInfer<TOutput>> | Promise<MCPToolOutcomeV2<NoInfer<TOutput>>>;
+  ):
+    | MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>>
+    | Promise<MCPToolOutcomeV2<InferPublicSchema<TOutputSchema>>>;
 }
 
 /** Define a protocol-aware tool that cannot be executed as a business tool. */
-export function createMCPTool<TInput, TOutput>(options: MCPToolActionV2<TInput, TOutput>): MCPToolV2<TInput, TOutput> {
+export function createMCPTool<TInputSchema extends PublicSchema<any>, TOutputSchema extends PublicSchema<any>>(
+  options: MCPToolActionV2<TInputSchema, TOutputSchema>,
+): MCPToolV2<InferPublicSchema<TInputSchema>, InferPublicSchema<TOutputSchema>> {
   const inputSchema = toStandardSchema(options.inputSchema);
   const outputSchema = toStandardSchema(options.outputSchema);
   return {

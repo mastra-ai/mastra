@@ -25,7 +25,7 @@ class NativeServer extends MCPServerBaseV2 {
     return this.getServerInfo();
   }
   getToolListInfo() {
-    return { tools: Object.keys(this.tools()).map(name => ({ name, inputSchema: {} })) };
+    return { tools: Object.keys(this.tools()).map(name => ({ id: name, name, inputSchema: {} })) };
   }
   getToolInfo(name: string) {
     return this.getToolListInfo().tools.find(tool => tool.name === name);
