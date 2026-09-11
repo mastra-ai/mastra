@@ -351,6 +351,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       stopped: false,
       loop: undefined,
       reclaimTimer: undefined,
+      inFlight: new Set(),
     };
     this.#subscriptions.set(key, sub);
     sub.loop = this.#runReadLoop(sub);
@@ -382,6 +383,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         for (const entry of messages) {
           // A successful claim already transferred ownership; drain its full batch.
           if (!entry) continue;
+          // The claim may return an entry this subscription is still processing
+          // locally (a handler running longer than reclaimIdleMs). Redelivering
+          // it here would invoke the callback a second time, concurrently, for
+          // the same event. Skip it — the original in-flight delivery still owns
+          // the ack/nack, and it will become reclaim-eligible again only after it
+          // settles (or truly stalls) and clears itself from inFlight.
+          if (sub.inFlight.has(entry.id)) continue;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
       } catch (err) {
@@ -755,6 +763,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const ack = async () => {
       if (settled) return;
       settled = true;
+      sub.inFlight.delete(streamId);
       try {
         // Only ack against this consumer group. Do NOT xDel: the stream may
         // be consumed by other groups, and xDel removes the entry for all of
@@ -770,6 +779,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const nack = async () => {
       if (settled) return;
       settled = true;
+      // This local delivery is done regardless of which branch below runs
+      // (drop, republish, or republish-failure), so clear the in-flight guard
+      // now. On the republish-failure path the entry is intentionally left
+      // pending; clearing it here makes it eligible for a future reclaim.
+      sub.inFlight.delete(streamId);
       const attempt = event.deliveryAttempt ?? 1;
       // Cap redelivery to avoid an infinite poison-pill loop. When the cap
       // is hit we drop the event (xAck without republish) and warn so an
@@ -838,6 +852,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       }
     };
 
+    // Mark this entry in-flight for the reclaim loop's benefit for exactly the
+    // window between invoking the handler and the delivery settling (ack/nack).
+    sub.inFlight.add(streamId);
     try {
       // EventCallback is typed `=> void` but handlers commonly return a
       // promise (TS allows Promise<void> to satisfy void). If we get one
@@ -909,4 +926,8 @@ interface Subscription {
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
   reclaimLoop?: Promise<void>;
   teardown?: Promise<void>;
+  // Stream entry IDs currently being processed locally by this subscription.
+  // The reclaim loop consults this to avoid re-invoking the handler for a
+  // message whose original delivery is still in flight (self-redelivery).
+  inFlight: Set<string>;
 }

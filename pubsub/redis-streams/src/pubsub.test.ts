@@ -409,6 +409,37 @@ describe('RedisStreamsPubSub', () => {
       await waitFor(() => seenB.length >= 1, { timeoutMs: 6000 });
       expect(seenB[0]!.type).toBe('sticky');
     });
+
+    it('does not self-redeliver an in-flight message before ack', async () => {
+      // A single grouped consumer whose handler runs longer than reclaimIdleMs
+      // and spans several reclaim ticks. The reclaim loop must not re-invoke the
+      // handler for the same still-in-flight entry.
+      const ps = new RedisStreamsPubSub({
+        url: REDIS_URL,
+        blockMs: 200,
+        reclaimIdleMs: 200,
+        reclaimIntervalMs: 100,
+      });
+      pubsubs.push(ps);
+
+      const topic = `t-${randomUUID()}`;
+      const groupName = `inflight-${randomUUID()}`;
+
+      let deliveries = 0;
+      const cb: EventCallback = async (_event, ack) => {
+        deliveries++;
+        // Runs well past reclaimIdleMs, spanning multiple reclaim ticks.
+        await new Promise(r => setTimeout(r, 800));
+        void ack?.();
+      };
+      await ps.subscribe(topic, cb, { group: groupName });
+
+      await ps.publish(topic, makeEvent({ type: 'long-running' }));
+
+      // Wait past the handler duration plus several reclaim cycles.
+      await new Promise(r => setTimeout(r, 1500));
+      expect(deliveries).toBe(1);
+    });
   });
 
   describe('nack max-delivery cap', () => {
