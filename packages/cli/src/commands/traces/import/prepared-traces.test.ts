@@ -203,6 +203,35 @@ describe('prepared traces', () => {
     expect(await collectBatches(state.directory, 100)).toEqual([]);
   });
 
+  it('bounds diagnostic source span IDs without changing skipped counts', async () => {
+    const state = await initialize();
+    const sourceSpanIds = Array.from({ length: 51 }, (_, index) => `source-span-${index}`);
+    const sourceProvider: TraceImportProvider = {
+      identify: async () => source,
+      read: async function* () {
+        yield {
+          kind: 'skipped',
+          skipped: {
+            sourceTraceId: 'broken-large-trace',
+            spanCount: sourceSpanIds.length,
+            reason: 'missing_parent',
+            sourceSpanIds,
+          },
+        };
+      },
+    };
+
+    const manifest = await prepareTraceImport({ directory: state.directory, provider: sourceProvider });
+
+    expect(manifest.counts).toMatchObject({
+      readSpans: 51,
+      skippedTraces: 1,
+      skippedSpans: 51,
+      skipReasons: { missing_parent: 1 },
+    });
+    expect(manifest.skippedTraceSamples[0]?.sourceSpanIds).toEqual(sourceSpanIds.slice(0, 50));
+  });
+
   it('cleans up prepared data only after every trace is acknowledged', async () => {
     const state = await initialize();
     await prepareTraceImport({ directory: state.directory, provider: provider([trace(1), trace(2)]) });
