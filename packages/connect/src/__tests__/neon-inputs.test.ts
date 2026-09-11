@@ -5,6 +5,7 @@ import { createRoleInputSchema } from '../providers/neon/tools/create-role.js';
 import { getBranchSchemaInputSchema } from '../providers/neon/tools/get-branch-schema.js';
 import { restoreBranchInputSchema } from '../providers/neon/tools/restore-branch.js';
 import { setSnapshotScheduleInputSchema } from '../providers/neon/tools/set-snapshot-schedule.js';
+import { updateProjectInputSchema } from '../providers/neon/tools/update-project.js';
 
 describe('generated Neon input constraints', () => {
   it('preserves historical selector exclusions through generation', () => {
@@ -52,4 +53,19 @@ it('preserves the PostgreSQL role name byte limit through generation', () => {
   expect(createRoleInputSchema.safeParse({ ...base, body: { role: { name: 'reader', no_login: true } } }).success).toBe(
     true,
   );
+});
+
+it('rejects contradictory project compute defaults', () => {
+  expect(
+    updateProjectInputSchema.safeParse({
+      project_id: 'project',
+      body: { project: { default_endpoint_settings: { autoscaling_limit_min_cu: 4, autoscaling_limit_max_cu: 1 } } },
+    }).success,
+  ).toBe(false);
+  expect(
+    updateProjectInputSchema.safeParse({
+      project_id: 'project',
+      body: { project: { default_endpoint_settings: { autoscaling_limit_min_cu: 4 } } },
+    }).success,
+  ).toBe(true);
 });

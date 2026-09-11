@@ -1,190 +1,205 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 9629ccfaefd5 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 4cdd3a76deb0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const updateProjectInputSchema = z.object({
-  project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
-  body: z.object({
-    project: z.object({
-      settings: z
-        .object({
-          quota: z
-            .object({
-              active_time_seconds: z
-                .number()
-                .int()
-                .min(0)
-                .describe(
-                  "The total amount of wall-clock time allowed to be spent by the project's compute endpoints.\n",
-                )
-                .optional(),
-              compute_time_seconds: z
-                .number()
-                .int()
-                .min(0)
-                .describe("The total amount of CPU seconds allowed to be spent by the project's compute endpoints.\n")
-                .optional(),
-              written_data_bytes: z
-                .number()
-                .int()
-                .min(0)
-                .describe("Total amount of data written to all of a project's branches.\n")
-                .optional(),
-              data_transfer_bytes: z
-                .number()
-                .int()
-                .min(0)
-                .describe("Total amount of data transferred from all of a project's branches using the proxy.\n")
-                .optional(),
-              logical_size_bytes: z
-                .number()
-                .int()
-                .min(0)
-                .describe(
-                  "Limit on the logical size of every project's branch.\n\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n",
-                )
-                .optional(),
-            })
-            .describe(
-              'Per-project consumption quotas. If a quota is exceeded, all active computes\nare automatically suspended and cannot be started via API calls or incoming connections.\n\nThe exception is `logical_size_bytes`, which is enforced per branch.\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n\nQuotas are enforced using per-project consumption metrics with the same names.\nThese metrics reset at the start of each billing period. `logical_size_bytes`\nis also an exception—it reflects the total data stored in a branch and does not reset.\n\nA zero or empty quota value means “unlimited.”\n',
-            )
-            .optional(),
-          allowed_ips: z
-            .object({
-              ips: z
-                .array(z.string())
-                .describe('A list of IP addresses that are allowed to connect to the endpoint.')
-                .optional(),
-              protected_branches_only: z
-                .boolean()
-                .describe('If true, the list will be applied only to protected branches.')
-                .optional(),
-            })
-            .describe(
-              'A list of IP addresses that are allowed to connect to the compute endpoint.\nIf the list is empty or not set, all IP addresses are allowed.\nIf protected_branches_only is true, the list will be applied only to protected branches.\n',
-            )
-            .optional(),
-          enable_logical_replication: z
-            .boolean()
-            .describe(
-              'Sets wal_level=logical for all compute endpoints in this project.\nAll active endpoints will be suspended.\nOnce enabled, logical replication cannot be disabled.\n',
-            )
-            .optional(),
-          maintenance_window: z
-            .object({
-              weekdays: z
-                .array(z.number().int())
-                .describe(
-                  'A list of weekdays when the maintenance window is active.\nEncoded as ints, where 1 - Monday, and 7 - Sunday.\n',
-                ),
-              start_time: z
-                .string()
-                .describe('Start time of the maintenance window, in the format of "HH:MM". Uses UTC.\n'),
-              end_time: z
-                .string()
-                .describe('End time of the maintenance window, in the format of "HH:MM". Uses UTC.\n'),
-            })
-            .describe(
-              "A maintenance window is a time period during which Neon may perform maintenance on the project's infrastructure.\nDuring this time, the project's compute endpoints may be unavailable and existing connections can be\ninterrupted.\n",
-            )
-            .optional(),
-          block_public_connections: z
-            .boolean()
-            .describe(
-              'When set, connections from the public internet\nare disallowed. This supersedes the AllowedIPs list.\nThis parameter is under active development and its semantics may change in the future.\n',
-            )
-            .optional(),
-          block_vpc_connections: z
-            .boolean()
-            .describe(
-              'When set, connections using VPC endpoints are disallowed.\nThis parameter is under active development and its semantics may change in the future.\n',
-            )
-            .optional(),
-          audit_log_level: z
-            .enum(['base', 'extended', 'full'])
-            .describe(
-              'Audit logging level, set only on HIPAA-enabled organizations (absent otherwise). Values: `base`, `extended`, `full`; HIPAA defaults to `extended`. Cannot be lowered back to `base` once `extended` or `full`.',
-            )
-            .optional(),
-          hipaa: z
-            .boolean()
-            .describe('Enables HIPAA compliance mode for the project, including audit logging.')
-            .optional(),
-          preload_libraries: z
-            .object({
-              use_defaults: z
-                .boolean()
-                .describe(
-                  "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
-                )
-                .optional(),
-              enabled_libraries: z
-                .array(z.string())
-                .describe('Names of shared preload libraries to enable for the project.')
-                .optional(),
-            })
-            .describe("The shared libraries to preload into the project's compute instances.\n")
-            .optional(),
-        })
-        .describe(
-          'Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.',
-        )
-        .optional(),
-      name: z.string().min(1).max(256).describe('The project name').optional(),
-      default_endpoint_settings: z
-        .object({
-          pg_settings: z
-            .object({})
-            .catchall(z.string())
-            .describe('A raw representation of Postgres settings')
-            .optional(),
-          pgbouncer_settings: z
-            .object({})
-            .catchall(z.string())
-            .describe(
-              'Deprecated. Use the endpoint-level connection pooler configuration instead. Removal scheduled for June 20, 2026.\n',
-            )
-            .optional(),
-          autoscaling_limit_min_cu: z
-            .number()
-            .min(0.25)
-            .describe(
-              'Minimum number of Compute Units for this endpoint. At least 0.25 and no greater than `autoscaling_limit_max_cu`.\n',
-            )
-            .optional(),
-          autoscaling_limit_max_cu: z
-            .number()
-            .min(0.25)
-            .describe(
-              'Default maximum number of Compute Units for endpoints created under this account. At least 0.25.\n',
-            )
-            .optional(),
-          suspend_timeout_seconds: z
-            .number()
-            .int()
-            .min(-1)
-            .max(604800)
-            .describe(
-              'Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.',
-            )
-            .optional(),
-        })
-        .describe('A collection of settings for a Neon endpoint')
-        .optional(),
-      history_retention_seconds: z
-        .number()
-        .int()
-        .min(0)
-        .max(2592000)
-        .describe(
-          'History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).\n',
-        )
-        .optional(),
+export const updateProjectInputSchema = z
+  .object({
+    project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
+    body: z.object({
+      project: z.object({
+        settings: z
+          .object({
+            quota: z
+              .object({
+                active_time_seconds: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe(
+                    "The total amount of wall-clock time allowed to be spent by the project's compute endpoints.\n",
+                  )
+                  .optional(),
+                compute_time_seconds: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe("The total amount of CPU seconds allowed to be spent by the project's compute endpoints.\n")
+                  .optional(),
+                written_data_bytes: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe("Total amount of data written to all of a project's branches.\n")
+                  .optional(),
+                data_transfer_bytes: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe("Total amount of data transferred from all of a project's branches using the proxy.\n")
+                  .optional(),
+                logical_size_bytes: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .describe(
+                    "Limit on the logical size of every project's branch.\n\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n",
+                  )
+                  .optional(),
+              })
+              .describe(
+                'Per-project consumption quotas. If a quota is exceeded, all active computes\nare automatically suspended and cannot be started via API calls or incoming connections.\n\nThe exception is `logical_size_bytes`, which is enforced per branch.\nIf a branch exceeds its `logical_size_bytes` quota, computes can still be started,\nbut write operations will fail—allowing data to be deleted to free up space.\nComputes on other branches are not affected.\n\nSetting `logical_size_bytes` overrides any lower value set by the `neon.max_cluster_size` Postgres setting.\n\nQuotas are enforced using per-project consumption metrics with the same names.\nThese metrics reset at the start of each billing period. `logical_size_bytes`\nis also an exception—it reflects the total data stored in a branch and does not reset.\n\nA zero or empty quota value means “unlimited.”\n',
+              )
+              .optional(),
+            allowed_ips: z
+              .object({
+                ips: z
+                  .array(z.string())
+                  .describe('A list of IP addresses that are allowed to connect to the endpoint.')
+                  .optional(),
+                protected_branches_only: z
+                  .boolean()
+                  .describe('If true, the list will be applied only to protected branches.')
+                  .optional(),
+              })
+              .describe(
+                'A list of IP addresses that are allowed to connect to the compute endpoint.\nIf the list is empty or not set, all IP addresses are allowed.\nIf protected_branches_only is true, the list will be applied only to protected branches.\n',
+              )
+              .optional(),
+            enable_logical_replication: z
+              .boolean()
+              .describe(
+                'Sets wal_level=logical for all compute endpoints in this project.\nAll active endpoints will be suspended.\nOnce enabled, logical replication cannot be disabled.\n',
+              )
+              .optional(),
+            maintenance_window: z
+              .object({
+                weekdays: z
+                  .array(z.number().int())
+                  .describe(
+                    'A list of weekdays when the maintenance window is active.\nEncoded as ints, where 1 - Monday, and 7 - Sunday.\n',
+                  ),
+                start_time: z
+                  .string()
+                  .describe('Start time of the maintenance window, in the format of "HH:MM". Uses UTC.\n'),
+                end_time: z
+                  .string()
+                  .describe('End time of the maintenance window, in the format of "HH:MM". Uses UTC.\n'),
+              })
+              .describe(
+                "A maintenance window is a time period during which Neon may perform maintenance on the project's infrastructure.\nDuring this time, the project's compute endpoints may be unavailable and existing connections can be\ninterrupted.\n",
+              )
+              .optional(),
+            block_public_connections: z
+              .boolean()
+              .describe(
+                'When set, connections from the public internet\nare disallowed. This supersedes the AllowedIPs list.\nThis parameter is under active development and its semantics may change in the future.\n',
+              )
+              .optional(),
+            block_vpc_connections: z
+              .boolean()
+              .describe(
+                'When set, connections using VPC endpoints are disallowed.\nThis parameter is under active development and its semantics may change in the future.\n',
+              )
+              .optional(),
+            audit_log_level: z
+              .enum(['base', 'extended', 'full'])
+              .describe(
+                'Audit logging level, set only on HIPAA-enabled organizations (absent otherwise). Values: `base`, `extended`, `full`; HIPAA defaults to `extended`. Cannot be lowered back to `base` once `extended` or `full`.',
+              )
+              .optional(),
+            hipaa: z
+              .boolean()
+              .describe('Enables HIPAA compliance mode for the project, including audit logging.')
+              .optional(),
+            preload_libraries: z
+              .object({
+                use_defaults: z
+                  .boolean()
+                  .describe(
+                    "When true, the project's preload libraries include the platform default set in addition to any libraries listed in `enabled_libraries`.",
+                  )
+                  .optional(),
+                enabled_libraries: z
+                  .array(z.string())
+                  .describe('Names of shared preload libraries to enable for the project.')
+                  .optional(),
+              })
+              .describe("The shared libraries to preload into the project's compute instances.\n")
+              .optional(),
+          })
+          .describe(
+            'Project-level settings, for example `quota`, `allowed_ips`, `enable_logical_replication`, and `maintenance_window`.',
+          )
+          .optional(),
+        name: z.string().min(1).max(256).describe('The project name').optional(),
+        default_endpoint_settings: z
+          .object({
+            pg_settings: z
+              .object({})
+              .catchall(z.string())
+              .describe('A raw representation of Postgres settings')
+              .optional(),
+            pgbouncer_settings: z
+              .object({})
+              .catchall(z.string())
+              .describe(
+                'Deprecated. Use the endpoint-level connection pooler configuration instead. Removal scheduled for June 20, 2026.\n',
+              )
+              .optional(),
+            autoscaling_limit_min_cu: z
+              .number()
+              .min(0.25)
+              .describe(
+                'Minimum number of Compute Units for this endpoint. At least 0.25 and no greater than `autoscaling_limit_max_cu`.\n',
+              )
+              .optional(),
+            autoscaling_limit_max_cu: z
+              .number()
+              .min(0.25)
+              .describe(
+                'Default maximum number of Compute Units for endpoints created under this account. At least 0.25.\n',
+              )
+              .optional(),
+            suspend_timeout_seconds: z
+              .number()
+              .int()
+              .min(-1)
+              .max(604800)
+              .describe(
+                'Scale-to-zero idle timeout, in seconds, before the compute suspends. `0` uses the plan default; `-1` disables scale-to-zero (never suspends). Minimum is plan-dependent (Scale: 60); maximum 604800 (one week). Free cannot change it; Launch can only enable or disable; Scale can set any value.',
+              )
+              .optional(),
+          })
+          .describe('A collection of settings for a Neon endpoint')
+          .optional(),
+        history_retention_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(2592000)
+          .describe(
+            'History window (point-in-time restore range) for all branches, in seconds. `0` disables it. Default 1 day (Free: 6 hours). Maximum depends on plan: Free 6 hours (21600), Launch 7 days (604800), Scale 30 days (2592000).\n',
+          )
+          .optional(),
+      }),
     }),
-  }),
-});
+  })
+  .refine(
+    input => {
+      const settings = input.body.project.default_endpoint_settings;
+      return (
+        settings?.autoscaling_limit_min_cu === undefined ||
+        settings.autoscaling_limit_max_cu === undefined ||
+        settings.autoscaling_limit_min_cu <= settings.autoscaling_limit_max_cu
+      );
+    },
+    {
+      message: 'Minimum compute units must not exceed maximum',
+      path: ['body', 'project', 'default_endpoint_settings'],
+    },
+  );
 
 const ProviderResponseSchema = z
   .object({

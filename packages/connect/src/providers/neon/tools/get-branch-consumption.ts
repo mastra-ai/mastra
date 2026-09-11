@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 9629ccfaefd5 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 4cdd3a76deb0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -20,14 +20,14 @@ export const getBranchConsumptionInputSchema = z
       .describe('Maximum number of branches per page. Allowed range: 1 to 1000. Default: 100.\n')
       .optional(),
     project_ids: z
-      .array(z.string().regex(new RegExp('^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$')))
+      .array(z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')))
       .min(1)
       .max(100)
       .describe(
         'Project IDs to include (required, 1 to 100). Returns metrics for branches in these projects.\n\nPass multiple IDs as repeated query parameters or a comma-separated list:\n- `project_ids=cold-poetry-09157238&project_ids=quiet-snow-71788278`\n- `project_ids=cold-poetry-09157238,quiet-snow-71788278`\n',
       ),
     branch_ids: z
-      .array(z.string().regex(new RegExp('^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$')))
+      .array(z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')))
       .min(0)
       .max(100)
       .describe(

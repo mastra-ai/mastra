@@ -26,6 +26,8 @@ describe('generated Neon diagnostics', () => {
     await expect(
       tools.neon_get_branch_consumption!.execute!(input, { requestContext: new RequestContext() }),
     ).resolves.toMatchObject({ next_cursor: 'next' });
+    expect(getBranchConsumptionInputSchema.safeParse({ ...input, project_ids: [''] }).success).toBe(false);
+    expect(getBranchConsumptionInputSchema.safeParse({ ...input, project_ids: ['a,b'] }).success).toBe(false);
     const query = new URL(String(fetchMock.mock.calls[0]![0])).searchParams;
     expect(query.get('project_ids')).toBe('project-a,project-b');
     expect(query.get('metrics')).toBe('compute_unit_seconds,public_network_transfer_bytes');

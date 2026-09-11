@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 9629ccfaefd5 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 4cdd3a76deb0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -16,7 +16,7 @@ export const getBranchSchemaInputSchema = z
       .describe('The point in time for which the schema is retrieved\n')
       .optional(),
     format: z
-      .string()
+      .enum(['sql', 'json'])
       .describe('The format of the schema to retrieve. Possible values:\n- `sql` (default)\n- `json`\n')
       .optional(),
   })

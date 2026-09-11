@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 9629ccfaefd5 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 4cdd3a76deb0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -20,7 +20,7 @@ export const getProjectConsumptionInputSchema = z
       .describe('Maximum number of projects per page. Allowed range: 1 to 100. Default: 10.\n')
       .optional(),
     project_ids: z
-      .array(z.string().regex(new RegExp('^([a-z0-9-]{1,60}(,[a-z0-9-]{1,60}){0,99})?$')))
+      .array(z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')))
       .min(0)
       .max(100)
       .describe(
