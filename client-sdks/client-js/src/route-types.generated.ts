@@ -21471,6 +21471,42 @@ export interface PostAgentControllerControllerIdSessionsResourceIdFollowUp_Route
 }
 
 // ============================================================================
+// Route: DELETE /agent-controller/:controllerId/sessions/:resourceId/follow-up/:followUpId
+// ============================================================================
+export type DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_PathParams = {
+  controllerId: string;
+  resourceId: string;
+  followUpId: string;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams =
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_Response =
+  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_Request = Simplify<
+  (DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_PathParams extends never
+    ? {}
+    : { params: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_PathParams }) &
+    (DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams
+        ? { query?: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams }
+        : { query: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_RouteContract {
+  pathParams: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_PathParams;
+  queryParams: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_QueryParams;
+  body: never;
+  request: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_Request;
+  response: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agent-controller/:controllerId/sessions/:resourceId/abort
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams =
@@ -22650,6 +22686,7 @@ export interface RouteTypes {
   'POST /agent-controller/:controllerId/sessions/:resourceId/messages': PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/steer': PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/follow-up': PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  'DELETE /agent-controller/:controllerId/sessions/:resourceId/follow-up/:followUpId': DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/abort': PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/tool-approval': PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/tool-suspension': PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract;
@@ -22760,6 +22797,9 @@ export interface Client {
   };
   '/agent-controller/:controllerId/sessions/:resourceId/follow-up': {
     POST: PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/follow-up/:followUpId': {
+    DELETE: DeleteAgentControllerControllerIdSessionsResourceIdFollowUpFollowUpId_RouteContract;
   };
   '/agent-controller/:controllerId/sessions/:resourceId/goal': {
     DELETE: DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;

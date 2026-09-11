@@ -176,6 +176,14 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'focus on tests' });
   });
 
+  it('removes a queued follow-up by id', async () => {
+    mockJson({ ok: true });
+    await client.getAgentController('code').session('user-1').removeFollowUp('follow-up-7-abc123');
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up/follow-up-7-abc123');
+    expect(init.method).toBe('DELETE');
+  });
+
   it('reads session state', async () => {
     mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-1', modeId: 'build', modelId: 'm' });
     const state = await client.getAgentController('code').session('user-1').state();

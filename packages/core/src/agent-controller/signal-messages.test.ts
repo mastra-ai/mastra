@@ -592,7 +592,7 @@ describe('AgentController signal messages', () => {
 
     expect(session.followUps.count()).toBe(1);
     expect(session.displayState.get().queuedFollowUps).toBe(1);
-    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'follow_up_queued', count: 1 }));
   });
 
   it('uses queueMessage when draining follow-ups for a subscribed thread', async () => {
@@ -643,8 +643,10 @@ describe('AgentController signal messages', () => {
     expect(sendSignal).not.toHaveBeenCalled();
     expect(session.followUps.count()).toBe(0);
     expect(session.displayState.get().queuedFollowUps).toBe(0);
-    expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
-    expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
+    expect(events).toContainEqual(expect.objectContaining({ type: 'follow_up_queued', count: 1 }));
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'follow_up_queued', count: 0, items: [], runId: 'queued-run-id' }),
+    );
   });
 
   it('sends idle follow-ups immediately without marking them queued', async () => {

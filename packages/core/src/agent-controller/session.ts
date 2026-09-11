@@ -49,6 +49,7 @@ import type {
   PermissionRules,
   TokenUsage,
   ToolCategory,
+  QueuedFollowUpItem,
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
@@ -1181,6 +1182,8 @@ export class SessionSuspensions {
 
 /** A message queued to send once the active run finishes, held in {@link SessionFollowUps}. */
 export interface FollowUp {
+  /** Stable id assigned when the follow-up is queued; the handle for `removeFollowUp`. */
+  id?: string;
   /** The message text to send. */
   content: string;
   /** Optional request context to apply when the queued message is sent. */
@@ -1198,6 +1201,7 @@ export interface FollowUp {
 export class SessionFollowUps {
   /** Messages waiting to be sent after the current run, in arrival order. */
   #queue: FollowUp[] = [];
+  #nextId = 0;
 
   /** Number of messages currently queued. */
   count(): number {
@@ -1209,9 +1213,14 @@ export class SessionFollowUps {
     return this.#queue.length === 0;
   }
 
-  /** Append a follow-up to the back of the queue. */
+  /** The queued follow-ups in send order, as a UI lists them (id and text). */
+  list(): QueuedFollowUpItem[] {
+    return this.#queue.map(followUp => ({ id: followUp.id ?? '', content: followUp.content }));
+  }
+
+  /** Append a follow-up to the back of the queue, giving it an id when it has none. */
   enqueue(followUp: FollowUp): void {
-    this.#queue.push(followUp);
+    this.#queue.push(followUp.id ? followUp : { ...followUp, id: this.#allocateId() });
   }
 
   /** Remove and return the next follow-up, or undefined when empty. */
@@ -1224,9 +1233,22 @@ export class SessionFollowUps {
     this.#queue.unshift(followUp);
   }
 
+  /** Remove one queued follow-up by id. Returns whether it was queued. */
+  remove(id: string): boolean {
+    const index = this.#queue.findIndex(followUp => followUp.id === id);
+    if (index === -1) return false;
+    this.#queue.splice(index, 1);
+    return true;
+  }
+
   /** Drop all queued follow-ups (e.g. on steer or thread switch). */
   clear(): void {
     this.#queue = [];
+  }
+
+  #allocateId(): string {
+    this.#nextId += 1;
+    return `follow-up-${this.#nextId}-${Math.random().toString(36).slice(2, 8)}`;
   }
 }
 
@@ -2296,6 +2318,7 @@ export class SessionDisplayState {
     ds.currentMessage = null;
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
+    ds.queuedFollowUpItems = [];
     ds.modifiedFiles = new Map();
     ds.tasks = [];
     ds.previousTasks = [];
@@ -2643,6 +2666,7 @@ export class SessionDisplayState {
       // ── Follow-up queue ────────────────────────────────────────────────
       case 'follow_up_queued':
         ds.queuedFollowUps = event.count;
+        ds.queuedFollowUpItems = event.items ?? [];
         break;
 
       // ── Thread lifecycle ───────────────────────────────────────────────
@@ -3620,7 +3644,7 @@ export class Session<TState = unknown> {
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUps.clear();
-    this.emit({ type: 'follow_up_queued', count: 0 });
+    this.emitFollowUpQueued();
     await this.sendMessage({ content, requestContext });
   }
 
@@ -3631,10 +3655,31 @@ export class Session<TState = unknown> {
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (this.run.isRunning()) {
       this.followUps.enqueue({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+      this.emitFollowUpQueued();
     } else {
       await this.sendMessage({ content, requestContext });
     }
+  }
+
+  /**
+   * Remove one queued follow-up by the id a UI read from
+   * `displayState.queuedFollowUpItems`. Returns whether it was still queued;
+   * a follow-up already drained into a run is not affected.
+   */
+  removeFollowUp({ id }: { id: string }): boolean {
+    const removed = this.followUps.remove(id);
+    if (removed) this.emitFollowUpQueued();
+    return removed;
+  }
+
+  /** Emit the queue's count and items together, so a UI never repaints one without the other. */
+  private emitFollowUpQueued(runId?: string): void {
+    this.emit({
+      type: 'follow_up_queued',
+      count: this.followUps.count(),
+      items: this.followUps.list(),
+      ...(runId ? { runId } : {}),
+    });
   }
 
   /**
@@ -3674,9 +3719,9 @@ export class Session<TState = unknown> {
         // otherwise be lost).
         const accepted = await result.accepted;
         const runId = 'runId' in accepted ? accepted.runId : undefined;
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId });
+        this.emitFollowUpQueued(runId);
       } else {
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+        this.emitFollowUpQueued();
         await this.sendMessage({
           content: next.content,
           requestContext: next.requestContext,
@@ -3687,7 +3732,7 @@ export class Session<TState = unknown> {
       return true;
     } catch (error) {
       this.followUps.requeue(next);
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+      this.emitFollowUpQueued();
       throw error;
     }
   }

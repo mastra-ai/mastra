@@ -24,6 +24,7 @@ import {
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
   FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
+  REMOVE_FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
   AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
   AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
 } from './agent-controller';
@@ -396,6 +397,21 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+    });
+
+    it('removes one queued follow-up by id', async () => {
+      const session = await getRouteSession('user-remove-follow-up');
+      const spy = vi.spyOn(session, 'removeFollowUp').mockReturnValue(true);
+
+      const res = await REMOVE_FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-remove-follow-up',
+        followUpId: 'follow-up-7-abc123',
+      } as any);
+
+      expect(res).toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledWith({ id: 'follow-up-7-abc123' });
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {

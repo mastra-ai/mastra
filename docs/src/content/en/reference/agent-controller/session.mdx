@@ -183,6 +183,15 @@ Queue a follow-up while a run is active, or send it immediately while idle.
 await session.followUp({ content: 'Then propose a fix.' })
 ```
 
+#### `removeFollowUp({ id })`
+
+Remove one queued follow-up by the `id` a UI read from `displayState.queuedFollowUpItems`. The other queued messages keep their order. Returns whether it was still queued; a follow-up already drained into a run is not affected. Emits `follow_up_queued` with the new `count` and `items`.
+
+```typescript
+const [next] = session.displayState.get().queuedFollowUpItems
+if (next) session.removeFollowUp({ id: next.id })
+```
+
 #### `getCurrentRunId()`
 
 Return the active stream run identifier, the tracked run identifier, or `null` while idle.
@@ -754,6 +763,19 @@ if (!session.followUps.isEmpty()) {
   // Messages are waiting to be processed
 }
 ```
+
+### `session.followUps.list()`
+
+Return the queued follow-ups in send order, each with a stable `id` and its `content`. The same list is mirrored on `displayState.queuedFollowUpItems` next to the `queuedFollowUps` count, and travels on every `follow_up_queued` event as `items`.
+
+```typescript
+const waiting = session.followUps.list()
+// [{ id: 'follow-up-1-k3j9x2', content: 'Then propose a fix.' }]
+```
+
+### `session.followUps.remove(id)`
+
+Remove one queued follow-up by id without touching the rest of the queue. Returns whether it was still queued. Prefer [`session.removeFollowUp()`](#messages-and-run-control), which also emits the updated queue to subscribers.
 
 ## Approval
 
