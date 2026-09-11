@@ -1,4 +1,4 @@
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AnyExportedSpan,
   ModelGenerationAttributes,
@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
-import { getAttributes, formatUsageMetrics } from './gen-ai-semantics';
+import { getAttributes, formatUsageMetrics, getSpanName } from './gen-ai-semantics';
 
 function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyExportedSpan {
   return {
@@ -223,5 +223,192 @@ describe('getAttributes - conversation id', () => {
     const attrs = getAttributes(createSpan(SpanType.MODEL_GENERATION, { resourceId: 'resource-123' }));
 
     expect(attrs).not.toHaveProperty('gen_ai.conversation.id');
+  });
+});
+
+/**
+ * Workflow control-flow spans inherit entityName from the enclosing workflow, so
+ * the exported span has to fall back to its own identity to stay distinguishable.
+ */
+function createWorkflowSpan(
+  type: SpanType,
+  name: string,
+  attributes: Record<string, unknown>,
+  entity?: { entityType?: EntityType; entityId?: string; entityName?: string },
+): AnyExportedSpan {
+  return {
+    id: 'test-span-id',
+    traceId: 'test-trace-id',
+    name,
+    type,
+    startTime: new Date(),
+    isRootSpan: false,
+    isEvent: false,
+    attributes,
+    // Every span below sits inside 'demo-workflow', which is what entityName
+    // resolves to once it has been inherited down the tree.
+    entityName: 'demo-workflow',
+    ...entity,
+  } as AnyExportedSpan;
+}
+
+describe('getSpanName - workflow control flow', () => {
+  it('keeps sibling steps apart instead of naming both after the workflow', () => {
+    const left = createWorkflowSpan(
+      SpanType.WORKFLOW_STEP,
+      "workflow step: 'left'",
+      {},
+      {
+        entityType: EntityType.WORKFLOW_STEP,
+        entityId: 'left',
+      },
+    );
+    const right = createWorkflowSpan(
+      SpanType.WORKFLOW_STEP,
+      "workflow step: 'right'",
+      {},
+      {
+        entityType: EntityType.WORKFLOW_STEP,
+        entityId: 'right',
+      },
+    );
+
+    expect(getSpanName(left)).toBe('workflow_step left');
+    expect(getSpanName(right)).toBe('workflow_step right');
+    expect(getSpanName(left)).not.toBe(getSpanName(right));
+  });
+
+  it('keeps a step identified by itself rather than by the workflow that encloses it', () => {
+    // A nested workflow: the inner step inherits the outer workflow's entityName.
+    const step = createWorkflowSpan(
+      SpanType.WORKFLOW_STEP,
+      "workflow step: 'inner-step'",
+      {},
+      {
+        entityType: EntityType.WORKFLOW_STEP,
+        entityId: 'inner-step',
+        entityName: 'outer-workflow',
+      },
+    );
+
+    expect(getSpanName(step)).toBe('workflow_step inner-step');
+    expect(getSpanName(step)).not.toContain('outer-workflow');
+  });
+
+  it('tells two predicates of the same branch apart', () => {
+    const first = createWorkflowSpan(SpanType.WORKFLOW_CONDITIONAL_EVAL, "condition '0'", {
+      conditionIndex: 0,
+      result: true,
+    });
+    const second = createWorkflowSpan(SpanType.WORKFLOW_CONDITIONAL_EVAL, "condition '1'", {
+      conditionIndex: 1,
+      result: false,
+    });
+
+    expect(getSpanName(first)).toBe('condition 0');
+    expect(getSpanName(second)).toBe('condition 1');
+  });
+
+  it('leaves span types that own their entity alone', () => {
+    const run = createWorkflowSpan(
+      SpanType.WORKFLOW_RUN,
+      'workflow run',
+      {},
+      {
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'demo-workflow',
+      },
+    );
+
+    expect(getSpanName(run)).toBe('invoke_workflow demo-workflow');
+  });
+});
+
+describe('getAttributes - workflow control flow', () => {
+  it('exports the branch decision', () => {
+    const span = createWorkflowSpan(SpanType.WORKFLOW_CONDITIONAL, "conditional: '2 conditions'", {
+      conditionCount: 2,
+      truthyIndexes: [0],
+      selectedSteps: ['left'],
+    });
+
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_conditional.condition_count': 2,
+      'mastra.workflow_conditional.truthy_indexes': '[0]',
+      'mastra.workflow_conditional.selected_steps': '["left"]',
+    });
+  });
+
+  it('exports which predicate this was and how it evaluated', () => {
+    const span = createWorkflowSpan(SpanType.WORKFLOW_CONDITIONAL_EVAL, "condition '1'", {
+      conditionIndex: 1,
+      result: false,
+    });
+
+    // result is false, so a truthiness check on the way out would drop it.
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_conditional_eval.condition_index': 1,
+      'mastra.workflow_conditional_eval.result': false,
+    });
+  });
+
+  it('exports the step id of a step span', () => {
+    const span = createWorkflowSpan(
+      SpanType.WORKFLOW_STEP,
+      "workflow step: 'left'",
+      { status: 'success' },
+      {
+        entityType: EntityType.WORKFLOW_STEP,
+        entityId: 'left',
+      },
+    );
+
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_step.step_id': 'left',
+      'mastra.workflow_step.status': 'success',
+    });
+  });
+
+  it('exports parallel and loop routing', () => {
+    const parallel = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, 'parallel', {
+      branchCount: 2,
+      parallelSteps: ['a', 'b'],
+    });
+    const loop = createWorkflowSpan(SpanType.WORKFLOW_LOOP, 'loop', {
+      loopType: 'foreach',
+      iteration: 3,
+      concurrency: 2,
+    });
+
+    expect(getAttributes(parallel)).toMatchObject({
+      'mastra.workflow_parallel.branch_count': 2,
+      'mastra.workflow_parallel.parallel_steps': '["a","b"]',
+    });
+    expect(getAttributes(loop)).toMatchObject({
+      'mastra.workflow_loop.loop_type': 'foreach',
+      'mastra.workflow_loop.iteration': 3,
+      'mastra.workflow_loop.concurrency': 2,
+    });
+  });
+
+  it('serialises a sleep deadline rather than dropping it', () => {
+    const until = new Date('2026-01-01T00:00:00.000Z');
+    const span = createWorkflowSpan(SpanType.WORKFLOW_SLEEP, 'sleep', {
+      durationMs: 500,
+      untilDate: until,
+      sleepType: 'dynamic',
+    });
+
+    expect(getAttributes(span)).toMatchObject({
+      'mastra.workflow_sleep.duration_ms': 500,
+      'mastra.workflow_sleep.until_date': until.toISOString(),
+      'mastra.workflow_sleep.sleep_type': 'dynamic',
+    });
+  });
+
+  it('adds nothing for a span type that carries no workflow attributes', () => {
+    const attrs = getAttributes(createSpan(SpanType.AGENT_RUN));
+
+    expect(Object.keys(attrs).some(key => key.startsWith('mastra.workflow_'))).toBe(false);
   });
 });

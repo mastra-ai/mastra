@@ -9,7 +9,7 @@
  * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AgentRunAttributes,
   AnyExportedSpan,
@@ -172,6 +172,23 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
       return attrs?.model;
     }
 
+    case SpanType.WORKFLOW_STEP:
+    case SpanType.WORKFLOW_CONDITIONAL:
+    case SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case SpanType.WORKFLOW_PARALLEL:
+    case SpanType.WORKFLOW_LOOP:
+    case SpanType.WORKFLOW_SLEEP:
+    case SpanType.WORKFLOW_WAIT_EVENT: {
+      // These spans inherit entityName from the enclosing workflow, so it names
+      // the workflow and not the step, and every sibling would share one name.
+      // A step span sets its own entity, and its id is the step id; the other
+      // control-flow spans set none, so they keep their own name instead.
+      if (span.entityType === EntityType.WORKFLOW_STEP) {
+        return span.entityId;
+      }
+      return undefined;
+    }
+
     default:
       return span.entityName ?? span.entityId;
   }
@@ -190,6 +207,68 @@ export function getSpanName(span: AnyExportedSpan): string {
 
   // For other types, use a simplified version of the original name
   return sanitizeSpanName(span.name);
+}
+
+/**
+ * Attributes carried by workflow control-flow spans, per span type.
+ *
+ * These spans describe how a run was routed: which predicate this was, how it
+ * evaluated, which branches were taken. Nothing else in the export carries that,
+ * so without these the exported trace shows that a branch happened but not what
+ * it decided.
+ */
+const WORKFLOW_ATTRIBUTE_KEYS: Partial<Record<SpanType, readonly string[]>> = {
+  [SpanType.WORKFLOW_RUN]: ['status'],
+  [SpanType.WORKFLOW_STEP]: ['status'],
+  [SpanType.WORKFLOW_CONDITIONAL]: ['conditionCount', 'truthyIndexes', 'selectedSteps'],
+  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: ['conditionIndex', 'result'],
+  [SpanType.WORKFLOW_PARALLEL]: ['branchCount', 'parallelSteps'],
+  [SpanType.WORKFLOW_LOOP]: ['loopType', 'iteration', 'totalIterations', 'concurrency'],
+  [SpanType.WORKFLOW_SLEEP]: ['durationMs', 'untilDate', 'sleepType'],
+  [SpanType.WORKFLOW_WAIT_EVENT]: ['eventName', 'timeoutMs'],
+};
+
+function toSnakeCase(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
+/**
+ * Copy the workflow attributes of a control-flow span onto the exported span.
+ *
+ * Arrays and dates have no OTel attribute representation, so they are serialised
+ * the same way the model and agent attributes above serialise theirs.
+ */
+function addWorkflowAttributes(attributes: Attributes, span: AnyExportedSpan, spanType: string): void {
+  const keys = WORKFLOW_ATTRIBUTE_KEYS[span.type];
+  if (!keys) {
+    return;
+  }
+
+  // A step span carries its own step id as its entity id, and that is the only
+  // place the step's identity survives on the exported span.
+  if (span.type === SpanType.WORKFLOW_STEP && span.entityType === EntityType.WORKFLOW_STEP && span.entityId) {
+    attributes[`mastra.${spanType}.step_id`] = span.entityId;
+  }
+
+  const workflowAttrs = span.attributes as Record<string, unknown> | undefined;
+  if (!workflowAttrs) {
+    return;
+  }
+
+  for (const key of keys) {
+    const value = workflowAttrs[key];
+    if (value === undefined || value === null) {
+      continue;
+    }
+    const name = `mastra.${spanType}.${toSnakeCase(key)}`;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      attributes[name] = value;
+    } else if (value instanceof Date) {
+      attributes[name] = value.toISOString();
+    } else {
+      attributes[name] = JSON.stringify(value);
+    }
+  }
 }
 
 /**
@@ -389,6 +468,8 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
     attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
   }
+
+  addWorkflowAttributes(attributes, span, spanType);
 
   // Add error information if present
   if (span.errorInfo) {
