@@ -3413,6 +3413,23 @@ describe('Memory', () => {
           updatedAt: new Date(),
         },
       });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'repair-msg-1',
+            threadId: 'repair-thread',
+            resourceId: 'resource-a',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'hello repair' }] },
+            createdAt: new Date(),
+          },
+        ] as any,
+      });
+
+      // Ignore the upsert performed by the initial saveMessages so we only assert on the
+      // upsert the retry rebuilds.
+      mockVector.upsert.mockClear();
+      mockVector.deleteVectors.mockClear();
 
       const result = await memory.updateThreadResourceId({ threadId: 'repair-thread', resourceId: 'resource-a' });
 
@@ -3420,6 +3437,13 @@ describe('Memory', () => {
       // With vector migration configured we must NOT short-circuit, so a retry after a
       // storage-succeeded/migration-failed state can rebuild the stale vectors.
       expect(mockVector.deleteVectors).toHaveBeenCalled();
+      // The rebuild must re-embed the thread's messages under the (unchanged) resource so
+      // resource-scoped recall keeps surfacing them — proving the migration actually ran.
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const upsertArg = mockVector.upsert.mock.calls.at(-1)![0];
+      expect(upsertArg.metadata).toEqual(
+        expect.arrayContaining([expect.objectContaining({ resource_id: 'resource-a', thread_id: 'repair-thread' })]),
+      );
     });
   });
 });

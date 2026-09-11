@@ -1,6 +1,6 @@
-import type { MastraDBMessage } from '@mastra/core/memory';
 import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MemoryLibSQL } from './index';
@@ -40,11 +40,7 @@ describe('MemoryLibSQL.updateThreadResourceId', () => {
       },
     });
     await store.saveMessages({
-      messages: [
-        createMessage({ id: 'm1' }),
-        createMessage({ id: 'm2' }),
-        createMessage({ id: 'm3' }),
-      ],
+      messages: [createMessage({ id: 'm1' }), createMessage({ id: 'm2' }), createMessage({ id: 'm3' })],
     });
   });
 
@@ -78,9 +74,9 @@ describe('MemoryLibSQL.updateThreadResourceId', () => {
   });
 
   it('throws when the thread does not exist', async () => {
-    await expect(
-      store.updateThreadResourceId({ threadId: 'missing', resourceId: 'resource-2' }),
-    ).rejects.toThrow(/not found/);
+    await expect(store.updateThreadResourceId({ threadId: 'missing', resourceId: 'resource-2' })).rejects.toThrow(
+      /not found/,
+    );
   });
 
   it('never leaves split ownership under concurrent transfers to different resources', async () => {
