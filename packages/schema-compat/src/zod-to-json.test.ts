@@ -765,6 +765,14 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     'patternProperties',
     'unevaluatedItems',
     'unevaluatedProperties',
+    'allOf',
+    'oneOf',
+    'not',
+    'if',
+    'then',
+    'else',
+    'dependentRequired',
+    'dependentSchemas',
   ];
 
   function collectLeakedKeywords(schema: any, path = '$'): string[] {
@@ -915,8 +923,11 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     expect(props.list.items.description).toContain('minimum length 2');
     expect(props.choice.anyOf[0].description).toContain('input must match this regex x');
     expect(props.choice.anyOf[1].description).toContain('greater than or equal to 0');
-    expect(props.combo.oneOf[0].description).toContain('maximum length 4');
-    expect(props.merged.allOf[0].properties.inner.description).toContain('minimum length 1');
+    // oneOf is converted to anyOf; allOf is merged into the containing node.
+    expect(props.combo.oneOf).toBeUndefined();
+    expect(props.combo.anyOf[0].description).toContain('maximum length 4');
+    expect(props.merged.allOf).toBeUndefined();
+    expect(props.merged.properties.inner.description).toContain('minimum length 1');
     expect(props.nested.properties.deep.description).toContain('maximum length 10');
   });
 
@@ -958,6 +969,66 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     expect(legacy.additionalProperties).toBe(false);
     expect(legacy.required).toEqual(expect.arrayContaining(['code']));
     expect(legacy.properties.code.description).toContain('input must match this regex ^[A-Z]+$');
+  });
+
+  it('merges allOf subschemas into the containing node', () => {
+    const schema = {
+      allOf: [
+        { type: 'object', properties: { a: { type: 'string', minLength: 1 } } },
+        { type: 'object', properties: { b: { type: 'number', minimum: 0 } } },
+      ],
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    expect((out as any).allOf).toBeUndefined();
+    const props = out.properties as any;
+    expect(props.a.description).toContain('minimum length 1');
+    expect(props.b.description).toContain('greater than or equal to 0');
+    expect(out.required).toEqual(expect.arrayContaining(['a', 'b']));
+    expect(out.additionalProperties).toBe(false);
+  });
+
+  it('converts oneOf to anyOf and strips its branches', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        pick: {
+          oneOf: [
+            { type: 'string', maxLength: 4 },
+            { type: 'number', minimum: 1 },
+          ],
+        },
+      },
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    const pick = (out.properties as any).pick;
+    expect(pick.oneOf).toBeUndefined();
+    expect(pick.anyOf).toHaveLength(2);
+    expect(pick.anyOf[0].description).toContain('maximum length 4');
+    expect(pick.anyOf[1].description).toContain('greater than or equal to 1');
+  });
+
+  it('drops not/if/then/else and dependency keywords', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        val: { type: 'string' },
+      },
+      not: { type: 'null' },
+      if: { properties: { val: { const: 'x' } } },
+      then: { required: ['val'] },
+      else: { required: [] },
+      dependentRequired: { val: ['other'] },
+      dependentSchemas: { val: { required: ['other'] } },
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    // Supported structure survives.
+    expect((out.properties as any).val).toBeDefined();
   });
 
   it('drops object-level and contains/unevaluated keywords with no description mapping', () => {

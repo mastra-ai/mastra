@@ -260,7 +260,61 @@ const STRICT_MODE_DROPPED_KEYWORDS = [
   'patternProperties',
   'unevaluatedItems',
   'unevaluatedProperties',
+  // Conditional/dependency keywords: unsupported by OpenAI strict mode with no
+  // useful structural mapping, so they are dropped.
+  'not',
+  'if',
+  'then',
+  'else',
+  'dependentRequired',
+  'dependentSchemas',
 ] as const;
+
+/**
+ * Merge `allOf` subschemas into the containing node. OpenAI strict mode rejects `allOf`
+ * (only `anyOf` composition is supported), so the intersection is flattened: object
+ * `properties`/`required` are combined and descriptions are concatenated. This preserves
+ * the common Zod-intersection case (`allOf: [objectA, objectB]`) instead of dropping intent.
+ */
+function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, subschemas: JSONSchema7[]): void {
+  const mergedProps: Record<string, JSONSchema7> = { ...((target.properties as Record<string, JSONSchema7>) ?? {}) };
+  const requiredSet = new Set<string>(Array.isArray(target.required) ? target.required : []);
+  const descriptions: string[] =
+    typeof target.description === 'string' && target.description ? [target.description] : [];
+
+  for (const sub of subschemas) {
+    if (!sub || typeof sub !== 'object') {
+      continue;
+    }
+    if (sub.properties) {
+      Object.assign(mergedProps, sub.properties);
+    }
+    if (Array.isArray(sub.required)) {
+      for (const key of sub.required) {
+        requiredSet.add(key);
+      }
+    }
+    if (sub.type && !target.type) {
+      target.type = sub.type;
+    }
+    if (sub.additionalProperties === false) {
+      target.additionalProperties = false;
+    }
+    if (typeof sub.description === 'string' && sub.description) {
+      descriptions.push(sub.description);
+    }
+  }
+
+  if (Object.keys(mergedProps).length) {
+    target.properties = mergedProps;
+  }
+  if (requiredSet.size) {
+    target.required = [...requiredSet];
+  }
+  if (descriptions.length) {
+    target.description = descriptions.join(' ');
+  }
+}
 
 /**
  * Merge constraint phrases into a schema node's description.
@@ -383,14 +437,23 @@ function stripUnsupportedStrictModeKeywords(schema: JSONSchema7): JSONSchema7 {
     result.additionalProperties = stripUnsupportedStrictModeKeywords(result.additionalProperties as JSONSchema7);
   }
 
+  // anyOf is the only composition keyword OpenAI strict mode supports; keep it, strip its branches.
   if (result.anyOf && Array.isArray(result.anyOf)) {
     result.anyOf = result.anyOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
   }
+
+  // oneOf is unsupported; anyOf is the documented replacement, so convert it.
   if (result.oneOf && Array.isArray(result.oneOf)) {
-    result.oneOf = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    const converted = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    delete result.oneOf;
+    result.anyOf = Array.isArray(result.anyOf) ? [...result.anyOf, ...converted] : converted;
   }
+
+  // allOf is unsupported; flatten the intersection into the containing node.
   if (result.allOf && Array.isArray(result.allOf)) {
-    result.allOf = result.allOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    const merged = result.allOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    delete result.allOf;
+    mergeAllOfSubschemas(result, merged);
   }
 
   applyToDefinitions(result, stripUnsupportedStrictModeKeywords);
