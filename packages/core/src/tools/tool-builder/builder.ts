@@ -717,6 +717,7 @@ export class CoreToolBuilder extends MastraBase {
                 resourceId,
                 outputWriter: options.outputWriter || execOptions.outputWriter,
                 flushMessages: execOptions.flushMessages,
+                ...(execOptions.isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
             };
           } else if (isWorkflowExecution) {

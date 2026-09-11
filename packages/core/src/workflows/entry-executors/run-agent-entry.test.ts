@@ -178,6 +178,24 @@ describe('runAgentEntry structured output guard', () => {
     );
   });
 
+  it('carries usage diagnostics on the thrown error when present', async () => {
+    const usage = { totalTokens: 42, inputTokens: 10, outputTokens: 32 };
+    const agent = makeV2Agent({ text: '', object: undefined, finishReason: 'stop', usage });
+
+    await runAgentEntry(
+      { type: 'agent', id: 'step-1', agentId: 'v2-agent', agent, options: structuredOptions },
+      makeDefaultCtx(),
+    ).then(
+      () => {
+        throw new Error('expected runAgentEntry to reject');
+      },
+      (err: any) => {
+        expect(err.id).toBe('STRUCTURED_OUTPUT_OBJECT_UNDEFINED');
+        expect(err.details?.usage).toEqual(usage);
+      },
+    );
+  });
+
   it('returns a validly-parsed object when one is produced', async () => {
     const agent = makeV2Agent({ text: '{"decisions":["ok"]}', object: { decisions: ['ok'] } });
 

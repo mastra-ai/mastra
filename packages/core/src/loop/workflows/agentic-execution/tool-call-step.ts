@@ -1026,6 +1026,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // tool pauses the bg-task run instead.
                     return resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
+                      isBackgroundTask: true,
                       ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
