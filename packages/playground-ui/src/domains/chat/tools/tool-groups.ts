@@ -1,12 +1,12 @@
-import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ConsecutiveGroups } from '@mastra/playground-ui/components/ai/tool-call';
-import { isToolPart, readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
-import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
-import { isSignalData } from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import type { DataPart, MessageFactoryPart } from '@mastra/react';
 
+import { isToolPart, readToolPart } from '../messages/renderers/tool-part';
+import type { ToolPart } from '../messages/renderers/tool-part';
+import { isSignalData } from '../messages/signal-data';
 import { toolCardKind, toolInteraction } from './tool-card-kind';
 import type { ToolCardContext, ToolCardKind } from './tool-card-kind';
+import { groupConsecutive } from '@/ds/components/ai/tool-call';
+import type { ConsecutiveGroups } from '@/ds/components/ai/tool-call';
 
 /** Cards that only draw: nothing in them waits on the reader. */
 const FOLDABLE_KINDS = new Set<ToolCardKind>(['plain', 'background', 'file_tree', 'sandbox', 'code_mode']);
