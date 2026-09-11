@@ -130,10 +130,10 @@ function ScopeTree({
         type="button"
         aria-pressed={selection?.scopeNodeId === node.id}
         className={cn(
-          'hover:text-icon6 truncate text-left',
-          selection?.scopeNodeId === node.id && 'text-icon6 font-medium',
+          'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+          selection?.scopeNodeId === node.id && 'bg-surface4 text-icon6 font-medium',
         )}
-        style={{ paddingLeft: `${depth * 12}px` }}
+        style={{ paddingLeft: `${8 + depth * 12}px` }}
         title={node.description ?? node.name}
         onClick={() => onSelect({ scopeNodeId: node.id })}
       >
@@ -154,10 +154,10 @@ function ScopeTree({
             type="button"
             aria-pressed={selection?.scopeLevel === root.level}
             className={cn(
-              'hover:text-icon6 truncate text-left',
-              selection?.scopeLevel === root.level && 'text-icon6 font-medium',
+              'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+              selection?.scopeLevel === root.level && 'bg-surface4 text-icon6 font-medium',
             )}
-            style={{ paddingLeft: `${index * 12}px` }}
+            style={{ paddingLeft: `${8 + index * 12}px` }}
             onClick={() => onSelect({ scopeLevel: root.level })}
           >
             {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
