@@ -34,6 +34,8 @@ export interface MCPServerConfigV2 extends Pick<
 }
 
 export interface MCPToolInfoV2 {
+  /** Catalogue key the tool is registered and executed under. */
+  id: string;
   name: string;
   description?: string;
   inputSchema: unknown;
