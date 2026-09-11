@@ -820,6 +820,14 @@ export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'thr
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
+  /** Total number of messages in the thread (server-side). Present on local-memory paths; absent on gateway. */
+  total?: number;
+  /** 0-based page index that was returned. */
+  page?: number;
+  /** Number of messages per page, or `false` for an unpaged result. */
+  perPage?: number | false;
+  /** Whether there are older messages on a subsequent page. */
+  hasMore?: boolean;
 };
 
 export interface CloneMemoryThreadParams {

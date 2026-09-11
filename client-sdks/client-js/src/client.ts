@@ -419,18 +419,31 @@ export class MastraClient extends BaseResource {
       networkId?: string;
       requestContext?: RequestContext | Record<string, any>;
       includeSystemReminders?: boolean;
+      /** 0-based page index. Page 0 = most recent messages when orderBy is DESC. */
+      page?: number;
+      /** Number of messages per page. */
+      perPage?: number;
+      /** Sort order for messages. Defaults to server default (DESC = newest first). */
+      orderBy?: { field: string; direction: 'ASC' | 'DESC' };
     } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    let url = '';
-    const includeSystemRemindersQuery =
-      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+    const params = new URLSearchParams();
+    if (opts.agentId) params.set('agentId', opts.agentId);
+    if (opts.page !== undefined) params.set('page', String(opts.page));
+    if (opts.perPage !== undefined) params.set('perPage', String(opts.perPage));
+    if (opts.orderBy) params.set('orderBy', JSON.stringify(opts.orderBy));
+    if (opts.includeSystemReminders !== undefined)
+      params.set('includeSystemReminders', String(opts.includeSystemReminders));
 
+    const qs = params.toString();
+    const sep = qs ? '&' : '?';
+
+    let url = '';
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
-    } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
+      const networkQs = `networkId=${opts.networkId}${qs ? `&${qs}` : ''}`;
+      url = `/memory/network/threads/${threadId}/messages?${networkQs}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
+      url = `/memory/threads/${threadId}/messages${qs ? `?${qs}` : ''}${requestContextQueryString(opts.requestContext, sep)}`;
     }
     return this.request(url);
   }

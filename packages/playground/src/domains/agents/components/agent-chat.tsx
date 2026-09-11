@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
@@ -33,7 +33,13 @@ export const AgentChat = ({
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
+  const {
+    data,
+    isLoading: isMessagesLoading,
+    fetchPreviousPage,
+    hasPreviousPage,
+    isFetchingPreviousPage,
+  } = useAgentMessages({
     agentId: agentId,
     threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
@@ -66,6 +72,13 @@ export const AgentChat = ({
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
 
+  // fetch the next older page when the user scrolls to the top.
+  const handleLoadPrevious = useCallback(async () => {
+    if (hasPreviousPage && !isFetchingPreviousPage) {
+      await fetchPreviousPage();
+    }
+  }, [hasPreviousPage, isFetchingPreviousPage, fetchPreviousPage]);
+
   return (
     <ChatProvider
       agentId={agentId}
@@ -89,6 +102,8 @@ export const AgentChat = ({
         refreshThreadList={refreshThreadList}
         runOptionsSlot={runOptionsSlot}
         isHistoryLoading={isMessagesLoading}
+        onLoadPrevious={hasPreviousPage ? handleLoadPrevious : undefined}
+        isLoadingPrevious={isFetchingPreviousPage}
       />
     </ChatProvider>
   );
