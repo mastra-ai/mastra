@@ -1,4 +1,8 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { runScorer } from '../evals/hooks';
+import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
+import { createObservabilityContext } from '../observability';
+import { wrapMastra } from '../observability/context';
 import { validateAndSaveScore, createOnScorerHook } from './hooks';
 
 describe('validateAndSaveScore', () => {
@@ -373,6 +377,90 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('correlates the score to the exported ancestor span when the current span is hidden', async () => {
+    // Durable agents run scorers inside a workflow whose spans are marked
+    // internal and never reach storage. The span itself reports which exported
+    // ancestor a signal should reference, so the score must use that rather than
+    // the hidden step span's own id (#23465).
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'test-scorer' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+      tracingContext: {
+        currentSpan: {
+          id: 'hidden-step-span',
+          traceId: 'trace-live',
+          isValid: true,
+          getExportedSpanId: vi.fn().mockReturnValue('agent-run-span'),
+          observabilityInstance: { getExporters: () => [] },
+        },
+      },
+    };
+
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'test-scorer',
+      run: vi.fn().mockResolvedValue({ score: 0.8 }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledWith(
+      expect.objectContaining({ targetSpanId: 'agent-run-span' }),
+    );
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
+      expect.objectContaining({ spanId: 'agent-run-span' }),
+    );
+  });
+
+  it('still saves the score when no exportable ancestor exists', async () => {
+    // `undefined` is a valid answer: it omits the span reference rather than
+    // pointing it at a span that was never stored. The score itself must survive.
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'test-scorer' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+      tracingContext: {
+        currentSpan: {
+          id: 'hidden-step-span',
+          traceId: 'trace-live',
+          isValid: true,
+          getExportedSpanId: vi.fn().mockReturnValue(undefined),
+          observabilityInstance: { getExporters: () => [] },
+        },
+      },
+    };
+
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'test-scorer',
+      run: vi.fn().mockResolvedValue({ score: 0.8 }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledWith(
+      expect.objectContaining({ targetSpanId: undefined }),
+    );
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle scorer not found without throwing', async () => {
     const hookData = {
       runId: 'test-run',
@@ -492,5 +580,109 @@ describe('createOnScorerHook', () => {
     // MastraScorer.run() — emitting again here would double-publish to every exporter.
     expect(addScoreSpy).not.toHaveBeenCalled();
     expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * End-to-end dispatch through the real hook bus.
+ *
+ * The unit tests above call the hook directly and never set an owner token, so
+ * `isScorerHookForMastra` short-circuits to true and they pass even when
+ * production drops every score. Durable agents dispatch through a workflow step,
+ * whose mastra is a tracing proxy — a distinct object identity from the instance
+ * the hook was registered on, which used to make the owner check fail silently
+ * (#23465). These tests drive `runScorer` → `executeHook` → `createOnScorerHook`
+ * for real, so the owner gate is actually exercised.
+ */
+describe('createOnScorerHook owner-scoped dispatch', () => {
+  let mockScoresStore: any;
+  let mockStorage: any;
+  let mockMastra: any;
+  let mockScorer: any;
+  let onScorerHook: (hookData: any) => Promise<void>;
+
+  /** A span that is valid and not a NoOp, so `wrapMastra` really does proxy. */
+  const currentSpan = { id: 'step-span', traceId: 'trace-1', isValid: true };
+
+  function makeMastra(scorer: any) {
+    return {
+      // All four getters are required for `isMastra` to accept the object,
+      // which is what makes `wrapMastra` create a proxy rather than pass through.
+      getAgent: vi.fn(),
+      getAgentById: vi.fn().mockReturnValue(undefined),
+      getWorkflow: vi.fn(),
+      getWorkflowById: vi.fn(),
+      getStorage: vi.fn().mockReturnValue(mockStorage),
+      getLogger: vi.fn().mockReturnValue({ error: vi.fn(), warn: vi.fn(), trackException: vi.fn() }),
+      getScorerById: vi.fn().mockReturnValue(scorer),
+    };
+  }
+
+  function scorerArgs(mastra: any) {
+    return {
+      runId: 'run-1',
+      scorerId: 'test-scorer',
+      scorerObject: { scorer: { id: 'test-scorer', name: 'Test Scorer', description: 'test' } } as any,
+      input: {},
+      output: {},
+      requestContext: {},
+      entity: { id: 'test-entity' },
+      structuredOutput: false,
+      source: 'LIVE' as const,
+      entityType: 'AGENT' as const,
+      mastra,
+      ...createObservabilityContext({ currentSpan } as any),
+    } as any;
+  }
+
+  beforeEach(() => {
+    mockScoresStore = { saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }) };
+    mockStorage = {
+      getStore: vi.fn((domain: string) =>
+        domain === 'scores' ? Promise.resolve(mockScoresStore) : Promise.resolve(undefined),
+      ),
+    };
+    mockScorer = { id: 'test-scorer', name: 'Test Scorer', run: vi.fn().mockResolvedValue({ score: 0.8 }) };
+    mockMastra = makeMastra(mockScorer);
+
+    onScorerHook = createOnScorerHook(mockMastra);
+    registerHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+  });
+
+  afterEach(() => {
+    // The emitter is module-level and never drops handlers; leaking one would
+    // cross-contaminate later suites and fail the __hookHandlerCount leak tests.
+    deregisterHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+  });
+
+  it('saves a score dispatched with a tracing proxy of the owning Mastra', async () => {
+    const proxy = wrapMastra(mockMastra, { currentSpan } as any);
+    // Guard: the proxy must be a distinct identity, or this test proves nothing.
+    expect(proxy).not.toBe(mockMastra);
+
+    runScorer(scorerArgs(proxy));
+
+    await vi.waitFor(() => expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1));
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a score dispatched with the owning Mastra itself', async () => {
+    runScorer(scorerArgs(mockMastra));
+
+    await vi.waitFor(() => expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1));
+  });
+
+  it('drops a score owned by a different Mastra, even through a proxy', async () => {
+    const foreignMastra = makeMastra(mockScorer);
+    const foreignProxy = wrapMastra(foreignMastra, { currentSpan } as any);
+
+    runScorer(scorerArgs(foreignProxy));
+
+    // executeHook defers via setImmediate, so flush the queue before asserting
+    // that nothing happened.
+    for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
+
+    expect(mockScorer.run).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 });
