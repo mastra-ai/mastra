@@ -245,11 +245,16 @@ function retentionEntryMatches(createQuery: string | undefined, entry: Retention
   return current?.column === entry.column && current.days === entry.days;
 }
 
-async function retentionEntryMatchesEveryClusterHost(
+type ClusterRetentionSnapshot = {
+  hostCount: number;
+  createQueries: Map<string, string[]>;
+};
+
+async function readClusterRetentionSnapshot(
   client: ClickHouseClient,
-  entry: RetentionEntry,
+  tables: readonly string[],
   cluster: string,
-): Promise<boolean> {
+): Promise<ClusterRetentionSnapshot> {
   const hostCountResult = await client.query({
     query: `SELECT count() AS host_count FROM system.clusters WHERE cluster = {cluster:String}`,
     query_params: { cluster },
@@ -259,15 +264,30 @@ async function retentionEntryMatchesEveryClusterHost(
     host_count: number | string;
   }>;
   const hostCount = Number(hostCountValue);
-  if (!Number.isInteger(hostCount) || hostCount <= 0) return false;
 
   const createQueriesResult = await client.query({
-    query: `SELECT name, create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name = {table:String}`,
-    query_params: { cluster, table: entry.table },
+    query: `SELECT name, create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { cluster, tables },
     format: 'JSONEachRow',
   });
   const rows = (await createQueriesResult.json()) as Array<{ name: string; create_table_query: string }>;
-  return rows.length === hostCount && rows.every(row => retentionEntryMatches(row.create_table_query, entry));
+  const createQueries = new Map<string, string[]>();
+  for (const row of rows) {
+    const tableQueries = createQueries.get(row.name) ?? [];
+    tableQueries.push(row.create_table_query ?? '');
+    createQueries.set(row.name, tableQueries);
+  }
+
+  return { hostCount, createQueries };
+}
+
+function retentionEntryMatchesEveryClusterHost(snapshot: ClusterRetentionSnapshot, entry: RetentionEntry): boolean {
+  if (!Number.isInteger(snapshot.hostCount) || snapshot.hostCount <= 0) return false;
+  const createQueries = snapshot.createQueries.get(entry.table) ?? [];
+  return (
+    createQueries.length === snapshot.hostCount &&
+    createQueries.every(createQuery => retentionEntryMatches(createQuery, entry))
+  );
 }
 
 /**
@@ -277,17 +297,23 @@ async function retentionEntryMatchesEveryClusterHost(
 async function filterAppliedRetention(
   client: ClickHouseClient,
   entries: readonly RetentionEntry[],
+  replication?: ClickhouseReplicationConfig,
 ): Promise<readonly RetentionEntry[]> {
   if (entries.length === 0) return entries;
 
-  let createQueries: Map<string, string>;
+  const tables = [...new Set(entries.map(entry => entry.table))];
   try {
-    createQueries = await readRetentionCreateQueries(client, [...new Set(entries.map(entry => entry.table))]);
+    const cluster = replication?.cluster?.trim();
+    if (cluster) {
+      const snapshot = await readClusterRetentionSnapshot(client, tables, cluster);
+      return entries.filter(entry => !retentionEntryMatchesEveryClusterHost(snapshot, entry));
+    }
+
+    const createQueries = await readRetentionCreateQueries(client, tables);
+    return entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
   } catch {
     return entries;
   }
-
-  return entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
 }
 
 /**
@@ -299,7 +325,7 @@ export async function applyClickHouseRetention(args: {
   retention: RetentionConfig;
   replication?: ClickhouseReplicationConfig;
 }): Promise<readonly RetentionEntry[]> {
-  const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention));
+  const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention), args.replication);
   for (const entry of pending) {
     try {
       await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
@@ -307,7 +333,10 @@ export async function applyClickHouseRetention(args: {
       try {
         const cluster = args.replication?.cluster?.trim();
         const installed = cluster
-          ? await retentionEntryMatchesEveryClusterHost(args.client, entry, cluster)
+          ? retentionEntryMatchesEveryClusterHost(
+              await readClusterRetentionSnapshot(args.client, [entry.table], cluster),
+              entry,
+            )
           : retentionEntryMatches(
               (await readRetentionCreateQueries(args.client, [entry.table])).get(entry.table),
               entry,
