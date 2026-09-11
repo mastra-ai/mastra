@@ -12,7 +12,16 @@ export interface IterationStateUpdateInput {
 }
 
 /**
- * Step record for tracking iteration history
+ * Step record for tracking iteration history.
+ *
+ * DELIBERATE SHAPE DIVERGENCE from main (PHASE3 ledger L24): main's loop
+ * accumulates full `DefaultStepResult` objects (with `content`, `response`,
+ * etc.); durable serializes this reduced record across step boundaries
+ * instead. Processor hooks receive these records via the
+ * `(inputData as any).accumulatedSteps` casts in llm-execution.ts, so a
+ * processor reading `steps[i].content` gets `undefined` on durable.
+ * Converging the shapes feeds durable's serialized iteration state and is
+ * Phase 2 surface area, not a tail fix.
  */
 export interface StepRecord {
   text?: string;

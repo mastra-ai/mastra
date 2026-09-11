@@ -1958,6 +1958,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // `error`, `length`, and `content-filter` all reproduce the same
             // failure/truncation/refusal when the request is re-sent, so the
             // loop would spin until maxSteps (#17893, #15717 parity port).
+            //
+            // DELIBERATE DIVERGENCE from main (PHASE3 ledger L25): treating
+            // `stop` as terminal here IS reachable with tool calls — some
+            // providers report finishReason 'stop' alongside tool calls, and
+            // no upstream normalization rewrites it (`normalizeFinishReason`
+            // in stream/aisdk/v5/transform.ts is format-only). Main's #17893
+            // gate deliberately does NOT exclude `stop` (see
+            // `hasPendingToolCalls` in loop/workflows/agentic-execution/
+            // llm-execution-step.ts), so main runs the tools AND loops so the
+            // model sees the results. Durable still executes the tools (the
+            // tool-call foreach consumes `toolCalls` regardless of this flag)
+            // and commits their results, but ends the loop without a
+            // follow-up model step — unless a tool errors, in which case
+            // llm-mapping's recovery override (ledger L23) forces
+            // continuation. Kept as-is: the narrow #17893 port deliberately
+            // preserved durable's gating; converge only with a pinning test.
             const isContinued = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
             const hasToolCalls = toolCalls.length > 0;
 

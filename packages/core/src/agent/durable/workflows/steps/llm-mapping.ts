@@ -278,6 +278,16 @@ export function createDurableLLMMappingStep() {
       // can see the error messages (already added to messageList above) and
       // self-correct. This matches the regular agent's behaviour where both
       // ToolNotFoundError and generic tool execution errors are recoverable.
+      //
+      // DELIBERATE DIVERGENCE from main (PHASE3 ledger L23): this override
+      // can trump a terminal finish reason — a step that finished with
+      // `stop`/`length`/`content-filter` whose tool result errored still
+      // continues. Main avoids the case structurally: its #17893
+      // `hasPendingToolCalls` gate stops the loop before tools ever run on a
+      // terminal reason. Durable runs tools first (the tool-call foreach is
+      // unconditional), so this override IS its tool-error recovery path —
+      // do not "fix" it to match main's gating without a pinning test for
+      // tool-error recovery.
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
       const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
