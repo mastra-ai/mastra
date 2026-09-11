@@ -15,7 +15,7 @@ export interface DraftStatus {
   error?: string;
 }
 interface Snapshot {
-  drafts: Record<PropertyKey, ThreadDraft>;
+  drafts: Map<PropertyKey, ThreadDraft>;
   status: DraftStatus;
 }
 interface DraftState {
@@ -32,7 +32,7 @@ const activeDrafts = new Map<string, DraftState>();
 
 function createState(initialKey?: string): DraftState {
   let storageKey = initialKey;
-  let snapshot: Snapshot = { drafts: {}, status: { restoring: initialKey !== undefined, saving: false } };
+  let snapshot: Snapshot = { drafts: new Map(), status: { restoring: initialKey !== undefined, saving: false } };
   let started = false;
   let restorationFailed = false;
   let loading = Promise.resolve();
@@ -61,7 +61,7 @@ function createState(initialKey?: string): DraftState {
     notify();
     release();
   };
-  const getDraft = (key: PropertyKey) => snapshot.drafts[key] ?? EMPTY_DRAFT;
+  const getDraft = (key: PropertyKey) => snapshot.drafts.get(key) ?? EMPTY_DRAFT;
   const persist = async (key: string, draft: ThreadDraft) => {
     if (handoffFrom !== undefined) {
       storedRevision = await moveThreadDraft(handoffFrom, key, { draft, revision: storedRevision });
@@ -102,8 +102,9 @@ function createState(initialKey?: string): DraftState {
     const previous = getDraft(key);
     const next = typeof value === 'function' ? value(previous) : value;
     if (next === previous) return;
-    const drafts = { ...snapshot.drafts, [key]: next };
-    if (!next.text && next.attachments.length === 0) delete drafts[key];
+    const drafts = new Map(snapshot.drafts);
+    if (!next.text && next.attachments.length === 0) drafts.delete(key);
+    else drafts.set(key, next);
     snapshot = { ...snapshot, drafts };
     notify();
     if (storageKey !== undefined && key === PERSISTED && !restorationFailed) {
@@ -116,7 +117,7 @@ function createState(initialKey?: string): DraftState {
     try {
       const saved = await loadThreadDraft(storageKey);
       storedRevision = saved.revision;
-      snapshot = { drafts: { [PERSISTED]: saved.draft }, status: { restoring: false, saving: false } };
+      snapshot = { drafts: new Map([[PERSISTED, saved.draft]]), status: { restoring: false, saving: false } };
       notify();
     } catch {
       restorationFailed = true;
