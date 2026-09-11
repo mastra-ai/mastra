@@ -2878,7 +2878,7 @@ describe('ProcessorRunner', () => {
         cacheKey: 'workflow-state-cache-key',
         contents: 'workflow state',
       }));
-      const firstProcessInputStep = vi.fn(() => undefined);
+      const firstProcessInputStep = vi.fn(() => ({ runId: 'processor-overwrite-attempt' }) as any);
       const secondProcessInputStep = vi.fn(() => undefined);
       const firstProcessor: Processor = {
         id: 'workflow-state-processor',
