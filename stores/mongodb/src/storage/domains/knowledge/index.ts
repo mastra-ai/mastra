@@ -5,7 +5,6 @@ import {
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
-  knowledgeVisibleScopeKeys,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -74,7 +73,20 @@ const canonicalName = (name: string) => name.trim().toLocaleLowerCase();
 const nodeReferenceId = (node: KnowledgeNode | string) => (typeof node === 'string' ? node : node.id);
 const sessionOptions = (session?: ClientSession) => (session ? { session } : {});
 
-const visibleScopeKeys = knowledgeVisibleScopeKeys;
+function visibleScopeKeys(scope: KnowledgeScope): string[] {
+  const canonical = canonicalizeKnowledgeScope(scope);
+  const subsets: KnowledgeScope[] = [[]];
+  for (const entry of canonical) subsets.push(...subsets.map(subset => [...subset, entry]));
+  const keys = new Set<string>();
+  for (const subset of subsets.slice(1)) {
+    try {
+      keys.add(knowledgeScopeKey(subset));
+    } catch {
+      // Invalid hierarchy fragments cannot be persisted scope keys.
+    }
+  }
+  return [...keys];
+}
 
 function recordCursorFilter(cursor: string, expected: { namePrefix?: string; kind?: string; hasContent?: boolean }) {
   const parsed = parseKnowledgeNodeCursor(cursor, expected);
