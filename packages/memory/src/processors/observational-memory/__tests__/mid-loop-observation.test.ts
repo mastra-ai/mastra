@@ -667,7 +667,7 @@ describe('Mid-Loop Observation', () => {
       return record?.bufferedObservationChunks ?? [];
     }
 
-    it('buffers only the completed prefix when a pending tool call splits the candidates', async () => {
+    it('buffers only the prefix before a tool call still pending on the newest message', async () => {
       const { tid, rid } = nextIds();
       const { processorWithBuffering } = await createBufferedProcessor(tid, rid);
       const messageList = new MessageList({ threadId: tid, resourceId: rid });
@@ -684,16 +684,7 @@ describe('Mid-Loop Observation', () => {
           'memory',
         );
       }
-      messageList.add(pendingToolMessage('pending-tool-msg', new Date(now - 50_000)), 'response');
-      const retainedIds = ['pending-tool-msg'];
-      for (let i = 0; i < 3; i++) {
-        const id = `new-${i}`;
-        retainedIds.push(id);
-        messageList.add(
-          createTestMessage(`New ${i}: `.padEnd(200, 'y'), 'user', id, new Date(now - 10_000 + i * 1000)),
-          'memory',
-        );
-      }
+      messageList.add(pendingToolMessage('pending-tool-msg', new Date(now - 10_000)), 'response');
 
       await processorWithBuffering.processInputStep(stepArgsFor(tid, rid, messageList, {}));
 
@@ -703,39 +694,42 @@ describe('Mid-Loop Observation', () => {
       for (const id of oldIds) {
         expect(bufferedIds).toContain(id);
       }
-      for (const id of retainedIds) {
-        expect(bufferedIds).not.toContain(id);
-      }
+      expect(bufferedIds).not.toContain('pending-tool-msg');
+      // Raw persistence still happened: the pending call remains in the list,
+      // eligible to buffer on a later turn once its result arrives.
+      expect(messageList.get.all.db().map(msg => msg.id)).toContain('pending-tool-msg');
     }, 20000);
 
-    it('defers the whole mid-loop buffer attempt when the pending call is chronologically first', async () => {
+    it('buffers an abandoned call once the conversation has continued past it', async () => {
       const { tid, rid } = nextIds();
-      const { processorWithBuffering, observerSpy } = await createBufferedProcessor(tid, rid);
+      const { processorWithBuffering } = await createBufferedProcessor(tid, rid);
       const messageList = new MessageList({ threadId: tid, resourceId: rid });
       const now = Date.now();
 
-      messageList.add(pendingToolMessage('pending-first-msg', new Date(now - 200_000)), 'response');
+      // A `call` that is no longer the newest message never received its result;
+      // providers reject the prompt unless core drops/pairs it, so it is an orphan
+      // and must not stall buffering for the rest of the thread.
+      messageList.add(pendingToolMessage('abandoned-call-msg', new Date(now - 200_000)), 'memory');
+      const laterIds: string[] = [];
       for (let i = 0; i < 8; i++) {
+        const id = `later-${i}`;
+        laterIds.push(id);
         messageList.add(
-          createTestMessage(
-            `Warmup ${i}: `.padEnd(200, 'x'),
-            'user',
-            `warmup-${i}`,
-            new Date(now - 100_000 + i * 1000),
-          ),
+          createTestMessage(`Later ${i}: `.padEnd(200, 'x'), 'user', id, new Date(now - 100_000 + i * 1000)),
           'memory',
         );
       }
 
       await processorWithBuffering.processInputStep(stepArgsFor(tid, rid, messageList, {}));
 
-      const chunks = await waitForChunks(tid, rid, 1000);
-      expect(chunks).toHaveLength(0);
-      expect(observerSpy).not.toHaveBeenCalled();
-      // Raw persistence still happened: the pending call remains in the list,
-      // eligible to buffer on a later turn once its result arrives.
-      expect(messageList.get.all.db().map(msg => msg.id)).toContain('pending-first-msg');
-    });
+      const chunks = await waitForChunks(tid, rid, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      const bufferedIds = chunks.flatMap(chunk => chunk.messageIds);
+      expect(bufferedIds).toContain('abandoned-call-msg');
+      for (const id of laterIds) {
+        expect(bufferedIds).toContain(id);
+      }
+    }, 20000);
   });
 
   describe('#16523 — step-0 observation of a single over-threshold message', () => {

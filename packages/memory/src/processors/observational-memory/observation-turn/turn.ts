@@ -230,8 +230,8 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      // Buffer only the safe completed prefix; defer while incomplete tool calls
-      // are pending or the cut before them is unsafe (see selectSafeBufferPrefix).
+      // Buffer only the safe prefix before a tool call still pending on the newest
+      // message; defer when the cut before it is unsafe (see selectSafeBufferPrefix).
       const idleMessages = selectSafeBufferPrefix(unobservedMessages);
       if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(

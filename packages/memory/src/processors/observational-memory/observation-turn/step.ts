@@ -157,9 +157,9 @@ export class ObservationStep {
     });
 
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
-    // Incomplete tool calls don't block the whole batch: admit only the safe
-    // completed prefix before the first pending call — the same policy idle
-    // buffering applies at turn end (see selectSafeBufferPrefix).
+    // A pending tool call on the newest message doesn't block the whole batch:
+    // admit only the safe prefix before it — the same policy idle buffering
+    // applies at turn end (see selectSafeBufferPrefix).
     if (statusSnapshot.shouldBuffer) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);

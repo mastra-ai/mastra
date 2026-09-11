@@ -5,7 +5,11 @@ import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
 
-export async function clientToolLifecycle(connectionString: string, bufferOnIdle: boolean) {
+export async function clientToolLifecycle(
+  connectionString: string,
+  bufferOnIdle: boolean,
+  hooks: { beforeActorResponse?: () => void } = {},
+) {
   const threadId = randomUUID();
   const resourceId = randomUUID();
   const storage = new PostgresStore({ id: `22573-${threadId}`, connectionString });
@@ -47,6 +51,7 @@ export async function clientToolLifecycle(connectionString: string, bufferOnIdle
   const model = new MockLanguageModelV2({
     doGenerate: async ({ prompt }) => {
       actorPrompts.push(prompt);
+      hooks.beforeActorResponse?.();
       return {
         content:
           actorPrompts.length === 1

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MessageList } from '@mastra/core/agent';
 import { $ } from 'execa';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { clientToolLifecycle } from './shared/client-tool-lifecycle';
 import { getPgStorageTests } from './shared/with-pg-storage';
 
@@ -146,95 +146,109 @@ describe('PostgreSQL Storage Tests', () => {
     });
   }
 
-  it.each([
-    { gap: 0, earlier: false },
-    { gap: 1, earlier: false },
-    { gap: 100, earlier: false },
-    { gap: 0, earlier: true },
-    { gap: 1, earlier: true },
-  ])('22573 prefix retains suffix with gap $gap earlier=$earlier', async ({ gap, earlier }) => {
-    const start = new Date('2026-01-01T00:00:00.000Z').getTime();
-    const fixture = await clientToolLifecycle(connectionString, false);
-    const idle = fixture.makeAgent(true);
-    const activation = fixture.makeAgent(false, 10, 1);
-    try {
-      await fixture.agent.generate('Completed prefix marker.', fixture.options);
-      if (earlier) await fixture.agent.generate('Earlier completed marker.', fixture.options);
-      await fixture.memory.settled();
-      const saved = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
-      const pending = saved.messages.find(message =>
-        message.content.parts?.some(part => part.type === 'tool-invocation'),
-      )!;
-      const prefix = saved.messages.find(message => message.role === 'user')!;
-      const store = (await fixture.storage.getStore('memory'))!;
-      // Import the actual request's messages with historical timestamp edge cases.
-      // Upserts preserve createdAt, so remove these isolated fixture rows first.
-      prefix.createdAt = new Date(start);
-      pending.createdAt = new Date(start + gap);
-      const history = [prefix, pending];
-      if (earlier) {
-        const older = saved.messages.find(message =>
-          message.content.parts.some(part => part.type === 'text' && part.text === 'Earlier completed marker.'),
+  it.each([{ gap: 0 }, { gap: 100 }])(
+    '22573 prefix buffers before a pending call on the newest message gap=$gap',
+    async ({ gap }) => {
+      const start = new Date('2026-01-01T00:00:00.000Z').getTime();
+      // The actor hook moves the frozen clock after the user message is stamped and
+      // before the pending tool-call response is, so the gap is deterministic.
+      // MessageList stamps the response strictly after every message it already
+      // holds (+2ms under a frozen clock), so the live tool-call request never
+      // lands on the +1ms cursor-collision boundary; that guard is unit-tested.
+      const fixture = await clientToolLifecycle(connectionString, true, {
+        beforeActorResponse: () => vi.setSystemTime(start + gap),
+      });
+      const activation = fixture.makeAgent(false, 10, 1);
+      try {
+        const older = {
+          id: `22573-older-${fixture.threadId}`,
+          threadId: fixture.threadId,
+          resourceId: fixture.resourceId,
+          role: 'user' as const,
+          type: 'text' as const,
+          createdAt: new Date(start - 100),
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Earlier completed marker.' }] },
+        };
+        await fixture.memory.createThread({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+        await fixture.memory.saveMessages({ messages: [older] });
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          await fixture.agent.generate('Make the client green.', fixture.options);
+        } finally {
+          vi.useRealTimers();
+        }
+        await fixture.memory.settled();
+        const saved = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+        const pending = saved.messages.find(message =>
+          message.content.parts?.some(part => part.type === 'tool-invocation'),
         )!;
-        older.createdAt = new Date(start - 100);
-        history.unshift(older);
-      }
-      await store.deleteMessages(history.map(message => message.id));
-      await fixture.memory.saveMessages({ messages: history });
-      const dated = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
-      expect(dated.messages.find(message => message.id === prefix.id)?.createdAt.getTime()).toBe(start);
-      expect(dated.messages.find(message => message.id === pending.id)?.createdAt.getTime()).toBe(start + gap);
-      if (earlier)
-        expect(dated.messages.find(message => message.id === history[0]!.id)?.createdAt.getTime()).toBe(start - 100);
-      // Echo the actual history to make equal-timestamp ordering explicit.
-      await idle.agent.generate(
-        earlier
-          ? [...structuredClone(history), { role: 'user', content: 'Retained suffix marker.' }]
-          : 'Retained suffix marker.',
-        fixture.options,
-      );
-      await idle.memory.settled();
-      if (earlier) {
-        const loaded = JSON.stringify(fixture.afterHistory.at(-1));
-        expect(loaded).toContain(prefix.id);
-        expect(loaded).toContain(pending.id);
-        expect(loaded.indexOf(prefix.id)).toBeLessThan(loaded.indexOf(pending.id));
-      }
-      const buffered = await store.getObservationalMemory(fixture.threadId, fixture.resourceId);
-      expect(JSON.stringify(fixture.observerPrompts)).not.toContain('changeColor');
-      expect(JSON.stringify(fixture.observerPrompts)).not.toContain('Retained suffix marker');
-      expect(fixture.observerPrompts).toHaveLength(gap > 1 ? 1 : 0);
-      expect(buffered?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds) ?? []).toEqual(
-        gap > 1 ? [prefix.id] : [],
-      );
-      if (gap > 1) {
+        const prefix = saved.messages.find(message => message.role === 'user' && message.id !== older.id)!;
+        expect(prefix.createdAt.getTime()).toBe(start);
+        expect(pending.createdAt.getTime()).toBe(start + Math.max(gap, 2));
+        const store = (await fixture.storage.getStore('memory'))!;
+        const buffered = await store.getObservationalMemory(fixture.threadId, fixture.resourceId);
+        expect(JSON.stringify(fixture.observerPrompts)).not.toContain('changeColor');
+        expect(fixture.observerPrompts).toHaveLength(1);
+        expect(JSON.stringify(fixture.observerPrompts)).toContain('Earlier completed marker.');
+        expect(buffered?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds) ?? []).toEqual([
+          older.id,
+          prefix.id,
+        ]);
+        // Activation cursor stays before the retained pending call.
         await activation.agent.generate([structuredClone(pending)], fixture.options);
         await activation.memory.settled();
         const activated = await store.getObservationalMemory(fixture.threadId, fixture.resourceId);
         expect(activated?.activeObservations).toBeTruthy();
         expect(new Date(activated!.lastObservedAt!).getTime()).toBeLessThan(pending.createdAt.getTime());
         expect(JSON.stringify(fixture.afterHistory.at(-1))).toContain(pending.id);
-        expect(JSON.stringify(fixture.afterHistory.at(-1))).toContain('Retained suffix marker.');
-      }
-      const incoming = structuredClone(pending);
-      for (const part of incoming.content.parts ?? []) {
-        if (part.type === 'tool-invocation') {
-          part.toolInvocation = { ...part.toolInvocation, state: 'result', result: '22573-prefix-complete' };
+        const incoming = structuredClone(pending);
+        for (const part of incoming.content.parts ?? []) {
+          if (part.type === 'tool-invocation') {
+            part.toolInvocation = { ...part.toolInvocation, state: 'result', result: '22573-prefix-complete' };
+          }
         }
+        await fixture.agent.generate([incoming], fixture.options);
+        await fixture.memory.settled();
+        expect(JSON.stringify(fixture.actorPrompts.at(-1))).toContain('22573-prefix-complete');
+        expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('22573-prefix-complete');
+        const final = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+        expect(JSON.stringify(final.messages.find(message => message.id === pending.id))).toContain(
+          '22573-prefix-complete',
+        );
+      } finally {
+        vi.useRealTimers();
+        await fixture.memory.settled();
+        await activation.memory.settled();
+        await fixture.storage.close();
       }
-      await idle.agent.generate([incoming], fixture.options);
-      await idle.memory.settled();
-      expect(JSON.stringify(fixture.actorPrompts.at(-1))).toContain('22573-prefix-complete');
-      expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('22573-prefix-complete');
-      if (earlier) expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('Earlier completed marker.');
-      const final = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
-      expect(JSON.stringify(final.messages.find(message => message.id === pending.id))).toContain(
-        '22573-prefix-complete',
-      );
+    },
+  );
+
+  it('22573 abandoned call buffers once the conversation continues past it', async () => {
+    const fixture = await clientToolLifecycle(connectionString, true);
+    try {
+      await fixture.agent.generate('Make the client green.', fixture.options);
+      await fixture.memory.settled();
+      expect(JSON.stringify(fixture.observerPrompts)).not.toContain('changeColor');
+      // The client never sends the result; the user just keeps talking. Providers
+      // reject a dangling tool_use, so core drops/pairs it before the prompt and
+      // observational memory treats it as an orphan rather than stalling.
+      await fixture.agent.generate('Never mind, leave the color.', fixture.options);
+      await fixture.memory.settled();
+      const saved = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
+      const abandoned = saved.messages.find(message =>
+        message.content.parts?.some(part => part.type === 'tool-invocation'),
+      )!;
+      expect(abandoned.content.parts.find(part => part.type === 'tool-invocation')?.toolInvocation.state).toBe('call');
+      const store = (await fixture.storage.getStore('memory'))!;
+      const record = await store.getObservationalMemory(fixture.threadId, fixture.resourceId);
+      const bufferedIds = record?.bufferedObservationChunks?.flatMap(chunk => chunk.messageIds) ?? [];
+      expect(bufferedIds).toContain(abandoned.id);
+      expect(bufferedIds).toEqual(expect.arrayContaining(saved.messages.map(message => message.id)));
+      expect(JSON.stringify(fixture.observerPrompts.at(-1))).toContain('Never mind, leave the color.');
     } finally {
       await fixture.memory.settled();
-      await idle.memory.settled();
-      await activation.memory.settled();
       await fixture.storage.close();
     }
   });

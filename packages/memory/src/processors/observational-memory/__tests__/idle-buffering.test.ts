@@ -381,24 +381,31 @@ describe('turn.end() idle buffering', () => {
 
 describe('22573 idle', () => {
   it.each([
-    { times: [100, 200, 300, 400], expected: 2 },
-    { times: [100, 200, 300, 400], expected: 2, reverse: true },
-    { times: [100, 300, 300, 400], expected: 0 },
-    { times: [100, 299, 300, 400], expected: 0 },
-    { times: [299, 299, 300, 400], expected: 0 },
-    { times: [100, 200, 300, 400], expected: 0, splitTool: true },
+    // Pending call on the newest message: buffer everything before it.
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3 },
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3, reverse: true },
+    // Cursor collision (max(prefix)+1ms >= pending): defer the whole attempt.
+    { times: [100, 200, 400, 400], pendingIndex: 3, expected: 0 },
+    { times: [100, 200, 399, 400], pendingIndex: 3, expected: 0 },
+    { times: [399, 399, 399, 400], pendingIndex: 3, expected: 0 },
+    // A toolCallId shared across the cut: defer the whole attempt.
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 0, splitTool: true },
+    // A `call` that is not on the newest message is an orphan — the conversation
+    // already continued past it — so it buffers like any other message.
+    { times: [100, 200, 300, 400], pendingIndex: 2, expected: 4 },
+    { times: [100, 200, 300, 400], pendingIndex: 0, expected: 4 },
   ])(
-    'buffers the whole prefix or defers: $times split=$splitTool reverse=$reverse',
-    async ({ times, expected, splitTool, reverse }) => {
+    'buffers the whole prefix or defers: $times pending=$pendingIndex split=$splitTool reverse=$reverse',
+    async ({ times, pendingIndex, expected, splitTool, reverse }) => {
       const messages = times.map((time, index) =>
         createTestMessage(`Message ${index}`, 'assistant', `prefix-${index}`, new Date(time)),
       );
-      messages[2]!.content.parts.push({
+      messages[pendingIndex]!.content.parts.push({
         type: 'tool-invocation',
         toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {} },
       });
       if (splitTool) {
-        for (const index of [1, 3]) {
+        for (const index of [1, pendingIndex]) {
           messages[index]!.content.parts.push({
             type: 'tool-invocation',
             toolInvocation: { state: 'result', toolCallId: 'split', toolName: 'split', args: {}, result: 'done' },

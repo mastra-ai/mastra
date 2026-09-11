@@ -8,43 +8,46 @@ function hasPendingToolCall(message: MastraDBMessage): boolean {
 }
 
 /**
- * Selects the leading run of unobserved messages that is safe to buffer when
- * some candidates still contain incomplete tool calls.
+ * Selects the unobserved messages that are safe to buffer while a tool call
+ * may still be in flight.
  *
- * Policy: buffer the chronological prefix before the first message containing a
- * `tool-invocation` still in state `call` (client- or provider-executed), but
- * only when the cut is clean. The cut is unsafe — and the whole attempt is
- * deferred — when:
+ * Only the chronologically last candidate can hold a live pending call: a
+ * `tool-invocation` still in state `call` (client- or provider-executed) on the
+ * newest message means the request ended waiting for its result. Any earlier
+ * `call` is an orphan — the conversation already continued past it, and core's
+ * output converter drops or placeholder-pairs it before the prompt reaches a
+ * provider — so it is buffered like any other message.
+ *
+ * When the last candidate is pending, the prefix before it is buffered, but only
+ * when the cut is clean. The cut is unsafe — and the whole attempt is deferred —
+ * when:
  *
  * - Cursor collision: buffering advances the persisted cursor to
  *   `max(buffered.createdAt) + 1ms`, and later candidate selection requires
- *   `createdAt > cursor`. If a retained message sits at the same or +1ms
+ *   `createdAt > cursor`. If the retained message sits at the same or +1ms
  *   timestamp, the cursor would permanently hide it even after its result
  *   arrives.
  * - Split tool exchange: a `toolCallId` appears on both sides of the cut, so
  *   the observer would see half of a tool exchange.
  *
- * When no candidate contains a pending call, the input is returned unchanged.
+ * When the last candidate has no pending call, the input is returned unchanged.
  * An empty result means "defer this buffering attempt" — callers must skip
  * buffering entirely. Raw message persistence is unaffected and happens
- * elsewhere; the retained suffix becomes eligible again once its tool calls
- * complete.
+ * elsewhere; the retained message becomes eligible again once its tool call
+ * completes.
  */
 export function selectSafeBufferPrefix(messages: MastraDBMessage[]): MastraDBMessage[] {
   const chronological = [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const firstPending = chronological.findIndex(hasPendingToolCall);
-  if (firstPending === -1) {
+  const last = chronological[chronological.length - 1];
+  if (!last || !hasPendingToolCall(last)) {
     return messages;
   }
 
-  const prefix = chronological.slice(0, firstPending);
-  const retained = chronological.slice(firstPending);
-  const retainedTime = new Date(retained[0]!.createdAt).getTime();
+  const prefix = chronological.slice(0, -1);
+  const retainedTime = new Date(last.createdAt).getTime();
   const retainedToolIds = new Set(
-    retained.flatMap(message =>
-      (message.content.parts ?? []).flatMap(part =>
-        part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-      ),
+    (last.content.parts ?? []).flatMap(part =>
+      part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
     ),
   );
 
