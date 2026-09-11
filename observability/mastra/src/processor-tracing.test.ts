@@ -13,6 +13,7 @@ import type {
   AnyExportedSpan,
   TracingContext,
 } from '@mastra/core/observability';
+import { getCurrentSpan } from '@mastra/core/observability/context-storage';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
@@ -464,6 +465,50 @@ describe('Processor Tracing Tests', () => {
   // ==========================================================================
 
   describe('Single Processor', () => {
+    it('preserves ambient ancestry across awaits and concurrent generated stream chains', async () => {
+      let calls = 0;
+      const agent = new Agent({
+        id: 'ambient-stream',
+        name: 'Ambient stream',
+        instructions: 'Test',
+        model: createMockModel(),
+        outputProcessors: [
+          {
+            id: 'ambient',
+            processOutputStream: async ({ part, tracingContext }) => {
+              if (part.type !== 'text-delta') return part;
+              const active = getCurrentSpan();
+              expect(active).toBeDefined();
+              expect(active?.traceId).toBe(tracingContext?.currentSpan?.traceId);
+              await new Promise(resolve => setTimeout(resolve, 0));
+              expect(getCurrentSpan()).toBe(active);
+              getCurrentSpan()?.createChildSpan({ type: SpanType.GENERIC, name: 'ambient-child' }).end();
+              calls++;
+              return part;
+            },
+          },
+        ],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+      await Promise.all(
+        [1, 2].map(async () => {
+          const output = await mastra.getAgent('agent').stream('test');
+          await output.consumeStream();
+          expect(await output.text).toBe('Mock response');
+        }),
+      );
+      expect(calls).toBe(4);
+      expect(getCurrentSpan()).toBeUndefined();
+      await observability.flush();
+      const spans = testExporter.getAllSpans();
+      const children = spans.filter(span => span.name === 'ambient-child');
+      expect(children).toHaveLength(4);
+      expect(new Set(children.map(span => span.traceId)).size).toBe(2);
+      for (const child of children) {
+        expect(spans.some(parent => parent.id === child.parentSpanId && parent.traceId === child.traceId)).toBe(true);
+      }
+    });
+
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)

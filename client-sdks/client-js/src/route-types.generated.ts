@@ -17,7 +17,7 @@ type Shared_Auxiliary_272 =
       [key: string]: Shared_Auxiliary_272;
     };
 
-type Shared_Auxiliary_588 =
+type Shared_Auxiliary_590 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,32 +52,41 @@ type Shared_Auxiliary_588 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_588[];
+      args: Shared_Auxiliary_590[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_588;
+      arg: Shared_Auxiliary_590;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_608;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_608;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_608;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_608;
+          };
+    }
+  | {
+      feedback:
+        | {
+            some: Shared_Auxiliary_608;
+          }
+        | {
+            none: Shared_Auxiliary_608;
           };
     };
 
-type Shared_Auxiliary_606 =
+type Shared_Auxiliary_608 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -112,14 +121,14 @@ type Shared_Auxiliary_606 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_606[];
+      args: Shared_Auxiliary_608[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_606;
+      arg: Shared_Auxiliary_608;
     };
 
-type Shared_Auxiliary_1139 =
+type Shared_Auxiliary_1148 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +173,19 @@ type Shared_Auxiliary_1139 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1139[];
+      args: Shared_Auxiliary_1148[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1139;
+      arg: Shared_Auxiliary_1148;
     };
 
-type Shared_Auxiliary_1279 = {
+type Shared_Auxiliary_1288 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1279[] | undefined;
+  children?: Shared_Auxiliary_1288[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2609,7 +2618,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1139[];
+  predicates: Shared_Auxiliary_1148[];
 };
 
 type Shared_Type_112 = {
@@ -2632,7 +2641,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1139;
+  predicate: Shared_Auxiliary_1148;
 };
 
 type Shared_Type_113 =
@@ -2986,7 +2995,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1279[] | undefined;
+  files?: Shared_Auxiliary_1288[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -7920,6 +7929,46 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /memory/threads/:threadId/transfer
+// ============================================================================
+export type PostMemoryThreadsThreadIdTransfer_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type PostMemoryThreadsThreadIdTransfer_QueryParams = {
+  agentId?: string | undefined;
+};
+
+export type PostMemoryThreadsThreadIdTransfer_Body = {
+  resourceId: string;
+};
+
+export type PostMemoryThreadsThreadIdTransfer_Response = GetMemoryThreadsThreadId_Response;
+
+export type PostMemoryThreadsThreadIdTransfer_Request = Simplify<
+  (PostMemoryThreadsThreadIdTransfer_PathParams extends never
+    ? {}
+    : { params: PostMemoryThreadsThreadIdTransfer_PathParams }) &
+    (PostMemoryThreadsThreadIdTransfer_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_QueryParams
+        ? { query?: PostMemoryThreadsThreadIdTransfer_QueryParams }
+        : { query: PostMemoryThreadsThreadIdTransfer_QueryParams }) &
+    (PostMemoryThreadsThreadIdTransfer_Body extends never
+      ? {}
+      : {} extends PostMemoryThreadsThreadIdTransfer_Body
+        ? { body?: PostMemoryThreadsThreadIdTransfer_Body }
+        : { body: PostMemoryThreadsThreadIdTransfer_Body })
+>;
+
+export interface PostMemoryThreadsThreadIdTransfer_RouteContract {
+  pathParams: PostMemoryThreadsThreadIdTransfer_PathParams;
+  queryParams: PostMemoryThreadsThreadIdTransfer_QueryParams;
+  body: PostMemoryThreadsThreadIdTransfer_Body;
+  request: PostMemoryThreadsThreadIdTransfer_Request;
+  response: PostMemoryThreadsThreadIdTransfer_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/threads/:threadId/working-memory
 // ============================================================================
 export type PostMemoryThreadsThreadIdWorkingMemory_PathParams = GetMemoryThreadsThreadId_PathParams;
@@ -9137,7 +9186,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_588 | undefined;
+  where?: Shared_Auxiliary_590 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -9655,6 +9704,39 @@ export interface PostObservabilityScores_RouteContract {
 }
 
 // ============================================================================
+// Route: DELETE /observability/scores
+// ============================================================================
+export type DeleteObservabilityScores_Body = {
+  /** IDs of the score events to delete (maximum 1000) */
+  scoreIds: string[];
+  /** Restrict deletion to scores in this organization */
+  organizationId?: string | undefined;
+  /** Restrict deletion to scores for this resource */
+  resourceId?: string | undefined;
+};
+
+export type DeleteObservabilityScores_Response = PostAuthRefresh_Response;
+
+export type DeleteObservabilityScores_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteObservabilityScores_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityScores_Body
+        ? { body?: DeleteObservabilityScores_Body }
+        : { body: DeleteObservabilityScores_Body })
+>;
+
+export interface DeleteObservabilityScores_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: DeleteObservabilityScores_Body;
+  request: DeleteObservabilityScores_Request;
+  response: DeleteObservabilityScores_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /observability/scores/:scoreId
 // ============================================================================
 export type GetObservabilityScoresScoreId_PathParams = {
@@ -10088,6 +10170,39 @@ export interface PostObservabilityFeedback_RouteContract {
   body: PostObservabilityFeedback_Body;
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /observability/feedback
+// ============================================================================
+export type DeleteObservabilityFeedback_Body = {
+  /** IDs of the feedback events to delete (maximum 1000) */
+  feedbackIds: string[];
+  /** Restrict deletion to feedback in this organization */
+  organizationId?: string | undefined;
+  /** Restrict deletion to feedback for this resource */
+  resourceId?: string | undefined;
+};
+
+export type DeleteObservabilityFeedback_Response = PostAuthRefresh_Response;
+
+export type DeleteObservabilityFeedback_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteObservabilityFeedback_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityFeedback_Body
+        ? { body?: DeleteObservabilityFeedback_Body }
+        : { body: DeleteObservabilityFeedback_Body })
+>;
+
+export interface DeleteObservabilityFeedback_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: DeleteObservabilityFeedback_Body;
+  request: DeleteObservabilityFeedback_Request;
+  response: DeleteObservabilityFeedback_Response;
   responseType: 'json';
 }
 
@@ -16812,7 +16927,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1279[] | undefined;
+  files?: Shared_Auxiliary_1288[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16870,7 +16985,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1279[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1288[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21159,6 +21274,26 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
   limit?: number | undefined;
+  page?: number | undefined;
+  perPage?: (false | number) | undefined;
+  orderBy?:
+    | (
+        | {
+            field?: 'createdAt' | undefined;
+            direction?: ('ASC' | 'DESC') | undefined;
+          }
+        | undefined
+      )
+    | undefined;
+  include?:
+    | {
+        id: string;
+        threadId?: string | undefined;
+        withPreviousMessages?: number | undefined;
+        withNextMessages?: number | undefined;
+      }[]
+    | undefined;
+  filter?: Shared_Type_66 | undefined;
   sessionScope?: string | undefined;
 };
 
@@ -21179,6 +21314,10 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
     resourceId?: string | undefined;
     type?: string | undefined;
   }[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
@@ -22267,6 +22406,7 @@ export interface RouteTypes {
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
   'DELETE /memory/threads/:threadId': DeleteMemoryThreadsThreadId_RouteContract;
   'POST /memory/threads/:threadId/clone': PostMemoryThreadsThreadIdClone_RouteContract;
+  'POST /memory/threads/:threadId/transfer': PostMemoryThreadsThreadIdTransfer_RouteContract;
   'POST /memory/threads/:threadId/working-memory': PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/messages/delete': PostMemoryMessagesDelete_RouteContract;
   'GET /memory/search': GetMemorySearch_RouteContract;
@@ -22301,6 +22441,7 @@ export interface RouteTypes {
   'GET /observability/logs': GetObservabilityLogs_RouteContract;
   'GET /observability/scores': GetObservabilityScores_RouteContract;
   'POST /observability/scores': PostObservabilityScores_RouteContract;
+  'DELETE /observability/scores': DeleteObservabilityScores_RouteContract;
   'GET /observability/scores/:scoreId': GetObservabilityScoresScoreId_RouteContract;
   'POST /observability/scores/aggregate': PostObservabilityScoresAggregate_RouteContract;
   'POST /observability/scores/breakdown': PostObservabilityScoresBreakdown_RouteContract;
@@ -22308,6 +22449,7 @@ export interface RouteTypes {
   'POST /observability/scores/percentiles': PostObservabilityScoresPercentiles_RouteContract;
   'GET /observability/feedback': GetObservabilityFeedback_RouteContract;
   'POST /observability/feedback': PostObservabilityFeedback_RouteContract;
+  'DELETE /observability/feedback': DeleteObservabilityFeedback_RouteContract;
   'PATCH /observability/feedback/:feedbackId/review-status': PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract;
   'POST /observability/feedback/aggregate': PostObservabilityFeedbackAggregate_RouteContract;
   'POST /observability/feedback/breakdown': PostObservabilityFeedbackBreakdown_RouteContract;
@@ -23123,6 +23265,9 @@ export interface Client {
   '/memory/threads/:threadId/messages': {
     GET: GetMemoryThreadsThreadIdMessages_RouteContract;
   };
+  '/memory/threads/:threadId/transfer': {
+    POST: PostMemoryThreadsThreadIdTransfer_RouteContract;
+  };
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
@@ -23155,6 +23300,7 @@ export interface Client {
     GET: GetObservabilityDiscoveryTags_RouteContract;
   };
   '/observability/feedback': {
+    DELETE: DeleteObservabilityFeedback_RouteContract;
     GET: GetObservabilityFeedback_RouteContract;
     POST: PostObservabilityFeedback_RouteContract;
   };
@@ -23192,6 +23338,7 @@ export interface Client {
     POST: PostObservabilityMetricsTimeseries_RouteContract;
   };
   '/observability/scores': {
+    DELETE: DeleteObservabilityScores_RouteContract;
     GET: GetObservabilityScores_RouteContract;
     POST: PostObservabilityScores_RouteContract;
   };

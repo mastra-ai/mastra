@@ -102,7 +102,7 @@ function fromObject(value: Record<string, unknown>, origin: ModelCandidateOrigin
 
   // AI SDK language model instance: `{ provider, modelId, ... doGenerate }`
   if (typeof providerField === 'string' && typeof modelIdField === 'string') {
-    const isSdkInstance = typeof (value as { doGenerate?: unknown }).doGenerate === 'function';
+    const isSdkInstance = typeof value.doGenerate === 'function';
     return [
       {
         provider: providerField,
@@ -155,8 +155,8 @@ export function toModelCandidates(input: ModelCandidateInput): ModelCandidate[] 
     const candidates: ModelCandidate[] = [];
     input.forEach((variant, index) => {
       if (!isPlainObject(variant)) return;
-      const value = (variant as { value?: unknown }).value ?? variant;
-      const hasRules = isPlainObject(variant) && 'rules' in variant && (variant as { rules?: unknown }).rules != null;
+      const value = variant.value ?? variant;
+      const hasRules = isPlainObject(variant) && 'rules' in variant && variant.rules != null;
       const origin: ModelCandidateOrigin = hasRules ? 'conditional-variant' : 'conditional-default';
       const label = hasRules ? `variant[${index}]` : `variant[${index}] (default)`;
       if (typeof value === 'string') {

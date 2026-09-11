@@ -3,6 +3,26 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { AssistantTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/assistant-text-part-renderer';
+import { DataPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/data-part-renderer';
+import { messageTextKind } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text-kind';
+import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
+import { messageStatusRenderers } from '@mastra/playground-ui/domains/chat/messages/renderers/status-renderers';
+import { readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { UserTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-text-part-renderer';
+import {
+  getSignalType,
+  isRecord,
+  isSignalData,
+  isUserSignalType,
+  toReactiveSignalData,
+} from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { badgeStatus } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import type { ToolCardContext } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import { collectToolGroups } from '@mastra/playground-ui/domains/chat/tools/tool-groups';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -11,24 +31,10 @@ import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-reac
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChatRunning } from '../chat/chat-context';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
-import { badgeStatus } from '../tools/tool-card-kind';
-import type { ToolCardContext } from '../tools/tool-card-kind';
-import { collectToolGroups } from '../tools/tool-groups';
 import { DatasetSaveAction } from './dataset-save-action';
-import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
-import { DataPartRenderer } from './renderers/data-part-renderer';
-import { messageTextKind } from './renderers/message-text-kind';
-import { ReasoningPartRenderer } from './renderers/reasoning-part-renderer';
-import { messageStatusRenderers } from './renderers/status-renderers';
-import { readToolPart } from './renderers/tool-part';
-import type { ToolPart } from './renderers/tool-part';
-import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
-import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
-import { getSignalType, isRecord, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 
@@ -43,7 +49,7 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
-  /** Extra controls rendered under the message; only visible while hovering or focusing the row. */
+  /** Extra controls rendered under the message, alongside the assistant action bar. */
   footer?: ReactNode;
 }
 
@@ -315,11 +321,8 @@ export const MessageRow = memo(function MessageRow({
 
   if (dbMessage === null) return null;
 
-  const footerSlot = footer ? (
-    <div className="opacity-0 transition-opacity group-hover:opacity-100 has-[:focus-visible]:opacity-100">
-      {footer}
-    </div>
-  ) : null;
+  // Same inset as a tool badge's trailing slot, so a user message's action lines up with the tool below it.
+  const footerSlot = footer ? <div className="pr-1">{footer}</div> : null;
 
   // Same object once caught up, so the factory keeps the part it is filling in mounted.
   const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;

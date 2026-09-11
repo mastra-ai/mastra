@@ -5,6 +5,20 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { ReasoningStreamingLine } from '@mastra/playground-ui/domains/chat/messages/reasoning-streaming-line';
+import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
+import {
+  WarningStatusRenderer,
+  TripwireStatusRenderer,
+} from '@mastra/playground-ui/domains/chat/messages/renderers/status-renderers';
+import { SignalBadge } from '@mastra/playground-ui/domains/chat/messages/signal-badge';
+import {
+  getSignalType,
+  isSignalData,
+  isUserSignalType,
+  toReactiveSignalData,
+} from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -33,12 +47,6 @@ import {
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
-import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
-import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
-import {
-  WarningStatusRenderer,
-  TripwireStatusRenderer,
-} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
 import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
@@ -56,9 +64,6 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
-import { ReasoningStreamingLine } from '@/lib/ai-ui/messages/reasoning-streaming-line';
-import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
-import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
   message: MastraDBMessage;
@@ -331,7 +336,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               </Button>
             )}
             <CollapsibleTrigger
-              className="text-neutral4 hover:text-neutral6 text-sm underline-offset-2 hover:underline"
+              className="text-neutral4 hover:text-neutral6 text-ui-md underline-offset-2 hover:underline"
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
@@ -339,7 +344,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-neutral4 bg-surface1 max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap"
+              className="text-neutral4 bg-surface1 text-ui-sm max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -421,7 +426,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                   Input
                 </Txt>
               </div>
-              <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+              <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                 {inputJson || '{}'}
               </pre>
             </div>
@@ -432,7 +437,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                     Output
                   </Txt>
                 </div>
-                <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                   {outputJson}
                 </pre>
               </div>

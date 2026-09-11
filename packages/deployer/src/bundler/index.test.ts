@@ -70,6 +70,36 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 
+describe('Bundler.listToolsInputOptions', () => {
+  it('returns stable, sorted inputs relative to the project root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));
+    tempDirs.push(tempDir);
+    const projectRoot = join(tempDir, 'apps', 'api');
+    const toolsDir = join(projectRoot, 'src', 'mastra', 'tools');
+    await mkdir(join(toolsDir, 'nested'), { recursive: true });
+    for (const file of ['b.ts', 'a.ts', join('nested', 'c.ts')]) {
+      await writeFile(join(toolsDir, file), 'export {}', 'utf-8');
+    }
+
+    const bundler = new TestBundler('Test');
+    const toolsGlob = join(toolsDir, '**/*.ts');
+    const first = await bundler.listToolsInputOptions([toolsGlob], projectRoot);
+    const second = await bundler.listToolsInputOptions([join(toolsDir, 'b.ts'), toolsGlob], projectRoot);
+
+    expect(second).toEqual(first);
+    expect(Object.values(first)).toEqual([
+      join(toolsDir, 'a.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'b.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'nested', 'c.ts').replaceAll('\\', '/'),
+    ]);
+    expect(Object.keys(first)).toEqual([
+      'tools/a3576fdd-4db8-3860-0363-043d8e044095',
+      'tools/c8a75e35-2420-ce8d-d5d1-d6a12388c682',
+      'tools/a34d68f6-b252-bc06-1de9-238ce99e3110',
+    ]);
+  });
+});
+
 describe('Bundler.writePackageJson', () => {
   it('writes npm alias and workspace tarball dependency specs using the package name as the key', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-package-json-'));

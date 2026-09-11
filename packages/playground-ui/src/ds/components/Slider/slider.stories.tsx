@@ -80,8 +80,8 @@ export const WithLabel: Story = {
     return (
       <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-neutral5 text-sm">Volume</span>
-          <span className="text-neutral3 text-sm tabular-nums">{value[0]}%</span>
+          <span className="text-neutral5 text-ui-md">Volume</span>
+          <span className="text-neutral3 text-ui-md tabular-nums">{value[0]}%</span>
         </div>
         <Slider value={value} max={100} step={1} onValueChange={setValue} />
       </div>
@@ -95,8 +95,8 @@ export const PriceRange: Story = {
     return (
       <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-neutral5 text-sm">Price range</span>
-          <span className="text-neutral3 text-sm tabular-nums">
+          <span className="text-neutral5 text-ui-md">Price range</span>
+          <span className="text-neutral3 text-ui-md tabular-nums">
             ${value[0]} – ${value[1]}
           </span>
         </div>
@@ -120,19 +120,19 @@ export const States: Story = {
   render: () => (
     <div className="flex w-70 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-sm">Default</span>
+        <span className="text-neutral5 text-ui-md">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-sm">Range</span>
+        <span className="text-neutral5 text-ui-md">Range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-sm">Disabled</span>
+        <span className="text-neutral5 text-ui-md">Disabled</span>
         <Slider defaultValue={[50]} max={100} step={1} disabled />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-neutral5 text-sm">Disabled range</span>
+        <span className="text-neutral5 text-ui-md">Disabled range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} disabled />
       </div>
     </div>

@@ -136,6 +136,44 @@ describe('Postgres advanced trace query', () => {
     );
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).not.toContain(key);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
+    expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
+    expect(compiled.text).toContain('IS NULL OR');
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      key,
+      value,
+      'actorRole',
+      'assistant',
+      'tool',
+      'parentMessageId',
+      101,
+    ]);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
@@ -170,6 +208,60 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).toContain('NOT r."isPending"');
     expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
+  });
+
+  it('compiles typed feedback relations with one correlated existence check per clause', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                    { op: 'exists', path: 'comment' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.text.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.text).toContain('s."traceId" IS NOT NULL');
+    expect(compiled.text).toContain('s."traceId" = r."traceId"');
+    expect(compiled.text).toContain('s."valueNumber" IS NOT NULL AND s."valueNumber" <');
+    expect(compiled.text).toContain('s."valueString" IS NOT NULL AND s."valueString" IN');
+    expect(compiled.text).toContain('(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)');
+    expect(compiled.text).toContain('FROM "public"."mastra_feedback_events" s');
+    expect(compiled.text).toContain('newer."feedbackId" = s."feedbackId"');
+    expect(compiled.text).toContain('newer."cursorId" > s."cursorId"');
+    expect(compiled.text).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compilePostgresTraceQuery('public', plan()).text;
+    const feedbackOnly = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).text;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('mastra_feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
   it('uses total null semantics for negative predicates', () => {
