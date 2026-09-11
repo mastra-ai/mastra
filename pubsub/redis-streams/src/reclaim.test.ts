@@ -25,13 +25,14 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 describe('RedisStreamsPubSub reclaim loop', () => {
   let pubsubs: RedisStreamsPubSub[] = [];
 
-  function createPubSub(): RedisStreamsPubSub {
+  function createPubSub(extra: { inFlightTimeoutMs?: number; maxDeliveryAttempts?: number } = {}): RedisStreamsPubSub {
     const ps = new RedisStreamsPubSub({
       url: REDIS_URL,
       blockMs: 200,
       // Aggressive settings so a reclaim pass is a few hundred ms, not 60s.
       reclaimIdleMs: 200,
       reclaimIntervalMs: 100,
+      ...extra,
     });
     pubsubs.push(ps);
     return ps;
@@ -138,5 +139,57 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     await waitFor(() => seenB.length >= 1, 3000);
     expect(seenB[0]!.type).toBe('sticky');
     expect(deliveriesA).toBe(1);
+  });
+
+  it('nacks a hung handler on its behalf after inFlightTimeoutMs, honoring the attempt cap', async () => {
+    // Single consumer, handler never settles. With inFlightTimeoutMs set the
+    // reclaim loop must nack the entry itself: republish with deliveryAttempt
+    // + 1 and ack the original. After maxDeliveryAttempts the event is
+    // dropped, so total invocations equal the cap.
+    const ps = createPubSub({ inFlightTimeoutMs: 300, maxDeliveryAttempts: 3 });
+    const topic = `t-${randomUUID()}`;
+    const group = `hung-${randomUUID()}`;
+
+    const attempts: number[] = [];
+    const cb: EventCallback = event => {
+      attempts.push(event.deliveryAttempt ?? 1);
+      // intentionally never ack/nack
+    };
+    await ps.subscribe(topic, cb, { group });
+    await ps.publish(topic, makeEvent({ type: 'hung' }));
+
+    await waitFor(() => attempts.length === 3, 5000);
+    // Give the loop time to (wrongly) redeliver past the cap if it were going to.
+    await sleep(800);
+    expect(attempts).toEqual([1, 2, 3]);
+
+    const raw = createClient({ url: REDIS_URL }) as RedisClientType;
+    await raw.connect();
+    try {
+      // Every attempt was settled: nothing left pending in the group.
+      const pending = await raw.xPendingRange(`mastra:topic:${topic}`, group, '-', '+', 10);
+      expect(pending).toHaveLength(0);
+    } finally {
+      await raw.quit();
+    }
+  });
+
+  it('does not time out an in-flight handler that is merely slow', async () => {
+    // inFlightTimeoutMs must be measured from delivery, and a handler that
+    // settles before the deadline is never nacked or re-invoked.
+    const ps = createPubSub({ inFlightTimeoutMs: 1500 });
+    const topic = `t-${randomUUID()}`;
+
+    let deliveries = 0;
+    const cb: EventCallback = async (_event, ack) => {
+      deliveries++;
+      await sleep(600);
+      void ack?.();
+    };
+    await ps.subscribe(topic, cb, { group: `slow-${randomUUID()}` });
+    await ps.publish(topic, makeEvent({ type: 'slow' }));
+
+    await sleep(2200);
+    expect(deliveries).toBe(1);
   });
 });
