@@ -171,6 +171,26 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
 }
 
 /**
+ * Apply a strict-mode pass to every schema hoisted into `$defs`/`definitions`.
+ * zod-to-json-schema (v3 path, `$refStrategy: 'relative'`) lifts reused subschemas into
+ * these definition maps and references them via `$ref`, so the referenced schemas must be
+ * processed with the same pass as inline nodes or their unsupported keywords leak through.
+ */
+function applyToDefinitions(result: JSONSchema7, fn: (schema: JSONSchema7) => JSONSchema7): void {
+  for (const defKey of ['$defs', 'definitions'] as const) {
+    const defs = (result as Record<string, unknown>)[defKey];
+    if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
+      (result as Record<string, unknown>)[defKey] = Object.fromEntries(
+        Object.entries(defs as Record<string, unknown>).map(([key, value]) => [
+          key,
+          typeof value === 'object' && value !== null ? fn(value as JSONSchema7) : value,
+        ]),
+      );
+    }
+  }
+}
+
+/**
  * Recursively ensures all properties in an object schema are included in the `required` array.
  * OpenAI's strict structured output mode requires every key in `properties` to also appear in `required`.
  *
@@ -212,6 +232,8 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
   if (result.allOf && Array.isArray(result.allOf)) {
     result.allOf = result.allOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
   }
+
+  applyToDefinitions(result, ensureAllPropertiesRequired);
 
   return result;
 }
@@ -371,6 +393,8 @@ function stripUnsupportedStrictModeKeywords(schema: JSONSchema7): JSONSchema7 {
     result.allOf = result.allOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
   }
 
+  applyToDefinitions(result, stripUnsupportedStrictModeKeywords);
+
   return result;
 }
 
@@ -411,6 +435,8 @@ function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
   if (result.allOf && Array.isArray(result.allOf)) {
     result.allOf = result.allOf.map(s => ensureAdditionalPropertiesFalse(s as JSONSchema7));
   }
+
+  applyToDefinitions(result, ensureAdditionalPropertiesFalse);
 
   return result;
 }

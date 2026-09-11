@@ -908,6 +908,56 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
 
     const out = prepareJsonSchemaForOpenAIStrictMode(schema);
     expect(collectLeakedKeywords(out)).toEqual([]);
+
+    // Structure must be preserved (deleting subtrees must not satisfy the test) and
+    // constraints must be folded into the corresponding node's description.
+    const props = out.properties as any;
+    expect(props.list.items.description).toContain('minimum length 2');
+    expect(props.choice.anyOf[0].description).toContain('input must match this regex x');
+    expect(props.choice.anyOf[1].description).toContain('greater than or equal to 0');
+    expect(props.combo.oneOf[0].description).toContain('maximum length 4');
+    expect(props.merged.allOf[0].properties.inner.description).toContain('minimum length 1');
+    expect(props.nested.properties.deep.description).toContain('maximum length 10');
+  });
+
+  it('strips and folds keywords inside $defs/definitions referenced schemas', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        primary: { $ref: '#/$defs/Item' },
+        legacy: { $ref: '#/definitions/Legacy' },
+      },
+      $defs: {
+        Item: {
+          type: 'object',
+          properties: {
+            tags: { type: 'array', items: { type: 'string' }, uniqueItems: true, minItems: 1 },
+          },
+        },
+      },
+      definitions: {
+        Legacy: {
+          type: 'object',
+          properties: {
+            code: { type: 'string', pattern: '^[A-Z]+$' },
+          },
+        },
+      },
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+
+    const item = (out as any).$defs.Item;
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required).toEqual(expect.arrayContaining(['tags']));
+    expect(item.properties.tags.description).toContain('minimum length 1');
+    expect(item.properties.tags.description).toContain('all items must be unique');
+
+    const legacy = (out as any).definitions.Legacy;
+    expect(legacy.additionalProperties).toBe(false);
+    expect(legacy.required).toEqual(expect.arrayContaining(['code']));
+    expect(legacy.properties.code.description).toContain('input must match this regex ^[A-Z]+$');
   });
 
   it('drops object-level and contains/unevaluated keywords with no description mapping', () => {
