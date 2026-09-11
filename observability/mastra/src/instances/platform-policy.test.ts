@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core/mastra';
 import type { InitExporterOptions, TracingEvent } from '@mastra/core/observability';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from '../default';
@@ -112,6 +112,42 @@ describe('Platform storage exporter supersession', () => {
 
     expect(firstInstance.getExporters()).toEqual([firstCustomExporter]);
     expect(secondInstance.getExporters()).toEqual([secondCustomExporter]);
+  });
+
+  it('ignores a storage exporter registered through Mastra on a Platform deployment', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
+    const customExporter = new CustomExporter();
+    const instance = createInstance([customExporter]);
+    const observability = new Observability({
+      configs: { default: instance },
+      sensitiveDataFilter: false,
+    });
+    const mastra = new Mastra({ logger: false, observability });
+    const storageExporter = new MastraStorageExporter();
+
+    mastra.registerExporter(storageExporter, createInstance([], 'fallback'), observability);
+
+    expect(instance.getExporters()).toEqual([customExporter]);
+    expect(instance.getConfig().exporters).toEqual([customExporter]);
+    expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter]);
+  });
+
+  it('registers a storage exporter through Mastra outside a Platform deployment', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', undefined);
+    const customExporter = new CustomExporter();
+    const instance = createInstance([customExporter]);
+    const observability = new Observability({
+      configs: { default: instance },
+      sensitiveDataFilter: false,
+    });
+    const mastra = new Mastra({ logger: false, observability });
+    const storageExporter = new MastraStorageExporter();
+
+    mastra.registerExporter(storageExporter, createInstance([], 'fallback'), observability);
+
+    expect(instance.getExporters()).toEqual([customExporter, storageExporter]);
+    expect(instance.getConfig().exporters).toEqual([customExporter, storageExporter]);
+    expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter, storageExporter]);
   });
 
   it('does not initialize a superseded storage exporter after setting the Mastra context', () => {

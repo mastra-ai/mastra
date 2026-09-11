@@ -404,6 +404,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
+    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
+      return;
+    }
+
     this.observabilityBus.registerExporter(exporter);
     this.config.exporters ??= [];
     if (this.config.exporters.includes(exporter)) {
