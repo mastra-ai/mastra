@@ -264,10 +264,11 @@ disabled, the channel logs a one-time warning and falls back to `'cards'`.
 progress.
 
 Pass a function to `toolDisplay` for fully custom rendering. The function
-receives a `ToolDisplayEvent` (`running` / `result` / `error` / `approval`)
-and a `ToolDisplayContext` (`{ mode, platform }`); return `{ kind: 'post',
-message }` for a discrete post/edit, `{ kind: 'stream', chunk }` to push into
-the active streaming widget, or `undefined` to skip rendering that event.
+receives a `ToolDisplayEvent` (`running` / `result` / `error` / `approval` /
+`approved` / `denied`) and a `ToolDisplayContext` (`{ mode, platform }`); return
+`{ kind: 'post', message }` for a discrete post/edit, `{ kind: 'stream', chunk }`
+to push into the active streaming widget, or `undefined` to skip rendering that
+event.
 
 By default, a stream result opens a streaming session when none is active. Set
 `openIfEmpty: false` when the chunk only applies to an existing session. Mastra
@@ -298,6 +299,34 @@ in both streaming and static modes; return a non-blank `{ kind: 'post', message 
 to replace the built-in card with your own message (for example, a localized
 one). Returning `undefined`, a blank message, or `{ kind: 'stream' }` falls back
 to the built-in card so the approval stays actionable.
+
+Once someone clicks a button, the same message is edited to its resolved state
+and your function receives `approved` or `denied` for that `toolCallId`. This
+gives your renderer ownership of the card's final text, so a localized approval
+prompt resolves into a localized result instead of the built-in English one.
+Both events carry `byUser`, the display name of whoever decided, except in a
+direct message where it is `undefined`. The same fallback rule applies as for
+`approval`: returning `undefined`, a blank message, or `{ kind: 'stream' }`
+falls back to the built-in resolved card, because that edit is what removes the
+Approve and Deny buttons.
+
+```typescript
+toolDisplay: event => {
+  if (event.kind === 'denied') {
+    return { kind: 'post', message: `✗ Rechazado por ${event.byUser ?? 'alguien'}` }
+  }
+
+  if (event.kind === 'approved') {
+    return { kind: 'post', message: '✓ Aprobado, ejecutando…' }
+  }
+
+  return undefined // every other event keeps its built-in rendering
+}
+```
+
+An approved tool then runs and emits a `result` event, which edits the same
+message again. A denied tool does not run, so the `denied` message is the card's
+resting state.
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'

@@ -149,10 +149,10 @@ export type ToolDisplayFn = (event: ToolDisplayEvent, ctx: ToolDisplayContext) =
  *
  * Every variant carries `toolCallId` — a stable identifier for this
  * specific tool invocation. Use it to correlate `running`/`result`/`error`/
- * `approval` events for the same call (e.g. to edit a previously posted
- * message, or as the `id` on a streamed `task_update` so the SDK updates
- * the row in place rather than appending a new one). It is unique even
- * when the same tool is called in parallel.
+ * `approval`/`approved`/`denied` events for the same call (e.g. to edit a
+ * previously posted message, or as the `id` on a streamed `task_update` so
+ * the SDK updates the row in place rather than appending a new one). It is
+ * unique even when the same tool is called in parallel.
  */
 export type ToolDisplayEvent =
   | {
@@ -193,6 +193,28 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+    }
+  | {
+      /** The approval was granted and the card is being edited to its resolved state. */
+      kind: 'approved';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      /** Display name of the user who approved, when the platform provides one. */
+      byUser?: string;
+    }
+  | {
+      /** The approval was denied and the card is being edited to its resolved state. */
+      kind: 'denied';
+      toolCallId: string;
+      toolName: string;
+      displayName: string;
+      argsSummary: string;
+      args: unknown;
+      /** Display name of the user who denied, when the platform provides one. */
+      byUser?: string;
     };
 
 /** Context about which driver is consuming the function-form result. */
