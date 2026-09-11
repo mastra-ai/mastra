@@ -58,6 +58,43 @@ describe('Subconscious observation curator', () => {
     expect(await getStore.mock.results[0]!.value).toBe(selectedStore);
   });
 
+  it('passes the selected Knowledge and exact visible scope descriptions to the curator', async () => {
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      description: 'Project knowledge separated by organization and active workspace.',
+      storage: new InMemoryStore(),
+      structure: {
+        scopes: [
+          {
+            address: 'resource:user-42',
+            name: 'Project Atlas',
+            description: 'Store durable Project Atlas launch decisions at resource scope.',
+          },
+          {
+            address: 'resource:other',
+            name: 'Other project',
+            description: 'This description must not be visible to the current curator.',
+          },
+        ],
+      },
+    });
+    const { context, extractor } = fixture(knowledge);
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
+    });
+
+    await extractor.onExtracted!(context);
+
+    const instructions = await curatorAgent!.getInstructions();
+    expect(instructions).toContain('Project knowledge separated by organization and active workspace.');
+    expect(instructions).toContain(
+      'resource:user-42 (Project Atlas): Store durable Project Atlas launch decisions at resource scope.',
+    );
+    expect(instructions).not.toContain('This description must not be visible to the current curator.');
+  });
+
   it.each(['instance', 'key'] as const)(
     'passes selected Knowledge by %s into the configured curator',
     async selection => {
