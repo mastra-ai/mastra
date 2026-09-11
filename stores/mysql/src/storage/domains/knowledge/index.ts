@@ -278,6 +278,12 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
     await assertKnowledgeDescriptionWithinBoundCompat(input.description);
+    if (input.scopeAddresses?.length) {
+      // Peer-floor safe: mirrors KnowledgeUnsupportedCapabilityError without importing it.
+      const error = new Error('This Knowledge storage adapter does not expose structural scope placement.');
+      error.name = 'KnowledgeUnsupportedCapabilityError';
+      throw error;
+    }
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getNodeByName(tx, input.name, scope);
