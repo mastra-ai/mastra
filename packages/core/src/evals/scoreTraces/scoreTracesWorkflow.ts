@@ -271,7 +271,6 @@ export async function scoreTrace({
 
   const result = await runScorerForTrace({ scorer, trace, span });
 
-  // A not-scorable run produced no score: nothing to persist or attach.
   if (result.notScorable) {
     return null;
   }
@@ -346,7 +345,7 @@ export async function scoreTraceBatch({
           datasetId,
           datasetItemId: target.datasetItemId,
         });
-        if (!score) {
+        if (score === null) {
           return {
             ok: true,
             excluded: true,

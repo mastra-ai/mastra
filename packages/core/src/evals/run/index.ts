@@ -373,7 +373,6 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
               targetTraceId: targetResult.traceId,
               targetSpanId: targetResult.spanId,
             });
-            // Not-scorable gate runs stay out of the gate average
             if (!gateScore.notScorable) {
               gateScoresByGateId[gate.id]!.push(gateScore.score as number);
             }
@@ -392,7 +391,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
       // Track threshold scores
       for (const [scorerId] of thresholdMap) {
         const result = scorerResults[scorerId];
-        if (result && typeof result === 'object' && 'score' in result) {
+        if (typeof result?.score === 'number') {
           thresholdScoresByScorerID[scorerId]!.push(result.score);
         }
       }

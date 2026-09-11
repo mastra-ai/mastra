@@ -1300,7 +1300,6 @@ class MastraScorer<
               }
             : judge;
 
-          // Not scorable: stop before any remaining steps or judge calls run.
           if (isNotScorable(stepResult)) {
             const notScorable: NotScorableOutcome =
               stepResult.reason !== undefined ? { reason: stepResult.reason } : {};
