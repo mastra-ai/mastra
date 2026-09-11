@@ -24,6 +24,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import type { ToolPayloadTransformPolicy } from '../../../tools/types';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -107,6 +108,19 @@ async function drain(stream: ReadableStream<any>) {
   const out: any[] = [];
   for await (const c of stream) out.push(c);
   return out;
+}
+
+/** Find the tool-invocation part (with its providerMetadata) for a toolCallId. */
+function findInvocationPart(messages: any[], toolCallId: string) {
+  for (const msg of messages) {
+    const parts = msg?.content?.parts ?? [];
+    for (const part of parts) {
+      if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+        return part;
+      }
+    }
+  }
+  return undefined;
 }
 
 /** Recursively collect every object carrying the given toolCallId. */
@@ -236,6 +250,62 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
     const serialized = JSON.stringify(recalled.messages);
     expect(serialized).toContain('REDACTED');
     expect(serialized).not.toContain('SECRET-SOURCE');
+    result.cleanup();
+  });
+
+  it('persists the transform metadata when a deferred provider result is patched (L18b residual)', async () => {
+    // Mirrors the same-stream L18b assertions in durable-agent-transform.test.ts,
+    // but for the deferred path: the tool-call arrives in step N, the result in
+    // step N+1, so the transform state must ride the updateToolInvocation patch
+    // (before the fix, the patch read rawChunk.metadata — always undefined
+    // because enrichment builds a NEW clientChunk object — so the configured
+    // transcript redaction was a silent no-op for deferred results).
+    const transformCalls: Array<{ toolCallId: string; phase: string; target: string }> = [];
+    const policy: ToolPayloadTransformPolicy = {
+      targets: ['display', 'transcript'],
+      transformToolPayload: ctx => {
+        transformCalls.push({ toolCallId: ctx.toolCallId, phase: ctx.phase, target: ctx.target });
+        return `[redacted ${ctx.phase} on ${ctx.target}]`;
+      },
+    };
+
+    const { mockMemory, durableAgent } = setup(pubsub, {
+      deferredResult: { hits: 3, source: 'DEFERRED-SECRET-SOURCE' },
+    });
+
+    const result = await durableAgent.stream('search and check weather', {
+      transform: policy,
+      memory: { thread: 'thread-deferred-4', resource: 'resource-deferred-4' },
+    });
+    await drain(result.fullStream);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-deferred-4',
+      resourceId: 'resource-deferred-4',
+    });
+    const part = findInvocationPart(recalled.messages as any[], PROVIDER_CALL_ID);
+    expect(part).toBeDefined();
+    expect(part.toolInvocation?.state).toBe('result');
+
+    // The patched invocation's providerMetadata carries the transform state.
+    const transform = part.providerMetadata?.mastra?.toolPayloadTransform;
+    expect(transform?.transcript?.['output-available']?.transformed).toBe('[redacted output-available on transcript]');
+    expect(transform?.display?.['output-available']?.transformed).toBe('[redacted output-available on display]');
+
+    // The transcript redaction applies at drain time from that metadata, so
+    // the raw deferred secret never reaches storage.
+    expect(part.toolInvocation?.result).toBe('[redacted output-available on transcript]');
+    expect(JSON.stringify(recalled.messages)).not.toContain('DEFERRED-SECRET-SOURCE');
+
+    // Single application: the patch-block transform is reused by the
+    // client-emission path, so the deferred result is transformed exactly
+    // once per target (no double-transform).
+    const deferredOutputCalls = transformCalls.filter(
+      c => c.toolCallId === PROVIDER_CALL_ID && c.phase === 'output-available',
+    );
+    expect(deferredOutputCalls.filter(c => c.target === 'transcript')).toHaveLength(1);
+    expect(deferredOutputCalls.filter(c => c.target === 'display')).toHaveLength(1);
+
     result.cleanup();
   });
 

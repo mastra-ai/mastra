@@ -1289,6 +1289,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // guarantee and so streaming clients see the post-processor value.
                 // Presence check (not truthiness): a tool legitimately returning
                 // `null` still triggers processors.
+                //
+                // `transformTools` / `deferredEnrichedChunk` are hoisted above the
+                // patch block because deferred-result patching needs the payload
+                // transform to run BEFORE `updateToolInvocation`: the enrichment
+                // below builds a NEW clientChunk object (it never mutates
+                // rawChunk), so reading `rawChunk.metadata` at patch time would
+                // always see undefined and silently drop the transcript transform
+                // state for deferred results (L18b residual). The client-emission
+                // path reuses the enriched chunk so the transform runs once.
+                //
+                // Use the per-step `currentTools` (post-`prepareStep` and input
+                // processors) rather than the registry-level tool list — that way
+                // any tool-level `transformToolPayload` added or replaced for the
+                // current step is honoured, instead of being silently skipped.
+                const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
+                let deferredEnrichedChunk: typeof rawChunk | undefined;
                 if (rawChunk.type === 'tool-result' && rawChunk.payload && 'result' in (rawChunk.payload as any)) {
                   const resultPayload = rawChunk.payload as any;
                   const resultToolDef = resolveToolDef(resultPayload.toolName);
@@ -1337,8 +1353,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     }
                   }
 
+                  // Run the payload transform now (post-processor value already
+                  // synced into the payload) so the patch below can persist the
+                  // transform's transcript state. Same policy/tools inputs as the
+                  // client-emission enrichment further down, which reuses this
+                  // chunk instead of transforming again.
+                  if (registryEntry?.toolPayloadTransform || transformTools) {
+                    deferredEnrichedChunk = await applyToolPayloadTransformToChunk(rawChunk, {
+                      policy: registryEntry?.toolPayloadTransform,
+                      tools: transformTools,
+                      logger: logger as any,
+                    });
+                  }
+
                   // Patch the deferred tool-call to state:'result' with the
-                  // (possibly post-processor-mutated) value.
+                  // (possibly post-processor-mutated) value. Args/result stay
+                  // raw — display-layer transforms live only in the transform
+                  // metadata, applied to the transcript at drain time.
                   messageList.updateToolInvocation({
                     type: 'tool-invocation',
                     toolInvocation: {
@@ -1350,7 +1381,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     },
                     providerMetadata: withToolPayloadTransformProviderMetadata(
                       resultPayload.providerMetadata,
-                      (rawChunk as { metadata?: Record<string, unknown> }).metadata,
+                      (deferredEnrichedChunk as { metadata?: Record<string, unknown> } | undefined)?.metadata,
                     ),
                     providerExecuted: resultProviderExecuted,
                   });
@@ -1368,19 +1399,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // untransformed `rawChunk` so display-layer redactions/rewrites
                 // do not leak into actual tool inputs.
                 //
-                // Use the per-step `currentTools` (post-`prepareStep` and input
-                // processors) rather than the registry-level tool list — that way
-                // any tool-level `transformToolPayload` added or replaced for the
-                // current step is honoured, instead of being silently skipped.
-                const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
+                // Deferred tool-result chunks were already enriched in the patch
+                // block above (`deferredEnrichedChunk`) — reuse that result so
+                // the transform is applied exactly once per chunk.
                 const clientChunk =
-                  registryEntry?.toolPayloadTransform || transformTools
+                  deferredEnrichedChunk ??
+                  (registryEntry?.toolPayloadTransform || transformTools
                     ? await applyToolPayloadTransformToChunk(rawChunk, {
                         policy: registryEntry?.toolPayloadTransform,
                         tools: transformTools,
                         logger: logger as any,
                       })
-                    : rawChunk;
+                    : rawChunk);
 
                 // ── Client-tool observability injection ──
                 // For tool-call streaming chunks, inject CLIENT_TOOL_CALL spans
