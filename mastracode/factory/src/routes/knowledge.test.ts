@@ -1,4 +1,4 @@
-import { InMemoryDB, InMemoryKnowledgeStorage } from '@mastra/core/storage';
+import { InMemoryDB, InMemoryKnowledgeStorage, KnowledgeUnsupportedCapabilityError } from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
@@ -235,6 +235,25 @@ describe('KnowledgeRoutes', () => {
     );
     expect(unknown.status).toBe(200);
     expect(((await unknown.json()) as KnowledgeGraphPayload).nodes).toEqual([]);
+  });
+
+  it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {
+    const unsupported = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    unsupported.listScopeNodes = async () => {
+      throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+    };
+    const h1 = await createHarness({ knowledge: unsupported });
+    const ok = await h1.app.request(`/web/factory/projects/${h1.projectId}/knowledge/scopes`);
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as KnowledgeScopeTreePayload).scopeNodes).toBeUndefined();
+
+    const broken = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    broken.listScopeNodes = async () => {
+      throw new Error('db connection lost');
+    };
+    const h2 = await createHarness({ knowledge: broken });
+    const failed = await h2.app.request(`/web/factory/projects/${h2.projectId}/knowledge/scopes`);
+    expect(failed.status).toBe(500);
   });
 
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {

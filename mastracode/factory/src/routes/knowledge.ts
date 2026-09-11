@@ -27,6 +27,7 @@ import type {
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
+  KnowledgeUnsupportedCapabilityError,
   knowledgeScopeKey,
   parseKnowledgeWikilinks,
 } from '@mastra/core/storage';
@@ -467,11 +468,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           // The structural tree comes from the reconciled scope nodes
           // themselves — never synthesized from the identity rungs. Adapters
-          // without the structural read (MySQL/MongoDB) omit the tree.
+          // without the structural read (MySQL/MongoDB) omit the tree; any
+          // other failure is a real storage error and must surface as one.
           let scopeNodes: KnowledgeScopeNodeSummary[] | undefined;
           try {
             scopeNodes = await view.store.listScopeNodes();
-          } catch {
+          } catch (error) {
+            if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
             scopeNodes = undefined;
           }
           return c.json({
