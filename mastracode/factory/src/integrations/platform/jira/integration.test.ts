@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient } from '../api-client.js';
-import { PlatformJiraApiError } from './api.js';
+import { JiraApiError } from '../../jira/api.js';
 import {
   decodeIssueReference,
   decodeSourceId,
@@ -21,7 +20,7 @@ const connections = [
 
 function integration(): PlatformJiraIntegration {
   return new PlatformJiraIntegration({
-    client: new PlatformApiClient({ baseUrl: PLATFORM_BASE, accessToken: 'platform-token' }),
+    clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
   });
 }
 
@@ -187,7 +186,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).rejects.toMatchObject({
       code: 'jira_request_failed',
       status: 400,
-    } satisfies Partial<PlatformJiraApiError>);
+    } satisfies Partial<JiraApiError>);
   });
 
   it('creates comments through the selected connection and returns a site URL', async () => {

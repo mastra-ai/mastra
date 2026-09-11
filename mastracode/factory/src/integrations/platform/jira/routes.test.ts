@@ -5,8 +5,7 @@ import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../../storage/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
-import { PlatformJiraApiError } from './api.js';
+import { JiraApiError } from '../../jira/api.js';
 import { PlatformJiraIntegration } from './integration.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -71,7 +70,7 @@ const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
-    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
   });
   vi.spyOn(jira, 'listConnections').mockResolvedValue([
     { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
@@ -169,7 +168,7 @@ describe('projects route', () => {
   });
 
   it('409s with jira_auth_failed when Jira rejects the credentials', async () => {
-    listJiraSources.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (401)', 401));
+    listJiraSources.mockRejectedValueOnce(new JiraApiError('Jira API request failed (401)', 401));
     const res = await buildApp(org1()).request('/web/jira/projects');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'jira_auth_failed' });
@@ -238,14 +237,14 @@ describe('issues route', () => {
   });
 
   it('409s with jira_auth_failed when Jira rejects the credentials', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (403)', 403));
+    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (403)', 403));
     const res = await buildApp(org1()).request('/web/jira/issues');
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: 'jira_auth_failed' });
   });
 
   it('502s when the Jira API fails', async () => {
-    listActiveJiraIssues.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (500)', 500));
+    listActiveJiraIssues.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
     const res = await buildApp(org1()).request('/web/jira/issues');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'jira_fetch_failed' });
