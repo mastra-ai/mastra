@@ -232,6 +232,11 @@ export interface KnowledgeGraphProps {
   focusedRecordId?: string | null;
   onNodeClick?: (node: KnowledgeGraphNode) => void;
   onEdgeClick?: (edge: { source: string; target: string; recordId: string }) => void;
+  /**
+   * Label every node regardless of degree — for bounded member listings
+   * (structural scope lens) that carry no intra-scope edges.
+   */
+  labelAll?: boolean;
 }
 
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
@@ -299,6 +304,7 @@ function KnowledgeGraphInner({
   focusedRecordId,
   onNodeClick,
   onEdgeClick,
+  labelAll,
 }: KnowledgeGraphProps) {
   const [filters, setFilters] = useState<KnowledgeGraphFilters>(NO_FILTERS);
   const [hover, setHover] = useState<HoverCard | null>(null);
@@ -389,7 +395,7 @@ function KnowledgeGraphInner({
       if (focused.nodes.some(node => node.id === focusedId)) filtered = focused;
     }
     const { recordNodes, recordEdges } = deriveRecordElements(filtered.nodes, records);
-    const mapped = toFlowGraph(filtered.nodes, filtered.edges, undefined, focusedId);
+    const mapped = toFlowGraph(filtered.nodes, filtered.edges, undefined, focusedId, labelAll);
     const neighborOf = (id: string): { x: number; y: number } | undefined => {
       for (const edge of filtered.edges) {
         const other = edge.source === id ? edge.target : edge.target === id ? edge.source : null;
@@ -441,12 +447,12 @@ function KnowledgeGraphInner({
     // filter would rearrange everything again. While focused this writes to the
     // scratch cache, so the project layout survives the visit untouched.
     for (const [id, center] of positions) centers.set(id, center);
-    const nodeFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId);
+    const nodeFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId, labelAll);
     if (records.length === 0) return nodeFlow; // pre-A11 payload fallback
     const recordFlow = toRecordFlow(recordNodes, recordEdges, positions);
     return { nodes: [...nodeFlow.nodes, ...recordFlow.nodes], edges: recordFlow.edges };
     // dragVersion re-runs the layout after a drag pin.
-  }, [payload, filters, focusedId, dragVersion, arrivals]);
+  }, [payload, filters, focusedId, dragVersion, arrivals, labelAll]);
 
   // Arrival animation: newly-polled nodes/edges fade-scale in with a pulse.
   // Selection: the flyout's open record lights its marker and edge(s) up.

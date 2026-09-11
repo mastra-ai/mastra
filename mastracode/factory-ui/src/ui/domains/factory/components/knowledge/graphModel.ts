@@ -298,6 +298,7 @@ export function toFlowGraph(
   edges: KnowledgeGraphEdge[],
   positions?: ReadonlyMap<string, { x: number; y: number }>,
   focusId?: string | null,
+  labelAll?: boolean,
 ): { nodes: NodeFlowNode[]; edges: KnowledgeFlowEdge[] } {
   const degrees = degreeMap(edges);
   let maxWeighted = 0;
@@ -308,8 +309,11 @@ export function toFlowGraph(
   return {
     nodes: nodes.map(node => {
       const degree = degrees.get(node.id) ?? { incoming: 0, outgoing: 0 };
+      // Structural member listings carry no intra-scope edges; labeling every
+      // member keeps the lens readable as a directory instead of bare dots.
+      const effectiveDegree = labelAll && degree.incoming === 0 ? { incoming: 1, outgoing: degree.outgoing } : degree;
       const focused = node.id === focusId;
-      const size = focused ? NODE_SIZE_MAX : nodeSize(degree, maxWeighted);
+      const size = focused ? NODE_SIZE_MAX : nodeSize(effectiveDegree, maxWeighted);
       // The force layout positions circle CENTERS; React Flow positions the
       // node's TOP-LEFT corner — convert here or differently-sized nodes skew
       // into each other (the sim thinks they're apart, the render stacks them).
@@ -323,7 +327,7 @@ export function toFlowGraph(
         // the DOM measures it.
         width: size,
         height: size,
-        data: { node, size, degree, focused },
+        data: { node, size, degree: effectiveDegree, focused },
       } satisfies NodeFlowNode;
     }),
     edges: edges.map(edge => ({
