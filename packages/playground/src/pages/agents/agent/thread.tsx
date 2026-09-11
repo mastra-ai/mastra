@@ -2,8 +2,10 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -32,10 +34,20 @@ function AgentThread() {
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const threadsPanel = useRef<CollapsiblePanelHandle>(null);
   const isNewThread = threadId === 'new';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
   const newThreadId = useMemo(() => uuid(), [threadId]);
+  const newThreadKey = `${agentId}:${newThreadId}`;
+  const activeNewThread = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    activeNewThread.current = isNewThread ? newThreadKey : undefined;
+    return () => {
+      activeNewThread.current = undefined;
+    };
+  }, [isNewThread, newThreadKey]);
 
   const hasMemory = Boolean(memory?.result);
 
@@ -104,11 +116,11 @@ function AgentThread() {
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
 
   const handleRefreshThreadList = async () => {
-    await refreshThreads();
-
-    if (isNewThread) {
-      void navigate(`/agents/${agentId}/threads/${newThreadId}`);
+    if (isNewThread && activeNewThread.current === newThreadKey) {
+      void navigate(`/agents/${agentId}/threads/${newThreadId}`, { replace: true });
     }
+
+    await refreshThreads();
   };
 
   return (
@@ -127,11 +139,18 @@ function AgentThread() {
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
                     <AgentLayout
                       agentId={agentId!}
+                      leftPanel={threadsPanel}
                       leftSlot={
                         isThreadsLoading ? (
                           <AgentSidebarLoadingSkeleton />
                         ) : (
-                          <AgentSidebar agentId={agentId!} threadId={actualThreadId} threads={sidebarThreads} />
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={actualThreadId}
+                            threads={sidebarThreads}
+                            // The mobile drawer has its own close control, so no hide button there.
+                            onHidePanel={isMobile ? undefined : () => threadsPanel.current?.collapse()}
+                          />
                         )
                       }
                       leftDrawerLabel="Threads"

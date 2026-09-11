@@ -1,10 +1,10 @@
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
 import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
-import { BadgeWrapper } from './badge-wrapper';
-import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -99,7 +99,6 @@ export const CodeModeBadge = ({
   return (
     <BadgeWrapper
       data-testid="code-mode-badge"
-      toolCallId={toolCallId}
       icon={<ToolCoinIcon className="text-accent6" />}
       title={toolName}
       initialCollapsed={!toolApprovalMetadata}

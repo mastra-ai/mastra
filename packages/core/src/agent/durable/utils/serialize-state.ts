@@ -182,9 +182,9 @@ export function serializeModelSettings(
   const source = settings as Record<string, unknown>;
   const out: SerializableModelSettings = {};
   const pickNumber = (key: keyof SerializableModelSettings) => {
-    const value = source[key as string];
+    const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      (out as Record<string, unknown>)[key as string] = value;
+      (out as Record<string, unknown>)[key] = value;
     }
   };
 
@@ -198,7 +198,7 @@ export function serializeModelSettings(
   pickNumber('maxRetries');
 
   if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
-    out.stopSequences = source.stopSequences as string[];
+    out.stopSequences = source.stopSequences;
   }
 
   // Headers are never serialized into the workflow input. They are stored

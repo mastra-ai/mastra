@@ -1,7 +1,23 @@
 import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@mastra/playground-ui/utils/file';
 import type { FilePart } from '@mastra/react';
 
+import { isTextMimeType } from '../../attachments/attachment-kind';
 import { InMessageAttachment } from './in-message-attachment';
+
+const textPreview = (data: string) => {
+  if (!data.startsWith('data:')) return data;
+  try {
+    const base64 = data.match(/^data:[^,]*;base64,(.*)$/s)?.[1];
+    if (base64 === undefined) return undefined;
+    const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0));
+    let encoding = 'utf-8';
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) encoding = 'utf-16le';
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) encoding = 'utf-16be';
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+};
 
 export interface UserFilePartRendererProps {
   part: FilePart;
@@ -25,14 +41,15 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   // Only use the source as the chip label when it is a real URL. Local inlined
   // media is a long `data:...;base64,...` payload that would bloat the chip
   // title/tooltip and DOM attributes.
-  const fileLabel = isFetchableUrl || isNonFetchableUrl ? src : undefined;
+  const filename = 'filename' in part && typeof part.filename === 'string' ? part.filename : undefined;
+  const fileLabel = filename ?? (isFetchableUrl || isNonFetchableUrl ? src : undefined);
   const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
-  const isVideo = typeof mimeType === 'string' && mimeType.startsWith('video/');
-  const isAudio = typeof mimeType === 'string' && mimeType.startsWith('audio/');
+  const isText = typeof mimeType === 'string' && isTextMimeType(mimeType);
+  const preview = isText && src ? textPreview(src) : src;
+  const isDocument = mimeType === 'application/pdf' || (isText && preview !== undefined && !isFetchableUrl);
 
-  // Cloud-storage URIs (gs://, s3://) and audio/video can't be previewed
-  // in-browser — show a labeled chip instead of a broken image/preview.
-  if (isNonFetchableUrl || isVideo || isAudio) {
+  // Binary attachments and cloud-storage URIs stay as files, never garbled text previews.
+  if (isNonFetchableUrl || (!isImage && !isDocument)) {
     return (
       <InMessageAttachment type="file" contentType={mimeType} name={fileLabel} src={isFetchableUrl ? src : undefined} />
     );
@@ -43,6 +60,12 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   }
 
   return (
-    <InMessageAttachment type="document" contentType={mimeType} src={isFetchableUrl ? data : undefined} data={src} />
+    <InMessageAttachment
+      type="document"
+      contentType={mimeType}
+      name={fileLabel}
+      src={isFetchableUrl ? src : undefined}
+      data={preview}
+    />
   );
 };

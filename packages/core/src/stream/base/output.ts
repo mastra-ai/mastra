@@ -17,6 +17,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { isSignalChunkExcluded } from '../signal-exclusions';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -1469,6 +1470,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
+    const stream = this.__getUnfilteredFullStream();
+    const hideSignals = this.#options.hideSignals;
+    if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.length === 0)) return stream;
+    return stream.pipeThrough(
+      new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+        transform(chunk, controller) {
+          if (!isSignalChunkExcluded(chunk, hideSignals)) controller.enqueue(chunk);
+        },
+      }),
+    );
+  }
+
+  /** @internal Shared fanout must retain signal chunks, with the existing transforms applied. */
+  __getUnfilteredFullStream() {
     const configuredTransforms = this.#options.experimentalTransform;
     if (!configuredTransforms) {
       return this.#createEventedStream();

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockNetworkChoiceMetadataDialogTrigger = vi.fn(() => null);
 const mockToolApprovalButtons = vi.fn(() => null);
 
-vi.mock('../badges/network-choice-metadata-dialog', () => ({
+vi.mock('@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog', () => ({
   NetworkChoiceMetadataDialogTrigger: mockNetworkChoiceMetadataDialogTrigger,
 }));
 
@@ -21,7 +21,7 @@ vi.mock('@mastra/playground-ui/icons/AgentIcon', () => ({
   AgentIcon: () => null,
 }));
 
-vi.mock('../badges/badge-wrapper', () => ({
+vi.mock('@mastra/playground-ui/domains/chat/components/badge-wrapper', () => ({
   BadgeWrapper: ({ extraInfo }: { extraInfo: ReactNode }) => {
     return extraInfo;
   },

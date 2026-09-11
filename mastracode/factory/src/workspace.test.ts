@@ -1468,6 +1468,55 @@ describe('GitHub session workspace preparation', () => {
     expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    // The active binding flips to review and the same cached workspace is
+    // reused, so reconciliation switches the live sandbox to the reviewer PAT
+    // and authorizes the reviewer context.
+    mocks.runBindingRole = 'review';
+    mocks.setEnv.mockClear();
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: reviewerContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    expect(lastGhToken()).toBe('ghp_reviewer');
+
+    // Reconnect: the memoized sandbox starts again and re-runs the onStart
+    // hook bound at construction (worker context). It must not reauthorize the
+    // stale worker context nor reject the current reviewer context.
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(reviewerContext, 'fresh-reviewer-token')).not.toThrow();
+    expect(() => injectGithubToken(workerContext, 'stale-worker-token')).toThrow(/no longer matches/);
+  });
+
+  it('keeps a same-role context usable across a sandbox reconnect', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    expect(lastGhToken()).toBe('ghp_worker');
+
+    const sandbox = mocks.createSandbox.mock.results[0]!.value;
+    await sandbox.start();
+
+    expect(() => injectGithubToken(workerContext, 'rotated-worker-token')).not.toThrow();
+  });
+
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';

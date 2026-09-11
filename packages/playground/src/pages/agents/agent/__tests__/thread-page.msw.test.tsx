@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import {
   emptyThreadTracesList,
@@ -22,6 +25,106 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'thread-1';
+
+// jsdom has no layout, so react-resizable-panels never resizes anything and
+// `collapse()`/`expand()` are silently ignored. Replace Group/Panel with a
+// deterministic stand-in that keeps sizes in React state, fires `onResize`,
+// and reports the layout to the Group so the real `useDefaultLayout` still
+// persists it. Everything else (usePanelRef, useDefaultLayout) is the real lib.
+vi.mock('react-resizable-panels', async () => {
+  const actual = await vi.importActual<typeof import('react-resizable-panels')>('react-resizable-panels');
+
+  type PanelSize = { inPixels: number; asPercentage: number };
+  type Handle = {
+    collapse: () => void;
+    expand: () => void;
+    resize: (size: string | number) => void;
+    getSize: () => PanelSize;
+    isCollapsed: () => boolean;
+  };
+
+  const LayoutContext = createContext<{ report: (id: string, size: number) => void }>({ report: () => {} });
+  const toNumber = (size: string | number | undefined, fallback: number) =>
+    size === undefined ? fallback : typeof size === 'number' ? size : Number.parseFloat(size);
+
+  const Group = ({
+    className,
+    children,
+    onLayoutChange,
+  }: {
+    className?: string;
+    children: ReactNode;
+    onLayoutChange?: (layout: Record<string, number>) => void;
+  }) => {
+    const [layout, setLayout] = useState<Record<string, number>>({});
+    const report = (id: string, size: number) =>
+      setLayout(prev => (prev[id] === size ? prev : { ...prev, [id]: size }));
+
+    useEffect(() => {
+      if (Object.keys(layout).length > 0) onLayoutChange?.(layout);
+    }, [layout, onLayoutChange]);
+
+    return (
+      <LayoutContext.Provider value={{ report }}>
+        <div data-testid="panel-group" className={className}>
+          {children}
+        </div>
+      </LayoutContext.Provider>
+    );
+  };
+
+  const Panel = ({
+    id,
+    className,
+    children,
+    panelRef,
+    defaultSize,
+    collapsedSize,
+    onResize,
+    style,
+  }: {
+    id?: string;
+    className?: string;
+    children?: ReactNode;
+    panelRef?: Ref<Handle>;
+    defaultSize?: string | number;
+    collapsedSize?: number;
+    onResize?: (size: PanelSize, prev: PanelSize | undefined, id: string) => void;
+    style?: React.CSSProperties;
+  }) => {
+    const { report } = useContext(LayoutContext);
+    const expandedSize = toNumber(defaultSize, 300);
+    const [size, setSize] = useState(expandedSize);
+
+    useImperativeHandle(panelRef, () => ({
+      collapse: () => setSize(collapsedSize ?? 0),
+      expand: () => setSize(expandedSize),
+      resize: next => setSize(toNumber(next, expandedSize)),
+      getSize: () => ({ inPixels: size, asPercentage: size }),
+      isCollapsed: () => size <= (collapsedSize ?? 0),
+    }));
+
+    useEffect(() => {
+      onResize?.({ inPixels: size, asPercentage: size }, undefined, id ?? '');
+      if (id) report(id, size);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to size changes
+    }, [size]);
+
+    return (
+      <section data-testid={`panel-${id}`} className={className} style={style}>
+        {children}
+      </section>
+    );
+  };
+
+  const Separator = () => <div data-testid="panel-separator" />;
+
+  return { ...actual, Group, Panel, Separator };
+});
+
+// CollapsiblePanel keeps its content mounted but marks the wrapper `hidden` once
+// collapsed, so "gone" means an ancestor carries the hidden attribute.
+const isHiddenFromUser = (element: HTMLElement) => element.closest('[hidden]') !== null;
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -55,10 +158,12 @@ const buildRouter = (initialEntry: string) =>
     { initialEntries: [initialEntry] },
   );
 
-const renderAt = (initialEntry: string) => {
-  const queryClient = new QueryClient({
+const renderAt = (
+  initialEntry: string,
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  }),
+) => {
   const router = buildRouter(initialEntry);
 
   render(
@@ -156,6 +261,156 @@ afterEach(() => {
 });
 
 describe('Standalone thread page', () => {
+  describe('when a history response arrives after live output', () => {
+    it.each([
+      { name: 'empty', history: emptyHistory },
+      { name: 'stale', history: staleHistory },
+    ])('preserves the streamed response with $name history', async ({ history }) => {
+      installHandlers();
+      let releaseHistory = () => {};
+      const gate = new Promise<void>(resolve => {
+        releaseHistory = resolve;
+      });
+      let push: (() => void) | undefined;
+      let close = () => {};
+      const historyReturned = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+        http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+          HttpResponse.json({ workingMemory: null }),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+        http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, async () => {
+          await gate;
+          historyReturned();
+          return HttpResponse.json(history);
+        }),
+        http.post(
+          `${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  close = () => controller.close();
+                  push = () => {
+                    for (const chunk of liveChunks)
+                      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                  };
+                },
+              }),
+              { headers: { 'Content-Type': 'text/event-stream' } },
+            ),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`, queryClient);
+      try {
+        await screen.findByText('OpenAI');
+        await waitFor(() => expect(push).toBeDefined());
+        await act(async () => push?.());
+        await waitFor(() => expect(document.body.textContent).toContain('Live response survives'));
+        await act(async () => releaseHistory());
+        await waitFor(() =>
+          expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
+            'success',
+          ),
+        );
+        expect(historyReturned).toHaveBeenCalledOnce();
+        await waitFor(() => expect(document.body.textContent?.split('Live response survives')).toHaveLength(2));
+        expect(document.body.textContent).not.toContain('Old partial output');
+        if (history.messages.length) expect(document.body.textContent).toContain('Earlier prompt');
+      } finally {
+        releaseHistory();
+        close();
+      }
+    });
+  });
+
+  describe('when a first signal message is accepted', () => {
+    it.each(['stay', 'navigate', 'reload'] as const)(
+      'preserves thread identity and navigation when the user chooses to %s',
+      async action => {
+        installHandlers();
+        const sent = vi.fn();
+        let release = () => {};
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        const acknowledged = vi.fn();
+        const refreshedAfterAck = vi.fn();
+        const ids: string[] = [];
+        const closes: Array<() => void> = [];
+        server.use(
+          http.get(`${BASE_URL}/api/memory/threads`, () => {
+            if (acknowledged.mock.calls.length) refreshedAfterAck();
+            return HttpResponse.json(threadsResponse);
+          }),
+          http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+          http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+            HttpResponse.json({ workingMemory: null }),
+          ),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId`, () => HttpResponse.json(threadsResponse.threads[0])),
+          http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [] })),
+          http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json(emptyHistory)),
+          http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+            sent(await request.json());
+            await gate;
+            acknowledged();
+            return HttpResponse.json({ accepted: true, runId: 'recovery-run' });
+          }),
+          http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, async ({ request }) => {
+            const body: unknown = await request.json();
+            if (body && typeof body === 'object' && 'threadId' in body && typeof body.threadId === 'string')
+              ids.push(body.threadId);
+            return new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  closes.push(() => controller.close());
+                  if (action === 'reload' && ids.length > 1) {
+                    for (const chunk of liveChunks)
+                      controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                  }
+                },
+              }),
+              { headers: { 'Content-Type': 'text/event-stream' } },
+            );
+          }),
+        );
+        const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+        try {
+          await waitFor(() => expect(ids.length).toBeGreaterThan(0));
+          const input = await screen.findByRole('textbox');
+          fireEvent.change(input, { target: { value: 'Keep this conversation' } });
+          fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+          await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+          if (action === 'navigate') await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+          await act(async () => release());
+          await waitFor(() => expect(refreshedAfterAck).toHaveBeenCalled());
+          if (action === 'navigate') {
+            expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+          } else {
+            await waitFor(() => expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${ids[0]}`));
+            expect(router.state.historyAction).toBe('REPLACE');
+            expect(document.body.textContent).toContain('Keep this conversation');
+            if (action === 'reload') {
+              const savedPath = router.state.location.pathname;
+              cleanup();
+              renderAt(savedPath);
+              await waitFor(() => expect(ids).toHaveLength(2));
+              await waitFor(() => expect(document.body.textContent).toContain('Live response survives'));
+            }
+            expect(new Set(ids).size).toBe(1);
+          }
+        } finally {
+          release();
+          for (const close of closes) close();
+        }
+      },
+    );
+  });
   it('shows the thread conversation at /agents/:agentId/threads/:threadId', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
@@ -180,6 +435,81 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+  });
+
+  it('lets the user hide the threads panel and bring it back from the page edge', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    // Given the thread list is visible next to the chat
+    await screen.findByText('Sushi ideas');
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+
+    // When I hide the threads panel
+    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+
+    // Then the list is gone and only the restore affordance remains
+    await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(true));
+    expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
+
+    // And the collapsed state is remembered for this agent
+    await waitFor(() => {
+      const layout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${AGENT_ID}`);
+      expect(layout).not.toBeNull();
+      expect(JSON.parse(layout!)['left-slot']).toBe(0);
+    });
+
+    // When I expand it again from the page edge
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand panel' }));
+
+    // Then the thread list is back
+    await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+  });
+
+  it('does not carry a hidden threads panel over to another agent', async () => {
+    installHandlers();
+    const OTHER_AGENT_ID = 'sommelier-agent';
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${OTHER_AGENT_ID}`, () =>
+        HttpResponse.json({ ...agentResponse, id: OTHER_AGENT_ID, name: 'Sommelier Agent' }),
+      ),
+      http.get(`${BASE_URL}/api/memory/threads`, ({ request }) => {
+        const agentId = new URL(request.url).searchParams.get('agentId');
+        if (agentId === OTHER_AGENT_ID) {
+          return HttpResponse.json({
+            threads: [
+              {
+                id: 'wine-1',
+                resourceId: OTHER_AGENT_ID,
+                title: 'Wine pairing',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          });
+        }
+        return HttpResponse.json(threadsResponse);
+      }),
+    );
+    const router = renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    // Given I hid the threads panel for the first agent
+    await screen.findByText('Sushi ideas');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+    await screen.findByRole('button', { name: 'Expand panel' });
+
+    // When I switch to another agent without leaving the page
+    await act(() => router.navigate(`/agents/${OTHER_AGENT_ID}/threads/new`));
+
+    // Then its threads panel is visible and its own layout is not marked collapsed
+    const otherThread = await screen.findByText('Wine pairing');
+    await waitFor(() => expect(isHiddenFromUser(otherThread)).toBe(false));
+    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    const otherLayout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${OTHER_AGENT_ID}`);
+    expect(otherLayout === null || JSON.parse(otherLayout)['left-slot'] !== 0).toBe(true);
   });
 
   describe('when the thread list is still loading', () => {

@@ -2,14 +2,14 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { LoadingBadge } from './loading-badge';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
@@ -80,7 +80,6 @@ export const WorkflowBadge = ({
   return (
     <BadgeWrapper
       data-testid="workflow-badge"
-      toolCallId={toolCallId}
       icon={<WorkflowIcon className="text-accent3" />}
       title={workflow.name}
       initialCollapsed={false}
