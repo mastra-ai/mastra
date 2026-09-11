@@ -2649,6 +2649,41 @@ export class DurableAgent<
     //    so obvious caller errors fail fast.
     let workflowInput = await this.#loadRecoverableWorkflowInput(workflowsStore, runId);
 
+    // A crashed run that was executing a stored version must recover on
+    // *that* version — rehydration rebuilds tools/model/instructions from
+    // whatever `this` currently resolves to, which for status selectors
+    // hot-switches to the latest publish (mirrors the resume() pin above).
+    // Resolution happens BEFORE lease acquisition so we never delegate to a
+    // fork while holding the lease; reading the pin from the pre-claim
+    // snapshot is safe because `agentVersionId` is stamped once at
+    // preparation and never mutated. Unlike resume(), recover options carry
+    // no call-site version selector, so the pin always wins here — recovery
+    // is unattended and has no operator escape hatch.
+    const pinnedVersionId = workflowInput.agentVersionId;
+    if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
+      const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
+      if (pinnedVersionId !== currentVersionId) {
+        try {
+          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
+            versionId: pinnedVersionId,
+          });
+          if (resolved !== (this as unknown as Agent)) {
+            return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).recover(runId, options);
+          }
+        } catch (versionError) {
+          // The pinned version may have been deleted while the run sat
+          // crashed — recover on the current definition rather than failing
+          // an unattended path (mirrors resume()'s deleted-pin fallback).
+          this.logger.warn('Failed to resolve pinned agent version for durable recovery, using current definition', {
+            agentId: this.id,
+            runId,
+            pinnedVersionId,
+            error: versionError,
+          });
+        }
+      }
+    }
+
     // 2. Claim recovery ownership before resolving any live dependencies so a
     //    concurrent caller cannot finish first and leave this attempt using a
     //    stale snapshot.
