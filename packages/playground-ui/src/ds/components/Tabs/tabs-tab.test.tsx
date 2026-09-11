@@ -27,6 +27,24 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
+  it('measures contained tabs once without ResizeObserver', () => {
+    Reflect.deleteProperty(globalThis, 'ResizeObserver');
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+
+    render(
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+      </Tabs>,
+    );
+
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '1 more tabs' })).toBeTruthy();
+  });
+
   it('keeps attention after selection until the caller clears it', () => {
     const content = (attention: boolean) => (
       <Tabs defaultTab="first">

@@ -91,9 +91,10 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
     const viewport = scrollRef.current;
     if (!viewport || !contained) return;
     const measure = () => setAvailable(viewport.clientWidth);
+    measure();
+    if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
-    measure();
     return () => observer.disconnect();
   }, [contained]);
   const gap = tabs?.frame === 'inset' ? 4 : 0;
