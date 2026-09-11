@@ -209,7 +209,11 @@ export async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory, scopeIds),
+      // Read tools vouch only the resource-bound tail: under grant expansion a
+      // vouched org reads every resource under it, defeating the project-scope
+      // override that pins this toolset to one resource subtree. Write and pin
+      // tools keep the full array — they slice off the org internally.
+      ...createKnowledgeTools(memory, scopeIds.slice(1)),
       ...createKnowledgeWriteTools(memory, {
         scopeIds,
         sourceThreadId: context.threadId,

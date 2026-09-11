@@ -114,7 +114,7 @@ export async function resolveKnowledgeScopeIds(
   const thread = await materialize({
     address: threadAddress,
     parentAddresses: [resourceAddress],
-    contextualScopeAddress: resourceAddress,
+    contextualScopeAddress: threadAddress,
     parameters: { orgId: organizationId, resourceId, threadId },
   });
   const scopeIds = [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
