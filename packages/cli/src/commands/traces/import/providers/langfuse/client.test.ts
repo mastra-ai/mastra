@@ -45,6 +45,26 @@ describe('LangfuseClient', () => {
     );
   });
 
+  it('retries when a successful response body fails while streaming', async () => {
+    const failedBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new TypeError('stream interrupted'));
+      },
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(failedBody))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: 'project-1', name: 'Customer project' }] }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const onRetry = vi.fn();
+    const client = new LangfuseClient(options, { fetch, sleep, maxAttempts: 2, onRetry });
+
+    await expect(client.identifyProject()).resolves.toEqual({ id: 'project-1', name: 'Customer project' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
   it('builds a bounded Observations API v2 request', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

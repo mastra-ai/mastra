@@ -148,7 +148,21 @@ export class LangfuseClient {
       }
 
       if (response.ok) {
-        return parseJson(await readResponseText(response));
+        try {
+          return parseJson(await readResponseText(response));
+        } catch (error) {
+          if (error instanceof LangfuseReaderError) throw error;
+          if (signal?.aborted) throw signal.reason ?? error;
+          lastError = error;
+          if (attempt + 1 < this.maxAttempts) {
+            await this.waitBeforeRetry(backoffMilliseconds(attempt), signal, onRetry);
+            continue;
+          }
+          throw new LangfuseReaderError('Could not read the Langfuse response after the retry limit was exhausted.', {
+            retryable: true,
+            cause: error,
+          });
+        }
       }
 
       if (response.status === 401 || response.status === 403) {
