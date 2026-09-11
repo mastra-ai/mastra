@@ -112,6 +112,28 @@ describe('createTool execute inputData type inference (issue #16528)', () => {
   });
 });
 
+describe('createTool structural Zod schema inference (issue #23658)', () => {
+  it('accepts the minimal structural shape used to identify Zod schemas', () => {
+    const structuralZodSchema = {
+      _output: {} as { name: string },
+      _input: {} as { name: string },
+      _def: {},
+      parse: (_data: unknown) => ({ name: 'Grace' }),
+      safeParse: (_data: unknown): unknown => ({ success: true, data: { name: 'Grace' } }),
+    };
+
+    createTool({
+      id: 'structural-zod-schema',
+      description: 'Test',
+      inputSchema: structuralZodSchema,
+      execute: async inputData => {
+        expectTypeOf(inputData).toEqualTypeOf<{ name: string }>();
+        return undefined;
+      },
+    });
+  });
+});
+
 describe('createTool accepts jsonSchema() without cast (issue #16384)', () => {
   it('accepts a jsonSchema() schema without requiring "as never" cast', () => {
     createTool({
