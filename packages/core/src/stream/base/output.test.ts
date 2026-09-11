@@ -979,6 +979,68 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.totalUsage?.inputTokens).toBeUndefined();
     });
 
+    it('does not double-count reasoning tokens when deriving a missing total', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        // No total reported; reasoning is a subset of outputTokens and must not be added again.
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, reasoningTokens: 5 }),
+        createFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, reasoningTokens: 5 }),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload?.totalUsage?.totalTokens).toBe(30);
+    });
+
+    it('preserves an invalidated aggregate across serialize/deserialize', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const firstStream = createChunkStream([
+        // First step omits inputTokens, invalidating that aggregate.
+        createStepFinishChunk(runId, undefined, { outputTokens: 20, totalTokens: 20 }),
+      ]);
+      const first = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: firstStream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await first.consumeStream();
+      const serialized = first.serializeState();
+
+      // Resume: a later step and finish chunk report inputTokens, but the aggregate
+      // must stay unknown because an earlier (pre-suspend) step omitted it.
+      let finishPayload: any;
+      const resumeStream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 999, outputTokens: 5, totalTokens: 1004 }),
+        createFinishChunk(runId, undefined, { inputTokens: 999, outputTokens: 5, totalTokens: 1004 }),
+      ]);
+      const resumed = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: resumeStream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId, onFinish: async payload => (finishPayload = payload) },
+      });
+      resumed.deserializeState(serialized);
+      await resumed.consumeStream();
+
+      expect(finishPayload?.totalUsage?.inputTokens).toBeUndefined();
+    });
+
     it('preserves measured zero as a known aggregate', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });

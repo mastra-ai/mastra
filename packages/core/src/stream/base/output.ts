@@ -1948,7 +1948,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   // Derive totalTokens only when it can be known: use a reported total if present,
   // otherwise derive it only when both input and output counts are known. If any
   // contributing primary count is missing, the total remains unknown (undefined)
-  // rather than being fabricated from zero-filled parts.
+  // rather than being fabricated from zero-filled parts. reasoningTokens are a
+  // subset of outputTokens, so they are not added again here.
   #deriveTotalTokens(): number | undefined {
     if (this.#usageCount.totalTokens !== undefined) {
       return this.#usageCount.totalTokens;
@@ -1960,7 +1961,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       return undefined;
     }
 
-    return input + output + (this.#usageCount.reasoningTokens ?? 0);
+    return input + output;
   }
 
   #getTotalUsage(): LanguageModelUsage {
@@ -2158,6 +2159,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       finishReason: this.#finishReason,
       request: this.#request,
       usageCount: this.#usageCount,
+      incompleteUsageKeys: [...this.#incompleteUsageKeys],
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
@@ -2183,6 +2185,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#finishReason = state.finishReason;
     this.#request = state.request;
     this.#usageCount = state.usageCount;
+    this.#incompleteUsageKeys = new Set(state.incompleteUsageKeys ?? []);
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
