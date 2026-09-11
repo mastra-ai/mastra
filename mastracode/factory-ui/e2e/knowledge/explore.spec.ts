@@ -63,10 +63,39 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
-    if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
+    if (url.pathname.endsWith('/attention')) {
+      const empty = { open: 0, unread: 0, latest: null };
+      return route.fulfill({
+        json: {
+          items: [],
+          kinds: {
+            'automation-failed': empty,
+            'supervisor-finding': empty,
+            'agent-waiting': empty,
+            mention: empty,
+            'automation-proposed': empty,
+            activity: empty,
+          },
+          hasMore: false,
+        },
+      });
+    }
+    if (url.pathname.endsWith('/active-runs')) return route.fulfill({ json: { runs: [] } });
+    if (url.pathname.endsWith('/decisions')) return route.fulfill({ json: { decisions: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
-    if (url.pathname.endsWith('/knowledge/graph')) return route.fulfill({ json: graph });
+    if (url.pathname.endsWith('/knowledge/scopes')) {
+      return route.fulfill({
+        json: {
+          roots: [
+            { level: 'org', id: 'proof', available: true },
+            { level: 'resource', id: projectId, available: true },
+          ],
+          defaultLevel: 'resource',
+        },
+      });
+    }
+    if (url.pathname.endsWith('/knowledge/subgraph')) return route.fulfill({ json: graph });
     if (url.pathname.endsWith('/knowledge/activity')) {
       return route.fulfill({
         json: {
@@ -107,6 +136,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await page.goto(`/factories/${projectId}/knowledge`);
   await expect(page.getByRole('heading', { name: 'Knowledge' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Knowledge scopes' })).toBeVisible();
+  await expect(page.getByText('Select a scope to explore its knowledge.')).toBeVisible();
+  await page.getByRole('button', { name: /Project/ }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
   await page.locator('.react-flow__node[data-id="payments"]').dispatchEvent('click');

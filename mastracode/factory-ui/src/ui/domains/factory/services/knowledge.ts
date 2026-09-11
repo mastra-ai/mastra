@@ -11,6 +11,15 @@ import { requestJson } from './request';
 
 export type KnowledgeRung = 'org' | 'resource' | 'thread';
 
+export interface KnowledgeScopeTreePayload {
+  roots: Array<{
+    level: KnowledgeRung;
+    id: string;
+    available: boolean;
+  }>;
+  defaultLevel: 'resource';
+}
+
 export interface KnowledgeGraphNode {
   id: string;
   name: string;
@@ -108,21 +117,36 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function knowledgeQuery(knowledgeKey: string, threadId: string | undefined): string {
+function knowledgeQuery(knowledgeKey: string, threadId: string | undefined, scopeLevel?: KnowledgeRung): string {
   const query = new URLSearchParams({ knowledgeKey });
   if (threadId) query.set('threadId', threadId);
+  if (scopeLevel) query.set('scopeLevel', scopeLevel);
   return `?${query}`;
 }
 
-export async function fetchKnowledgeGraph(
+export async function fetchKnowledgeScopes(
   baseUrl: string,
   factoryProjectId: string,
   threadId?: string,
   signal?: AbortSignal,
   knowledgeKey = 'default',
+): Promise<KnowledgeScopeTreePayload> {
+  return requestJson<KnowledgeScopeTreePayload>(
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery(knowledgeKey, threadId)}`,
+    { signal },
+  );
+}
+
+export async function fetchKnowledgeGraph(
+  baseUrl: string,
+  factoryProjectId: string,
+  scopeLevel: KnowledgeRung,
+  threadId?: string,
+  signal?: AbortSignal,
+  knowledgeKey = 'default',
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/graph${knowledgeQuery(knowledgeKey, threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
     { signal },
   );
 }
@@ -130,12 +154,13 @@ export async function fetchKnowledgeGraph(
 export async function fetchKnowledgeActivity(
   baseUrl: string,
   factoryProjectId: string,
+  scopeLevel: KnowledgeRung,
   threadId?: string,
   signal?: AbortSignal,
   knowledgeKey = 'default',
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(knowledgeKey, threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
     { signal },
   );
 }
@@ -144,12 +169,13 @@ export async function fetchKnowledgeNode(
   baseUrl: string,
   factoryProjectId: string,
   nodeId: string,
+  scopeLevel: KnowledgeRung,
   threadId?: string,
   signal?: AbortSignal,
   knowledgeKey = 'default',
 ): Promise<KnowledgeNodePayload> {
   return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery(knowledgeKey, threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
     { signal },
   );
 }
