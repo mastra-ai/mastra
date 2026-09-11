@@ -68,3 +68,40 @@ export interface TraceImportSourceIdentity {
   mapperVersion: string;
   idAlgorithmVersion: string;
 }
+
+export interface TraceImportCounts {
+  readSpans: number;
+  preparedTraces: number;
+  preparedSpans: number;
+  skippedTraces: number;
+  skippedSpans: number;
+  sourceRetries: number;
+  skipReasons: Record<string, number>;
+}
+
+export interface TraceImportManifest {
+  schemaVersion: 1;
+  importId: string;
+  createdAt: string;
+  updatedAt: string;
+  source: TraceImportSourceIdentity;
+  targetProjectId: string;
+  window: TraceImportWindow;
+  phase: 'preparing' | 'prepared' | 'uploading' | 'complete';
+  counts: TraceImportCounts;
+  preparedBytes: number;
+  acknowledgedTraces: number;
+  acknowledgedSpans: number;
+  warnings: string[];
+  skippedTraceSamples: SkippedTrace[];
+  completedAt?: string;
+}
+
+/** A batch of complete traces ready for a single upload request. */
+export interface PreparedTraceBatch {
+  /** Zero-based index of the first trace in this batch's prepared file. */
+  firstTraceIndex: number;
+  traces: TraceImportTrace[];
+  spanCount: number;
+  payloadBytes: number;
+}
