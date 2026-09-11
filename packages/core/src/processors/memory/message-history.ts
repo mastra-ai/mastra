@@ -2,6 +2,7 @@ import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
+import { listNewestHistoryRows } from '../../memory/history-window';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
@@ -127,6 +128,19 @@ export class MessageHistory implements Processor {
       // 1. Fetch historical messages from storage (as DB format)
       const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
       const loadMessages = async () => {
+        if (typeof this.lastMessages === 'number' && this.lastMessages > 0) {
+          // `lastMessages` budgets conversation history, not stored rows: signal
+          // and system rows must not evict real messages (#23231).
+          const { messages } = await listNewestHistoryRows({
+            storage: this.storage,
+            threadId,
+            resourceId,
+            budget: this.lastMessages,
+            // Last-N history read only consumes `messages`; skip the COUNT(*) work.
+            includeTotal: false,
+          });
+          return messages;
+        }
         const result = await this.storage.listMessages({
           threadId,
           resourceId,

@@ -305,6 +305,113 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
   );
 }
 
+// Local copy for compatibility with core versions that predate this export. Keep in sync with
+// packages/core/src/memory/history-window.ts until the peer range can be tightened.
+/** Minimum rows per read, so a small budget cannot force many round-trips. */
+const MIN_HISTORY_READ_PAGE = 20;
+/** Hard bound on continuation reads; `hasMore` normally ends the loop first. */
+const MAX_HISTORY_PAGES = 25;
+
+/**
+ * Whether a stored row consumes the `lastMessages` history budget.
+ *
+ * `signal` rows (the working-memory, task, goal and browser state lanes) and `system` rows never
+ * carry conversation content, so letting them consume the budget evicts real messages. With
+ * `useStateSignals` a single assistant turn is stored as assistant / signal / assistant, which means
+ * a `lastMessages: 2` window can spend its whole budget on the newest turn and drop the previous
+ * turn's tool calls and results (#23231).
+ */
+function consumesHistoryBudget(message: MastraDBMessage): boolean {
+  return message.role !== 'signal' && message.role !== 'system';
+}
+
+/**
+ * Reads the newest rows until `budget` budget-consuming rows are collected or the thread is
+ * exhausted, paging backwards one fixed-size page at a time.
+ *
+ * Rows that do not consume budget but fall inside the collected span are kept: state-signal
+ * processors rely on an in-window snapshot to emit a delta instead of re-injecting a full snapshot,
+ * and non-state signals (`user-message`, `notification`) are genuine history.
+ *
+ * `hasMore` comes from the store's peek read (`includeTotal: false` derives it from one extra row
+ * instead of `COUNT(*)`), so continuation pages stay cheap. `includeTotal` is honoured on the first
+ * read only, for callers that report `total`; continuation pages always skip the `COUNT(*)` work.
+ *
+ * @returns `messages` newest-first, in the order they were fetched
+ */
+async function listNewestHistoryRows({
+  storage,
+  threadId,
+  resourceId,
+  budget,
+  counts = consumesHistoryBudget,
+  includeTotal,
+}: {
+  storage: MemoryStorage;
+  threadId: string;
+  resourceId?: string;
+  budget: number;
+  counts?: (message: MastraDBMessage) => boolean;
+  includeTotal?: boolean;
+}): Promise<{ messages: MastraDBMessage[]; total: number; hasMore: boolean }> {
+  const perPage = Math.max(budget, MIN_HISTORY_READ_PAGE);
+  // Continuation pages never need `total`. The first read keeps the caller's setting so that
+  // `total` stays a real count when the caller did not opt out of it.
+  const firstPageTotalOption = includeTotal !== undefined ? { includeTotal } : {};
+  const collected: MastraDBMessage[] = [];
+  let counted = 0;
+  let total = 0;
+  let hasMore = false;
+  let filled = false;
+
+  for (let page = 0; !filled && counted < budget && page < MAX_HISTORY_PAGES; page++) {
+    const result = await storage.listMessages({
+      threadId,
+      resourceId,
+      page,
+      perPage,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+      ...(page === 0 ? firstPageTotalOption : { includeTotal: false }),
+    });
+    if (page === 0) total = result.total;
+    if (result.messages.length === 0) {
+      hasMore = false;
+      break;
+    }
+
+    for (let i = 0; i < result.messages.length; i++) {
+      const message = result.messages[i]!;
+      collected.push(message);
+      if (counts(message)) counted++;
+      if (counted >= budget) {
+        // Anything still in this page, or any later page, is outside the window.
+        hasMore = i + 1 < result.messages.length || result.hasMore;
+        filled = true;
+        break;
+      }
+    }
+
+    if (!filled) {
+      hasMore = result.hasMore;
+      if (!result.hasMore) break;
+    }
+  }
+
+  return { messages: collected, total, hasMore };
+}
+
+/**
+ * Whether a single message survives `filterSystemReminderMessages`, so rows that are going to be
+ * hidden anyway cannot spend the history budget.
+ */
+function isHiddenByRecallFilters(
+  message: MastraDBMessage,
+  includeSystemReminders?: boolean,
+  hideSignals?: boolean | RecallSignalType[],
+): boolean {
+  return filterSystemReminderMessages([message], includeSystemReminders, hideSignals).length === 0;
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -779,31 +886,65 @@ export class Memory extends MastraMemory {
       // include results are returned (not the full message history)
       const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
 
-      const paginatedResult = await memoryStore.listMessages({
-        threadId,
-        resourceId,
-        perPage: effectivePerPage,
-        page,
-        orderBy: effectiveOrderBy,
-        filter,
-        ...(includeTotal !== undefined ? { includeTotal } : {}),
-        ...(filteredVectorResults?.length
-          ? {
-              include: filteredVectorResults.map(r => ({
-                id: r.metadata?.message_id,
-                threadId: r.metadata?.thread_id,
-                withNextMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.after,
-                withPreviousMessages:
-                  typeof vectorConfig.messageRange === 'number'
-                    ? vectorConfig.messageRange
-                    : vectorConfig.messageRange.before,
-              })),
-            }
-          : {}),
-      });
+      // `lastMessages` budgets conversation history, not stored rows: the signal rows persisted by
+      // `useStateSignals` (and the task/goal/browser state lanes) must not spend that budget and
+      // evict real messages (#23231). Only the config-derived window is budgeted — an explicit
+      // `perPage`/`page` keeps raw storage pagination semantics, and vector `include` or a metadata
+      // `filter` change how the store assembles a page.
+      const historyBudget =
+        perPageArg === undefined &&
+        (page === undefined || page === 0) &&
+        shouldGetNewestAndReverse &&
+        !historyDisabledByConfig &&
+        !filteredVectorResults?.length &&
+        !filter &&
+        typeof effectivePerPage === 'number' &&
+        effectivePerPage > 0
+          ? effectivePerPage
+          : undefined;
+
+      let paginatedResult: StorageListMessagesOutput;
+      if (historyBudget !== undefined) {
+        const historyWindow = await listNewestHistoryRows({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          budget: historyBudget,
+          // A row only spends the budget if it carries conversation history *and* survives the
+          // exclusions below. Signal rows are state re-injected by their owning processor, and rows
+          // that are about to be filtered out should never evict a message the caller will see.
+          counts: message =>
+            consumesHistoryBudget(message) && !isHiddenByRecallFilters(message, includeSystemReminders, hideSignals),
+          includeTotal,
+        });
+        paginatedResult = { ...historyWindow, page: page ?? 0, perPage: historyBudget };
+      } else {
+        paginatedResult = await memoryStore.listMessages({
+          threadId,
+          resourceId,
+          perPage: effectivePerPage,
+          page,
+          orderBy: effectiveOrderBy,
+          filter,
+          ...(includeTotal !== undefined ? { includeTotal } : {}),
+          ...(filteredVectorResults?.length
+            ? {
+                include: filteredVectorResults.map(r => ({
+                  id: r.metadata?.message_id,
+                  threadId: r.metadata?.thread_id,
+                  withNextMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.after,
+                  withPreviousMessages:
+                    typeof vectorConfig.messageRange === 'number'
+                      ? vectorConfig.messageRange
+                      : vectorConfig.messageRange.before,
+                })),
+              }
+            : {}),
+        });
+      }
       // Reverse to restore chronological order if we queried DESC to get newest messages
       const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
 
@@ -1894,6 +2035,18 @@ ${workingMemory}`;
       const lastMessages = config.lastMessages;
       if (lastMessages === false) {
         messages = [];
+      } else if (typeof lastMessages === 'number' && lastMessages > 0) {
+        // `lastMessages` budgets conversation history, not stored rows: the signal rows persisted by
+        // `useStateSignals` must not spend that budget and evict real messages (#23231).
+        const historyWindow = await listNewestHistoryRows({
+          storage: memoryStore,
+          threadId,
+          resourceId,
+          budget: lastMessages,
+          // Only `messages` is consumed here; skip the COUNT(*) work.
+          includeTotal: false,
+        });
+        messages = historyWindow.messages.reverse(); // DESC → chronological order
       } else {
         const result = await memoryStore.listMessages({
           threadId,

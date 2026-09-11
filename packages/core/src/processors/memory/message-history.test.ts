@@ -26,7 +26,7 @@ class MockStorage extends MemoryStorage {
   private messages: MastraDBMessage[] = [];
 
   async listMessages(params: any): Promise<any> {
-    const { threadId, perPage = false, page = 1, orderBy } = params;
+    const { threadId, perPage = false, page = 0, orderBy } = params;
     const threadMessages = this.messages.filter(m => m.threadId === threadId);
 
     // Sort by createdAt if orderBy is specified
@@ -40,8 +40,11 @@ class MockStorage extends MemoryStorage {
     }
 
     let resultMessages = sortedMessages;
+    let hasMore = false;
     if (typeof perPage === 'number' && perPage > 0) {
-      resultMessages = sortedMessages.slice(0, perPage);
+      const offset = page * perPage;
+      resultMessages = sortedMessages.slice(offset, offset + perPage);
+      hasMore = offset + perPage < sortedMessages.length;
     }
 
     return {
@@ -49,7 +52,7 @@ class MockStorage extends MemoryStorage {
       total: threadMessages.length,
       page,
       perPage,
-      hasMore: false,
+      hasMore,
     };
   }
 
@@ -213,6 +216,180 @@ describe('MessageHistory', () => {
       }
 
       expect(listMessages).toHaveBeenCalledTimes(1);
+    });
+
+    describe('lastMessages budget (#23231)', () => {
+      const threadId = 'thread-1';
+      const secondsAgo = (n: number) => new Date(Date.now() - n * 1000);
+
+      function textRow(id: string, role: 'user' | 'assistant', age: number): MastraDBMessage {
+        return {
+          id,
+          role,
+          content: { format: 2, parts: [{ type: 'text', text: id }] },
+          threadId,
+          createdAt: secondsAgo(age),
+        };
+      }
+
+      function toolRow(id: string, age: number): MastraDBMessage {
+        return {
+          id,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'calling the calculator' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: `call-${id}`,
+                  toolName: 'calculator',
+                  args: { a: 1, b: 2 },
+                  result: '3',
+                },
+              },
+            ],
+          },
+          threadId,
+          createdAt: secondsAgo(age),
+        };
+      }
+
+      function stateSignalRow(id: string, age: number): MastraDBMessage {
+        return createSignal({
+          id,
+          type: 'state',
+          contents: `working memory ${id}`,
+          createdAt: secondsAgo(age),
+        }).toDBMessage({ threadId });
+      }
+
+      async function loadHistory(lastMessages?: number) {
+        processor = new MessageHistory({ storage: mockStorage, lastMessages });
+        const messageList = new MessageList();
+        const result = await processor.processInput({
+          messages: [],
+          messageList,
+          abort: mockAbort,
+          requestContext: createRuntimeContextWithMemory(threadId),
+        });
+        return result instanceof MessageList ? result.get.all.db() : result;
+      }
+
+      it('keeps the previous turn tool results when a signal row splits the turn', async () => {
+        // One assistant turn stored as three rows: tool calls, the state signal,
+        // then the final text. `lastMessages: 2` must still reach the tool row.
+        mockStorage.setMessages([
+          textRow('user-1', 'user', 40),
+          toolRow('assistant-tools', 30),
+          stateSignalRow('sig-1', 20),
+          textRow('assistant-text', 'assistant', 10),
+        ]);
+
+        const rows = await loadHistory(2);
+        const ids = rows.map(row => row.id);
+
+        expect(ids).toContain('assistant-tools');
+        expect(ids).toContain('assistant-text');
+        expect(rows.find(row => row.id === 'assistant-tools')?.content.parts?.[1]?.type).toBe('tool-invocation');
+      });
+
+      it('counts conversation rows, not stored rows', async () => {
+        mockStorage.setMessages([
+          textRow('user-1', 'user', 70),
+          textRow('assistant-1', 'assistant', 60),
+          stateSignalRow('sig-1', 50),
+          textRow('user-2', 'user', 40),
+          textRow('assistant-2', 'assistant', 30),
+          stateSignalRow('sig-2', 20),
+          textRow('user-3', 'user', 10),
+        ]);
+
+        const rows = await loadHistory(3);
+        const historyRows = rows.filter(row => row.role !== 'signal');
+
+        // Budget of 3 buys user-2, assistant-2 and user-3; the interleaved sig-2
+        // comes along for free because it sits inside the collected span.
+        expect(rows.map(row => row.id)).toEqual(['user-2', 'assistant-2', 'sig-2', 'user-3']);
+        expect(historyRows.map(row => row.id)).toEqual(['user-2', 'assistant-2', 'user-3']);
+        expect(historyRows).toHaveLength(3);
+      });
+
+      it('keeps signal rows that fall inside the collected window', async () => {
+        mockStorage.setMessages([
+          textRow('user-1', 'user', 40),
+          toolRow('assistant-tools', 30),
+          stateSignalRow('sig-1', 20),
+          textRow('assistant-text', 'assistant', 10),
+        ]);
+
+        const rows = await loadHistory(2);
+
+        expect(rows.map(row => row.id)).toEqual(['assistant-tools', 'sig-1', 'assistant-text']);
+      });
+
+      it('drops signal rows older than the window', async () => {
+        mockStorage.setMessages([
+          textRow('user-1', 'user', 60),
+          stateSignalRow('sig-old', 50),
+          textRow('assistant-1', 'assistant', 40),
+          textRow('user-2', 'user', 20),
+          textRow('assistant-2', 'assistant', 10),
+        ]);
+
+        const rows = await loadHistory(3);
+
+        expect(rows.map(row => row.id)).not.toContain('sig-old');
+        expect(rows.map(row => row.id)).toEqual(['assistant-1', 'user-2', 'assistant-2']);
+      });
+
+      it('pages backwards until the budget is filled', async () => {
+        // 60 rows, alternating signal/history, with a small read page: the budget
+        // can only be filled by reading more than one page.
+        const rows: MastraDBMessage[] = [];
+        for (let i = 0; i < 30; i++) {
+          rows.push(textRow(`assistant-${i}`, 'assistant', 1000 - i * 2));
+          rows.push(stateSignalRow(`sig-${i}`, 999 - i * 2));
+        }
+        mockStorage.setMessages(rows);
+
+        const listMessages = vi.spyOn(mockStorage, 'listMessages');
+        const loaded = await loadHistory(25);
+
+        expect(loaded.filter(row => row.role !== 'signal')).toHaveLength(25);
+        expect(listMessages.mock.calls.length).toBeGreaterThan(1);
+      });
+
+      it('stops when a thread is entirely signal rows', async () => {
+        const rows: MastraDBMessage[] = [];
+        for (let i = 0; i < 100; i++) {
+          rows.push(stateSignalRow(`sig-${i}`, 1000 - i));
+        }
+        mockStorage.setMessages(rows);
+
+        const listMessages = vi.spyOn(mockStorage, 'listMessages');
+        const loaded = await loadHistory(5);
+
+        expect(loaded.every(row => row.role === 'signal')).toBe(true);
+        expect(listMessages.mock.calls.length).toBeLessThanOrEqual(5);
+      });
+
+      it.each([undefined, 0])('leaves lastMessages=%s on the single unbounded read', async lastMessages => {
+        mockStorage.setMessages([
+          textRow('user-1', 'user', 30),
+          stateSignalRow('sig-1', 20),
+          textRow('assistant-1', 'assistant', 10),
+        ]);
+
+        const listMessages = vi.spyOn(mockStorage, 'listMessages');
+        const rows = await loadHistory(lastMessages);
+
+        expect(listMessages).toHaveBeenCalledTimes(1);
+        expect(listMessages.mock.calls[0][0]).toMatchObject({ page: 0, perPage: lastMessages });
+        expect(rows.map(row => row.id)).toEqual(['user-1', 'sig-1', 'assistant-1']);
+      });
     });
 
     it('should merge historical messages with new messages', async () => {

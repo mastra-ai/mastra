@@ -2649,6 +2649,169 @@ describe('Memory', () => {
     });
   });
 
+  describe('lastMessages history budget (#23231)', () => {
+    const target = { threadId: 'budget-thread', resourceId: 'budget-owner' };
+    const age = (seconds: number) => new Date(Date.now() - seconds * 1000);
+
+    const textRow = (id: string, role: MastraDBMessage['role'], seconds: number): MastraDBMessage => ({
+      ...target,
+      id,
+      role,
+      content: { format: 2, parts: [{ type: 'text', text: id }] },
+      createdAt: age(seconds),
+    });
+
+    const toolRow = (id: string, seconds: number): MastraDBMessage => ({
+      ...target,
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'calling the calculator' },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: `call-${id}`,
+              toolName: 'calculator',
+              args: { a: 1, b: 2 },
+              result: '3',
+            },
+          },
+        ],
+      },
+      createdAt: age(seconds),
+    });
+
+    const stateSignalRow = (id: string, seconds: number): MastraDBMessage =>
+      createSignal({ id, type: 'state', contents: `working memory ${id}`, createdAt: age(seconds) }).toDBMessage(
+        target,
+      );
+
+    // One assistant turn stored the way `useStateSignals` stores it: the tool-calling row, the
+    // state signal, then the final text row.
+    async function createMemoryWithSplitTurn(lastMessages: number) {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { lastMessages, semanticRecall: false },
+      });
+      await memory.createThread(target);
+      await memory.saveMessages({
+        messages: [
+          textRow('user-1', 'user', 40),
+          toolRow('assistant-tools', 30),
+          stateSignalRow('sig-1', 20),
+          textRow('assistant-text', 'assistant', 10),
+        ],
+      });
+      return memory;
+    }
+
+    it('spends the lastMessages window on conversation rows, not signal rows', async () => {
+      const memory = await createMemoryWithSplitTurn(2);
+
+      const { messages } = await memory.recall({ ...target, hideSignals: true });
+
+      // Before the fix the two newest *rows* were the signal and the final text, so the
+      // tool-calling row was evicted and the model lost the previous turn's tool results.
+      expect(messages.map(message => message.id)).toEqual(['assistant-tools', 'assistant-text']);
+    });
+
+    it('keeps a visible in-window signal row instead of charging it to the budget', async () => {
+      const memory = await createMemoryWithSplitTurn(2);
+
+      const { messages } = await memory.recall(target);
+
+      expect(messages.map(message => message.id)).toEqual(['assistant-tools', 'sig-1', 'assistant-text']);
+    });
+
+    it('leaves an explicit perPage on raw storage pagination', async () => {
+      const memory = await createMemoryWithSplitTurn(2);
+
+      const { messages } = await memory.recall({ ...target, perPage: 2, hideSignals: true });
+
+      // Explicit `perPage` keeps its storage meaning — the 2 newest rows, then filtered — so
+      // `loadMessagesForSummarization` page arithmetic and Studio pagination are unchanged.
+      expect(messages.map(message => message.id)).toEqual(['assistant-text']);
+    });
+
+    it('applies the budget in getContext() without observational memory', async () => {
+      const memory = await createMemoryWithSplitTurn(2);
+
+      const context = await memory.getContext(target);
+
+      expect(context.messages.map(message => message.id)).toEqual(['assistant-tools', 'sig-1', 'assistant-text']);
+    });
+
+    it('keeps total a real row count when the caller does not opt out', async () => {
+      const memory = await createMemoryWithSplitTurn(2);
+      const store = await memory.storage.getStore('memory');
+      const listMessages = vi.spyOn(store!, 'listMessages');
+
+      const recalled = await memory.recall({ ...target, hideSignals: true });
+
+      // The budgeted read pages, so its first read must not force `includeTotal: false` — stores
+      // return a placeholder (`offset + page length`) instead of a real count on that path.
+      expect(listMessages.mock.calls[0][0]).not.toHaveProperty('includeTotal', false);
+      expect(recalled.total).toBe(4);
+      expect(recalled.perPage).toBe(2);
+      expect(recalled.page).toBe(0);
+    });
+
+    it('skips the count work on continuation reads and when the caller opts out', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { lastMessages: 3, semanticRecall: false },
+      });
+      await memory.createThread(target);
+
+      // Newest 25 rows are signals, so one 20-row page cannot fill a budget of 3.
+      const messages: MastraDBMessage[] = [];
+      for (let i = 0; i < 5; i++) {
+        messages.push(textRow(`assistant-${i}`, 'assistant', 1000 - i));
+      }
+      for (let i = 0; i < 25; i++) {
+        messages.push(stateSignalRow(`sig-${i}`, 100 - i));
+      }
+      await memory.saveMessages({ messages });
+
+      const store = await memory.storage.getStore('memory');
+      const listMessages = vi.spyOn(store!, 'listMessages');
+      const recalled = await memory.recall({ ...target, hideSignals: true, includeTotal: false });
+
+      expect(listMessages.mock.calls.length).toBeGreaterThan(1);
+      for (const call of listMessages.mock.calls) {
+        expect(call[0]).toMatchObject({ includeTotal: false });
+      }
+      expect(recalled.messages).toHaveLength(3);
+      expect(recalled.messages.every(message => message.role === 'assistant')).toBe(true);
+    });
+
+    it('pages backwards when the newest rows are mostly signals', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { lastMessages: 3, semanticRecall: false },
+      });
+      await memory.createThread(target);
+
+      const messages: MastraDBMessage[] = [];
+      for (let i = 0; i < 12; i++) {
+        messages.push(textRow(`assistant-${i}`, 'assistant', 1000 - i * 2));
+        messages.push(stateSignalRow(`sig-${i}`, 999 - i * 2));
+      }
+      await memory.saveMessages({ messages });
+
+      const store = await memory.storage.getStore('memory');
+      const listMessages = vi.spyOn(store!, 'listMessages');
+      const recalled = await memory.recall({ ...target, hideSignals: true });
+
+      expect(recalled.messages).toHaveLength(3);
+      expect(recalled.messages.every(message => message.role === 'assistant')).toBe(true);
+      expect(listMessages).toHaveBeenCalled();
+    });
+  });
+
   describe('lastMessages: false (disable conversation history)', () => {
     let memory: Memory;
     const resourceId = 'test-resource';
