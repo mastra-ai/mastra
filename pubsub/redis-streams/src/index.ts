@@ -763,7 +763,6 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const ack = async () => {
       if (settled) return;
       settled = true;
-      sub.inFlight.delete(streamId);
       try {
         // Only ack against this consumer group. Do NOT xDel: the stream may
         // be consumed by other groups, and xDel removes the entry for all of
@@ -774,16 +773,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Clear the in-flight guard only AFTER Redis has settled the entry.
+        // Clearing before the xAck resolves would open a window where the
+        // entry is neither in-flight nor acked, so a reclaim tick landing in
+        // that window (the entry is already idle >= reclaimIdleMs for a
+        // long-running handler) would redeliver and re-invoke the handler.
+        sub.inFlight.delete(streamId);
       }
     };
     const nack = async () => {
       if (settled) return;
       settled = true;
-      // This local delivery is done regardless of which branch below runs
-      // (drop, republish, or republish-failure), so clear the in-flight guard
-      // now. On the republish-failure path the entry is intentionally left
-      // pending; clearing it here makes it eligible for a future reclaim.
-      sub.inFlight.delete(streamId);
       const attempt = event.deliveryAttempt ?? 1;
       // Cap redelivery to avoid an infinite poison-pill loop. When the cap
       // is hit we drop the event (xAck without republish) and warn so an
@@ -804,6 +805,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
             topic: sub.topic,
             err: err instanceof Error ? err.message : err,
           });
+        } finally {
+          // Cleared only after settlement — see ack() for the reclaim-window
+          // rationale.
+          sub.inFlight.delete(streamId);
         }
         return;
       }
@@ -838,8 +843,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           err: err instanceof Error ? err.message : err,
         });
         // Allow this entry to be redelivered: reset settled so the next
-        // delivery attempt (via XAUTOCLAIM) can ack/nack it again.
+        // delivery attempt (via XAUTOCLAIM) can ack/nack it again. The entry
+        // is intentionally left pending, so clear the in-flight guard now to
+        // make it eligible for a future reclaim.
         settled = false;
+        sub.inFlight.delete(streamId);
         return;
       }
       try {
@@ -849,6 +857,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Cleared only after settlement — see ack() for the reclaim-window
+        // rationale.
+        sub.inFlight.delete(streamId);
       }
     };
 

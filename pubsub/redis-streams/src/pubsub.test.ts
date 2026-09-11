@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { RedisStreamsPubSub } from './index';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
@@ -439,6 +439,54 @@ describe('RedisStreamsPubSub', () => {
       // Wait past the handler duration plus several reclaim cycles.
       await new Promise(r => setTimeout(r, 1500));
       expect(deliveries).toBe(1);
+    });
+
+    it('does not redeliver during the ack-time settlement window', async () => {
+      // The in-flight guard must be cleared only AFTER Redis settles the entry.
+      // We widen the window between ack() being invoked and the xAck resolving
+      // by slowing xAck on every client this pubsub creates. During that window
+      // the entry is already idle >= reclaimIdleMs, so a reclaim tick would
+      // redeliver it if the guard were cleared before settlement.
+      const realCreate = createClient;
+      const spy = vi.spyOn(await import('redis'), 'createClient').mockImplementation(((opts: any) => {
+        const client = realCreate(opts) as RedisClientType;
+        const origXAck = client.xAck.bind(client);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (client as any).xAck = async (...args: Parameters<typeof origXAck>) => {
+          // Hold the settlement open across several reclaim ticks.
+          await new Promise(r => setTimeout(r, 500));
+          return origXAck(...args);
+        };
+        return client;
+      }) as any);
+
+      try {
+        const ps = new RedisStreamsPubSub({
+          url: REDIS_URL,
+          blockMs: 200,
+          reclaimIdleMs: 200,
+          reclaimIntervalMs: 100,
+        });
+        pubsubs.push(ps);
+
+        const topic = `t-${randomUUID()}`;
+        const groupName = `ackwin-${randomUUID()}`;
+
+        let deliveries = 0;
+        const cb: EventCallback = async (_event, ack) => {
+          deliveries++;
+          void ack?.();
+        };
+        await ps.subscribe(topic, cb, { group: groupName });
+
+        await ps.publish(topic, makeEvent({ type: 'ack-window' }));
+
+        // Wait past the slow xAck plus several reclaim cycles.
+        await new Promise(r => setTimeout(r, 1500));
+        expect(deliveries).toBe(1);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 
