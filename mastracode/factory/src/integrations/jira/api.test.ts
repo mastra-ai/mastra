@@ -56,6 +56,22 @@ describe('JiraApiClient requests', () => {
     expect(page.values[0]?.key).toBe('ENG');
   });
 
+  it('uses Basic auth when accessToken is present but undefined', async () => {
+    const fetchMock = stubFetch(jsonResponse({ values: [], startAt: 0, isLast: true }));
+    const jira = new JiraApiClient({
+      baseUrl: BASE,
+      email: 'ops@acme.test',
+      apiToken: 'jira-token',
+      accessToken: undefined,
+    });
+
+    await jira.listProjects();
+
+    expect(requestOf(fetchMock).init.headers).toMatchObject({
+      authorization: `Basic ${Buffer.from('ops@acme.test:jira-token').toString('base64')}`,
+    });
+  });
+
   it('uses Bearer auth when pointed at a Platform connection proxy', async () => {
     const fetchMock = stubFetch(jsonResponse({ baseUrl: 'https://acme.atlassian.net' }));
     const proxy = new JiraApiClient({
