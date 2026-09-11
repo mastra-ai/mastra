@@ -236,6 +236,7 @@ function RecordCard({
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
+  scopeLevel: KnowledgeRung;
   threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
@@ -249,6 +250,7 @@ export interface KnowledgeFlyoutProps {
 export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
+  scopeLevel,
   threadId,
   focusRecordId,
   onSelectRecord,
@@ -256,7 +258,7 @@ export function KnowledgeFlyout({
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, threadId);
+  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
 
   return (
     <aside
