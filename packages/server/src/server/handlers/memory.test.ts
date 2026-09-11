@@ -5,6 +5,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   GET_MEMORY_STATUS_ROUTE,
@@ -348,6 +349,58 @@ describe('Memory Handlers', () => {
         perPage: 10,
         orderBy: undefined,
       });
+    });
+
+    it('should not enumerate other resources when an authenticated caller has no resource scope', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      await mockMemory.createThread({ resourceId: 'resource-1' });
+      await mockMemory.createThread({ resourceId: 'resource-2' });
+
+      // Auth ran (a user is on the context) but mapUserToResourceId is not
+      // configured, so MASTRA_RESOURCE_ID_KEY is never set and the caller
+      // supplies no resourceId of its own.
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        LIST_THREADS_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          resourceId: undefined,
+          metadata: undefined,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it('should still enumerate across resources for an admin caller', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      await mockMemory.createThread({ resourceId: 'resource-1' });
+      await mockMemory.createThread({ resourceId: 'resource-2' });
+
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'admin-1' });
+      ctx.requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['memory:*']);
+
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...ctx,
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        resourceId: undefined,
+        metadata: undefined,
+      });
+
+      expect(result.total).toEqual(2);
     });
 
     it('should return paginated threads with default parameters', async () => {
