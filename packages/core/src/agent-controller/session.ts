@@ -960,7 +960,10 @@ export class SessionThread {
         }
       }
     } catch {
-      session.resetTokenUsage();
+      // A transient metadata read failure must NOT destroy the running tally:
+      // resetting here would replace measured token usage with a false zero.
+      // Preserve the existing in-memory tally and leave other settings at their
+      // current values.
     }
   }
 }
