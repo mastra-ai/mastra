@@ -103,7 +103,8 @@ describe('jira_get_issue', () => {
     await seedProject();
     fetchJiraIssueDetail.mockResolvedValueOnce(issueDetail);
     const tools = await buildPlatformJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
-    const result = await (tools.jira_get_issue!.execute as any)({ issue: ' ENG-42 ' });
+    const input = (tools.jira_get_issue!.inputSchema as any).parse({ issue: ' ENG-42 ' });
+    const result = await (tools.jira_get_issue!.execute as any)(input);
     expect(result).toEqual(issueDetail);
     expect(fetchJiraIssueDetail).toHaveBeenCalledWith('ENG-42');
   });
