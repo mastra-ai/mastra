@@ -29,6 +29,8 @@ const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   knowledge: (key: string) => Promise<Knowledge | undefined>;
+  /** Host-selected Knowledge key. Requests cannot override it; endpoints 503 when it does not resolve. */
+  defaultKnowledgeKey?: string;
   limits?: Partial<KnowledgeRouteLimits>;
 }
 
@@ -240,7 +242,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
     let knowledge: Knowledge | undefined;
     try {
-      const key = c.req.query('knowledgeKey') ?? 'default';
+      // Host-selected key only: an untrusted query parameter must never select
+      // another registered Knowledge runtime.
+      const key = this.deps.defaultKnowledgeKey ?? 'default';
       knowledge = key.trim() ? await this.deps.knowledge(key) : undefined;
     } catch {
       knowledge = undefined;
