@@ -16,6 +16,7 @@ import {
   VOICES,
 } from './protocol';
 import { isReadableStream, transformTools } from './utils';
+import type { OpenAIExecuteFunction } from './utils';
 
 type EventCallback = (...args: any[]) => void;
 
@@ -101,6 +102,8 @@ export class OpenAILiveVoice extends MastraVoice {
   private debug: boolean;
   private queue: unknown[] = [];
   private connectionAbort?: AbortController;
+  private toolExecutors: Map<string, OpenAIExecuteFunction> = new Map();
+  private speakerStreams: Map<string, StreamWithId> = new Map();
 
   constructor(private liveOptions: OpenAILiveVoiceConfig = {}) {
     super();
@@ -173,6 +176,9 @@ export class OpenAILiveVoice extends MastraVoice {
     const url = this.liveOptions.url || LIVE_WS_URL;
     const apiKey = this.liveOptions.apiKey || process.env.OPENAI_API_KEY;
 
+    // Tear down any existing connection before opening a new one to avoid leaks.
+    if (this.ws) this.close();
+
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
@@ -204,24 +210,32 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   disconnect() {
-    this.state = 'close';
     this.connectionAbort?.abort(new Error('OpenAI Live connection disconnected during handshake'));
-    this.ws?.close();
+    this.close();
   }
 
   /**
-   * Disconnects from the Live session and cleans up resources.
+   * Disconnects from the Live session and cleans up resources. Shared teardown
+   * path for both `close()` and `disconnect()`.
    */
   close() {
-    if (!this.ws) return;
-    if (this.state === 'open' && this.ws.readyState === this.ws.OPEN) {
-      try {
-        this.ws.send(JSON.stringify({ type: CLIENT_EVENTS.sessionClose }));
-      } catch {
-        // best-effort; the socket is being torn down regardless
+    const ws = this.ws;
+    if (ws) {
+      if (this.state === 'open' && ws.readyState === ws.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: CLIENT_EVENTS.sessionClose }));
+        } catch {
+          // best-effort; the socket is being torn down regardless
+        }
       }
+      ws.close();
     }
-    this.ws.close();
+
+    for (const stream of this.speakerStreams.values()) {
+      stream.end();
+    }
+    this.speakerStreams.clear();
+
     this.state = 'close';
     this.ws = undefined;
   }
@@ -238,13 +252,21 @@ export class OpenAILiveVoice extends MastraVoice {
 
     if (isReadableStream(audioData)) {
       const stream = audioData as NodeJS.ReadableStream;
-      stream.on('data', chunk => {
-        try {
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { [LIVE_FIELDS.audio]: buffer.toString('base64') });
-        } catch (err) {
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', chunk => {
+          try {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { [LIVE_FIELDS.audio]: buffer.toString('base64') });
+          } catch (err) {
+            this.emit('error', err);
+            reject(err as Error);
+          }
+        });
+        stream.on('error', err => {
           this.emit('error', err);
-        }
+          reject(err as Error);
+        });
+        stream.on('end', () => resolve());
       });
     } else if (audioData instanceof Int16Array) {
       try {
@@ -382,7 +404,10 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   private sendSessionUpdate() {
-    const liveTools = transformTools(this.tools).map(t => t.liveTool);
+    const transformed = transformTools(this.tools);
+    const liveTools = transformed.map(t => t.liveTool);
+
+    this.toolExecutors = new Map(transformed.map(t => [t.liveTool.name, t.execute]));
 
     // GPT-Live delegates reasoning/tools to a backend under `responses`
     // delegation (the default). Tools live under `responses.tools`, and the
@@ -411,7 +436,7 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   private setupEventListeners(): void {
-    const speakerStreams = new Map<string, StreamWithId>();
+    const speakerStreams = this.speakerStreams;
     const DEFAULT_STREAM_ID = 'default';
 
     if (!this.ws) {
@@ -422,9 +447,24 @@ export class OpenAILiveVoice extends MastraVoice {
     ws.on('error', error => {
       if (this.ws === ws) this.emit('error', error);
     });
+    ws.on('close', () => {
+      for (const stream of speakerStreams.values()) {
+        stream.end();
+      }
+      speakerStreams.clear();
+      if (this.ws === ws) {
+        this.state = 'close';
+      }
+    });
     ws.on('message', message => {
       if (this.ws !== ws) return;
-      const data = JSON.parse(message.toString());
+      let data: any;
+      try {
+        data = JSON.parse(message.toString());
+      } catch (err) {
+        this.emit('error', new Error('Failed to parse OpenAI Live message', { cause: err }));
+        return;
+      }
       this.client.emit(data.type, data);
 
       if (this.debug) {
@@ -497,30 +537,26 @@ export class OpenAILiveVoice extends MastraVoice {
     const rawArgs = call?.[LIVE_FIELDS.arguments];
     try {
       const context = typeof rawArgs === 'string' ? JSON.parse(rawArgs || '{}') : (rawArgs ?? {});
+      const execute = name ? this.toolExecutors.get(name) : undefined;
       const tool = name ? this.tools?.[name] : undefined;
-      if (!tool) {
+      if (!execute) {
         console.warn(`Tool "${name}" not found`);
         return;
       }
 
-      if (tool.execute) {
-        this.emit('tool-call-start', {
-          toolCallId: delegationId,
-          toolName: name,
-          toolDescription: tool.description,
-          args: context,
-        });
-      }
-
-      const result = await tool.execute?.(context, {
+      this.emit('tool-call-start', {
         toolCallId: delegationId,
-        messages: [],
+        toolName: name,
+        toolDescription: tool?.description,
+        args: context,
       });
+
+      const result = await execute(context);
 
       this.emit('tool-call-result', {
         toolCallId: delegationId,
         toolName: name,
-        toolDescription: tool.description,
+        toolDescription: tool?.description,
         args: context,
         result,
       });
@@ -541,17 +577,7 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   private int16ArrayToBase64(int16Array: Int16Array): string {
-    const buffer = new ArrayBuffer(int16Array.length * 2);
-    const view = new DataView(buffer);
-    for (let i = 0; i < int16Array.length; i++) {
-      view.setInt16(i * 2, int16Array[i]!, true);
-    }
-    const uint8Array = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < uint8Array.length; i++) {
-      binary += String.fromCharCode(uint8Array[i]!);
-    }
-    return btoa(binary);
+    return Buffer.from(int16Array.buffer, int16Array.byteOffset, int16Array.byteLength).toString('base64');
   }
 
   private sendEvent(type: string, data: any) {

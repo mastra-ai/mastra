@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
+import { z } from 'zod';
 import { CLIENT_EVENTS, SERVER_EVENTS, LIVE_WS_URL } from './protocol';
 import { OpenAILiveVoice } from './index';
 
@@ -221,7 +222,7 @@ describe('OpenAILiveVoice', () => {
       const ws = attachOpenSocket(voice);
       const execute = vi.fn().mockResolvedValue({ ok: true });
       voice.addTools({
-        my_tool: { description: 'T', inputSchema: undefined, execute } as any,
+        my_tool: { description: 'T', inputSchema: z.object({ q: z.string() }), execute } as any,
       } as any);
 
       await (voice as any).handleDelegation({
