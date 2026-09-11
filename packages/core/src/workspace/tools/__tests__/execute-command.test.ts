@@ -321,6 +321,30 @@ describe('executeCommandTool data chunks', () => {
 
       expect(result).toBe('hello world\n');
     });
+
+    it('returns stderr for successful command with no stdout', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: '', stderr: 'warning', executionTimeMs: 5 };
+        },
+      });
+
+      const result = await execute({ command: 'warn', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nwarning');
+    });
+
+    it('labels stdout and stderr for successful command with both streams', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: 'completed', stderr: 'warning', executionTimeMs: 5 };
+        },
+      });
+
+      const result = await execute({ command: 'build', args: [], timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stdout:\ncompleted\n\nstderr:\nwarning');
+    });
   });
 
   describe('streaming chunks match return value', () => {

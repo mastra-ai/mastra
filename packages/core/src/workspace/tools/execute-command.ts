@@ -264,7 +264,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
       return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
     }
 
-    return (await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom)) || '(no output)';
+    return (
+      formatCommandOutput(
+        await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
+        await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
+      ).join('\n') || '(no output)'
+    );
   } catch (error) {
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
