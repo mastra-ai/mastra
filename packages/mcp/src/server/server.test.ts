@@ -337,7 +337,8 @@ describe('MCPServer', () => {
           type: 'object',
           properties: { processedInput: { type: 'string' } },
         });
-        expect(listed?.outputSchema).not.toHaveProperty('$schema');
+        // Advertised in the 2020-12 dialect MCP 2026-07-28 assumes by default.
+        expect(listed?.outputSchema?.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
         const result = await client.callTool({ name: 'structured', arguments: { input: 'hello' } });
         expect(result.structuredContent).toEqual({ processedInput: 'processed: hello' });
         expect(textOf(result)).toBe(JSON.stringify({ processedInput: 'processed: hello' }));
