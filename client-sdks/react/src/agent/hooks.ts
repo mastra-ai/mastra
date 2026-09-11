@@ -26,7 +26,7 @@ import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ModelSettings } from './types';
 
-const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
+const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], runId?: string) => {
   const pendingToolApprovalIds = new Set<string>();
 
   for (const message of messages) {
@@ -37,12 +37,13 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) 
       metadata.pendingToolApprovals,
       metadata.requireApprovalMetadata,
       metadata.suspendedTools,
-    ] as Array<Record<string, { toolCallId?: unknown }> | undefined>;
+    ] as Array<Record<string, { toolCallId?: unknown; runId?: unknown }> | undefined>;
 
     for (const source of metadataSources) {
       if (!source || typeof source !== 'object') continue;
 
       for (const suspensionData of Object.values(source)) {
+        if (runId && suspensionData?.runId !== runId) continue;
         const toolCallId = suspensionData?.toolCallId;
         if (typeof toolCallId === 'string' && toolCallId.length > 0) {
           pendingToolApprovalIds.add(toolCallId);
@@ -82,6 +83,23 @@ const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallI
     if (invocation.toolCallId !== toolCallId) return false;
     return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
   });
+
+const filterUnresolvedApprovals = <T extends { toolCallId: string }>(
+  entries: Record<string, T> | undefined,
+  parts: MastraDBMessage['content']['parts'],
+): Record<string, T> | undefined => {
+  if (!entries || typeof entries !== 'object') return undefined;
+  const pending = Object.fromEntries(
+    Object.entries(entries).filter(
+      ([, approval]) =>
+        approval &&
+        typeof approval === 'object' &&
+        typeof approval.toolCallId === 'string' &&
+        !toolCallHasOutput(parts, approval.toolCallId),
+    ),
+  );
+  return Object.keys(pending).length ? pending : undefined;
+};
 
 /**
  * Normalize persisted initial messages back into the stream-friendly shape the
@@ -128,23 +146,19 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
           : message;
 
       const normalizedMetadata = normalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
-      const pendingToolApprovals = normalizedMetadata?.pendingToolApprovals;
-      if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+      if (
+        !normalizedMetadata?.pendingToolApprovals &&
+        !normalizedMetadata?.requireApprovalMetadata &&
+        !normalizedMetadata?.suspendedTools
+      ) {
         return normalizedMessage;
       }
 
-      const stillPending = Object.fromEntries(
-        Object.entries(pendingToolApprovals).filter(
-          ([, approval]) =>
-            approval &&
-            typeof approval === 'object' &&
-            typeof approval.toolCallId === 'string' &&
-            !toolCallHasOutput(normalizedMessage.content.parts, approval.toolCallId),
-        ),
-      );
-
-      const { pendingToolApprovals: _omit, ...restMetadata } = normalizedMetadata;
-      const hasStillPending = Object.keys(stillPending).length > 0;
+      const { pendingToolApprovals, requireApprovalMetadata, suspendedTools, ...restMetadata } = normalizedMetadata;
+      const parts = normalizedMessage.content.parts;
+      const pending = filterUnresolvedApprovals(pendingToolApprovals, parts);
+      const required = { ...filterUnresolvedApprovals(requireApprovalMetadata, parts), ...pending };
+      const suspended = filterUnresolvedApprovals(suspendedTools, parts);
 
       return {
         ...normalizedMessage,
@@ -152,8 +166,10 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
           ...normalizedMessage.content,
           metadata: {
             ...restMetadata,
-            mode: 'stream' as const,
-            ...(hasStillPending ? { pendingToolApprovals: stillPending, requireApprovalMetadata: stillPending } : {}),
+            ...(pendingToolApprovals ? { mode: 'stream' as const } : {}),
+            ...(pending ? { pendingToolApprovals: pending } : {}),
+            ...(Object.keys(required).length ? { requireApprovalMetadata: required } : {}),
+            ...(suspended ? { suspendedTools: suspended } : {}),
           },
         },
       };
@@ -328,6 +344,7 @@ export const useChat = ({
   const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const liveTasks = useRef<TaskItem[] | undefined>(undefined);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -335,6 +352,9 @@ export const useChat = ({
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
   const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const liveApprovalIds = useRef(new Set<string>());
+  const liveRunId = useRef<string | undefined>(undefined);
+  const liveRunFinished = useRef(false);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -342,47 +362,76 @@ export const useChat = ({
 
   const observedRuns = useRef(new Map<string, 'sent' | 'failed'>());
   const finishedRuns = useRef(new Set<string>());
-  const initialMessagesThread = useRef(threadId);
+  const lastHydration = useRef<
+    | {
+        agentId: string;
+        resourceId?: string;
+        threadId?: string;
+        initialMessages: MastraChatProps['initialMessages'];
+        formattedMessages: MastraDBMessage[];
+      }
+    | undefined
+  >(undefined);
+
   useEffect(() => {
+    const previous = lastHydration.current;
+    const sameThread =
+      previous?.agentId === agentId && previous.resourceId === resourceId && previous.threadId === threadId;
+    if (sameThread && previous.initialMessages === initialMessages) return;
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
-    const sameThread = initialMessagesThread.current === threadId;
-    initialMessagesThread.current = threadId;
-    setMessages(prev => {
-      // History may lag behind both the active response and locally queued turns.
-      const accepted = sameThread
-        ? prev.filter(
-            message => isWaitingQueuedMessage(message) || typeof message.content.metadata?.deliveryRunId === 'string',
-          )
-        : [];
-      const nextMessages = [
-        ...formattedMessages.map(stored => {
-          const live = accepted.find(message => message.id === stored.id);
-          const runId = live?.content.metadata?.deliveryRunId;
-          if (live?.role === 'assistant' && typeof runId === 'string' && !finishedRuns.current.has(runId)) return live;
-          return stored;
-        }),
-        ...accepted.filter(
-          message =>
-            !(initialMessages ?? []).some(
-              stored =>
-                stored.id === message.id ||
-                (typeof message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === 'string' &&
-                  stored.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === message.content.metadata[CLIENT_MESSAGE_ID_KEY]),
-            ),
-        ),
-      ];
-      return [
-        ...nextMessages.filter(message => !isWaitingQueuedMessage(message)),
-        ...nextMessages.filter(isWaitingQueuedMessage),
-      ];
-    });
-    setTasks(extractLatestTasksFromMessages(formattedMessages));
-    pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
-    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
-    if (!sameThread || !_currentRunId.current || finishedRuns.current.has(_currentRunId.current)) {
-      _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+    lastHydration.current = { agentId, resourceId, threadId, initialMessages, formattedMessages };
+
+    if (sameThread) {
+      // Accumulation replaces changed messages immutably. Keep those local edits
+      // over history snapshots, even if the request returns after the run finishes.
+      const previousById = new Map(previous.formattedMessages.map(message => [message.id, message]));
+      setMessages(current => {
+        const live = current.filter(message => previousById.get(message.id) !== message);
+        const liveById = new Map(live.map(message => [message.id, message]));
+        const historyIds = new Set(formattedMessages.map(message => message.id));
+        const historyClientIds = new Set(
+          (initialMessages ?? [])
+            .map(message => message.content.metadata?.[CLIENT_MESSAGE_ID_KEY])
+            .filter(id => typeof id === 'string'),
+        );
+        const reconciled = [
+          ...formattedMessages.map(message => liveById.get(message.id) ?? message),
+          ...live.filter(message => {
+            const clientId = message.content.metadata?.[CLIENT_MESSAGE_ID_KEY];
+            return !historyIds.has(message.id) && !(typeof clientId === 'string' && historyClientIds.has(clientId));
+          }),
+        ];
+        return [
+          ...reconciled.filter(message => !isWaitingQueuedMessage(message)),
+          ...reconciled.filter(isWaitingQueuedMessage),
+        ];
+      });
+      setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
+      // History may arrive before the live approval event, but must not undo
+      // a live approval decision or terminal event, nor switch the active run.
+      const historyRunId = extractRunIdFromMessages(formattedMessages);
+      if (liveRunFinished.current) return;
+      if (!liveRunId.current && isRunning && historyRunId !== _currentRunId.current) return;
+    } else {
+      observedRuns.current.clear();
+      finishedRuns.current.clear();
+      liveTasks.current = undefined;
+      liveApprovalIds.current.clear();
+      liveRunId.current = undefined;
+      liveRunFinished.current = false;
+      if (previous) setIsRunning(false);
+      setMessages(formattedMessages);
+      setTasks(extractLatestTasksFromMessages(formattedMessages));
     }
-  }, [initialMessages, threadId]);
+    const pendingApprovals = extractPendingToolApprovalIdsFromMessages(formattedMessages, liveRunId.current);
+    for (const toolCallId of liveApprovalIds.current) {
+      if (pendingToolApprovalIdsRef.current.has(toolCallId)) pendingApprovals.add(toolCallId);
+      else pendingApprovals.delete(toolCallId);
+    }
+    pendingToolApprovalIdsRef.current = pendingApprovals;
+    setIsAwaitingToolApproval(pendingApprovals.size > 0);
+    _currentRunId.current = liveRunId.current ?? extractRunIdFromMessages(formattedMessages);
+  }, [agentId, resourceId, threadId, initialMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
     _activeContinuation.current = {
@@ -473,6 +522,8 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+      const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
+      const isOtherRunTerminal = isTerminal && liveRunId.current && chunk.runId !== liveRunId.current;
       if (
         chunk.type === 'start' &&
         !(typeof chunk.payload.messageId === 'string' && chunk.payload.messageId.startsWith('persisted-signal:'))
@@ -544,20 +595,26 @@ export const useChat = ({
             ? tail
             : undefined;
         return [
-          ...accumulateChunk({
-            chunk,
-            conversation: startupResponse ? ordered.slice(0, -1) : ordered,
-            metadata: { mode: 'stream', deliveryRunId: chunk.runId },
-          }),
+          ...(isOtherRunTerminal
+            ? ordered
+            : accumulateChunk({
+                chunk,
+                conversation: startupResponse ? ordered.slice(0, -1) : ordered,
+                metadata: { mode: 'stream', deliveryRunId: chunk.runId },
+              })),
           ...(startupResponse ? [startupResponse] : []),
           ...waiting,
         ];
       });
+      // Other runs can settle delivery feedback, but must not finish the active
+      // response, clear its approvals, or trigger its completion callback.
+      if (isOtherRunTerminal) return;
 
-      const signalTasks = extractTasksFromSignalChunk(chunk);
-      if (signalTasks !== undefined) setTasks(signalTasks);
-      const toolTasks = extractTasksFromToolResultChunk(chunk);
-      if (toolTasks !== undefined) setTasks(toolTasks);
+      const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
+      if (streamedTasks !== undefined) {
+        liveTasks.current = streamedTasks;
+        setTasks(streamedTasks);
+      }
 
       if (
         chunk.type === 'data-user-message' &&
@@ -571,6 +628,9 @@ export const useChat = ({
       if (chunk.type === 'start') {
         setIsRunning(true);
         if ('runId' in chunk && typeof chunk.runId === 'string') {
+          if (liveRunId.current !== chunk.runId) liveApprovalIds.current.clear();
+          liveRunFinished.current = false;
+          liveRunId.current = chunk.runId;
           _currentRunId.current = chunk.runId;
         }
       }
@@ -578,13 +638,16 @@ export const useChat = ({
       if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
         const toolCallId = chunk.payload?.toolCallId;
         if (typeof toolCallId === 'string') {
+          liveApprovalIds.current.add(toolCallId);
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
         setIsRunning(false);
       }
 
-      if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+      if (isTerminal) {
+        if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
+        for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.clear();
         setIsAwaitingToolApproval(false);
         setIsRunning(false);
@@ -1003,7 +1066,6 @@ export const useChat = ({
       // A requested queue must never silently fall back to steering the active run.
       if (delivery === 'queue') throw error;
       if (isThreadSignalUnsupportedError(error)) {
-        onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
         try {
           await agent.sendSignal({
             signal: {
@@ -1015,6 +1077,7 @@ export const useChat = ({
             threadId,
             ifIdle: { streamOptions },
           });
+          onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
           return;
         } catch (signalError) {
           onSignalEcho?.(resolvedSignalId);
@@ -1119,6 +1182,7 @@ export const useChat = ({
         }),
       ),
     );
+    liveRunFinished.current = true;
     pendingToolApprovalIdsRef.current.clear();
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
@@ -1154,6 +1218,8 @@ export const useChat = ({
           ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: continuation.requestContext,
         });
+        liveRunId.current ??= currentRunId;
+        liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);
@@ -1221,6 +1287,8 @@ export const useChat = ({
           ...(continuation.model !== undefined ? { streamOptions: { model: continuation.model } } : {}),
           requestContext: continuation.requestContext,
         });
+        liveRunId.current ??= currentRunId;
+        liveApprovalIds.current.add(toolCallId);
         pendingToolApprovalIdsRef.current.delete(toolCallId);
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);

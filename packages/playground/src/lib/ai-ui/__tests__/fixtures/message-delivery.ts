@@ -1,6 +1,4 @@
-import type { MastraClient, McpServerListResponse } from '@mastra/client-js';
-
-export const noMcpServers: McpServerListResponse = { servers: [], next: null, total_count: 0 };
+import type { MastraClient } from '@mastra/client-js';
 
 type AgentClient = ReturnType<MastraClient['getAgent']>;
 

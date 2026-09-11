@@ -400,19 +400,52 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       const target: SessionSandbox = requireExec(args.sandbox);
-      // The `gh` CLI needs a PAT when the org configured one (installation
-      // tokens 403 on integration-restricted endpoints); git clone/checkout
-      // keep using the minted installation token. Resolved per start so the
-      // installed credential never outlives rotation.
+      // Observability plus the post-checkout skill rescan run on every start
+      // (create or reconnect). Observability only — nothing reads these columns
+      // for decisions; the workdir was resolved (and memoized on the entry) by
+      // the guarded setup. The skill roots were reported empty by the
+      // unmaterialized-source guard before the checkout existed, so rescan now.
+      const publishStartSideEffects = () => {
+        void storage.sessions
+          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
+          .catch(() => {});
+        void constructedWorkspaces
+          .get(workspaceId)
+          ?.skills?.refresh()
+          .catch(() => {});
+      };
+      const existingRegistration = githubTokenInjectors.get(workspaceId);
+      if (existingRegistration) {
+        // Reconnect: re-point the current registration's injection target at
+        // this (possibly provider-healed) sandbox and reinstall its
+        // reconcile-owned credential. Do NOT mint a new registration, bump
+        // authority, or re-register the constructing request context —
+        // reconcileGithubToken owns role/generation and the active context's
+        // injector, so replacing them here would reauthorize the stale
+        // constructing context and reject the current one.
+        existingRegistration.inject = freshToken => {
+          if (!target.setEnv) {
+            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+          }
+          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+          existingRegistration.ghToken = freshToken;
+        };
+        // Install through inject (not optional-chained setEnv) so a provider
+        // that cannot accept the credential fails the reconnect here instead of
+        // deferring the failure to a later token refresh.
+        existingRegistration.inject(existingRegistration.ghToken);
+        publishStartSideEffects();
+        return;
+      }
+      // First start: resolve the credential and authorize the constructing
+      // request context. The `gh` CLI needs a PAT when the org configured one
+      // (installation tokens 403 on integration-restricted endpoints); git
+      // clone/checkout keep using the minted installation token. Resolved per
+      // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind('default');
       const ghCliToken =
         (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
       target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
-      // Observability only — nothing reads these columns for decisions. The
-      // workdir was resolved (and memoized on the entry) by the guarded setup.
-      void storage.sessions
-        .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
-        .catch(() => {});
       const tokenRegistration: GithubTokenRegistration = {
         inject: freshToken => {
           if (!target.setEnv) {
@@ -428,12 +461,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      // Project skill roots were reported empty by the unmaterialized-source
-      // guard before the checkout existed; rescan now. Fire-and-forget.
-      void constructedWorkspaces
-        .get(workspaceId)
-        ?.skills?.refresh()
-        .catch(() => {});
+      publishStartSideEffects();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {

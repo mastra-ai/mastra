@@ -35,7 +35,15 @@ export type ProviderModelsMap = {
     'qwen/qwen3.7-max',
     'qwen/qwen3.7-plus',
   ];
-  readonly bothub: readonly ['gemma-4-31b-it:free', 'nemotron-3-ultra-550b-a55b:free'];
+  readonly bothub: readonly [
+    'deepseek-v4-flash-0731',
+    'deepseek-v4-pro-0813',
+    'gemma-4-31b-it:free',
+    'glm-5.3',
+    'glm-5.3-flash',
+    'gpt-5.6-luna',
+    'nemotron-3-ultra-550b-a55b:free',
+  ];
   readonly greenpt: readonly [
     'deepseek-v4-flash-0731',
     'devstral-2-123b-instruct-2512',
@@ -387,7 +395,6 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-flash-0731:thinking',
     'deepseek/deepseek-v4-flash-latest',
     'deepseek/deepseek-v4-flash-vision-exp',
-    'deepseek/deepseek-v4-flash-vision-exp-uncensored',
     'deepseek/deepseek-v4-flash:thinking',
     'deepseek/deepseek-v4-pro',
     'deepseek/deepseek-v4-pro-0813',
@@ -495,7 +502,6 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash-vl',
     'inclusionai/ling-3.0-flash:thinking',
     'inflatebot/MN-12B-Mag-Mell-R1',
-    'k2-horizon-7b',
     'kimi-k2-instruct-fast',
     'liquid/lfm-2.5-2.6b',
     'longcat-2.0',
@@ -1185,6 +1191,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-6',
     'anthropic/claude-sonnet-5',
     'aws-bedrock/claude-fable-5',
+    'aws-bedrock/claude-fable-5-1',
     'aws-bedrock/claude-haiku-4-5',
     'aws-bedrock/claude-haiku-4-5-20251001',
     'aws-bedrock/claude-opus-4-1-20250805',
@@ -1274,6 +1281,7 @@ export type ProviderModelsMap = {
     'cerebras/qwen3-235b-a22b-instruct-2507',
     'consensusprotocol/Qwen3.8-27B',
     'consensusprotocol/deepseek-v4-flash',
+    'consensusprotocol/gemma-4-31b-it',
     'consensusprotocol/glm-5.3-flash',
     'consensusprotocol/gpt-oss-20b',
     'deepinfra/deepseek-v3.2',
@@ -1491,6 +1499,7 @@ export type ProviderModelsMap = {
     'vertex-openai/qwen3-coder-480b-a35b-instruct',
     'vertex-openai/qwen3-next-80b-a3b-instruct',
     'vertex-openai/qwen3-next-80b-a3b-thinking',
+    'vichar-ai/glm-5.3-flash',
     'xai/grok-4',
     'xai/grok-4-20-beta-0309-non-reasoning',
     'xai/grok-4-20-beta-0309-reasoning',
@@ -1929,7 +1938,6 @@ export type ProviderModelsMap = {
     'glm-5.2-fast',
     'glm-5.3-flash',
     'mimo-v2.5-pro',
-    'mimo-v2.5-pro-ultraspeed',
     'qwen3.8-max',
   ];
   readonly scaleway: readonly [
@@ -2643,6 +2651,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro-0813',
     'deepseek-v4-pro-0813@eu',
     'deepseek-v4-pro@eu',
+    'deepseek-v4.1-flash',
     'devstral-latest',
     'devstral-latest@eu',
     'fugu-ultra',
@@ -2852,6 +2861,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Flash-Vision-Exp',
     'deepseek-ai/DeepSeek-V4-Pro',
     'deepseek-ai/DeepSeek-V4-Pro-0813',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
     'google/gemma-4-26B-A4B-it',
     'google/gemma-4-31B-it',
     'meta-llama/Llama-3.1-8B-Instruct',
@@ -3466,7 +3476,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-flash-vision-exp',
     'deepseek/deepseek-v4-pro',
     'deepseek/deepseek-v4-pro-0813',
-    'deepseek/deepseek-v4.1-flash-beta',
+    'deepseek/deepseek-v4.1-flash',
     'fish-audio/s1',
     'fish-audio/s1-free',
     'fish-audio/s2-pro',
@@ -4044,7 +4054,7 @@ export type ProviderModelsMap = {
     'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8',
     'swiss-ai/Apertus-v1.5-70B',
   ];
-  readonly inception: readonly ['mercury-2', 'mercury-edit-2'];
+  readonly inception: readonly ['mercury-2', 'mercury-2.5', 'mercury-edit-2'];
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
@@ -4168,6 +4178,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/kimi-k2p7-code',
     'accounts/fireworks/models/kimi-k3',
     'accounts/fireworks/models/minimax-m3',
+    'accounts/fireworks/models/mistral-large-3-fp8',
     'accounts/fireworks/models/muse-glimmer-30b',
     'accounts/fireworks/models/nemotron-3-ultra-nvfp4',
     'accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b',
@@ -4472,6 +4483,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Flash-Vision-Exp',
     'deepseek-ai/DeepSeek-V4-Pro',
     'deepseek-ai/DeepSeek-V4-Pro-0813',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
     'google/gemma-4-26B-A4B-it',
     'google/gemma-4-31B-it',
     'google/gemma-4-E4B-it',
@@ -4596,6 +4608,7 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash-fin',
     'inclusionai/ling-3.0-flash-fin:free',
     'inclusionai/ling-3.0-flash-sante:free',
+    'inclusionai/ling-3.0-flash-vl:free',
     'kilo-auto/balanced',
     'kilo-auto/efficient',
     'kilo-auto/free',
@@ -4935,6 +4948,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-pro',
     'deepseek/deepseek-v4-pro-0423',
     'deepseek/deepseek-v4-pro-0813',
+    'deepseek/deepseek-v4.1-flash',
     'google/gemini-2.5-computer-use-preview-10-2025',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-image',
@@ -5083,7 +5097,12 @@ export type ProviderModelsMap = {
     'zai/glm-5.3',
     'zai/glm-5.3-flash',
   ];
-  readonly deepseek: readonly ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'];
+  readonly deepseek: readonly [
+    'deepseek-flash',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash-vision-exp',
+    'deepseek-v4-pro',
+  ];
   readonly abacus: readonly [
     'MiniMaxAI/MiniMax-M2.7',
     'MiniMaxAI/MiniMax-M3',
@@ -5433,6 +5452,7 @@ export type ProviderModelsMap = {
     'inclusionai/ling-3.0-flash-fin',
     'inclusionai/ling-3.0-flash-fin:free',
     'inclusionai/ling-3.0-flash-sante:free',
+    'inclusionai/ling-3.0-flash-vl:free',
     'kwaipilot/kat-coder-pro-v2',
     'kwaipilot/kat-coder-pro-v2.5',
     'liquid/lfm-2.5-2.6b:free',
@@ -5773,6 +5793,7 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v4-pro',
     'deepseek/deepseek-v4-pro-0423',
     'deepseek/deepseek-v4-pro-0813',
+    'deepseek/deepseek-v4.1-flash',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite',
     'google/gemini-2.5-pro',
@@ -5929,7 +5950,6 @@ export type ProviderModelsMap = {
     'gpt-5.2-codex',
   ];
   readonly 'scnet-token-plan': readonly [
-    'DeepSeek-V3.2',
     'DeepSeek-V4-Flash',
     'DeepSeek-V4-Flash-0731',
     'DeepSeek-V4-Pro',
@@ -5943,7 +5963,6 @@ export type ProviderModelsMap = {
     'Kimi-K2.6',
     'Kimi-K2.7-Code',
     'Kimi-K3',
-    'MiMo-V2.5-Pro',
     'MiniMax-M2.5',
     'MiniMax-M2.7',
     'MiniMax-M3',
@@ -6780,10 +6799,10 @@ export type ProviderModelsMap = {
     'xai/grok-4.3',
   ];
   readonly 'opencode-go': readonly [
-    'deepseek-flash',
     'deepseek-v4-flash',
     'deepseek-v4-flash-vision-exp',
     'deepseek-v4-pro',
+    'deepseek-v4.1-flash',
     'glm-5',
     'glm-5.1',
     'glm-5.2',
@@ -6891,6 +6910,7 @@ export type ProviderModelsMap = {
     'deepinfra/deepseek-ai/DeepSeek-V3-0324',
     'deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731',
     'deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813',
+    'deepinfra/deepseek-ai/DeepSeek-V4.1-Flash',
     'deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct',
     'deepinfra/meta-llama/Llama-3.3-70B-Instruct',
     'deepinfra/meta-llama/Llama-Guard-3-8B',
@@ -7215,6 +7235,7 @@ export type ProviderModelsMap = {
     'openrouter/inclusionai/ling-3.0-flash-fin',
     'openrouter/inclusionai/ling-3.0-flash-fin:free',
     'openrouter/inclusionai/ling-3.0-flash-sante:free',
+    'openrouter/inclusionai/ling-3.0-flash-vl:free',
     'openrouter/mancer/weaver',
     'openrouter/meta-llama/llama-3.1-70b-instruct',
     'openrouter/meta-llama/llama-3.1-8b-instruct',

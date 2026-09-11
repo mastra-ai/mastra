@@ -1,10 +1,68 @@
 import type { FilePart } from '@mastra/react';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { UserFilePartRenderer } from '../user-file-part-renderer';
 
 describe('UserFilePartRenderer', () => {
+  describe('when a named file contains literal attachment tags', () => {
+    it('preserves the entire file content in its preview', () => {
+      const text = '<attachment>literal</attachment>';
+      const part = { type: 'file' as const, mimeType: 'text/plain', data: text, filename: 'markup.txt' };
+      const { getByRole, getByText } = render(<UserFilePartRenderer part={part} />);
+      fireEvent.click(getByRole('button', { name: 'Preview markup.txt' }));
+      expect(getByText(text).textContent).toBe(text);
+    });
+  });
+  describe('when an inline text file is rendered', () => {
+    it.each(['text/csv', 'application/json', 'application/yaml'])(
+      'shows decoded %s content in the existing preview',
+      mimeType => {
+        const text = 'Zoë,hello\nworld';
+        const part = {
+          type: 'file' as const,
+          mimeType,
+          filename: 'notes.txt',
+          data: `data:${mimeType};base64,${btoa(String.fromCharCode(...new TextEncoder().encode(text)))}`,
+        };
+        const { container, getByRole } = render(<UserFilePartRenderer part={part} />);
+        expect(container.textContent).not.toContain(text);
+        expect(container.querySelector('[title="notes.txt"]')).not.toBeNull();
+        fireEvent.click(getByRole('button'));
+        expect(getByRole('dialog').textContent).toContain(text);
+      },
+    );
+  });
+  describe('when an inline UTF-16 text file is rendered', () => {
+    it.each([
+      ['little-endian', [0xff, 0xfe, 0x5a, 0, 0x6f, 0, 0xeb, 0]],
+      ['big-endian', [0xfe, 0xff, 0, 0x5a, 0, 0x6f, 0, 0xeb]],
+    ] as const)('shows the original %s text without replacement characters', (_encoding, bytes) => {
+      const part = {
+        type: 'file' as const,
+        mimeType: 'text/plain',
+        data: `data:text/plain;base64,${btoa(String.fromCharCode(...bytes))}`,
+      };
+      const { getByRole, getByText } = render(<UserFilePartRenderer part={part} />);
+      fireEvent.click(getByRole('button'));
+      expect(getByText('Zoë').textContent).toBe('Zoë');
+    });
+  });
+  describe('when a spreadsheet or malformed text file is rendered', () => {
+    it.each([
+      ['application/vnd.ms-excel', 'data:application/vnd.ms-excel;base64,AAEC'],
+      ['text/csv', 'data:text/csv;base64,%%%'],
+      ['text/plain', 'data:text/plain;base64,wyg='],
+      ['text/plain', 'data:text/plain;base64,//79'],
+      ['text/plain', 'data:text/plain;base64,/v8A'],
+    ])('shows a named file placeholder rather than binary or base64 text for %s', (mimeType, data) => {
+      const part = { type: 'file' as const, mimeType, data, filename: 'leads.xls' };
+      const { container } = render(<UserFilePartRenderer part={part} />);
+      expect(container.querySelector('[title="leads.xls"]')).not.toBeNull();
+      expect(container.querySelector('button')).toBeNull();
+      expect(container.innerHTML).not.toContain(data);
+    });
+  });
   it('renders an image preview for image mime types', () => {
     const part = {
       type: 'file',

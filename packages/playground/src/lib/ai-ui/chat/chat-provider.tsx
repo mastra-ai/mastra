@@ -117,6 +117,9 @@ export function ChatProvider({
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
+    onSignalSent: () => {
+      void refreshThreadList?.();
+    },
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
