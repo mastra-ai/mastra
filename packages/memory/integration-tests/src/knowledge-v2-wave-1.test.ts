@@ -22,14 +22,14 @@ const postgresSchemas: string[] = [];
 
 const structure = {
   scopes: [
-    { address: 'org:acme', name: 'Acme' },
+    { address: 'org:acme', name: 'mastra' },
+    { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+    { address: 'features:memory', name: 'memory', parentAddresses: ['features'] },
+    { address: 'features:memory:subconscious', name: 'subconscious', parentAddresses: ['features:memory'] },
+    { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+    { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
+    { address: 'repo:mastra:prs', name: 'prs', parentAddresses: ['repo:mastra'] },
     { address: 'resource:shipyard', name: 'Shipyard', parentAddresses: ['org:acme'] },
-    { address: 'subject:payments', name: 'Payments', parentAddresses: ['resource:shipyard'] },
-    { address: 'feature:refunds', name: 'Refunds', parentAddresses: ['subject:payments'] },
-    { address: 'area:runtime', name: 'Runtime', parentAddresses: ['feature:refunds'] },
-    { address: 'repository:mastra', name: 'Mastra', parentAddresses: ['feature:refunds'] },
-    { address: 'visibility:public', name: 'Public', parentAddresses: ['feature:refunds'] },
-    { address: 'visibility:internal', name: 'Internal', parentAddresses: ['feature:refunds'] },
   ],
 };
 
@@ -133,7 +133,13 @@ async function createStorage(id: string): Promise<{ storage: MastraCompositeStor
 }
 
 function createRuntime(storage: MastraCompositeStore) {
-  const knowledge = new Knowledge({ id: 'shipyard-knowledge', storage, structure });
+  const knowledge = new Knowledge({
+    id: 'mastra',
+    name: 'Mastra Knowledge',
+    description: 'Product architecture, repository work, and operational knowledge for Mastra.',
+    storage,
+    structure,
+  });
   const { model, doGenerate } = deterministicObservationModel();
   const curator = deterministicObservationModel(true);
   const memory = new Memory({
@@ -312,6 +318,7 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
       stores.push(initialStorage);
       const initialMemory = new Memory({ storage: initialStorage });
       await initialMemory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
+      await initialStorage.getStore('knowledge');
       await initialStorage.close();
       stores.splice(stores.indexOf(initialStorage), 1);
 
