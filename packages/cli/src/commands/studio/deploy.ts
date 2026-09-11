@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
@@ -422,6 +423,18 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   // Gather context
   const packageName = getPackageName(targetDir);
+  // Studio deploys have no way to flag a project as a Factory project, so a
+  // Factory build ends up without sandboxes or the factory route. Say so and
+  // point at the unified command rather than failing a deploy that may still
+  // be wanted for the Studio half.
+  if ((await detectProjectType(targetDir)) === 'factory') {
+    p.log.warn(
+      [
+        'This directory builds a Mastra Factory, but `mastra studio deploy` cannot enable Factory support on the project.',
+        'Use `mastra deploy` instead; it creates Factory projects with the flag and registers the Factory URL.',
+      ].join('\n'),
+    );
+  }
   const gitBranch = getGitBranch(targetDir);
   const mastraVersion = getMastraVersion(targetDir);
 

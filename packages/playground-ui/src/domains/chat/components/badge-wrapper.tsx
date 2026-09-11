@@ -1,3 +1,6 @@
+import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
 import {
   ToolCall,
   ToolCallContent,
@@ -9,13 +12,10 @@ import {
   ToolCallSpacer,
   ToolCallTrailing,
   ToolCallTrigger,
-} from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-
-import { useChatRunning } from '@/lib/ai-ui/chat/chat-context';
+} from '../../../ds/components/ai/tool-call';
+import type { ToolCallStatus } from '../../../ds/components/ai/tool-call';
+import { useChatRunning } from '../context/chat-context';
+import { cn } from '@/lib/utils';
 
 export interface BadgeWrapperProps {
   children?: React.ReactNode;
@@ -76,7 +76,7 @@ export const BadgeWrapper = ({
       open={bodyOpen}
       onOpenChange={setOpen}
       status={status}
-      className={cn(arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
+      className={cn(arrivedLive && 'fade-in-0 slide-in-from-bottom-1 motion-safe:animate-in')}
       data-testid={dataTestId}
     >
       <span className="flex w-full min-w-0 items-center">

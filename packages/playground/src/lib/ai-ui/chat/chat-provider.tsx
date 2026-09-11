@@ -1,5 +1,19 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import {
+  ChatAgentContext,
+  ChatMessagesContext,
+  ChatRunningContext,
+  ChatSendContext,
+  ChatTasksContext,
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
+import type {
+  AgentContextValue,
+  MessagesContextValue,
+  RunningContextValue,
+  SendContextValue,
+  TasksContextValue,
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -7,20 +21,6 @@ import { useChat, useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import {
-  ChatAgentContext,
-  ChatMessagesContext,
-  ChatRunningContext,
-  ChatSendContext,
-  ChatTasksContext,
-} from './chat-context';
-import type {
-  AgentContextValue,
-  MessagesContextValue,
-  RunningContextValue,
-  SendContextValue,
-  TasksContextValue,
-} from './chat-context';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -117,6 +117,9 @@ export function ChatProvider({
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
+    onSignalSent: () => {
+      void refreshThreadList?.();
+    },
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);

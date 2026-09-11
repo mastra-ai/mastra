@@ -29,6 +29,26 @@ async function killOrphanedDevServer(projectDir: string) {
   } catch {}
 }
 
+async function findInDir(root: string, targetName: string): Promise<boolean> {
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.name === targetName) {
+      return true;
+    }
+    if (entry.isDirectory()) {
+      if (await findInDir(join(root, entry.name), targetName)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
 
 async function cleanupAllProcesses() {
@@ -969,6 +989,50 @@ export const mastra = new Mastra({
           expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
           expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
         } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('MASTRA_BUILD_SKIP_INSTALL', () => {
+    it(
+      'skips dependency installation in the build output when the env var is set',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-skip-install-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const outputRoot = join(appDir, '.mastra', 'output');
+
+          await removeOutputDir(isolatedFixturePath);
+          const skipBuild = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+            reject: false,
+          });
+          const skipOutput = `${skipBuild.stdout}\n${skipBuild.stderr}`;
+
+          expect(skipBuild.exitCode).toBe(0);
+          expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+          // No dependencies installed and no lockfile generated anywhere in the build output.
+          expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
+          expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);
+
+          await removeOutputDir(isolatedFixturePath);
+          const defaultBuild = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            env: process.env,
+            reject: false,
+          });
+
+          expect(defaultBuild.exitCode).toBe(0);
+          // Default path installs dependencies into the build output.
+          expect(await findInDir(outputRoot, 'node_modules')).toBe(true);
+        } finally {
+          await removeOutputDir(isolatedFixturePath);
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },

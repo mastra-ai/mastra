@@ -186,5 +186,21 @@
     "@mastra/s3": "0.6.2",
     "@mastra/vercel": "1.5.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260910-182341",
+    "cloudflare-sandbox-shell-command",
+    "dull-ants-cross",
+    "eight-wings-dream",
+    "every-lines-buy",
+    "every-plants-cover",
+    "fair-rats-change",
+    "four-worms-decide",
+    "gold-banks-nail",
+    "grumpy-cycles-cross",
+    "rare-logger-export-warning",
+    "skip-install-deployer-build",
+    "slick-queens-wink",
+    "studio-auth-pinned-org-selects-tenant",
+    "tired-breads-kiss"
+  ]
 }

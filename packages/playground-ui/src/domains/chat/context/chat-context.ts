@@ -47,10 +47,9 @@ export interface AgentContextValue {
 }
 
 // NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
-// consume the existing `ToolCallProvider` (`@/services/tool-call-provider`),
-// which `ChatProvider` renders directly with `useChat`'s handlers — identical to
-// how `MastraRuntimeProvider` wired them. That keeps every badge unchanged and
-// preserves the `approveNetworkToolCall(toolName, runId?)` contract.
+// consume the host application's tool-call provider, which the chat provider
+// renders directly with `useChat`'s handlers. That keeps every badge unchanged
+// and preserves the `approveNetworkToolCall(toolName, runId?)` contract.
 
 export const ChatMessagesContext = createContext<MessagesContextValue>({ messages: [] });
 export const ChatRunningContext = createContext<RunningContextValue>({
