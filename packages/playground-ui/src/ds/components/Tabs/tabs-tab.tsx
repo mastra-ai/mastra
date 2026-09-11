@@ -44,9 +44,10 @@ export const Tab = ({
         onClick,
         onClose,
       });
+    measure();
+    if (!('ResizeObserver' in globalThis)) return;
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    measure();
     return () => observer.disconnect();
   }, [register, value, children, disabled, onClick, onClose]);
   useEffect(() => () => unregister?.(value), [unregister, value]);
