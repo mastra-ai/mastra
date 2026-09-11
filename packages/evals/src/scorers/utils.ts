@@ -1302,6 +1302,7 @@ export type TrajectoryEfficiencyResult = {
 
 /**
  * Evaluate trajectory efficiency against budgets and redundancy checks.
+ * Throws when a configured budget is invalid or its required measurements are incomplete or invalid.
  */
 export function checkTrajectoryEfficiency(
   trajectory: Trajectory,
@@ -1314,19 +1315,54 @@ export function checkTrajectoryEfficiency(
 ): TrajectoryEfficiencyResult {
   const { maxSteps, maxTotalTokens, maxTotalDurationMs, noRedundantCalls = true } = options;
 
-  const totalSteps = trajectory.steps.length;
-
-  // Calculate total tokens from model_generation steps
-  let totalTokens = 0;
-  for (const step of trajectory.steps) {
-    if (step.stepType === 'model_generation') {
-      totalTokens += (step.promptTokens ?? 0) + (step.completionTokens ?? 0);
+  const isMeasurement = (value: number | undefined): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  for (const [name, limit] of Object.entries({ maxSteps, maxTotalTokens, maxTotalDurationMs })) {
+    if (limit !== undefined && !isMeasurement(limit)) {
+      throw new Error(`Invalid ${name} budget: expected a finite nonnegative number`);
     }
   }
 
-  // Calculate total duration
+  const totalSteps = trajectory.steps.length;
+
+  // Count each model generation, including nested agents, without counting container aggregates.
+  let totalTokens = 0;
+  let modelGenerations = 0;
+  const remaining = [...trajectory.steps];
+  while (remaining.length > 0) {
+    const step = remaining.pop()!;
+    if (step.stepType === 'model_generation') {
+      modelGenerations++;
+      if (
+        maxTotalTokens !== undefined &&
+        (!isMeasurement(step.promptTokens) || !isMeasurement(step.completionTokens))
+      ) {
+        throw new Error(
+          `Cannot evaluate token budget: model generation "${step.name}" has missing or invalid token counts`,
+        );
+      }
+      totalTokens += (step.promptTokens ?? 0) + (step.completionTokens ?? 0);
+    }
+    if (step.children) {
+      for (const child of step.children) remaining.push(child);
+    }
+  }
+  if (maxTotalTokens !== undefined && (modelGenerations === 0 || !isMeasurement(totalTokens))) {
+    throw new Error('Cannot evaluate token budget: missing model-generation measurements or invalid total tokens');
+  }
+
+  // A parent duration already covers its children; never add both.
   const totalDurationMs =
     trajectory.totalDurationMs ?? trajectory.steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+  if (maxTotalDurationMs !== undefined) {
+    const hasDuration =
+      trajectory.totalDurationMs !== undefined
+        ? isMeasurement(trajectory.totalDurationMs)
+        : trajectory.steps.length > 0 && trajectory.steps.every(step => isMeasurement(step.durationMs));
+    if (!hasDuration || !isMeasurement(totalDurationMs)) {
+      throw new Error('Cannot evaluate duration budget: missing or invalid duration measurements');
+    }
+  }
 
   // Detect redundant calls (same tool name + same args in consecutive calls)
   const redundantCalls: Array<{ name: string; index: number }> = [];

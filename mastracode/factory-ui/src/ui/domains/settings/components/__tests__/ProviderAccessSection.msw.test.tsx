@@ -461,8 +461,9 @@ describe('ProviderAccessSection', () => {
       expect(orgWide()).toHaveAttribute('aria-pressed', 'false');
     });
 
-    it('offers members without org rights only the personal view, with org coverage visible per row', async () => {
+    it('shows members without org rights the org view greyed with the reason, org coverage visible per row', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      const user = userEvent.setup();
       server.use(
         authenticated(),
         http.get(PROVIDERS_URL, () =>
@@ -484,8 +485,12 @@ describe('ProviderAccessSection', () => {
       renderWithProviders(<ProviderAccessSection />);
 
       await screen.findByText('Anthropic');
-      await waitFor(() => expect(screen.getByText('Personal')).toBeInTheDocument());
-      expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
+      await waitFor(() => expect(orgWide()).toHaveAttribute('aria-disabled', 'true'));
+      expect(personal()).toHaveAttribute('aria-pressed', 'true');
+      await user.hover(orgWide());
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        'Only organization admins can manage org-wide credentials.',
+      );
       expect(within(rowFor('anthropic')).getByText('Covered by org')).toBeInTheDocument();
       expect(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' })).toBeInTheDocument();
       expect(

@@ -27,10 +27,10 @@ export function DatasetItemsLayout({ listSlot, detailPanelSlot, versionsPanelSlo
         'grid-cols-[1fr_auto]': showVersions,
       })}
     >
-      <div className={cn('flex max-w-full flex-col gap-4 overflow-y-auto pt-3 pl-6', !showDetail && 'pr-6')}>
+      <div className={cn('flex max-w-full flex-col gap-4 overflow-y-auto pt-6 pl-6', !showDetail && 'pr-6')}>
         {listSlot}
       </div>
-      {showDetail && <div className="h-full min-h-0 py-3 pr-6">{detailPanelSlot}</div>}
+      {showDetail && <div className="h-full min-h-0 pt-6 pr-6 pb-3">{detailPanelSlot}</div>}
       {showVersions && versionsPanelSlot}
     </div>
   );

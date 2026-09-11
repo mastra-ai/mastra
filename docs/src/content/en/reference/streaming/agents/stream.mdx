@@ -43,6 +43,14 @@ const stream = await agent.stream('message for agent')
         type: 'AgentExecutionOptions<Output, Format>',
         parameters: [
           {
+            name: 'hideSignals',
+            type: 'boolean | AgentSignalType[]',
+            isOptional: true,
+            defaultValue: '[]',
+            description:
+              "Use true to hide all recognized signals, false to show all, or an array to hide selected types from this caller's fullStream after experimental transforms. Does not filter model context, storage, aggregates, or other subscribers. See Signal visibility below.",
+          },
+          {
             name: 'maxSteps',
             type: 'number',
             isOptional: true,
@@ -936,6 +944,34 @@ const stream = await agent.stream('message for agent')
 ]}
 />
 
+## Signal visibility
+
+Signals, including reactive reminders, appear in `fullStream` by default. Set `hideSignals` to omit selected signal chunks from your stream:
+
+```ts
+const stream = await agent.stream('Review the latest changes', {
+  hideSignals: ['reactive', 'system-reminder'],
+})
+
+for await (const chunk of stream.fullStream) {
+  console.log(chunk)
+}
+```
+
+Set `hideSignals: true` to hide all recognized signal types, or `hideSignals: false` to show all signals. An array selects individual types.
+
+The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
+
+Exclusions apply after `experimentalTransform`, so transforms still receive the unfiltered input. Adapters consuming `fullStream` inherit the filter, but aggregate `content`, `getFullOutput()`, response messages, callbacks, model context, and saved messages remain unchanged.
+
+Each [thread subscription](/reference/agents/agent#subscribetothreadoptions) has its own exclusion policy, independent of the initiating stream.
+
+The same policy applies to `resumeStream()`, `untilIdle` continuations, and the deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` methods, including durable agents. Shared execution options also accept `hideSignals` on `generate()` and `resumeGenerate()`, but it doesn't filter their returned results. This option isn't available on HTTP or client-js request options or legacy `streamLegacy()` APIs.
+
+Unlike streams, [memory recall](/reference/memory/recall) hides reminders by default for compatibility. Recall exclusions match stored types exactly rather than normalizing aliases. Use `['reactive', 'system-reminder']` to exclude both reminder representations across surfaces.
+
+Exclusions control returned data, not authorization or delivery. They aren't a security boundary. Signal options such as `ifActive`, `ifIdle`, `persist`/`discard`, and `transient` retain their delivery and persistence meanings.
+
 ## Extended usage example
 
 ### Mastra Format (Default)
@@ -966,7 +1002,7 @@ const fullText = await stream.text
 
 ### Limiting execution time
 
-Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it.
+Use `modelSettings.timeout` to bound how long a run may take. `totalMs` limits the entire run, including every loop iteration, tool call and retry. `stepMs` limits a single model call, covering both establishing the stream and consuming it. `firstChunkMs` only applies to streaming calls and limits how long the model may take to emit its first content-bearing chunk.
 
 ```ts title="index.ts"
 const stream = await agent.stream('Tell me a story', {
@@ -974,15 +1010,19 @@ const stream = await agent.stream('Tell me a story', {
     timeout: {
       totalMs: 30000, // fail the run if it takes longer than 30s
       stepMs: 10000, // fail an individual model call after 10s
+      firstChunkMs: 3000, // fail a model call that produces no content within 3s
     },
   },
 })
 ```
 
-Exceeding either budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'` or `'step'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
+Exceeding a budget fails with a `MastraTimeoutError`, which carries a `timeoutType` of `'total'`, `'step'` or `'firstChunk'`. Each budget behaves differently when the agent is configured with fallback [`models`](/reference/agents/agent):
 
 - A `totalMs` timeout ends the run immediately and doesn't try the next model, because it's a hard deadline for the run as a whole.
 - A `stepMs` timeout isn't retried against the same model, but does advance to the next model, which makes it a way to fail over from a slow provider.
+- A `firstChunkMs` timeout behaves like `stepMs`: it isn't retried against the same model, but does advance to the next model. Stream-start and metadata chunks don't satisfy the budget; only the first text, reasoning, tool call, file or source chunk does. Once content begins, only `stepMs` and `totalMs` remain active. Each provider retry attempt gets a fresh `firstChunkMs` budget.
+
+Nested `timeout` settings are merged per key across call-time and per-model `modelSettings`, so a per-model `stepMs` override keeps a call-time `firstChunkMs`.
 
 ### AI SDK v5+ Format
 

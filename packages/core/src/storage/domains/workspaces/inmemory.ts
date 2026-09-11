@@ -119,7 +119,7 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StorageWorkspaceType['status'] }),
+      ...(status !== undefined && { status }),
       ...(metadata !== undefined && {
         metadata: { ...existingConfig.metadata, ...metadata },
       }),
@@ -160,8 +160,7 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          JSON.stringify(configFields[field]) !== JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
       );
 
       // Only create a new version if something actually changed

@@ -26,6 +26,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { StorageListMessagesOutput } from '../storage/types';
 import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
@@ -222,7 +223,7 @@ export interface ThreadDataStore {
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
-  listMessages(input: { threadId: string; limit?: number }): Promise<MastraDBMessage[]>;
+  listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
   firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>>;
   /** Read a value from a thread's metadata. */
@@ -483,7 +484,7 @@ export class SessionThread {
     if (!this.#store) return [];
     // Only expose messages for threads this session owns.
     await this.#requireOwnedThread({ threadId });
-    return this.#store.listMessages({ threadId, limit });
+    return (await this.#store.listMessages({ threadId, limit })).messages;
   }
 
   /** List messages for the session's active thread (empty when not bound). */
@@ -3303,8 +3304,8 @@ export class Session<TState = unknown> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
-    if (!this.stream.isActive() && this.run.getRunId() === null) return;
+  private async waitForStreamIdle(timeoutMs = 1_000): Promise<boolean> {
+    if (!this.stream.isActive() && this.run.getRunId() === null) return true;
 
     let lifecycleWait: AbortController | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -3322,12 +3323,16 @@ export class Session<TState = unknown> {
         ]);
         lifecycleWait.abort();
         lifecycleWait = undefined;
-        if (result === 'timeout') return;
+        // Teardown did not complete within the timeout: the old run is still
+        // finalizing and its live subscription still matches, so the caller
+        // must force a fresh subscription rather than trusting `matches`.
+        if (result === 'timeout') return false;
       }
     } finally {
       lifecycleWait?.abort();
       if (timeout) clearTimeout(timeout);
     }
+    return true;
   }
 
   /**
@@ -3422,7 +3427,7 @@ export class Session<TState = unknown> {
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
-      await this.thread.ensureSubscription(threadId);
+      await this.thread.ensureSubscription(threadId, agent);
 
       // A deferred abort (parked approval gate) leaves the AbortController
       // armed until the decline lands, so `submittedIsRunning` stays true for a
@@ -3462,7 +3467,21 @@ export class Session<TState = unknown> {
       // Only do this in the post-abort window (an abort was requested but the
       // run hasn't reset yet) so normal idle signals aren't delayed.
       if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-        await this.waitForStreamIdle();
+        const idle = await this.waitForStreamIdle();
+        // On the normal path the abort teardown detached the live subscription
+        // while we waited, so the handle captured by the earlier
+        // `ensureSubscription` is now dead and re-ensuring genuinely
+        // re-subscribes. But when `waitForStreamIdle` times out the old run is
+        // still finalizing with its subscription live and matching, so
+        // `ensureSubscription` would short-circuit to a no-op and dispatch onto
+        // the still-aborting run. Force teardown of the stale subscription first
+        // so the re-ensure always attaches a fresh one — otherwise the new run
+        // starts with no native subscription and its `agent_start`/`agent_end`
+        // never reach the session, leaving `run.isRunning()` stuck true.
+        if (!idle) {
+          this.thread.cleanupSubscription();
+        }
+        await this.thread.ensureSubscription(threadId, agent);
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({

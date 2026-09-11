@@ -113,6 +113,16 @@ type StorageListMessagesOptions = {
     metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
+  /**
+   * Whether to compute the total count of matching messages.
+   *
+   * Defaults to `true` to preserve Studio pagination, which relies on `total`.
+   * Callers that only need a bounded window of recent messages (e.g. agent
+   * last-N reads) can pass `false` so the store skips the `COUNT(*)` work and
+   * derives `hasMore` from a single extra row. When `false`, `total` is not a
+   * reliable count and should not be used for pagination math.
+   */
+  includeTotal?: boolean;
 };
 
 /**
@@ -225,6 +235,14 @@ export type StorageCloneThreadInput = {
   metadata?: Record<string, unknown>;
   /** Options for filtering which messages to include */
   options?: {
+    /**
+     * When true (default), the returned `clonedMessages` array is populated with the
+     * fully hydrated (parsed) message payloads. When false, message rows are copied
+     * inside the database (never returned to the JS heap) and `clonedMessages` is
+     * returned empty; only `messageIdMap` is produced. Set false on paths that discard
+     * payloads (e.g. forked-subagent clones, observational-memory-only remaps).
+     */
+    hydrateMessages?: boolean;
     /** Maximum number of messages to copy (from most recent) */
     messageLimit?: number;
     /** Filter messages by date range or specific IDs */
@@ -3145,6 +3163,8 @@ export interface ListExperimentResultsInput {
   experimentId: string;
   traceId?: string;
   status?: ExperimentResultStatus;
+  /** Return only results that have *all* of these tags. Empty/undefined disables the filter. */
+  tags?: string[];
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;

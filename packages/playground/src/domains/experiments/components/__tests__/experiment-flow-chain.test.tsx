@@ -61,17 +61,18 @@ describe('ExperimentFlowChain', () => {
     );
   });
 
-  it('spells out the whole pipeline, from dataset to score', async () => {
+  it('spells out the whole pipeline, from dataset to scorers', async () => {
     const { queryClient } = renderChain(agentExperiment);
 
     const datasetLink = await screen.findByRole('link', { name: /Entity extraction dataset/ });
     expect(datasetLink.getAttribute('href')).toBe('/datasets/dataset-1');
-    expect(screen.getByText('each item')).toBeDefined();
+    expect(screen.getByText('Each item will be passed to the agent')).toBeDefined();
     expect(screen.getByRole('link', { name: /example-entity-extraction-agent/ })).toBeDefined();
-    expect(screen.getByText('output')).toBeDefined();
-    expect(screen.getByText('2 scorers')).toBeDefined();
-    expect(screen.getByText('comparing ground truth')).toBeDefined();
-    expect(screen.getByText('Score')).toBeDefined();
+    expect(screen.getByText('Its output is then scored')).toBeDefined();
+    const relevancy = await screen.findByRole('link', { name: 'Answer relevancy' });
+    expect(relevancy.getAttribute('href')).toBe('/scorers/answer-relevancy');
+    expect(screen.getByRole('link', { name: 'Toxicity' })).toBeDefined();
+    expect(screen.getByText('It gives a score by comparing ground truth')).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
   });
@@ -111,7 +112,8 @@ describe('ExperimentFlowChain', () => {
     // scorerIds is null whenever the scorers resolve from the dataset or the items.
     const { queryClient } = renderChain({ ...agentExperiment, scorerIds: null });
 
-    expect(await screen.findByText('1 scorer')).toBeDefined();
+    expect(await screen.findByRole('link', { name: 'Answer relevancy' })).toBeDefined();
+    expect(screen.queryByRole('link', { name: 'Toxicity' })).toBeNull();
 
     await waitForMutationsIdle(queryClient);
   });

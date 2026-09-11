@@ -1,3 +1,8 @@
+import { ChatAgentContext, ChatRunningContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -7,17 +12,12 @@ import { useContext } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MessageRow } from '../../messages/message-row';
-import { readToolPart } from '../../messages/renderers/tool-part';
-import type { ToolPart } from '../../messages/renderers/tool-part';
 import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { failedParentMessages, partialChildMessages } from './fixtures/failed-delegation';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
-import { ChatAgentContext, ChatRunningContext } from '@/lib/ai-ui/chat/chat-context';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

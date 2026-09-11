@@ -1,14 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import { isSpanChunk, MessagePartSpans } from '../../../agent/message-list/message-part-spans';
 import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
-  ReasoningDeltaPayload,
-  ReasoningStartPayload,
   SourcePayload,
-  TextDeltaPayload,
-  TextStartPayload,
   ToolCallPayload,
   ToolErrorPayload,
   ToolResultPayload,
@@ -70,142 +67,14 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // Metadata stashed by *-start events, applied when the ref is created on first delta.
-  const textMeta = new Map<string, Record<string, any> | undefined>();
-  const reasoningMeta = new Map<string, Record<string, any> | undefined>();
-
-  // Live references to parts already in the `parts` array, keyed by span ID.
-  // Created and pushed on first delta — position reflects content arrival order (#15914).
-  const textRefs = new Map<string, { type: 'text'; text: string; providerMetadata?: Record<string, any> }>();
-  const reasoningRefs = new Map<
-    string,
-    { type: 'reasoning'; reasoning: string; details: any[]; providerMetadata?: Record<string, any> }
-  >();
+  const spans = new MessagePartSpans();
 
   for (const chunk of chunks) {
+    if (isSpanChunk(chunk)) {
+      spans.fold(parts, chunk);
+      continue;
+    }
     switch (chunk.type) {
-      // ── Text span ──────────────────────────────────────────────
-      case 'text-start': {
-        const p = chunk.payload as TextStartPayload;
-        // Just stash metadata — part is created on first delta
-        textMeta.set(p.id, p.providerMetadata);
-        break;
-      }
-      case 'text-delta': {
-        const p = chunk.payload as TextDeltaPayload;
-        let ref = textRefs.get(p.id);
-        if (!ref) {
-          // First delta for this span — create the part and push it now
-          ref = { type: 'text' as const, text: '', providerMetadata: textMeta.get(p.id) ?? p.providerMetadata };
-          textRefs.set(p.id, ref);
-          parts.push(ref as unknown as MastraMessagePart);
-        }
-        ref.text += p.text;
-        if (p.providerMetadata) {
-          ref.providerMetadata = p.providerMetadata;
-        }
-        break;
-      }
-      case 'text-end': {
-        const pEnd = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const ref = textRefs.get(pEnd.id);
-        if (ref) {
-          if (pEnd.providerMetadata) {
-            ref.providerMetadata = pEnd.providerMetadata;
-          }
-          // Clean up undefined providerMetadata so we don't serialize { providerMetadata: undefined }
-          if (!ref.providerMetadata) {
-            delete ref.providerMetadata;
-          }
-        }
-        // text-end with no deltas means empty span — nothing to emit
-        textMeta.delete(pEnd.id);
-        textRefs.delete(pEnd.id);
-        break;
-      }
-
-      // ── Reasoning span ─────────────────────────────────────────
-      case 'reasoning-start': {
-        const p = chunk.payload as ReasoningStartPayload;
-        const isRedacted = Object.values(p.providerMetadata || {}).some((v: any) => v?.redactedData);
-
-        // Redacted reasoning never receives deltas, so create and push immediately
-        if (isRedacted) {
-          const part = {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'redacted', data: '' }],
-            providerMetadata: p.providerMetadata,
-          };
-          reasoningRefs.set(p.id, part);
-          parts.push(part as unknown as MastraMessagePart);
-        } else {
-          // Non-redacted: just stash metadata, part is created on first delta
-          reasoningMeta.set(p.id, p.providerMetadata);
-        }
-        break;
-      }
-      case 'reasoning-delta': {
-        const p = chunk.payload as ReasoningDeltaPayload;
-        let ref = reasoningRefs.get(p.id);
-        if (!ref) {
-          // First delta for this span — create the part and push it now
-          ref = {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'text', text: '' }],
-            providerMetadata: reasoningMeta.get(p.id) ?? p.providerMetadata,
-          };
-          reasoningRefs.set(p.id, ref);
-          parts.push(ref as unknown as MastraMessagePart);
-        }
-        // Append to the text detail
-        const detail = ref.details[0];
-        if (detail && detail.type === 'text') {
-          detail.text += p.text;
-        }
-        ref.reasoning = (ref.reasoning || '') + p.text;
-        if (p.providerMetadata) {
-          ref.providerMetadata = p.providerMetadata;
-        }
-        break;
-      }
-      case 'reasoning-end': {
-        const p = chunk.payload as { id: string; providerMetadata?: Record<string, any> };
-        const ref = reasoningRefs.get(p.id);
-        if (ref) {
-          if (p.providerMetadata) {
-            ref.providerMetadata = p.providerMetadata;
-          }
-        } else {
-          // No deltas arrived — emit empty reasoning part.
-          // OpenAI requires item_reference for tool calls that follow reasoning.
-          // See: https://github.com/mastra-ai/mastra/issues/9005
-          const part: MastraMessagePart = {
-            type: 'reasoning' as const,
-            reasoning: '',
-            details: [{ type: 'text', text: '' }],
-            providerMetadata: p.providerMetadata ?? reasoningMeta.get(p.id),
-          };
-          parts.push(part);
-        }
-        reasoningMeta.delete(p.id);
-        reasoningRefs.delete(p.id);
-        break;
-      }
-
-      // Redacted reasoning can appear as a standalone chunk (not wrapped in start/end)
-      case 'redacted-reasoning': {
-        const p = chunk.payload as { id: string; data: unknown; providerMetadata?: Record<string, any> };
-        parts.push({
-          type: 'reasoning' as const,
-          reasoning: '',
-          details: [{ type: 'redacted', data: '' }],
-          providerMetadata: p.providerMetadata,
-        } as MastraMessagePart);
-        break;
-      }
-
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;
@@ -300,27 +169,7 @@ export function buildMessagesFromChunks({
     }
   }
 
-  // Unclosed reasoning spans that had deltas are already in `parts` (pushed on first delta).
-  // Unclosed reasoning spans with NO deltas need to be emitted for #9005.
-  for (const [id] of reasoningMeta) {
-    if (!reasoningRefs.has(id)) {
-      const part: MastraMessagePart = {
-        type: 'reasoning' as const,
-        reasoning: '',
-        details: [{ type: 'text', text: '' }],
-        providerMetadata: reasoningMeta.get(id),
-      };
-      parts.push(part);
-    }
-  }
-
-  // Unclosed text spans that had deltas are already in `parts`.
-  // Clean up undefined providerMetadata on any that are still open.
-  for (const [, ref] of textRefs) {
-    if (!ref.providerMetadata) {
-      delete ref.providerMetadata;
-    }
-  }
+  spans.flushSpansLeftOpen(parts);
 
   // Remove text parts that ended up empty (e.g. spans where every delta was ''),
   // unless they carry providerMetadata (e.g. Gemini thought signatures, #20469) —

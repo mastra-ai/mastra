@@ -1,0 +1,51 @@
+---
+extends: existence
+message: "AI quantified reveal: '%s'. The totality word replaces a contrast the sentence never states. Name what it rules out, or drop the word."
+level: error
+nonword: true
+ignorecase: true
+# The reveal by quantifier: a claim stated once in compressed form, then
+# ", and", then the same claim again with a totality word on it ("For
+# search that join reverses, and a chunk that ranks well maps back to
+# every blob that contains it"; "the table is content-addressed and
+# append-only, and a blob's bytes never change once captured"). The
+# first clause plants an expectation, the second overturns or unpacks
+# it, and "every," "never," "always," or "only" carries the whole turn.
+# It is the "not X, it's Y" formula with the negation deleted: the same
+# two-beat pivot, the emphasis moved onto the quantifier, and "and"
+# doing the work of "but" or a colon. ContrastiveFormulas and
+# ContrastiveNegation catch the spelled-out versions, so the contrast
+# went underground and this is where it resurfaced (2026-09).
+#
+# The plain form states the contrast or drops the word: "A chunk maps
+# back to more than one blob," or "Append-only: a blob's bytes never
+# change."
+#
+# Vale cannot see a restatement, so the tokens take the reveal clause.
+# Costs across the Go and Python standard libraries: the reversal verb
+# ahead of the coordinated universal measures zero, the coordinated
+# absolute ("and the leading bit always indicates sign") two, "and only
+# the sweeper" three, "and nothing else has it" one, and the universal
+# with the anaphoric relative ("each function that needs it," "each OS
+# that forces it") three. Every hit is the construction itself and fires
+# by design.
+tokens:
+  # --- The reversal verb, then the universal after the "and" ("that join
+  # reverses, and a chunk maps back to every blob"). The lookbehind keeps
+  # "at all" out.
+  - "\\b(?:reverses|reversed|flips|flipped|inverts|inverted|runs the other way|goes the other way|runs the other direction|goes the other direction|is the reverse|is the inverse|is the mirror|turns around)(?: [a-z-]+){0,3}, and (?:[a-z'-]+ ){0,12}(?:every|each|(?<!at )all)\\b"
+
+  # --- The coordinated absolute: a determiner-fronted subject after the
+  # "and" whose verb takes "never" or "always" ("and a blob's bytes never
+  # change," "and the source symbol is always the GOT").
+  - ", and (?:a|an|the|its|their|each|every) (?:[a-z-]+(?:'s)? ){1,3}(?:is |are )?(?:never|always|only ever) [a-z]+"
+
+  # --- The coordinated restriction ("called by the sweeper, and only the
+  # sweeper," "and nothing else has it").
+  - ", and only (?:the|a|an|its|their|one)\\b"
+  - ", and nothing (?:else|but|more)\\b"
+
+  # --- The universal with the anaphoric relative clause, the reveal
+  # delivered as its own sentence ("maps back to every blob that contains
+  # it," "each caller that reads them").
+  - "\\b(?:every|each) [a-z-]+ that [a-z]+s (?:it|them)\\b"

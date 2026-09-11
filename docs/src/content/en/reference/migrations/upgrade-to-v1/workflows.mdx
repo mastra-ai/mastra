@@ -249,7 +249,7 @@ createStep({
 
 ### `setState()` is now async and the data passed is validated
 
-The `setState()` function is now async. The data passed is now validated against the `stateSchema` defined in the step. The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not. Also, when calling `setState()`, you can now pass only the state data being updated, instead of adding the previous state spread `(...state)`.
+The `setState()` function is now async and validates data against the step's `stateSchema` when `validateInputs` is enabled. Pass only the fields you want to update, without spreading the previous state (`...state`).
 
 To migrate, update the `setState()` function to be async.
 

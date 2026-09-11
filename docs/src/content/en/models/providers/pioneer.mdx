@@ -7,7 +7,7 @@ description: "Browse Pioneer model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/pioneer.svg" alt="Pioneer logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Pioneer
 
-Access 103 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
+Access 105 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
 
 Learn more in the [Pioneer documentation](https://agent.pioneer.ai/llms.txt).
 
@@ -814,6 +814,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
+    "model": "pioneer/mistral-medium",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
     "model": "pioneer/mistral-medium-3.5",
     "imageInput": true,
     "audioInput": false,
@@ -1280,6 +1292,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.4,
     "outputCost": 4.4
+  },
+  {
+    "model": "pioneer/zai-org/GLM-5.2-Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2.1,
+    "outputCost": 6.6
   }
 ]}
 />
@@ -1314,7 +1338,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "pioneer/zai-org/GLM-5.2"
+      ? "pioneer/zai-org/GLM-5.2-Fast"
       : "pioneer/HuggingFaceTB/SmolLM3-3B-Base";
   }
 });

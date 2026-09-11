@@ -962,10 +962,14 @@ export class S3Filesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async init(): Promise<void> {
-    // Verify we can access the bucket
+    // Prefix-scoped credentials may not authorize a bucket-wide access check.
     const client = this.getClient();
     try {
-      await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      if (this.prefix) {
+        await client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: this.prefix, MaxKeys: 1 }));
+      } else {
+        await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      }
     } catch (error) {
       // Extract httpStatusCode if available
       const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;

@@ -21,6 +21,7 @@ import {
   ThreadRail,
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -29,7 +30,6 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
-import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
@@ -37,6 +37,7 @@ import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -116,6 +117,11 @@ export interface ThreadProps {
    * thread-list refresh here so the page navigates from /new to the real thread URL.
    */
   refreshThreadList?: () => Promise<void> | void;
+  /**
+   * True while the thread history is being fetched for the first time. The skeleton
+   * only replaces the welcome screen; live messages that arrive earlier take precedence.
+   */
+  isHistoryLoading?: boolean;
 }
 
 export const Thread = ({
@@ -127,6 +133,7 @@ export const Thread = ({
   hideModelSwitcher,
   runOptionsSlot,
   refreshThreadList,
+  isHistoryLoading,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -159,7 +166,11 @@ export const Thread = ({
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
             <ChatShell.Content>
-              {isEmpty ? (
+              {isEmpty && isHistoryLoading ? (
+                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-6">
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              ) : isEmpty ? (
                 <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
                 <ChatShell.Column

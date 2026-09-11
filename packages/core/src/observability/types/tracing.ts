@@ -7,10 +7,11 @@
  */
 import { EntityType } from '@internal/core/storage';
 
+import type { MessageListInput } from '../../agent/message-list/types';
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload, StepTripwireData } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
@@ -609,6 +610,10 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
 export interface WorkflowStepAttributes extends AIBaseAttributes {
   /** Step status */
   status?: WorkflowStepStatus;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -621,6 +626,12 @@ export interface WorkflowConditionalAttributes extends AIBaseAttributes {
   truthyIndexes?: number[];
   /** Which steps will be executed */
   selectedSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -641,6 +652,12 @@ export interface WorkflowParallelAttributes extends AIBaseAttributes {
   branchCount: number;
   /** Step IDs being executed in parallel */
   parallelSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -655,6 +672,12 @@ export interface WorkflowLoopAttributes extends AIBaseAttributes {
   totalIterations?: number;
   /** Number of steps to run concurrently in foreach loop */
   concurrency?: number;
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -667,6 +690,12 @@ export interface WorkflowSleepAttributes extends AIBaseAttributes {
   untilDate?: Date;
   /** Sleep type */
   sleepType?: 'fixed' | 'dynamic';
+  /** Authored graph entry id for this sleep operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -896,6 +925,162 @@ export interface SpanTypeMap {
  */
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 
+// ============================================================================
+// Span Input & Output Payloads
+// ============================================================================
+
+/**
+ * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
+ * when the run stops before the span's own result exists: a durable run
+ * suspended, or the caller aborted.
+ */
+export interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted';
+  /** Why the run stopped */
+  reason?: string;
+  /** Tool that suspended the run */
+  toolName?: string;
+  /** Tool call that suspended the run */
+  toolCallId?: string;
+}
+
+/**
+ * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
+ * passed, plus the suspended tool's identity when it is known.
+ */
+export interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown;
+  /** Tool the run resumes into */
+  toolName?: string;
+  /** Tool call the run resumes into */
+  toolCallId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Input recorded on `AGENT_RUN` spans: the messages the caller passed for a
+ * fresh run, or the resume data for a resumed run.
+ */
+export type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput;
+
+/** Output recorded on an `AGENT_RUN` span when the run finishes. */
+export interface AgentRunResult {
+  /** Final response text */
+  text?: string;
+  /** Final structured output */
+  object?: unknown;
+  /** Generated files */
+  files?: unknown[];
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData;
+}
+
+/** Output recorded on `AGENT_RUN` spans. */
+export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
+
+/**
+ * Input recorded on `MODEL_GENERATION` spans.
+ *
+ * Mastra's own loop records the normalized model messages, system messages
+ * first. SDK agents (`@mastra/claude`, `@mastra/openai`, ...) record the raw
+ * messages the caller passed, so `messages` keeps the full `MessageListInput`
+ * shape rather than a single message format.
+ */
+export interface ModelGenerationInput {
+  /** Messages sent to the model */
+  messages: MessageListInput;
+  /** Output schema, when structured output was requested */
+  schema?: unknown;
+}
+
+/**
+ * Output recorded on a `MODEL_GENERATION` span when the generation finishes.
+ * Every field is optional: a durable run records only `text`.
+ */
+export interface ModelGenerationResult {
+  /** Generated text */
+  text?: string;
+  /** Generated structured output */
+  object?: unknown;
+  /** Reasoning details */
+  reasoning?: unknown;
+  /** Reasoning as plain text */
+  reasoningText?: string;
+  /** Generated files */
+  files?: unknown[];
+  /** Sources the model cited */
+  sources?: unknown[];
+  /** Tool calls the model requested */
+  toolCalls?: unknown[];
+  /** Provider warnings */
+  warnings?: unknown[];
+}
+
+/** Output recorded on `MODEL_GENERATION` spans. */
+export type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput;
+
+/** One message in the shallow conversation preview a model step records. */
+export interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string;
+  /** Message text, with non-text parts summarized */
+  content: string;
+}
+
+/**
+ * Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow
+ * preview of what the step sent to the model. A normalized message list when
+ * the step carries messages; otherwise a summary of the request body, or the
+ * raw request when it cannot be summarized.
+ */
+export type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string;
+
+/**
+ * Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step
+ * finishes: the step result without `usage`, which lives on the attributes.
+ */
+export interface ModelStepResult {
+  /** Text generated in this step */
+  text?: string;
+  /** Tool calls the model requested in this step */
+  toolCalls?: unknown[];
+  /** Accumulated step results, when the loop reports them */
+  steps?: unknown[];
+  /** Structured output generated in this step */
+  object?: unknown;
+}
+
+/** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
+export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
+
+/**
+ * Span types whose `input` Mastra writes itself with a fixed shape. Every
+ * other span type keeps `any`, as before: tool arguments, workflow data and
+ * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
+ * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ */
+export interface SpanInputMap {
+  [SpanType.AGENT_RUN]: AgentRunInput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationInput;
+  [SpanType.MODEL_STEP]: ModelStepInput;
+  [SpanType.MODEL_INFERENCE]: ModelStepInput;
+}
+
+/** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
+export interface SpanOutputMap {
+  [SpanType.AGENT_RUN]: AgentRunOutput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
+  [SpanType.MODEL_STEP]: ModelStepOutput;
+  [SpanType.MODEL_INFERENCE]: ModelStepResult;
+}
+
+/** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */
+export type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap ? SpanInputMap[TType] : any;
+
+/** `output` payload of a span: the mapped shape when `SpanOutputMap` lists the type, otherwise `any`. */
+export type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap ? SpanOutputMap[TType] : any;
+
 /**
  * Span types a processor may declare via `Processor.spanType`.
  *
@@ -969,9 +1154,9 @@ interface BaseSpan<TType extends SpanType> {
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Input passed at the start of the span */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output generated at the end of the span */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
@@ -1378,9 +1563,9 @@ interface CreateBaseOptions<TType extends SpanType> {
  */
 export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data (for event spans) */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Parent span */
@@ -1438,7 +1623,7 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
  */
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -1453,7 +1638,7 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 interface UpdateBaseOptions<TType extends SpanType> {
@@ -1466,7 +1651,7 @@ interface UpdateBaseOptions<TType extends SpanType> {
 /** Options for ending a span, with optional final attributes and output. */
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
   /**
    * Also close any descendant spans still open, without applying these
    * options to them. Use at terminal points (error, abort, suspension) where
@@ -1481,9 +1666,9 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   /** Span name override */
   name?: string;
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 /** Options for recording an error on a span. */
@@ -1507,7 +1692,7 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
-  input?: any;
+  input?: SpanInput<TType>;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
   tracingPolicy?: TracingPolicy;

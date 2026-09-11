@@ -81,3 +81,22 @@ export type DataListRowSharedProps = {
    */
   featured?: boolean;
 };
+
+/** Split a grid-template-columns string on top-level whitespace only, so `minmax(0, 10rem)` stays one track. */
+export function splitColumns(columns: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of columns) {
+    if (char === '(') depth++;
+    if (char === ')') depth--;
+    if (/\s/.test(char) && depth === 0) {
+      if (current) parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}

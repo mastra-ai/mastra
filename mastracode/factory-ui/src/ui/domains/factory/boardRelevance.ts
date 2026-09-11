@@ -1,8 +1,10 @@
+import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+
 import type { BoardCandidate } from './boardCandidates';
 import type { BoardKind } from './boardStages';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
-import { isHumanActor, workItemHumanActorIds } from './workItemActivity';
+import { workItemHumanActorIds } from './workItemActivity';
 
 export const BOARD_RELEVANCE_TYPES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 export type BoardRelevanceType = (typeof BOARD_RELEVANCE_TYPES)[number];
@@ -136,12 +138,12 @@ export function workItemRelevance(
   const external = targetRelations(item);
   const worked = new Set(workItemHumanActorIds(item).map(actorId => `factory:${actorId}`));
   for (const event of activityPage?.events ?? []) {
-    if (event.actorType === 'human' && isHumanActor(event.actorId) && targetsWorkItem(event, item.id)) {
+    if (event.actorType === 'human' && isHumanActorId(event.actorId) && targetsWorkItem(event, item.id)) {
       worked.add(`factory:${event.actorId}`);
     }
   }
   const authored = new Set(external.authored);
-  if (item.source === 'manual' && isHumanActor(item.createdBy)) authored.add(`factory:${item.createdBy}`);
+  if (item.source === 'manual' && isHumanActorId(item.createdBy)) authored.add(`factory:${item.createdBy}`);
   return { worked, authored, assigned: external.assigned, 'review-requested': external['review-requested'] };
 }
 
@@ -220,7 +222,7 @@ export function boardParticipants({
   }
 
   for (const [actorId, profile] of Object.entries(activityPage?.actors ?? {})) {
-    if (!isHumanActor(actorId)) continue;
+    if (!isHumanActorId(actorId)) continue;
     add({ ...profile, id: `factory:${actorId}`, source: 'factory' });
   }
 

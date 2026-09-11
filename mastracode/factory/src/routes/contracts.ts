@@ -358,6 +358,30 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     responseSchema: z.object({ thresholds: z.array(z.number().finite()) }),
   },
+  boardCatalog: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards',
+    description: 'List installed Factory boards',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      boards: z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          initialPhase: z.string(),
+          phases: z.array(
+            z.object({
+              id: z.string(),
+              title: z.string(),
+              kind: z.enum(['resting', 'working', 'terminal']),
+              role: z.string().optional(),
+              transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
+            }),
+          ),
+        }),
+      ),
+    }),
+  },
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',

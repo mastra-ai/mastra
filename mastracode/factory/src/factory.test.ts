@@ -238,6 +238,12 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('uses the platform bot co-author identity', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+  });
+
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {

@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 import { attentionKindSummaries } from './attention';
+import { builtinBoardCatalog } from './board-catalog';
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -26,7 +27,11 @@ export const server = setupServer(
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
+  http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
+  // Ambient GitHub label routing (read by every board's intake feed); label-routing
+  // tests override it with `server.use(...)`.
+  http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/attention', () =>

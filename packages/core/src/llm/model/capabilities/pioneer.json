@@ -46,6 +46,7 @@
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta/muse-spark-1.1",
     "mistral-large-3",
+    "mistral-medium",
     "mistral-medium-3.5",
     "mistralai/Mistral-Small-4-119B-2603",
     "mistralai/Pixtral-12B-2409",
@@ -124,6 +125,7 @@
     "meta-llama/Llama-3.3-70B-Instruct",
     "meta/muse-spark-1.1",
     "mistral-large-3",
+    "mistral-medium",
     "mistral-medium-3.5",
     "mistralai/Codestral-22B-v0.1",
     "mistralai/Magistral-Small-2506",
@@ -147,7 +149,8 @@
     "qwen3.7-max",
     "qwen3.7-plus",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ],
   "structuredOutput": [
     "Qwen/Qwen3.5-9B",
@@ -193,6 +196,7 @@
     "qwen3.6-flash",
     "sakana/fugu-ultra",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ]
 }

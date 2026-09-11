@@ -450,7 +450,7 @@ Caching is implemented as the [`ResponseCache`](/reference/processors/response-c
 
 ### When to use response caching
 
-Reach for it when the same request shape repeats across users or sessions, for example prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over. Skip it when calls trigger external side effects through tools, since cache hits replay tool calls without re-executing them.
+Use caching when identical requests recur across users or sessions. Examples include suggested-prompt buttons and repeated searches, or guardrail LLMs that classify the same input. Skip it when calls trigger external side effects through tools, since cache hits replay tool calls without re-executing them.
 
 ### Quickstart
 
@@ -554,7 +554,7 @@ The cache key is derived from the resolved `LanguageModelV2Prompt` Mastra is abo
 
 When you don't supply `key`, the processor derives one deterministically from the inputs that change the LLM's response at this step: `agentId`, `stepNumber` (so each step in a tool loop has its own cache entry), `scope`, model identity (`provider`, `modelId`, spec version), and the resolved `prompt` (post-memory + post-processors). Any change to these inputs automatically invalidates the cache.
 
-Multimodal prompts are included too. Image and file parts reach the key by value: the key includes a URL's full href, and a digest of the bytes for inline binary data (`Uint8Array`, `ArrayBuffer`). Requests that differ only in which image they reference therefore get different cache entries.
+Multimodal prompts are included too. For image and file parts, the key includes the full URL or a digest of the bytes for inline binary data (`Uint8Array`, `ArrayBuffer`). Requests that differ only in which image they reference therefore get different cache entries.
 
 #### Customize the cache key
 

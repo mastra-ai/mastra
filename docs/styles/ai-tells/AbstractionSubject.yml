@@ -1,0 +1,59 @@
+---
+extends: existence
+message: "AI abstraction subject: '%s'. Name the thing the demonstrative stands for, then say what it does."
+level: error
+nonword: true
+# The anaphoric abstraction subject: the prior sentence compressed into an
+# abstract noun with a demonstrative on it, and that noun made the subject
+# of a comment ("That asymmetry is the point"; "This inversion buys the
+# reverse lookup"; "That gap is where the cost lives"; "This coupling is
+# the price"; "That symmetry is not an accident"). The reader has just
+# read the fact; the sentence names it again as an "asymmetry" or a
+# "tension" and then grades it. Metacommentary owns the "This X matters."
+# bridge and "This X means"; MicDrop owns "This is the point" and "That's
+# by design." This rule takes the abstraction noun as subject with any
+# other verb of comment, and the copula ahead of a verdict (2026-09).
+#
+# The plain form names the thing and says what it does: "The reverse
+# lookup costs one read," or "The writer never sees the index."
+#
+# Case matters. Capital "This," "That," "These," and "Those" open a
+# sentence, and lowercase "this" joins after a conjunction ("and this
+# indirection costs one read"). Lowercase "that" stays out: every corpus
+# hit is the "that" which opens a clause rather than the demonstrative
+# ("so that constraints are independent," "and that ordering is not
+# implemented").
+#
+# Costs across the Go and Python standard libraries: the comment verbs
+# measure two ("This separation makes the API cleaner," "These pairings
+# make no sense"), both the construction itself. The bare copula measures
+# six, five of them a passive that states a mechanism rather than a
+# verdict ("This invariant is left up to the caller," "These constraints
+# are checked by Inline," "These boundaries are represented in seconds,"
+# "This distinction is required because"). That is ordinary docs English,
+# so the copula token looks past a following participle and a number
+# ("That gap is 4 bytes") and keeps the one that grades the noun ("This
+# distinction is rarely important"). Three hits in all under Vale. "Loop"
+# and "pattern" stay out of the noun list, twelve matches and every one a
+# code reference ("This loop is faster than using copy"); "restriction"
+# and "assumption" stay out as docs English ("These restrictions are not
+# part of the specification"). "Holds" after "invariant" is the literal
+# sense ("If that invariant holds") and stays out.
+tokens:
+  # --- The copula ahead of a verdict ("That asymmetry is the point,"
+  # "This separation is deliberate," "That gap is where the cost lives,"
+  # "This coupling isn't free"). The lookahead keeps out a passive
+  # mechanism ("is enforced by the database") and a measurement.
+  - "\\b(?:This|That|These|Those|(?<=\\b(?:and|but|so|yet|because|since|while) )this) (?:asymmetry|asymmetries|symmetry|symmetries|inversions?|tensions?|mismatch(?:es)?|gaps?|splits?|distinctions?|differences?|duality|dualities|indirections?|separations?|couplings?|decoupling|trade-?offs?|contrasts?|imbalances?|disconnects?|frictions?|redundancy|redundancies|layerings?|orderings?|invariants?|constraints?|boundary|boundaries|seams?|ambiguity|ambiguities|divergences?|circularity|discrepancy|discrepancies|overlaps?|reversals?|parity|disparity|disparities|dichotomy|dichotomies|dissonances?|abstractions?|coincidences?|interplay|pairings?|hand-?offs?|nuances?|subtlety|subtleties|irony|ironies|paradox(?:es)?|interdependence|interdependencies|compromises?|simplifications?) (?:is|are|was|were|isn't|aren't|wasn't|weren't)\\b(?! (?:not |also |only |rarely |already |then |still |now |always |never |usually |typically |currently |explicitly |implicitly |fully |partly |partially |best |well )?(?:[a-z]+ed|left|kept|held|built|made|set|met|known|seen|shown|given|taken|done|hidden|broken|written|driven|chosen|found|caught|bound|lost|put|meant|understood|spelled|dealt|read|run|split|cut)\\b)(?! (?:[a-z]+ ){0,2}[0-9])"
+
+  # --- The verb of comment ("This inversion buys the reverse lookup,"
+  # "That mismatch explains the retry," "This indirection costs one read,"
+  # "That split keeps the writer simple," "This tension drives the
+  # design"). "Matters" fires only mid-sentence; the sentence-final form
+  # is MicDrop's.
+  - "\\b(?:This|That|These|Those|(?<=\\b(?:and|but|so|yet|because|since|while) )this) (?:asymmetry|asymmetries|symmetry|symmetries|inversions?|tensions?|mismatch(?:es)?|gaps?|splits?|distinctions?|differences?|duality|dualities|indirections?|separations?|couplings?|decoupling|trade-?offs?|contrasts?|imbalances?|disconnects?|frictions?|redundancy|redundancies|layerings?|orderings?|invariants?|constraints?|boundary|boundaries|seams?|ambiguity|ambiguities|divergences?|circularity|discrepancy|discrepancies|overlaps?|reversals?|parity|disparity|disparities|dichotomy|dichotomies|dissonances?|abstractions?|coincidences?|interplay|pairings?|hand-?offs?|nuances?|subtlety|subtleties|irony|ironies|paradox(?:es)?|interdependence|interdependencies|compromises?|simplifications?) (?:matters?(?=[ ,;:])|drives?|explains?|shapes?|buys?|costs?|keeps?|makes?|(?<!invariants? )holds?|lets?|forces?|decides?|determines?|dictates?|underpins?|defines?|governs?|justify|justifies|motivates?|pays?|saves?|earns?|tells?|gives?)\\b"
+
+  # --- "Means" behind the demonstratives Metacommentary does not take
+  # ("That asymmetry means one extra read"). "This X means" is
+  # Metacommentary's.
+  - "\\b(?:That|These|Those|(?<=\\b(?:and|but|so|yet|because|since|while) )this) (?:asymmetry|asymmetries|symmetry|symmetries|inversions?|tensions?|mismatch(?:es)?|gaps?|splits?|distinctions?|differences?|duality|dualities|indirections?|separations?|couplings?|decoupling|trade-?offs?|contrasts?|imbalances?|disconnects?|frictions?|redundancy|redundancies|layerings?|orderings?|invariants?|constraints?|boundary|boundaries|seams?|ambiguity|ambiguities|divergences?|circularity|discrepancy|discrepancies|overlaps?|reversals?|parity|disparity|disparities|dichotomy|dichotomies|dissonances?|abstractions?|coincidences?|interplay|pairings?|hand-?offs?|nuances?|subtlety|subtleties|irony|ironies|paradox(?:es)?|interdependence|interdependencies|compromises?|simplifications?) means?\\b"

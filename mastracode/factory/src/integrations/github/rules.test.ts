@@ -63,6 +63,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     subscriptionStorage: seeded.integrations.forIntegration('github'),
     workItems,
     projects: seeded.projects,
+    intake: seeded.intake,
     project,
     projectRepository,
     github,
@@ -2395,6 +2396,125 @@ describe('GithubRules', () => {
     await service.ingest(issueOpened('multi-tenant'));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(await workItems.listDeferredDecisions('org-2', second.id)).toHaveLength(1);
+  });
+});
+
+describe('GithubRules label routes', () => {
+  function issueLabels(action: 'labeled' | 'unlabeled', labels: string[], deliveryId = `label-${action}`) {
+    return {
+      event: 'issues',
+      deliveryId,
+      payload: {
+        action,
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        issue: {
+          number: 42,
+          title: 'Issue 42',
+          html_url: 'https://github.com/acme/repo/issues/42',
+          labels: labels.map(name => ({ name })),
+        },
+      },
+    };
+  }
+
+  async function setupRoutes(route: string | undefined) {
+    const base = await setup('write');
+    const intake = base.intake;
+    if (route) {
+      await intake.setLabelRoute({
+        orgId: 'org-1',
+        factoryProjectId: base.project.id,
+        integrationId: 'github',
+        label: route,
+        board: 'release',
+        userId: 'user-1',
+      });
+    }
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      configVersion: 'factory-config-v1',
+      intake,
+    });
+    return { ...base, service };
+  }
+
+  it('materializes a labelled issue on the routed board at its initial phase', async () => {
+    const { service, workItems, project } = await setupRoutes('Release');
+    const ingress = issueOpened('routed-open');
+    (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
+    await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({
+      type: 'upsertLinkedWorkItem',
+      board: 'release',
+      stage: 'queued',
+      metadata: expect.objectContaining({ labels: ['release'] }),
+    });
+  });
+
+  it('keeps unrouted issues on Work › Intake', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const ingress = issueOpened('unrouted-open');
+    (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
+    await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
+  });
+
+  it('moves a movable issue card to the routed board when the label is added, and back when removed', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const item = await createLinkedIssue(workItems, project.id);
+    const supersede = vi.spyOn(workItems, 'supersedeDecisionsForWorkItem');
+
+    await expect(service.ingest(issueLabels('labeled', ['Release']))).resolves.toEqual({ status: 'committed' });
+    const moved = await workItems.get({ orgId: 'org-1', id: item.id });
+    expect(moved).toMatchObject({ board: 'release', stages: ['queued'], metadata: { labels: ['Release'] } });
+    // Runs the old board proposed (Work's triage) must not follow the card.
+    expect(supersede).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-1', factoryProjectId: project.id, workItemId: item.id }),
+    );
+
+    await expect(service.ingest(issueLabels('unlabeled', []))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { labels: [] },
+    });
+  });
+
+  it('leaves a card a run owns where it is but still records the labels', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const item = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: {
+        // Sessions are keyed by the phase's role (`plan`), not the phase id (`planning`).
+        sessions: { plan: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
+      },
+    });
+    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: item.board,
+      stages: ['planning'],
+      metadata: { labels: ['release'] },
+    });
+  });
+
+  it('ignores label changes for issues without a card and label events on pull requests', async () => {
+    const { service } = await setupRoutes('release');
+    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'ignored' });
+    const onPullRequest = issueLabels('labeled', ['release'], 'pr-labeled');
+    (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
+    await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });
 });
 

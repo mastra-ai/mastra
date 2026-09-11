@@ -5,8 +5,10 @@ import { queryKeys } from '../api/keys';
 import {
   fetchIntakeBindings,
   fetchIntakeConfig,
+  fetchIntakeLabelRoutes,
   saveIntakeBinding,
   saveIntakeConfig,
+  saveIntakeLabelRoute,
 } from '../ui/domains/factory/services/intake';
 import type { IntakeConfig } from '../ui/domains/factory/services/intake';
 
@@ -55,11 +57,42 @@ export function useSaveIntakeBindingMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (binding: { integrationId: string; sourceId: string; factoryProjectId: string | null }) =>
-      saveIntakeBinding(baseUrl, binding),
+    mutationFn: (binding: {
+      integrationId: string;
+      sourceId: string;
+      factoryProjectId: string | null;
+      board?: string | null;
+    }) => saveIntakeBinding(baseUrl, binding),
     onSuccess: bindings => {
       queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
       void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
+    },
+  });
+}
+
+/** GitHub label → board routes of one Factory project. */
+export function useIntakeLabelRoutesQuery(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.intakeLabelRoutes(factoryProjectId),
+    queryFn: () => fetchIntakeLabelRoutes(baseUrl, factoryProjectId!),
+    enabled: Boolean(factoryProjectId),
+  });
+}
+
+/**
+ * Route a label to a board (or clear it with `board: null`). Work items are
+ * invalidated because the server relocates cards carrying the label.
+ */
+export function useSaveIntakeLabelRouteMutation() {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (route: { factoryProjectId: string; integrationId: string; label: string; board: string | null }) =>
+      saveIntakeLabelRoute(baseUrl, route),
+    onSuccess: (routes, route) => {
+      queryClient.setQueryData(queryKeys.intakeLabelRoutes(route.factoryProjectId), routes);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(route.factoryProjectId) });
     },
   });
 }

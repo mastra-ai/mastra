@@ -70,38 +70,30 @@ export interface MCPClientOptions {
 }
 
 /**
- * MCPClient manages multiple MCP server connections and their tools in a Mastra application.
+ * Manages Model Context Protocol (MCP) server connections and tool namespacing,
+ * with access to tools, resources, prompts, and elicitation.
  *
- * This class handles connection lifecycle, tool namespacing, and provides access to tools,
- * resources, prompts, and elicitation across all configured servers.
+ * Configure authentication when required by your servers.
  *
  * @example
+ * `yourServerUrl` is a URL for a running MCP server's HTTP endpoint.
  * ```typescript
  * import { MCPClient } from '@mastra/mcp';
- * import { Agent } from '@mastra/core/agent';
  *
  * const mcp = new MCPClient({
  *   servers: {
- *     weather: {
- *       url: new URL('http://localhost:8080/sse'),
- *     },
- *     stockPrice: {
- *       command: 'npx',
- *       args: ['tsx', 'stock-price.ts'],
- *       env: { API_KEY: 'your-api-key' },
- *     },
+ *     remote: { url: yourServerUrl },
  *   },
- *   timeout: 30000,
- * });
- *
- * const agent = new Agent({
- *   id: 'multi-tool-agent',
- *   name: 'Multi-tool Agent',
- *   instructions: 'You have access to multiple tools.',
- *   model: 'openai/gpt-4o',
- *   tools: await mcp.listTools(),
  * });
  * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/mcp/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [MCP client documentation](https://mastra.ai/reference/tools/mcp-client)
+ * if packaged docs are unavailable.
  */
 export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};

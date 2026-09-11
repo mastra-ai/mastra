@@ -17,6 +17,7 @@ import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { SearchableSpan } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceIdButton } from './trace-id-button';
 import { TraceSummaryDescription } from './trace-summary-description';
 import { TraceTimeline } from './trace-timeline';
 import { Button } from '@/ds/components/Button';
@@ -29,7 +30,6 @@ import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
-import { truncateString } from '@/lib/truncate-string';
 import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
@@ -88,7 +88,7 @@ export interface TraceDataPanelViewProps {
    * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
@@ -265,8 +265,9 @@ export function TraceDataPanelView({
         ) : (
           <>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <DataPanel.Heading>
-                Trace <b># {truncateString(traceId, 12)}</b>
+              <DataPanel.Heading className="items-center">
+                Trace
+                <TraceIdButton id={traceId} />
               </DataPanel.Heading>
               {!collapsed && rootSpan && (
                 <TraceSummaryDescription
@@ -368,9 +369,7 @@ export function TraceDataPanelView({
                   <DataPanel.Header className="min-h-16 py-2">
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
-                      {feedbackTabSlot && (
-                        <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
-                      )}
+                      {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
                       {scoresTabSlot && (
                         <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                       )}
