@@ -201,6 +201,11 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await page.getByRole('button', { name: /Project/ }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
+  // The graph pane must actually have height — a broken flex chain renders
+  // nodes at zero height while visibility checks on their text still pass.
+  const container = page.locator('[data-testid="knowledge-graph-container"]');
+  await expect.poll(async () => (await container.boundingBox())?.height ?? 0).toBeGreaterThan(100);
+
   await page.locator('.react-flow__node[data-id="payments"]').dispatchEvent('click');
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
