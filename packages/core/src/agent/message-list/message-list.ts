@@ -42,7 +42,11 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import {
+  dropCrossProviderExecutedParts,
+  dropCrossProviderSignedReasoning,
+  ensureGeminiCompatibleMessages,
+} from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -738,6 +742,8 @@ export class MessageList {
         }
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
+
+        messages = dropCrossProviderSignedReasoning(messages, this.messages, options.targetProvider, this.logger);
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 

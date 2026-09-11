@@ -58,6 +58,7 @@ export {
   getResponseProviderItemIdFromPart,
   findToolCallArgs,
   dropCrossProviderExecutedParts,
+  dropCrossProviderSignedReasoning,
 } from './utils/provider-compat';
 export {
   getResponseProviderItemId,
