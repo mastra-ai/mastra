@@ -1,8 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { MCPServer } from '@mastra/mcp';
-import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type { LoggingLevel } from '@modelcontextprotocol/server';
 
 // Simplified log levels matching MCP client (debug, info, warn, error, none)
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
@@ -94,33 +93,15 @@ export const writeErrorLog = (message: string, data?: any) => {
   }
 };
 
-// Create logger factory to inject server instance
-export function createLogger(server?: MCPServer): Logger {
+/**
+ * Server-wide logger. MCP 2026-07-28 has no session-level log channel — log
+ * delivery is opted into per request — so process-level logs go to the local
+ * log file (see `writeErrorLog`) filtered by `--log-level`.
+ */
+export function createLogger(): Logger {
   const sendLog = async (level: LoggingLevel, message: string, data?: any) => {
-    if (!server) return;
     if (!shouldLog(level)) return;
-
-    try {
-      const sdkServer = server.getServer();
-      if (!sdkServer) return;
-      await sdkServer.sendLoggingMessage({
-        level,
-        data: {
-          message,
-          ...(data ? (typeof data === 'object' ? data : { data }) : {}),
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        (error.message === 'Not connected' ||
-          error.message.includes('does not support logging') ||
-          error.message.includes('Connection closed'))
-      ) {
-        return;
-      }
-      console.error(`Failed to send ${level} log:`, error instanceof Error ? error.message : error);
-    }
+    writeErrorLog(message, { level, ...(data ? (typeof data === 'object' ? data : { data }) : {}) });
   };
 
   return {
@@ -147,7 +128,6 @@ export function createLogger(server?: MCPServer): Logger {
               name: error.name,
             }
           : error;
-      writeErrorLog(message, errorData);
       await sendLog('error', message, errorData);
     },
     critical: async (message: string, error?: any) => {
@@ -159,7 +139,6 @@ export function createLogger(server?: MCPServer): Logger {
               name: error.name,
             }
           : error;
-      writeErrorLog(message, errorData);
       await sendLog('critical', message, errorData);
     },
     alert: async (message: string, error?: any) => {
@@ -171,7 +150,6 @@ export function createLogger(server?: MCPServer): Logger {
               name: error.name,
             }
           : error;
-      writeErrorLog(message, errorData);
       await sendLog('alert', message, errorData);
     },
     emergency: async (message: string, error?: any) => {
@@ -183,7 +161,6 @@ export function createLogger(server?: MCPServer): Logger {
               name: error.name,
             }
           : error;
-      writeErrorLog(message, errorData);
       await sendLog('emergency', message, errorData);
     },
   };

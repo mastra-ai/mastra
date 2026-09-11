@@ -2206,6 +2206,7 @@ type Shared_Type_92 = {
 };
 
 type Shared_Type_93 = {
+  id?: string | undefined;
   name: string;
   description?: string | undefined;
   inputSchema: unknown;
@@ -12626,6 +12627,7 @@ export type GetMcpV0Servers_Response = {
       release_date: string;
       is_latest: boolean;
     };
+    transports: ('streamable-http' | 'sse')[];
   }[];
   total_count: number;
   next: string | null;
@@ -12674,6 +12676,7 @@ export type GetMcpV0ServersId_Response = {
   package_canonical?: string | undefined;
   packages?: unknown[] | undefined;
   remotes?: unknown[] | undefined;
+  transports: ('streamable-http' | 'sse')[];
 };
 
 export type GetMcpV0ServersId_Request = Simplify<

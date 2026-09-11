@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createTool } from '@mastra/core/tools';
 import { getPackageInfo } from 'local-pkg';
 import { z } from 'zod';
 import { logger } from '../logger';
@@ -153,8 +154,8 @@ async function readSourceMap(packageName: string, projectPath: string): Promise<
 // Tool: getMastraHelp (PRIMARY ENTRY POINT)
 // ============================================================================
 
-export const getMastraHelpTool = {
-  name: 'getMastraHelp',
+export const getMastraHelpTool = createTool({
+  id: 'getMastraHelp',
   description: `🚀 START HERE - Complete guide to Mastra documentation tools.
 
     This MCP server provides TWO documentation sources:
@@ -197,12 +198,12 @@ export const getMastraHelpTool = {
     3. Version mismatch: mastraChanges → mastraMigration
 
     This tool shows you which packages are installed and provides detailed guidance on using all available documentation tools.`,
-  parameters: z.object({
+  inputSchema: z.object({
     projectPath: z
       .string()
       .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
   }),
-  execute: async (args: { projectPath: string }) => {
+  execute: async args => {
     void logger.debug('Executing getMastraHelp tool', { projectPath: args.projectPath });
 
     const packages = await getInstalledMastraPackages(args.projectPath);
@@ -306,14 +307,14 @@ Guided learning experience with hands-on exercises.
 **If version differs**: Check changes
    → mastraChanges → mastraMigration`;
   },
-};
+});
 
 // ============================================================================
 // Tool: listMastraPackages
 // ============================================================================
 
-export const listInstalledPackagesTool = {
-  name: 'listMastraPackages',
+export const listInstalledPackagesTool = createTool({
+  id: 'listMastraPackages',
   description: `[📦 LOCAL PACKAGES] Discover which Mastra packages are installed and have documentation available.
 
     Use this when you need to:
@@ -323,12 +324,12 @@ export const listInstalledPackagesTool = {
 
     Returns: List of @mastra/* packages (core, memory, rag, etc.) with embedded docs.
     Next step: Use getMastraExports to explore a specific package's API.`,
-  parameters: z.object({
+  inputSchema: z.object({
     projectPath: z
       .string()
       .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
   }),
-  execute: async (args: { projectPath: string }) => {
+  execute: async args => {
     void logger.debug('Executing listInstalledMastraPackages tool', {
       projectPath: args.projectPath,
       cwd: process.cwd(),
@@ -362,14 +363,14 @@ Install Mastra packages to get started:
       '3. Use **searchMastraDocs** to find specific information',
     ].join('\n');
   },
-};
+});
 
 // ============================================================================
 // Tool: getMastraExports
 // ============================================================================
 
-export const readSourceMapTool = {
-  name: 'getMastraExports',
+export const readSourceMapTool = createTool({
+  id: 'getMastraExports',
   description: `[📦 LOCAL PACKAGES] Explore the complete API surface of a Mastra package - see all classes, functions, types, and constants.
 
     Use this when you need to:
@@ -380,7 +381,7 @@ export const readSourceMapTool = {
 
     Returns: List of all exports with their source file locations.
     Next step: Use getMastraExportDetails to get full type definitions and code for a specific export.`,
-  parameters: z.object({
+  inputSchema: z.object({
     package: z.string().describe('Package name to explore (e.g., "@mastra/core", "@mastra/memory", "@mastra/rag")'),
     projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
     filter: z
@@ -388,7 +389,7 @@ export const readSourceMapTool = {
       .optional()
       .describe('Optional: filter exports by name (case-insensitive, e.g., "Agent", "create", "Tool")'),
   }),
-  execute: async (args: { package: string; projectPath: string; filter?: string }) => {
+  execute: async args => {
     void logger.debug('Executing readMastraSourceMap tool', { args });
 
     const sourceMap = await readSourceMap(args.package, args.projectPath);
@@ -425,14 +426,14 @@ Try running without a filter to see all available exports.`
       '- Use **searchMastraDocs** to find specific topics or patterns',
     ].join('\n');
   },
-};
+});
 
 // ============================================================================
 // Tool: getMastraExportDetails
 // ============================================================================
 
-export const findExportTool = {
-  name: 'getMastraExportDetails',
+export const findExportTool = createTool({
+  id: 'getMastraExportDetails',
   description: `[📦 LOCAL PACKAGES] Get complete API reference for a specific Mastra export - type definitions, interfaces, and optionally source code.
 
     Use this when you need to:
@@ -444,7 +445,7 @@ export const findExportTool = {
 
     Returns: Full TypeScript type definitions and optionally implementation source code.
     Example: Get details on the Agent class to see how to create and configure agents.`,
-  parameters: z.object({
+  inputSchema: z.object({
     package: z.string().describe('Package name (e.g., "@mastra/core", "@mastra/memory")'),
     exportName: z.string().describe('Exact export name to look up (e.g., "Agent", "createTool", "Workflow")'),
     includeTypes: z
@@ -464,14 +465,7 @@ export const findExportTool = {
       .describe('Number of lines of implementation code to show (default: 50)'),
     projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
-  execute: async (args: {
-    package: string;
-    exportName: string;
-    projectPath: string;
-    includeTypes?: boolean;
-    includeImplementation?: boolean;
-    implementationLines?: number;
-  }) => {
+  execute: async args => {
     void logger.debug('Executing findMastraExport tool', { args });
 
     const sourceMap = await readSourceMap(args.package, args.projectPath);
@@ -554,14 +548,14 @@ Run getMastraExports with package="${args.package}" to see all available exports
 
     return output.join('\n');
   },
-};
+});
 
 // ============================================================================
 // Tool: readMastraDocs
 // ============================================================================
 
-export const readEmbeddedDocsTool = {
-  name: 'readMastraDocs',
+export const readEmbeddedDocsTool = createTool({
+  id: 'readMastraDocs',
   description: `[📦 LOCAL PACKAGES] Read comprehensive guides and documentation on Mastra concepts, patterns, and implementation examples.
 
     Use this when you need to:
@@ -573,7 +567,7 @@ export const readEmbeddedDocsTool = {
 
     Returns: Topic-based documentation with explanations, examples, and usage patterns.
     Available topics: agents, tools, workflows, memory, rag, integrations, deployment, and more.`,
-  parameters: z.object({
+  inputSchema: z.object({
     package: z.string().describe('Package name to read docs from (e.g., "@mastra/core", "@mastra/memory")'),
     topic: z
       .string()
@@ -587,7 +581,7 @@ export const readEmbeddedDocsTool = {
       .describe('Optional: specific documentation file within the topic (e.g., "01-overview.md")'),
     projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
-  execute: async (args: { package: string; projectPath: string; topic?: string; file?: string }) => {
+  execute: async args => {
     void logger.debug('Executing readMastraEmbeddedDocs tool', { args });
 
     const packageInfo = await getPackageRootPath(args.package, args.projectPath);
@@ -683,14 +677,14 @@ Run readMastraDocs with package="${args.package}" (without topic parameter) to s
 Run readMastraDocs with package="${args.package}" (without topic parameter) to see available topics.`;
     }
   },
-};
+});
 
 // ============================================================================
 // Tool: searchMastraDocs
 // ============================================================================
 
-export const searchEmbeddedDocsTool = {
-  name: 'searchMastraDocs',
+export const searchEmbeddedDocsTool = createTool({
+  id: 'searchMastraDocs',
   description: `[📦 LOCAL PACKAGES] Search across all Mastra documentation to find specific information, patterns, or examples.
 
     Use this when you need to:
@@ -702,7 +696,7 @@ export const searchEmbeddedDocsTool = {
 
     Returns: Relevant documentation excerpts with file paths, ranked by relevance.
     Tip: Use specific terms for better results (e.g., "agent memory" vs "memory").`,
-  parameters: z.object({
+  inputSchema: z.object({
     query: z
       .string()
       .describe('What to search for (case-insensitive, e.g., "workflow steps", "vector store", "authentication")'),
@@ -717,7 +711,7 @@ export const searchEmbeddedDocsTool = {
       .describe('Optional: maximum number of results to return (default: 10)'),
     projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
-  execute: async (args: { query: string; projectPath: string; package?: string; maxResults?: number }) => {
+  execute: async args => {
     void logger.debug('Executing searchMastraEmbeddedDocs tool', { args });
 
     const packages = args.package ? [args.package] : await getInstalledMastraPackages(args.projectPath);
@@ -801,7 +795,7 @@ Try:
       '- Refine your search with more specific terms if needed',
     ].join('\n');
   },
-};
+});
 
 // Export all tools
 export const embeddedDocsTools = {

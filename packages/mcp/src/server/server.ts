@@ -184,6 +184,7 @@ export class MCPServer extends MCPServerBaseV2 {
   private toolInfo(name: string, tool: CatalogueTool): MCPToolInfoV2 {
     const native = isMCPToolV2(tool);
     return {
+      id: name,
       name,
       description: tool.description,
       inputSchema: this.jsonSchema(tool.inputSchema) ?? { type: 'object', properties: {} },
@@ -303,8 +304,19 @@ export class MCPServer extends MCPServerBaseV2 {
         span?.error({ error: error as Error, attributes: { success: false } });
         if (error instanceof ProtocolError) throw error;
         this.logger.error('Tool execution failed', { tool: name, error });
-        if (error instanceof MastraError) return errorResult(JSON.stringify(error.toJSON()));
-        return errorResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        const mastraError =
+          error instanceof MastraError
+            ? error
+            : new MastraError(
+                {
+                  id: 'TOOL_EXECUTION_FAILED',
+                  domain: ErrorDomain.TOOL,
+                  category: ErrorCategory.USER,
+                  details: { toolName: name },
+                },
+                error,
+              );
+        return errorResult(JSON.stringify(mastraError.toJSON()));
       }
     });
   }
@@ -324,11 +336,14 @@ export class MCPServer extends MCPServerBaseV2 {
       return errorResult(value.message);
     }
     if (!tool.outputSchema) {
-      return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }] };
+      return {
+        isError: false,
+        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+      };
     }
     // Business tools already validated `value` against their output schema.
     const structuredContent = value as Record<string, unknown>;
-    return { structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
   }
 
   private registerResourceHandlers(server: Server): void {
