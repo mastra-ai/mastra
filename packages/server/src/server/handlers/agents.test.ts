@@ -44,6 +44,8 @@ import {
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
+  LIST_PENDING_SIGNALS_ROUTE,
+  REMOVE_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
@@ -2839,6 +2841,92 @@ describe('Agent Routes Authorization', () => {
         threadId: 'abort-thread-owned-by-context',
       });
     });
+
+    it('should list and remove pending signals for a thread scoped by the request context', async () => {
+      await mockMemory.createThread({
+        threadId: 'pending-signals-thread',
+        resourceId: 'user-a',
+        title: 'Pending Signals Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'pending-signals-thread',
+      });
+      const entry = {
+        scope: 'idle',
+        runId: 'queued-run',
+        agentId: 'test-agent',
+        signal: { id: 'sig-1', type: 'user', contents: 'queued', createdAt: new Date(0).toISOString() },
+      };
+      const listPendingSignals = vi.fn(() => [entry]);
+      const removePendingSignals = vi.fn(() => ({ removedSignalIds: ['sig-1'] }));
+      (mockAgent as any).listPendingSignals = listPendingSignals;
+      (mockAgent as any).removePendingSignals = removePendingSignals;
+
+      await expect(
+        LIST_PENDING_SIGNALS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          resourceId: 'ignored-resource',
+          threadId: 'ignored-thread',
+        } as any),
+      ).resolves.toEqual({ signals: [entry] });
+      expect(listPendingSignals).toHaveBeenCalledWith({ resourceId: 'user-a', threadId: 'pending-signals-thread' });
+
+      await expect(
+        REMOVE_PENDING_SIGNALS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          signalIds: ['sig-1', 'missing'],
+          requestContext,
+          resourceId: 'ignored-resource',
+          threadId: 'ignored-thread',
+        } as any),
+      ).resolves.toEqual({ removedSignalIds: ['sig-1'] });
+      expect(removePendingSignals).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'pending-signals-thread',
+        signalIds: ['sig-1', 'missing'],
+      });
+    });
+
+    it.each([LIST_PENDING_SIGNALS_ROUTE, REMOVE_PENDING_SIGNALS_ROUTE])(
+      'rejects $method signals requests for another resource or without a thread',
+      async route => {
+        await mockMemory.createThread({
+          threadId: 'pending-signals-thread-b',
+          resourceId: 'user-b',
+          title: 'Thread B',
+        });
+        const listPendingSignals = vi.fn(() => []);
+        const removePendingSignals = vi.fn(() => ({ removedSignalIds: ['sig-1'] }));
+        (mockAgent as any).listPendingSignals = listPendingSignals;
+        (mockAgent as any).removePendingSignals = removePendingSignals;
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            signalIds: ['sig-1', 'missing'],
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            resourceId: 'user-b',
+            threadId: 'pending-signals-thread-b',
+          } as any),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            signalIds: ['sig-1', 'missing'],
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          } as any),
+        ).rejects.toThrow(new HTTPException(400, { message: 'threadId is required' }));
+        expect(listPendingSignals).not.toHaveBeenCalled();
+        expect(removePendingSignals).not.toHaveBeenCalled();
+      },
+    );
 
     it('should reject subscribing to a thread owned by a different resource', async () => {
       await mockMemory.createThread({

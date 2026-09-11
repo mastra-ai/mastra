@@ -43,6 +43,10 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  ListPendingSignalsParams,
+  ListPendingSignalsResponse,
+  RemovePendingSignalsParams,
+  RemovePendingSignalsResponse,
   ListAgentSuspendedRunsParams,
   ListAgentSuspendedRunsResponse,
   GetAgentPlanResponse,
@@ -612,6 +616,38 @@ export class Agent extends BaseResource {
    */
   sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
+  }
+
+  /**
+   * Lists this agent ID's queued signals for a memory thread, in delivery order.
+   * Reflects only the in-memory queue of the server process handling the request.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  listPendingSignals(params: ListPendingSignalsParams): Promise<ListPendingSignalsResponse> {
+    return this.request(`/agents/${this.agentId}/signals${this.pendingSignalQuery(params)}`);
+  }
+
+  /**
+   * Removes this agent ID's queued signals. Accepts 1–1000 non-empty IDs.
+   * Returns only IDs actually removed, in request order without duplicates.
+   * Missing, other-agent, and already-drained signals are skipped.
+   * Does not abort runs or roll back state updates, notification status, or acceptance.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  removePendingSignals(params: RemovePendingSignalsParams): Promise<RemovePendingSignalsResponse> {
+    const { signalIds, ...target } = params;
+    return this.request(`/agents/${this.agentId}/signals${this.pendingSignalQuery(target)}`, {
+      method: 'DELETE',
+      body: { signalIds },
+    });
+  }
+
+  private pendingSignalQuery({ resourceId, threadId }: ListPendingSignalsParams): string {
+    const query = new URLSearchParams({ threadId });
+    if (resourceId) query.set('resourceId', resourceId);
+    return `?${query.toString()}`;
   }
 
   /**

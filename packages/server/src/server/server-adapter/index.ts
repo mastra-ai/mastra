@@ -1345,6 +1345,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return body;
     }
 
+    if (body === undefined) {
+      const omitted = await bodySchema.safeParseAsync(undefined);
+      if (omitted.success) return omitted.data;
+      // Bodyless requests to object schemas with optional/defaulted fields have
+      // historically been supported. Explicit null/falsy bodies still validate as-is.
+      return bodySchema.parseAsync({});
+    }
+
     return bodySchema.parseAsync(body);
   }
 

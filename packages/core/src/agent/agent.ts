@@ -187,7 +187,7 @@ import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
-import type { ActiveThreadRun } from './thread-stream-runtime';
+import type { ActiveThreadRun, AgentPendingSignalEntry } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -8259,6 +8259,30 @@ export class Agent<
 
   listActiveThreadRuns(): ActiveThreadRun[] {
     return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
+  }
+
+  /**
+   * Lists this agent ID's queued signals for a thread, in delivery order.
+   * Only reflects queues held by this process; signals queued on another
+   * process or owned by another agent ID are not visible.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  listPendingSignals(options: AgentThreadIdentityOptions): AgentPendingSignalEntry[] {
+    return agentThreadStreamRuntime.listPendingSignals({ ...options, agentId: this.id }, this.getPubSub());
+  }
+
+  /**
+   * Removes this agent ID's queued signals before delivery. Returns only IDs
+   * actually removed, in request order without duplicates. Missing signals,
+   * other agents' signals, and signals that have left the queue are skipped.
+   * Does not abort runs, retract acceptance, or roll back state updates and
+   * notification records associated with the signal.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  removePendingSignals(options: AgentThreadIdentityOptions & { signalIds: string[] }): { removedSignalIds: string[] } {
+    return agentThreadStreamRuntime.removePendingSignals({ ...options, agentId: this.id }, this.getPubSub());
   }
 
   /**

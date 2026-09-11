@@ -758,6 +758,41 @@ export const sendAgentMessageBodySchema = z.union([
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
 
+export const pendingSignalsQuerySchema = z.object({
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
+export const pendingSignalEntrySchema = z.object({
+  scope: z.enum(['pre-run', 'pending', 'idle']),
+  runId: z.string().optional(),
+  agentId: z.string().optional(),
+  signal: z.object({
+    id: z.string(),
+    type: z.enum(['user', 'state', 'reactive', 'notification']),
+    tagName: z.string().optional(),
+    contents: userMessageSignalContentsSchema,
+    createdAt: z.string(),
+    acceptedAt: z.string().optional(),
+    attributes: signalAttributesSchema.optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    providerOptions: z.record(z.string(), z.unknown()).optional(),
+    transient: z.boolean().optional(),
+  }),
+});
+
+export const listPendingSignalsResponseSchema = z.object({
+  signals: z.array(pendingSignalEntrySchema),
+});
+
+export const removePendingSignalsBodySchema = z.object({
+  signalIds: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export const removePendingSignalsResponseSchema = z.object({
+  removedSignalIds: z.array(z.string()),
+});
+
 export const subscribeAgentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),

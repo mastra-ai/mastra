@@ -164,6 +164,32 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type ListPendingSignalsParams = SubscribeAgentThreadParams;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type ListPendingSignalsResponse = GeneratedResponse<'GET /agents/:agentId/signals'>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentPendingSignalEntry = ListPendingSignalsResponse['signals'][number];
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type RemovePendingSignalsParams = SubscribeAgentThreadParams &
+  GeneratedRequest<Body<'DELETE /agents/:agentId/signals'>>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type RemovePendingSignalsResponse = GeneratedResponse<'DELETE /agents/:agentId/signals'>;
+
 export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
 
 /**

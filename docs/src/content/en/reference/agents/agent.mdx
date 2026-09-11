@@ -333,6 +333,42 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 `queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`.
 
+### `listPendingSignals(options)`
+
+Lists this agent's signals still queued for a thread, in delivery order. Scope is determined by `agent.id`, not the Agent instance: instances with the same ID share access, while other agents' queued inputs are excluded.
+
+```typescript
+const pending = agent.listPendingSignals({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+Returns `AgentPendingSignalEntry[]`, where each entry has:
+
+- `scope`: Which queue the signal is waiting in. `'pre-run'` signals are folded into the first model request of a run that has been reserved but not started. `'pending'` signals become the next turn of the active run. `'idle'` signals start their own run once the thread is free.
+- `runId`: For `'pre-run'` and `'pending'`, the active run that will drain the signal. For `'idle'`, the run id reserved for the run the signal will start.
+- `agentId`: The agent that owns the queued signal.
+- `signal`: The serialized signal (`id`, `type`, `tagName`, `contents`, `createdAt`, `acceptedAt`, `attributes`, `metadata`, `providerOptions`, `transient`). `signal.id` matches the `signal.id` returned by `sendMessage()`, `queueMessage()`, and `sendSignal()`.
+
+The queue is held in memory by the process that owns the thread, so this only reflects the current process. Signals routed with a `persist` behavior are written to memory rather than queued and don't appear here.
+
+### `removePendingSignals(options)`
+
+Removes this agent's queued signals by ID. Pass `signalIds: string[]` alongside the same `resourceId` and `threadId` used to list the queue. A single-element array removes one signal. Signals belonging to a different agent ID aren't removed.
+
+```typescript
+const { removedSignalIds } = agent.removePendingSignals({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  signalIds: pending.slice(0, 2).map(entry => entry.signal.id),
+})
+```
+
+Returns `{ removedSignalIds: string[] }` with only the IDs actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. An empty input array or no matches returns `{ removedSignalIds: [] }`. Once a signal leaves the queue for execution, it can't be removed, even if the model request hasn't started yet.
+
+Removal cancels queued delivery only. It doesn't abort the active run, retract a settled `accepted` result, undo state updates already applied by `sendStateSignal()`, or update notification records. Notifications marked `delivered` at acceptance keep that status after their queued signal is removed.
+
 ### `sendSignal(signal, options)`
 
 Sends a signal to an active run or memory thread.

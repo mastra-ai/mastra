@@ -1,6 +1,6 @@
 import { formatDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
 import { createTool } from '@mastra/core/tools';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { MastraClient } from '../client';
@@ -83,6 +83,35 @@ describe('Agent signal routes', () => {
     await agent.sendSignal(signalParams);
     return mockRequest;
   };
+
+  it('exposes typed text and file contents for pending signals', () => {
+    type Contents = Awaited<ReturnType<Agent['listPendingSignals']>>['signals'][number]['signal']['contents'];
+    type Part = Exclude<Contents, string>[number];
+    expectTypeOf<Extract<Part, { type: 'text' }>['text']>().toEqualTypeOf<string>();
+    expectTypeOf<Extract<Part, { type: 'file' }>['data']>().toEqualTypeOf<string>();
+  });
+
+  it('lists and removes pending signals through the signals routes', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi
+      .fn()
+      .mockResolvedValueOnce({ signals: [] })
+      .mockResolvedValueOnce({ removedSignalIds: ['sig/1'] });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await expect(agent.listPendingSignals({ resourceId: 'resource 1', threadId: 'thread-1' })).resolves.toEqual({
+      signals: [],
+    });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals?threadId=thread-1&resourceId=resource+1');
+
+    await expect(
+      agent.removePendingSignals({ resourceId: 'resource-1', threadId: 'thread-1', signalIds: ['sig/1', 'missing'] }),
+    ).resolves.toEqual({ removedSignalIds: ['sig/1'] });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/signals?threadId=thread-1&resourceId=resource-1', {
+      method: 'DELETE',
+      body: { signalIds: ['sig/1', 'missing'] },
+    });
+  });
 
   it('sends messages to the send-message route with string payloads unchanged', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');

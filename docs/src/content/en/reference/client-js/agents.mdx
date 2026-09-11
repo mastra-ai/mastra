@@ -193,6 +193,34 @@ await agent.queueMessage({
 })
 ```
 
+### `listPendingSignals()`
+
+List this agent's signals still queued for a thread, in delivery order. Other agent IDs' inputs are excluded, even on the same thread. Each entry reports its `scope` (`'pre-run'`, `'pending'`, or `'idle'`), the `runId` it is attached to, and the serialized `signal`. Only the in-memory queue of the server process that handles the request is reflected.
+
+```typescript
+const { signals } = await agent.listPendingSignals({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+### `removePendingSignals()`
+
+Remove this agent's queued signals by ID. Pass `signalIds: string[]` containing 1–1,000 non-empty IDs alongside `threadId` and optional `resourceId`. Use a single-element array to remove one signal.
+
+Returns `{ removedSignalIds: string[] }` with only IDs actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. Removal doesn't abort a run or roll back state updates, notification status, or an earlier acceptance result. See [cancellation semantics](/reference/agents/agent#removependingsignalsoptions).
+
+```typescript
+const signalIds = signals.slice(0, 2).map(entry => entry.signal.id)
+if (signalIds.length > 0) {
+  const { removedSignalIds } = await agent.removePendingSignals({
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+    signalIds,
+  })
+}
+```
+
 ### `sendSignal()`
 
 Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notification-shaped context that doesn't need inbox storage. For durable notification records, use the server-side [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) API. For user-authored input, prefer `sendMessage()` or `queueMessage()`.

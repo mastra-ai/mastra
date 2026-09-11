@@ -3087,75 +3087,93 @@ describe('Agent signals', () => {
     }
   });
 
-  it('restores a queued signal when the drain follow-up stream fails', async () => {
-    const runtime = new AgentThreadStreamRuntime();
-    const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
-    const agent = {
-      id: 'drain-failure-agent',
-      stream: streamMock,
-    } as unknown as Agent<any, any, any, any>;
-    const runId = 'drain-failure-run';
-    const threadId = 'drain-failure-thread';
-    const resourceId = 'drain-failure-user';
-    let finishRun!: () => void;
-    const finished = new Promise<void>(resolve => {
-      finishRun = resolve;
-    });
-    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
-    const iterator = subscription.stream[Symbol.asyncIterator]();
+  it.each([false, true])(
+    'preserves ownership of a restored signal after failed startup (remove: %s)',
+    async removeRestored => {
+      const runtime = new AgentThreadStreamRuntime();
+      const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));
+      const agent = {
+        id: 'drain-failure-agent',
+        stream: streamMock,
+      } as unknown as Agent<any, any, any, any>;
+      const runId = 'drain-failure-run';
+      const threadId = 'drain-failure-thread';
+      const resourceId = 'drain-failure-user';
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
+      const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+      const iterator = subscription.stream[Symbol.asyncIterator]();
 
-    try {
-      runtime.registerRun(
-        agent,
-        {
-          runId,
-          status: 'running',
-          fullStream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'start', runId });
-              controller.enqueue({ type: 'finish', runId, payload: {} });
-              controller.close();
-            },
-          }),
-          _waitUntilFinished: () => finished,
-        } as any,
-        { memory: { thread: threadId, resource: resourceId } } as any,
-      );
+      try {
+        runtime.registerRun(
+          agent,
+          {
+            runId,
+            status: 'running',
+            fullStream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'start', runId });
+                controller.enqueue({ type: 'finish', runId, payload: {} });
+                controller.close();
+              },
+            }),
+            _waitUntilFinished: () => finished,
+          } as any,
+          { memory: { thread: threadId, resource: resourceId } } as any,
+        );
 
-      await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the first run to stream');
-      const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId });
-      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
-      expect(streamMock).not.toHaveBeenCalled();
+        await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the first run to stream');
+        const result = runtime.sendMessage(agent, 'steer follow-up', { resourceId, threadId });
+        await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+        expect(streamMock).not.toHaveBeenCalled();
 
-      finishRun();
-      await waitForCondition(() => streamMock.mock.calls.length === 1);
-      await nextTick();
-      await nextTick();
+        finishRun();
+        await waitForCondition(() => streamMock.mock.calls.length === 1);
+        await nextTick();
+        await nextTick();
 
-      // Probe: register a fresh run on the same thread so the public
-      // drainPendingSignals can resolve the thread key, then inspect the queue.
-      // The failed signal must have been restored to the queue head.
-      runtime.registerRun(
-        agent,
-        {
-          runId: 'drain-failure-probe',
-          status: 'running',
-          fullStream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'start', runId: 'drain-failure-probe' });
-            },
-          }),
-          _waitUntilFinished: () => new Promise<void>(() => {}),
-        } as any,
-        { memory: { thread: threadId, resource: resourceId } } as any,
-      );
-      const restored = runtime.drainPendingSignals('drain-failure-probe');
-      expect(restored).toHaveLength(1);
-      expect(restored[0]).toMatchObject({ type: 'user', contents: 'steer follow-up' });
-    } finally {
-      subscription.unsubscribe();
-    }
-  });
+        const target = { resourceId, threadId, agentId: agent.id };
+        expect(runtime.getActiveThreadRunId({ resourceId, threadId })).toBeUndefined();
+        expect(runtime.listPendingSignals(target)).toMatchObject([
+          { agentId: agent.id, scope: 'pending', signal: { id: result.signal.id } },
+        ]);
+        expect(runtime.listPendingSignals({ ...target, agentId: 'other-agent' })).toEqual([]);
+        expect(
+          runtime.removePendingSignals({ ...target, agentId: 'other-agent', signalIds: [result.signal.id] }),
+        ).toEqual({ removedSignalIds: [] });
+        if (removeRestored) {
+          expect(runtime.removePendingSignals({ ...target, signalIds: [result.signal.id] })).toEqual({
+            removedSignalIds: [result.signal.id],
+          });
+        }
+
+        // Probe: register a fresh run on the same thread so the public
+        // drainPendingSignals can resolve the thread key, then inspect the queue.
+        // The failed signal must have been restored to the queue head.
+        runtime.registerRun(
+          agent,
+          {
+            runId: 'drain-failure-probe',
+            status: 'running',
+            fullStream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'start', runId: 'drain-failure-probe' });
+              },
+            }),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any,
+          { memory: { thread: threadId, resource: resourceId } } as any,
+        );
+        const restored = runtime.drainPendingSignals('drain-failure-probe');
+        expect(restored).toHaveLength(removeRestored ? 0 : 1);
+        if (!removeRestored) expect(restored[0]).toMatchObject({ type: 'user', contents: 'steer follow-up' });
+      } finally {
+        subscription.unsubscribe();
+      }
+    },
+  );
 
   it('publishes run-failed when the drain follow-up stream fails', async () => {
     const runtime = new AgentThreadStreamRuntime();
@@ -3691,6 +3709,319 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
 
     subscription.unsubscribe();
+  });
+
+  describe('listPendingSignals / removePendingSignals', () => {
+    const resourceId = 'pending-signals-user';
+    const threadId = 'pending-signals-thread';
+
+    it('returns an empty list for an idle thread', () => {
+      const agent = new Agent({
+        id: 'pending-signals-idle-agent',
+        name: 'Pending Signals Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('ok'),
+      });
+      expect(agent.listPendingSignals({ resourceId, threadId })).toEqual([]);
+      expect(agent.removePendingSignals({ resourceId, threadId, signalIds: ['missing'] })).toEqual({
+        removedSignalIds: [],
+      });
+    });
+
+    it('returns detached snapshots without serializing other agents or changing later delivery', async () => {
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'later');
+      const doStream = vi.spyOn(model, 'doStream');
+      const agent = new Agent({ id: 'snapshot-agent', name: 'Snapshot Agent', instructions: 'Test', model });
+      const otherAgent = new Agent({ id: 'other-snapshot-agent', name: 'Other Agent', instructions: 'Test', model });
+      const target = { resourceId, threadId: 'snapshot-thread' };
+      const subscription = await agent.subscribeToThread(target);
+      const stream = await agent.stream('Hello', { memory: { thread: target.threadId, resource: resourceId } });
+      await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+      try {
+        const input = {
+          type: 'user' as const,
+          contents: [
+            { type: 'text' as const, text: 'original snapshot contents' },
+            {
+              type: 'file' as const,
+              data: new Uint8Array([1, 2, 3]),
+              mediaType: 'application/pdf',
+              providerOptions: { test: { labels: ['original'] } },
+            },
+          ],
+          attributes: { priority: 'low' },
+          metadata: { nested: { labels: ['original'] } },
+          providerOptions: { test: { nested: { enabled: true } } },
+        };
+        const pending = agent.sendSignal(input, target);
+        const idle = agent.queueMessage(input, target);
+        await Promise.all([pending.accepted, idle.accepted]);
+        const expected = agent.listPendingSignals(target);
+        const listed = agent.listPendingSignals(target);
+        expect(listed.map(entry => entry.scope)).toEqual(['pending', 'idle']);
+        for (const entry of listed) {
+          entry.signal.attributes!.priority = 'high';
+          (entry.signal.metadata!.nested as { labels: string[] }).labels.push('mutated');
+          (entry.signal.providerOptions!.test!.nested as { enabled: boolean }).enabled = false;
+          if (Array.isArray(entry.signal.contents)) {
+            const text = entry.signal.contents[0]!;
+            if (text.type === 'text') text.text = 'mutated snapshot contents';
+            const file = entry.signal.contents[1]!;
+            if (file.type === 'file') {
+              file.data = 'mutated file';
+              (file.providerOptions!.test!.labels as string[]).push('mutated');
+            }
+          }
+        }
+        expect(agent.listPendingSignals(target)).toEqual(expected);
+        const serializePending = vi.spyOn(pending.signal, 'toDataPart');
+        const serializeIdle = vi.spyOn(idle.signal, 'toDataPart');
+        expect(otherAgent.listPendingSignals(target)).toEqual([]);
+        expect(serializePending).not.toHaveBeenCalled();
+        expect(serializeIdle).not.toHaveBeenCalled();
+        serializePending.mockRestore();
+        serializeIdle.mockRestore();
+        releaseFirst();
+        await expect(stream.text).resolves.toBe('firstlater');
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        await vi.waitFor(() => expect(agent.getActiveThreadRunId(target)).toBeUndefined());
+        const prompts = JSON.stringify(doStream.mock.calls.map(([options]) => options.prompt));
+        expect(prompts).toContain('original snapshot contents');
+        expect(prompts).not.toContain('mutated');
+        expect(agent.listPendingSignals(target)).toEqual([]);
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+      }
+    });
+
+    it.each([false, true])(
+      'removes queued signals without affecting other agents or threads (remove final: %s)',
+      async removeFinal => {
+        let releaseFirst!: () => void;
+        const firstFinished = new Promise<void>(resolve => {
+          releaseFirst = resolve;
+        });
+        let streamCount = 0;
+        const prompts: any[][] = [];
+        const model = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            streamCount += 1;
+            prompts.push(prompt);
+            const current = streamCount;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                async start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: `pending-signals-${current}`,
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  });
+                  controller.enqueue({ type: 'text-start', id: 'text-1' });
+                  controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `response ${current}` });
+                  controller.enqueue({ type: 'text-end', id: 'text-1' });
+                  if (current === 1) await firstFinished;
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  });
+                  controller.close();
+                },
+              }),
+            };
+          },
+        });
+        const agent = new Agent({
+          id: 'pending-signals-agent',
+          name: 'Pending Signals Agent',
+          instructions: 'Test',
+          model,
+        });
+        const subscription = await agent.subscribeToThread({ threadId, resourceId });
+
+        const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
+        await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+        const followUp = agent.sendSignal({ type: 'user', contents: 'follow-up' }, { resourceId, threadId });
+        await followUp.accepted;
+        const queued = agent.queueMessage('queued idle', { resourceId, threadId });
+        const queuedSettled = await queued.accepted;
+        const queuedRunId = 'runId' in queuedSettled ? queuedSettled.runId : undefined;
+        const removable = agent.queueMessage('remove me', { resourceId, threadId });
+        await removable.accepted;
+
+        const listed = agent.listPendingSignals({ resourceId, threadId });
+        expect(listed.map(entry => [entry.scope, entry.signal.id, entry.runId, entry.agentId])).toEqual([
+          ['pending', followUp.signal.id, stream.runId, agent.id],
+          ['idle', queued.signal.id, queuedRunId, agent.id],
+          ['idle', removable.signal.id, expect.any(String), agent.id],
+        ]);
+        expect(listed[0]!.signal.contents).toBe('follow-up');
+        expect(typeof listed[0]!.signal.createdAt).toBe('string');
+
+        const otherAgent = new Agent({
+          id: 'other-pending-signals-agent',
+          name: 'Other Agent',
+          instructions: 'Test',
+          model,
+        });
+        const otherQueued = otherAgent.queueMessage('other agent input', { resourceId, threadId });
+        await otherQueued.accepted;
+        expect(otherAgent.listPendingSignals({ resourceId, threadId }).map(entry => entry.signal.id)).toEqual([
+          otherQueued.signal.id,
+        ]);
+        expect(agent.removePendingSignals({ resourceId, threadId, signalIds: [] })).toEqual({ removedSignalIds: [] });
+        expect(agent.listPendingSignals({ resourceId, threadId })).toEqual(listed);
+        for (const entry of listed) {
+          expect(otherAgent.removePendingSignals({ resourceId, threadId, signalIds: [entry.signal.id] })).toEqual({
+            removedSignalIds: [],
+          });
+        }
+        expect(agent.removePendingSignals({ resourceId, threadId, signalIds: [otherQueued.signal.id] })).toEqual({
+          removedSignalIds: [],
+        });
+        for (const target of [
+          { resourceId, threadId: 'another-thread' },
+          { resourceId: 'another-resource', threadId },
+        ]) {
+          expect(agent.listPendingSignals(target)).toEqual([]);
+          expect(agent.removePendingSignals({ ...target, signalIds: [followUp.signal.id] })).toEqual({
+            removedSignalIds: [],
+          });
+        }
+
+        const signalIds = [
+          removable.signal.id,
+          'missing',
+          otherQueued.signal.id,
+          followUp.signal.id,
+          removable.signal.id,
+          ...(removeFinal ? [queued.signal.id] : []),
+        ];
+        expect(agent.removePendingSignals({ resourceId, threadId, signalIds })).toEqual({
+          removedSignalIds: [removable.signal.id, followUp.signal.id, ...(removeFinal ? [queued.signal.id] : [])],
+        });
+        expect(agent.removePendingSignals({ resourceId, threadId, signalIds })).toEqual({ removedSignalIds: [] });
+        expect(agent.listPendingSignals({ resourceId, threadId }).map(entry => entry.signal.id)).toEqual(
+          removeFinal ? [] : [queued.signal.id],
+        );
+        expect(otherAgent.listPendingSignals({ resourceId, threadId }).map(entry => entry.signal.id)).toEqual([
+          otherQueued.signal.id,
+        ]);
+        expect(otherAgent.removePendingSignals({ resourceId, threadId, signalIds: [otherQueued.signal.id] })).toEqual({
+          removedSignalIds: [otherQueued.signal.id],
+        });
+        releaseFirst();
+        await expect(stream.text).resolves.toBe('response 1');
+        await vi.waitFor(() => expect(streamCount).toBe(removeFinal ? 1 : 2));
+        await vi.waitFor(() => expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBeUndefined());
+        expect(agent.listPendingSignals({ resourceId, threadId })).toEqual([]);
+        expect(agent.removePendingSignals({ resourceId, threadId, signalIds: [queued.signal.id] })).toEqual({
+          removedSignalIds: [],
+        });
+
+        const allPrompts = JSON.stringify(prompts);
+        if (removeFinal) expect(allPrompts).not.toContain('queued idle');
+        else expect(allPrompts).toContain('queued idle');
+        expect(allPrompts).not.toContain('follow-up');
+        expect(allPrompts).not.toContain('remove me');
+        expect(allPrompts).not.toContain('other agent input');
+
+        const next = await agent.stream('Thread is reusable', { memory: { thread: threadId, resource: resourceId } });
+        await expect(next.text).resolves.toBe(`response ${removeFinal ? 2 : 3}`);
+        subscription.unsubscribe();
+      },
+    );
+
+    it('removes a pre-run signal without cancelling the reserved run or its sibling inputs', async () => {
+      let releaseModel!: () => void;
+      const modelGate = new Promise<void>(resolve => {
+        releaseModel = resolve;
+      });
+      const prompts: unknown[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          await modelGate;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'done' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'pre-run-signals-agent',
+        name: 'Pre-run Signals Agent',
+        instructions: 'Test',
+        model,
+      });
+      const preRunThreadId = 'pre-run-signals-thread';
+
+      const wake = agent.sendSignal({ type: 'user', contents: 'wake' }, { resourceId, threadId: preRunThreadId });
+      const early = agent.sendSignal({ type: 'user', contents: 'early' }, { resourceId, threadId: preRunThreadId });
+      const earlySecond = agent.sendSignal(
+        { type: 'user', contents: 'early second' },
+        { resourceId, threadId: preRunThreadId },
+      );
+      const sibling = agent.sendSignal(
+        { type: 'user', contents: 'sibling', metadata: { nested: { labels: ['original'] } } },
+        { resourceId, threadId: preRunThreadId },
+      );
+      const earlySettled = await early.accepted;
+      expect(earlySettled.action).toBe('deliver');
+
+      const listed = agent.listPendingSignals({ resourceId, threadId: preRunThreadId });
+      expect(listed.map(entry => [entry.scope, entry.signal.id])).toEqual([
+        ['pre-run', early.signal.id],
+        ['pre-run', earlySecond.signal.id],
+        ['pre-run', sibling.signal.id],
+      ]);
+      expect(listed[0]!.runId).toBe('runId' in earlySettled ? earlySettled.runId : undefined);
+      expect(listed[0]!.agentId).toBe(agent.id);
+      (listed[2]!.signal.metadata!.nested as { labels: string[] }).labels.push('mutated');
+      expect(agent.listPendingSignals({ resourceId, threadId: preRunThreadId })[2]!.signal.metadata).toEqual({
+        nested: { labels: ['original'] },
+      });
+      const serializeSibling = vi.spyOn(sibling.signal, 'toDataPart');
+      const otherAgent = new Agent({ id: 'other-pre-run-agent', name: 'Other Agent', instructions: 'Test', model });
+      expect(otherAgent.listPendingSignals({ resourceId, threadId: preRunThreadId })).toEqual([]);
+      expect(serializeSibling).not.toHaveBeenCalled();
+      serializeSibling.mockRestore();
+      expect(
+        otherAgent.removePendingSignals({ resourceId, threadId: preRunThreadId, signalIds: [early.signal.id] }),
+      ).toEqual({ removedSignalIds: [] });
+      expect(
+        agent.removePendingSignals({
+          resourceId,
+          threadId: preRunThreadId,
+          signalIds: [earlySecond.signal.id, early.signal.id],
+        }),
+      ).toEqual({ removedSignalIds: [earlySecond.signal.id, early.signal.id] });
+      expect(agent.getActiveThreadRunId({ resourceId, threadId: preRunThreadId })).toBe(listed[0]!.runId);
+
+      releaseModel();
+      const wakeSettled = await wake.accepted;
+      if (wakeSettled.action === 'wake') await wakeSettled.output.text;
+      await vi.waitFor(() => expect(agent.listPendingSignals({ resourceId, threadId: preRunThreadId })).toEqual([]));
+      expect(
+        agent.removePendingSignals({ resourceId, threadId: preRunThreadId, signalIds: [sibling.signal.id] }),
+      ).toEqual({ removedSignalIds: [] });
+      expect(JSON.stringify(prompts)).toContain('wake');
+      expect(JSON.stringify(prompts)).toContain('sibling');
+      expect(JSON.stringify(prompts)).not.toContain('early');
+    });
   });
 
   it('fans out sequential idle signal runs to many same-thread subscribers', async () => {

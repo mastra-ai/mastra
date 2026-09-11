@@ -69,6 +69,10 @@ import {
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   queueAgentMessageBodySchema,
+  pendingSignalsQuerySchema,
+  listPendingSignalsResponseSchema,
+  removePendingSignalsBodySchema,
+  removePendingSignalsResponseSchema,
   subscribeAgentThreadBodySchema,
   abortAgentThreadBodySchema,
   abortAgentThreadResponseSchema,
@@ -2196,6 +2200,97 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
+    }
+  },
+});
+
+/**
+ * Resolves the thread target for the pending-signal routes and verifies the
+ * caller may act on it. Mirrors the abort route: `threadId` is required and
+ * ownership is validated when a resource is in scope.
+ */
+async function resolvePendingSignalThread({
+  mastra,
+  agentId,
+  requestContext,
+  resourceId,
+  threadId,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  requestContext: RequestContext;
+  resourceId?: string;
+  threadId?: string;
+}) {
+  const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+  if (typeof (agent as { listPendingSignals?: unknown }).listPendingSignals !== 'function') {
+    throw new HTTPException(501, { message: 'pending agent signals are not supported by this Mastra core version' });
+  }
+
+  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+  if (!effectiveThreadId) {
+    throw new HTTPException(400, { message: 'threadId is required' });
+  }
+
+  if (effectiveResourceId) {
+    const memory = await agent.getMemory({ requestContext });
+    if (memory) {
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      await validateThreadOwnership(thread, effectiveResourceId);
+    }
+  }
+
+  return { agent, resourceId: effectiveResourceId, threadId: effectiveThreadId };
+}
+
+export const LIST_PENDING_SIGNALS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/signals',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: pendingSignalsQuerySchema,
+  responseSchema: listPendingSignalsResponseSchema,
+  summary: 'List pending agent signals',
+  description:
+    "Lists the selected agent ID's queued signals for a memory thread, in delivery order. Only reflects the in-memory queue of the process handling the request.",
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
+    try {
+      const target = await resolvePendingSignalThread({ mastra, agentId, requestContext, resourceId, threadId });
+      return { signals: target.agent.listPendingSignals({ resourceId: target.resourceId, threadId: target.threadId }) };
+    } catch (error) {
+      return handleError(error, 'error listing pending agent signals');
+    }
+  },
+});
+
+export const REMOVE_PENDING_SIGNALS_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/agents/:agentId/signals',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: pendingSignalsQuerySchema,
+  bodySchema: removePendingSignalsBodySchema,
+  responseSchema: removePendingSignalsResponseSchema,
+  summary: 'Remove pending agent signals',
+  description:
+    "Removes the selected agent ID's queued signals. Returns only IDs actually removed, in request order without duplicates. Missing signals, other agents' signals, and signals that have left the queue are skipped. Does not abort runs or roll back state updates, notification status, or acceptance.",
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, signalIds, resourceId, threadId, requestContext }) => {
+    try {
+      const target = await resolvePendingSignalThread({ mastra, agentId, requestContext, resourceId, threadId });
+      return target.agent.removePendingSignals({
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        signalIds,
+      });
+    } catch (error) {
+      return handleError(error, 'error removing pending agent signals');
     }
   },
 });

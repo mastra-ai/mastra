@@ -7,7 +7,8 @@ import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
+import { z } from 'zod/v4';
+import { GENERATE_AGENT_ROUTE, REMOVE_PENDING_SIGNALS_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
 import { HTTPException } from '../http-exception';
 import { MastraServer, getCustomHTTPExceptionResponse } from './index';
 
@@ -59,6 +60,59 @@ function createTestAdapter() {
     } as unknown as Mastra,
   });
 }
+
+describe('body schema validation', () => {
+  it.each([undefined, null, false, 0, '', {}, { signalIds: [] }])(
+    'rejects missing or invalid required input %#',
+    async body => {
+      await expect(createTestAdapter().parseBody(REMOVE_PENDING_SIGNALS_ROUTE, body)).rejects.toThrow();
+    },
+  );
+
+  it('accepts valid required input', async () => {
+    const body = { signalIds: ['signal-1', 'signal-2'] };
+    await expect(createTestAdapter().parseBody(REMOVE_PENDING_SIGNALS_ROUTE, body)).resolves.toEqual(body);
+  });
+
+  it('preserves bodyless optional fields and applies field defaults', async () => {
+    const bodySchema = z.object({ name: z.string().optional(), limit: z.number().default(10) });
+    await expect(
+      createTestAdapter().parseBody({ ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema }, undefined),
+    ).resolves.toEqual({ limit: 10 });
+  });
+
+  it('preserves root optional, default, and nullable schemas', async () => {
+    const adapter = createTestAdapter();
+    await expect(
+      adapter.parseBody({ ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema: z.string().optional() }, undefined),
+    ).resolves.toBeUndefined();
+    await expect(
+      adapter.parseBody(
+        { ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema: z.object({ name: z.string() }).default({ name: 'default' }) },
+        undefined,
+      ),
+    ).resolves.toEqual({ name: 'default' });
+    await expect(
+      adapter.parseBody({ ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema: z.string().nullable() }, null),
+    ).resolves.toBeNull();
+  });
+
+  it('passes explicit falsy values through when the schema accepts them', async () => {
+    const bodySchema = z.union([z.literal(false), z.literal(0), z.literal('')]);
+    for (const body of [false, 0, '']) {
+      await expect(createTestAdapter().parseBody({ ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema }, body)).resolves.toBe(
+        body,
+      );
+    }
+  });
+
+  it('leaves bodies unchanged when no schema is defined', async () => {
+    const route = { ...REMOVE_PENDING_SIGNALS_ROUTE, bodySchema: undefined };
+    for (const body of [undefined, null, false, 0, '', { value: true }]) {
+      await expect(createTestAdapter().parseBody(route, body)).resolves.toBe(body);
+    }
+  });
+});
 
 function createWritableResponse() {
   const response = new PassThrough();

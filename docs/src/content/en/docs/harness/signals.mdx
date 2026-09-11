@@ -102,6 +102,32 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
 
+### Inspect and cancel queued input
+
+Use `listPendingSignals()` to show this agent's queued signals on a thread, and `removePendingSignals()` to drop one or more before delivery. These methods are scoped to `agent.id`; they don't list or remove another agent's queued inputs on the same thread. Entries come back in delivery order with a `scope` of `pre-run`, `pending`, or `idle`, and each carries the same `signal.id` that `sendMessage()`, `queueMessage()`, and `sendSignal()` return.
+
+The following example requires a run already active on `thread_456`. On an idle thread, `queueMessage()` starts a run immediately, and its initial signal isn't a cancellable queue entry.
+
+```typescript title="src/mastra/signals.ts"
+const queued = agent.queueMessage('Also check whether the tests need updates.', {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+agent.listPendingSignals({ resourceId: 'user_123', threadId: 'thread_456' })
+// [{ scope: 'idle', runId: '…', agentId: 'agent', signal: { id: queued.signal.id, … } }]
+
+const { removedSignalIds } = agent.removePendingSignals({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+  signalIds: [queued.signal.id],
+})
+```
+
+`removePendingSignals()` accepts an array of IDs and returns `{ removedSignalIds: string[] }` with only those actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. A successful removal cancels queued delivery only: it doesn't abort a run, retract an `accepted` result, undo a state update from `sendStateSignal()`, or change a notification record's status. For example, a notification marked `delivered` at acceptance stays `delivered` even if you remove its queued signal.
+
+The queue is held in memory by the process that owns the thread, so these methods reflect only the current process; see [Distributed and serverless deployments](#distributed-and-serverless-deployments).
+
 ## Signal context
 
 ### Control low-level signal behavior
@@ -372,7 +398,7 @@ When a subscribed run pauses for tool approval, approve or decline the tool call
 
 ### Use HTTP routes
 
-If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
+If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. Use `GET /api/agents/:agentId/signals` to list queued signals and `DELETE /api/agents/:agentId/signals` with a JSON body containing `signalIds` to remove one or more. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
 
 ### Use the client SDK
 
@@ -426,6 +452,8 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 
 - [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.listPendingSignals()`](/reference/agents/agent#listpendingsignalsoptions)
+- [`Agent.removePendingSignals()`](/reference/agents/agent#removependingsignalsoptions)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)

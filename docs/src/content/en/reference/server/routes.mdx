@@ -20,6 +20,8 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
+| `GET` | `/api/agents/:agentId/signals` | List signals queued for a thread that have not reached the model |
+| `DELETE` | `/api/agents/:agentId/signals` | Remove queued signals by ID before delivery |
 | `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
 | `POST` | `/api/agents/:agentId/send-tool-approval` | Approve or decline a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
@@ -147,6 +149,44 @@ Both routes return:
   signal?: CreatedAgentSignal;
 }
 ```
+
+### Pending signal routes
+
+Use `GET /api/agents/:agentId/signals?threadId=…&resourceId=…` to list the selected agent's signals still queued for a thread, in delivery order. Use `DELETE /api/agents/:agentId/signals?threadId=…&resourceId=…` with a JSON body containing `signalIds` to remove one or more. The array must contain 1–1,000 non-empty strings. Neither route accesses signals owned by other agent IDs on that thread. Both routes only reflect the in-memory queue of the server process that handles the request.
+
+```bash
+curl 'http://localhost:4111/api/agents/supportAgent/signals?threadId=thread_456&resourceId=user_123'
+```
+
+```typescript oxfmt:false
+{
+  signals: Array<{
+    scope: 'pre-run' | 'pending' | 'idle';
+    runId?: string;
+    agentId?: string;
+    signal: {
+      id: string;
+      type: 'user' | 'state' | 'reactive' | 'notification';
+      tagName?: string;
+      contents: string | Array<TextPart | FilePart>;
+      createdAt: string;
+      acceptedAt?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+      metadata?: Record<string, unknown>;
+      providerOptions?: Record<string, unknown>;
+      transient?: boolean;
+    };
+  }>;
+}
+```
+
+```bash
+curl -X DELETE 'http://localhost:4111/api/agents/supportAgent/signals?threadId=thread_456&resourceId=user_123' \
+  -H 'Content-Type: application/json' \
+  -d '{"signalIds":["msg_abc","msg_def"]}'
+```
+
+File parts in `contents` use string `data` (base64 or a URL). The delete route returns `{ removedSignalIds: string[] }` containing only IDs actually removed, in request order without duplicates. Missing, other-agent, and already-drained signals are skipped. If none match, the array is empty. Removal cancels queued delivery only, without aborting runs or reverting state updates, notification status, or acceptance results. See [cancellation semantics](/reference/agents/agent#removependingsignalsoptions).
 
 ### Subscription tool approval routes
 

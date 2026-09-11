@@ -106,7 +106,7 @@ export type AgentSignalDataPart = {
     id: string;
     type: AgentSignalCategory;
     tagName?: AgentSignalTagName;
-    contents: AgentSignalContents;
+    contents: string | SignalPart[];
     createdAt: string;
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
@@ -414,9 +414,9 @@ function storagePartsToSignalParts(parts: MastraMessagePart[]): SignalPart[] {
 // Project canonical signal parts back into the public AgentSignalContents shape. Collapses a
 // single text part to a bare string; otherwise returns the parts unchanged (both internal
 // SignalPart and the public v5 FilePart use `mediaType`).
-function partsToSignalContents(parts: SignalPart[]): AgentSignalContents {
+function partsToSignalContents(parts: SignalPart[]): string | SignalPart[] {
   if (parts.length === 1 && parts[0]?.type === 'text' && !parts[0].providerOptions) return parts[0].text;
-  return parts.map<TextPart | FilePart>(part =>
+  return parts.map<SignalPart>(part =>
     part.type === 'file'
       ? {
           type: 'file',

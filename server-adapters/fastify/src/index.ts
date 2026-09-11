@@ -593,7 +593,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      if (params.body) {
+      if (params.body !== undefined || route.bodySchema) {
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {

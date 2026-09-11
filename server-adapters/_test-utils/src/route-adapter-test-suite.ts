@@ -51,6 +51,48 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       app = setup.app;
     });
 
+    describe('Pending signal DELETE body validation', () => {
+      it.each([
+        undefined,
+        null,
+        false,
+        0,
+        '',
+        {},
+        { signalIds: [] },
+        { signalIds: [''] },
+        { signalIds: Array(1001).fill('signal-1') },
+      ])('rejects missing or invalid signal IDs %#', async body => {
+        const response = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/agents/test-agent/signals',
+          query: { threadId: 'test-thread', resourceId: 'test-resource' },
+          body,
+        });
+        expect(response.status).toBe(400);
+      });
+
+      it('accepts valid IDs and returns only actual removals', async () => {
+        const response = await executeHttpRequest(app, {
+          method: 'DELETE',
+          path: '/api/agents/test-agent/signals',
+          query: { threadId: 'test-thread', resourceId: 'test-resource' },
+          body: { signalIds: ['missing'] },
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ removedSignalIds: [] });
+      });
+
+      it('preserves bodyless create-run requests with optional fields', async () => {
+        const response = await executeHttpRequest(app, {
+          method: 'POST',
+          path: '/api/workflows/test-workflow/create-run',
+        });
+        expect(response.status).toBe(200);
+        expect(response.data).toMatchObject({ runId: expect.any(String) });
+      });
+    });
+
     // Test deprecated routes separately - just verify they're marked correctly
     const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
 

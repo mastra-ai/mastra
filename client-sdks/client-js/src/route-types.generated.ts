@@ -17,7 +17,7 @@ type Shared_Auxiliary_272 =
       [key: string]: Shared_Auxiliary_272;
     };
 
-type Shared_Auxiliary_588 =
+type Shared_Auxiliary_594 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type Shared_Auxiliary_588 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_588[];
+      args: Shared_Auxiliary_594[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_588;
+      arg: Shared_Auxiliary_594;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_612;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_612;
           };
     }
   | {
       feedback:
         | {
-            some: Shared_Auxiliary_606;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_606;
+            none: Shared_Auxiliary_612;
           };
     };
 
-type Shared_Auxiliary_606 =
+type Shared_Auxiliary_612 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,14 +121,14 @@ type Shared_Auxiliary_606 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_606[];
+      args: Shared_Auxiliary_612[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_606;
+      arg: Shared_Auxiliary_612;
     };
 
-type Shared_Auxiliary_1146 =
+type Shared_Auxiliary_1152 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -173,19 +173,19 @@ type Shared_Auxiliary_1146 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1146[];
+      args: Shared_Auxiliary_1152[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1146;
+      arg: Shared_Auxiliary_1152;
     };
 
-type Shared_Auxiliary_1286 = {
+type Shared_Auxiliary_1292 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1286[] | undefined;
+  children?: Shared_Auxiliary_1292[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2618,7 +2618,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1146[];
+  predicates: Shared_Auxiliary_1152[];
 };
 
 type Shared_Type_112 = {
@@ -2641,7 +2641,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1146;
+  predicate: Shared_Auxiliary_1152;
 };
 
 type Shared_Type_113 =
@@ -2995,7 +2995,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1286[] | undefined;
+  files?: Shared_Auxiliary_1292[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4212,6 +4212,105 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
   body: PostAgentsAgentIdQueueMessage_Body;
   request: PostAgentsAgentIdQueueMessage_Request;
   response: PostAgentsAgentIdQueueMessage_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/signals
+// ============================================================================
+export type GetAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdSignals_QueryParams = {
+  resourceId?: string | undefined;
+  threadId?: string | undefined;
+};
+
+export type GetAgentsAgentIdSignals_Response = {
+  signals: {
+    scope: 'pre-run' | 'pending' | 'idle';
+    runId?: string | undefined;
+    agentId?: string | undefined;
+    signal: {
+      id: string;
+      type: 'user' | 'state' | 'reactive' | 'notification';
+      tagName?: string | undefined;
+      contents: string | (Shared_Type_48 | Shared_Type_49)[];
+      createdAt: string;
+      acceptedAt?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: string | number | boolean | null | undefined;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      transient?: boolean | undefined;
+    };
+  }[];
+};
+
+export type GetAgentsAgentIdSignals_Request = Simplify<
+  (GetAgentsAgentIdSignals_PathParams extends never ? {} : { params: GetAgentsAgentIdSignals_PathParams }) &
+    (GetAgentsAgentIdSignals_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdSignals_QueryParams
+        ? { query?: GetAgentsAgentIdSignals_QueryParams }
+        : { query: GetAgentsAgentIdSignals_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdSignals_RouteContract {
+  pathParams: GetAgentsAgentIdSignals_PathParams;
+  queryParams: GetAgentsAgentIdSignals_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdSignals_Request;
+  response: GetAgentsAgentIdSignals_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agents/:agentId/signals
+// ============================================================================
+export type DeleteAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type DeleteAgentsAgentIdSignals_QueryParams = GetAgentsAgentIdSignals_QueryParams;
+
+export type DeleteAgentsAgentIdSignals_Body = {
+  signalIds: string[];
+};
+
+export type DeleteAgentsAgentIdSignals_Response = {
+  removedSignalIds: string[];
+};
+
+export type DeleteAgentsAgentIdSignals_Request = Simplify<
+  (DeleteAgentsAgentIdSignals_PathParams extends never ? {} : { params: DeleteAgentsAgentIdSignals_PathParams }) &
+    (DeleteAgentsAgentIdSignals_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentsAgentIdSignals_QueryParams
+        ? { query?: DeleteAgentsAgentIdSignals_QueryParams }
+        : { query: DeleteAgentsAgentIdSignals_QueryParams }) &
+    (DeleteAgentsAgentIdSignals_Body extends never
+      ? {}
+      : {} extends DeleteAgentsAgentIdSignals_Body
+        ? { body?: DeleteAgentsAgentIdSignals_Body }
+        : { body: DeleteAgentsAgentIdSignals_Body })
+>;
+
+export interface DeleteAgentsAgentIdSignals_RouteContract {
+  pathParams: DeleteAgentsAgentIdSignals_PathParams;
+  queryParams: DeleteAgentsAgentIdSignals_QueryParams;
+  body: DeleteAgentsAgentIdSignals_Body;
+  request: DeleteAgentsAgentIdSignals_Request;
+  response: DeleteAgentsAgentIdSignals_Response;
   responseType: 'json';
 }
 
@@ -9146,7 +9245,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_588 | undefined;
+  where?: Shared_Auxiliary_594 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16887,7 +16986,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1286[] | undefined;
+  files?: Shared_Auxiliary_1292[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16945,7 +17044,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1286[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1292[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22273,6 +22372,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
   'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
+  'GET /agents/:agentId/signals': GetAgentsAgentIdSignals_RouteContract;
+  'DELETE /agents/:agentId/signals': DeleteAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/subscribe': PostAgentsAgentIdThreadsSubscribe_RouteContract;
@@ -22914,6 +23015,8 @@ export interface Client {
     POST: PostAgentsAgentIdSendToolApproval_RouteContract;
   };
   '/agents/:agentId/signals': {
+    DELETE: DeleteAgentsAgentIdSignals_RouteContract;
+    GET: GetAgentsAgentIdSignals_RouteContract;
     POST: PostAgentsAgentIdSignals_RouteContract;
   };
   '/agents/:agentId/skills/:skillName': {

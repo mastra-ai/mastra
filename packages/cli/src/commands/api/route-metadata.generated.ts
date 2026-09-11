@@ -186,6 +186,44 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/signals": {
+    "method": "GET",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "signals"
+    }
+  },
+  "DELETE /agents/:agentId/signals": {
+    "method": "DELETE",
+    "path": "/agents/:agentId/signals",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [
+      "signalIds"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "removedSignalIds"
+    }
+  },
   "POST /agents/:agentId/signals": {
     "method": "POST",
     "path": "/agents/:agentId/signals",

@@ -17,7 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import type { AgentMessageInput, AgentSignalDataPart, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
@@ -219,6 +219,35 @@ export type AgentThreadState = 'active' | 'idle';
 
 export type ActiveThreadRun = { runId: string; resourceId?: string; threadId: string };
 
+/**
+ * Which in-memory queue a pending signal is waiting in.
+ *
+ * - `pre-run` — queued for a run that has been reserved but has not made its
+ *   first model request; folded into that request.
+ * - `pending` — queued for an active run; becomes its own model turn once the
+ *   current step finishes (or the next run if the current one completes first).
+ * - `idle` — waiting for the thread to go idle; starts a new run of its own.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentPendingSignalScope = 'pre-run' | 'pending' | 'idle';
+
+/**
+ * A signal waiting in a thread's in-memory queue.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentPendingSignalEntry = {
+  scope: AgentPendingSignalScope;
+  /**
+   * `pre-run`/`pending`: the active run that will drain this signal.
+   * `idle`: the run id reserved for the run this signal will start.
+   */
+  runId?: string;
+  agentId?: string;
+  signal: AgentSignalDataPart['data'];
+};
+
 export type AgentThreadStrictRegistrationOptions = {
   strict: true;
   /**
@@ -277,6 +306,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
 export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+  // Queue ownership must survive reservation gaps and failed-start requeues.
+  #signalAgentIds = new WeakMap<CreatedAgentSignal, string>();
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -1579,6 +1610,7 @@ export class AgentThreadStreamRuntime {
     try {
       signal = queue?.shift();
       if (signal && queue) {
+        if (!this.#signalAgentIds.has(signal)) this.#signalAgentIds.set(signal, previousRun.agent.id);
         if (queue.length === 0) {
           state.pendingSignalsByThread.delete(key);
         }
@@ -1920,6 +1952,93 @@ export class AgentThreadStreamRuntime {
 
     signalsByThread.delete(key);
     return queue;
+  }
+
+  /**
+   * Lists the selected agent ID's signals waiting in this process's queues
+   * for a thread: pre-run signals first, then active-run follow-ups, then
+   * idle-start signals.
+   *
+   * Only reflects queues held by this runtime instance. A signal forwarded to
+   * a run owned by another process is not visible here.
+   */
+  listPendingSignals(
+    options: AgentThreadIdentityOptions & { agentId: string },
+    pubsub?: PubSub,
+  ): AgentPendingSignalEntry[] {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const activeRunId = state.activeThreadRunIds.get(key);
+    const activeAgentId = activeRunId ? state.threadRunsById.get(activeRunId)?.agent.id : undefined;
+
+    const toEntry = (scope: 'pre-run' | 'pending', signal: CreatedAgentSignal): AgentPendingSignalEntry => ({
+      scope,
+      runId: activeRunId,
+      agentId: this.#signalAgentIds.get(signal) ?? activeAgentId,
+      signal: structuredClone(signal.toDataPart().data),
+    });
+    const belongsToAgent = (signal: CreatedAgentSignal) =>
+      (this.#signalAgentIds.get(signal) ?? activeAgentId) === options.agentId;
+
+    return [
+      ...(state.preRunSignalsByThread.get(key) ?? []).filter(belongsToAgent).map(signal => toEntry('pre-run', signal)),
+      ...(state.pendingSignalsByThread.get(key) ?? []).filter(belongsToAgent).map(signal => toEntry('pending', signal)),
+      ...(state.pendingIdleSignalsByThread.get(key) ?? [])
+        .filter(entry => entry.agent.id === options.agentId)
+        .map(
+          (entry): AgentPendingSignalEntry => ({
+            scope: 'idle',
+            runId: entry.runId,
+            agentId: entry.agent.id,
+            signal: structuredClone(entry.signal.toDataPart().data),
+          }),
+        ),
+    ];
+  }
+
+  /**
+   * Removes the selected agent ID's queued signals before delivery. Returns
+   * only IDs actually removed, in request order without duplicates.
+   * Only affects this runtime instance's queues, not state updates,
+   * notification records, or previously settled acceptance promises.
+   */
+  removePendingSignals(
+    options: AgentThreadIdentityOptions & { agentId: string; signalIds: string[] },
+    pubsub?: PubSub,
+  ): { removedSignalIds: string[] } {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const activeRunId = state.activeThreadRunIds.get(key);
+    const activeAgentId = activeRunId ? state.threadRunsById.get(activeRunId)?.agent.id : undefined;
+    const requestedIds = new Set(options.signalIds);
+    const removedIds = new Set<string>();
+
+    for (const queues of [state.preRunSignalsByThread, state.pendingSignalsByThread]) {
+      const queue = queues.get(key);
+      if (!queue) continue;
+      for (let index = queue.length - 1; index >= 0; index--) {
+        const signal = queue[index]!;
+        if (requestedIds.has(signal.id) && (this.#signalAgentIds.get(signal) ?? activeAgentId) === options.agentId) {
+          queue.splice(index, 1);
+          removedIds.add(signal.id);
+        }
+      }
+      if (queue.length === 0) queues.delete(key);
+    }
+
+    const idleQueue = state.pendingIdleSignalsByThread.get(key);
+    if (idleQueue) {
+      for (let index = idleQueue.length - 1; index >= 0; index--) {
+        const entry = idleQueue[index]!;
+        if (requestedIds.has(entry.signal.id) && entry.agent.id === options.agentId) {
+          idleQueue.splice(index, 1);
+          removedIds.add(entry.signal.id);
+        }
+      }
+      if (idleQueue.length === 0) state.pendingIdleSignalsByThread.delete(key);
+    }
+
+    return { removedSignalIds: [...requestedIds].filter(id => removedIds.has(id)) };
   }
 
   async waitForCrossAgentThreadRun(
@@ -2390,7 +2509,10 @@ export class AgentThreadStreamRuntime {
         if (data.sourceId === this.#id) return;
         const signalsByThread = data.preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
         const queue = signalsByThread.get(key) ?? [];
-        queue.push(createSignal(data.signal));
+        const signal = createSignal(data.signal);
+        const owner = state.threadRunsById.get(data.runId)?.agent.id;
+        if (owner) this.#signalAgentIds.set(signal, owner);
+        queue.push(signal);
         signalsByThread.set(key, queue);
         return;
       }
@@ -2844,6 +2966,7 @@ export class AgentThreadStreamRuntime {
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+    this.#signalAgentIds.set(signal, agent.id);
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
