@@ -148,6 +148,7 @@ function ScopeTree({
         Scopes
       </Txt>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
+        <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Your access</div>
         {scopes?.roots.map((root, index) => (
           <button
             key={root.level}
@@ -166,6 +167,7 @@ function ScopeTree({
         ))}
         {structuralRoots.length > 0 ? (
           <div className="border-surface5 mt-2 flex flex-col gap-1 border-t pt-2">
+            <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Knowledge structure</div>
             {structuralRoots.map(node => renderScopeNode(node, 0))}
           </div>
         ) : null}
@@ -339,9 +341,19 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   } else if (graphQuery.isPending) {
     body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
   } else if (graphQuery.data.nodes.length === 0) {
+    // Identity rungs use exact-scope visibility (v2 has no downward
+    // inheritance), so an empty org/project view usually means knowledge only
+    // exists at a narrower rung — explain that instead of reading as broken.
+    const emptyMessage = selection.scopeNodeId
+      ? 'No knowledge in this scope yet.'
+      : selection.scopeLevel === 'org'
+        ? 'No knowledge captured at organization scope yet — knowledge captured in projects and sessions does not roll up here.'
+        : selection.scopeLevel === 'resource'
+          ? 'No knowledge captured at project scope yet — knowledge captured in sessions does not roll up here.'
+          : 'No knowledge captured in this session yet — the graph fills in as factory sessions work.';
     body = (
       <Txt as="p" variant="ui-md" className="text-icon3">
-        No knowledge captured yet — the graph fills in as factory sessions work.
+        {emptyMessage}
       </Txt>
     );
   } else {

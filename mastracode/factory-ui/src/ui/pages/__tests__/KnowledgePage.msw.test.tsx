@@ -332,8 +332,11 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
-    // The reconciled hierarchy renders nested under the identity rungs.
+    // The reconciled hierarchy renders nested under the identity rungs, with
+    // section labels separating tenant access from the knowledge structure.
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    expect(within(scopes).getByText('Your access')).toBeInTheDocument();
+    expect(await within(scopes).findByText('Knowledge structure')).toBeInTheDocument();
     expect(await within(scopes).findByRole('button', { name: 'mastra' })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: 'features' })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: 'memory' })).toBeInTheDocument();
@@ -461,7 +464,18 @@ describe('KnowledgePage', () => {
     stubKnowledgeRoute({ ...graphFixture, nodes: [], edges: [] });
     renderRoute();
 
-    expect(await screen.findByText(/No knowledge captured yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No knowledge captured at project scope yet/)).toBeInTheDocument();
+  });
+
+  it('explains exact-scope visibility when a wider rung is empty', async () => {
+    // Org rung: content stamped at the project rung is NOT visible here (v2
+    // has no downward inheritance) — the empty state must say why.
+    stubKnowledgeRoute({ ...graphFixture, nodes: [], edges: [] });
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=org`);
+
+    expect(
+      await screen.findByText(/knowledge captured in projects and sessions does not roll up here/),
+    ).toBeInTheDocument();
   });
 
   it('surfaces a load error as a notice', async () => {
