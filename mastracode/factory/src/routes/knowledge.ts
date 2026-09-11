@@ -18,6 +18,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
+  KnowledgeActivityEvent,
   KnowledgeNode,
   KnowledgeRecord,
   KnowledgeScope,
@@ -101,9 +102,10 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
-  scope: KnowledgeScope;
-  /** Deepest rung of the record's scope: org | resource | thread. */
-  rung: 'org' | 'resource' | 'thread';
+  /** Null for structural scope-node members (global, not identity-scoped). */
+  scope: KnowledgeScope | null;
+  /** Deepest rung of the record's scope: org | resource | thread; null for scope nodes. */
+  rung: 'org' | 'resource' | 'thread' | null;
   /**
    * True when a non-deleted pinned record's wikilinks reference ONLY this
    * node (A9: multi-target pins mark their edges instead — the pin is
@@ -509,18 +511,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             const payload: KnowledgeGraphPayload = {
               view: resolved.view,
               ...(resolved.threadId ? { threadId: resolved.threadId } : {}),
-              nodes: members.map(node => ({
-                id: node.id,
-                name: node.name,
-                kind: node.kind,
-                ...(node.description ? { description: node.description } : {}),
-                scope: node.scope,
-                rung: deepestRung(node.scope),
-                pinned: false,
-                recordCount: 0,
-                createdAt: node.createdAt.toISOString(),
-                updatedAt: node.updatedAt.toISOString(),
-              })),
+              nodes: members.map(node => {
+                const nodeScope = Array.isArray(node.scope) ? node.scope : null;
+                return {
+                  id: node.id,
+                  name: node.name,
+                  kind: node.kind,
+                  ...(node.description ? { description: node.description } : {}),
+                  scope: nodeScope,
+                  rung: nodeScope ? deepestRung(nodeScope) : null,
+                  pinned: false,
+                  recordCount: 0,
+                  createdAt: node.createdAt.toISOString(),
+                  updatedAt: node.updatedAt.toISOString(),
+                };
+              }),
               edges: [],
               records: [],
               truncated,
@@ -537,8 +542,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const { store, scope } = view;
           const limits = this.#limits;
 
-          // Nodes, newest-first; +1 to detect truncation.
-          const fetched = await store.listNodes({ scope, limit: limits.maxNodes + 1 });
+          // Nodes, newest-first; +1 to detect truncation. SQL adapters return
+          // global scope nodes (scope: null) from identity-scope reads — they
+          // are already surfaced via /knowledge/scopes, so exclude them here
+          // before truncation, records, and wikilink resolution.
+          const fetched = (await store.listNodes({ scope, limit: limits.maxNodes + 1 })).filter(node =>
+            Array.isArray(node.scope),
+          );
           let truncated = fetched.length > limits.maxNodes;
           const pinnedNodeIds = await this.#pinnedNodeIds(view);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(p => p.id));

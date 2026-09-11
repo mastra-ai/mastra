@@ -90,7 +90,7 @@ export function filterGraph(
     }
   }
   const keep = (node: KnowledgeGraphNode): boolean => {
-    if (filters.rungs.size > 0 && !filters.rungs.has(node.rung)) return false;
+    if (filters.rungs.size > 0 && (!node.rung || !filters.rungs.has(node.rung))) return false;
     if (filters.pinnedOnly && !node.pinned && !pinnedEdgeIds.has(node.id)) return false;
     return true;
   };

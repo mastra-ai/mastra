@@ -44,8 +44,9 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
-  scope: string[];
-  rung: KnowledgeRung;
+  /** Null for structural scope-node members (global, not identity-scoped). */
+  scope: string[] | null;
+  rung: KnowledgeRung | null;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
