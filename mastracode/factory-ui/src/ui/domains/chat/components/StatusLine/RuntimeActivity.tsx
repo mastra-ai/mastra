@@ -2,8 +2,8 @@ import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Brain } from 'lucide-react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
-import type { OMWorkByBudget } from '../../services/runtime';
-import { omWork } from '../../services/runtime';
+import type { OMWorkByBudget } from '../../services/om';
+import { omWork } from '../../services/om';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 
@@ -13,7 +13,6 @@ function holdingLabel({ messages, observations }: OMWorkByBudget): string | unde
   return undefined;
 }
 
-/** Memory work that holds the turn, and decode throughput. Background memory work shimmers on its budget instead. */
 export function RuntimeActivity() {
   const runtime = useChatRuntime();
   const label = holdingLabel(omWork(runtime));
