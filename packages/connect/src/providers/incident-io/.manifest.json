@@ -1,0 +1,24 @@
+{
+  "providerId": "incident-io",
+  "localId": "incident-io",
+  "templateSha": "cfb727cbc131be66eac752d4e129e761ea7027a3",
+  "templateRepo": "rhysbalevicius/integration-templates",
+  "generatedAt": "2026-09-11T05:02:22.019Z",
+  "toolCount": 11,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "449cccbec1f2b701d494a2667d08679cdba89da65ce0f99fb5bcfe34293ad9fd",
+    "tools.ts": "007dfcdfd5c5b67a5bb54110ac67954c8c7ba649f19f4f17d5e14ef8cc75e84a",
+    "tools/create-follow-up.ts": "210830d8f521f4b222566b4d9a15ce1736e19fb90c782c6f1274fc45c40b491a",
+    "tools/create-incident.ts": "f36252e402e651c19f71d5e0249db5bf434a124d6929eede11d5e80efb8347e2",
+    "tools/get-action.ts": "1f5ae900ab8840709f642af2d9dc6a8b2f5ed2f496e7851bbfeafcac3a8aebd7",
+    "tools/get-follow-up.ts": "311464a333857b17e1ae7577a3363b183eecd31537f40fea26f8de183b2d4905",
+    "tools/get-incident.ts": "ad7c0df562ef7782416a024587ebb155bfdec4c7c9b49c022b2e32250cd6b966",
+    "tools/list-actions.ts": "ae07cc8842528db576ba98f44b39aaf12c3ee1c9cbcfd31943b17cc7496b6cd3",
+    "tools/list-follow-ups.ts": "396756f6c5386c388273905b1f9fec79a675dd36e331bf91e9b8182bcca3855f",
+    "tools/list-incident-statuses.ts": "1e5e49be208508fa0139f52735f26cdb3514db74307259fe1cc6bf0f0a45d159",
+    "tools/list-incidents.ts": "17ebb88f0315d71eb6860ef5e0ba25fb369d4f1a40ee4731b5ba8bc84da1e314",
+    "tools/list-severities.ts": "061cb5e5f0a0a712792d8480195781a466d810de3c56da357391b7d7e542eb47",
+    "tools/update-follow-up.ts": "0d93424aada0903bed17432ef69be2ffac682a30c583344afce37934fd2a6f10"
+  }
+}

@@ -9,7 +9,18 @@ describe('shipped provider registry', () => {
   it('collects every provider whose directory exists under src/providers', () => {
     const integrationIds = PROVIDERS.map(p => p.integrationId).sort();
     // Extend this list when generated provider branches land.
-    expect(integrationIds).toEqual(['anthropic', 'clerk', 'linear', 'notion', 'openai', 'supabase', 'workos']);
+    expect(integrationIds).toEqual([
+      'anthropic',
+      'clerk',
+      'incident-io',
+      'linear',
+      'neon',
+      'notion',
+      'openai',
+      'resend',
+      'supabase',
+      'workos',
+    ]);
   });
 
   it('gives every provider the required registration fields', () => {

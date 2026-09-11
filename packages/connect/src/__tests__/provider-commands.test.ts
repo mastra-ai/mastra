@@ -196,7 +196,13 @@ describe('maintainer provider commands', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/first-provider/.manifest.json'), 'utf8'),
     ) as { providerId: string; localId: string; toolCount: number };
-    expect(manifest).toMatchObject({ providerId: 'first-provider', localId: 'first-provider', toolCount: 1 });
+    expect(manifest).toMatchObject({
+      providerId: 'first-provider',
+      localId: 'first-provider',
+      toolCount: 1,
+      templateSha,
+      templateRepo: 'rhysbalevicius/integration-templates',
+    });
     const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
     expect(providerIndex).toContain("import { firstProviderProvider } from './first-provider/index.js';");
     expect(providerIndex).toMatch(

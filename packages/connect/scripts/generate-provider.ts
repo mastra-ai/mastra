@@ -42,7 +42,7 @@ import {
   validateProviderId,
   type ProviderManifest,
 } from './provider-utils.js';
-import { TEMPLATE_SHA } from './templates-config.js';
+import { TEMPLATE_REPO, TEMPLATE_SHA } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
@@ -315,7 +315,7 @@ function emitActionFile(action: ExtractedAction): string {
   );
   const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
 
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -348,7 +348,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -370,7 +370,7 @@ function emitIndexFile(integrationId: string): string {
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).
   const registrationName = providerRegistrationName(integrationId);
-  return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+  return `// AUTO-GENERATED from ${TEMPLATE_REPO} @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';
 
@@ -457,6 +457,7 @@ export async function generateProvider({
       providerId,
       localId,
       templateSha,
+      templateRepo: TEMPLATE_REPO,
       generatedAt: new Date().toISOString(),
       toolCount: extracted.length,
       skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),

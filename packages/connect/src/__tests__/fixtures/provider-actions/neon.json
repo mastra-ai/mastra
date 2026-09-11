@@ -1,0 +1,1728 @@
+[
+  {
+    "provider": "neon",
+    "tool": "neon_list_projects",
+    "method": "GET",
+    "path": "/v2/projects",
+    "input": {},
+    "response": {
+      "projects": [
+        {
+          "id": "shiny-wind-028834",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "shiny-wind-028834",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100
+        },
+        {
+          "id": "winter-boat-259881",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "winter-boat-259881",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:52:25Z",
+          "updated_at": "2022-11-23T17:52:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100,
+          "org_id": "org-morning-bread-81040908"
+        }
+      ],
+      "applications": {
+        "winter-boat-259881": ["vercel", "github"]
+      },
+      "integrations": {
+        "winter-boat-259881": ["vercel", "github"]
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_project",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}",
+    "input": {
+      "project_id": "example"
+    },
+    "response": {
+      "project": {
+        "id": "shiny-wind-028834",
+        "platform_id": "aws",
+        "region_id": "aws-us-east-2",
+        "name": "shiny-wind-028834",
+        "provisioner": "k8s-pod",
+        "pg_version": 15,
+        "history_retention_seconds": 604800,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:25Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "branch_logical_size_limit": 0,
+        "cpu_used_sec": 10,
+        "owner_id": "1232111",
+        "owner": {
+          "name": "John Smith",
+          "email": "some@email.com",
+          "branches_limit": 10,
+          "subscription_type": "scale"
+        },
+        "creation_source": "console",
+        "store_passwords": true,
+        "branch_logical_size_limit_bytes": 10500,
+        "data_storage_bytes_hour": 1040,
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "consumption_period_start": "2023-02-01T00:00:00Z",
+        "consumption_period_end": "2023-03-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_project",
+    "method": "POST",
+    "path": "/v2/projects",
+    "input": {
+      "body": {
+        "project": {}
+      }
+    },
+    "response": {
+      "project": {
+        "id": "spring-example-302709",
+        "platform_id": "aws",
+        "region_id": "aws-us-east-2",
+        "name": "spring-example-302709",
+        "provisioner": "k8s-pod",
+        "pg_version": 15,
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "store_passwords": true,
+        "creation_source": "console",
+        "history_retention_seconds": 604800,
+        "created_at": "2022-12-13T01:30:55Z",
+        "updated_at": "2022-12-13T01:30:55Z",
+        "owner": {
+          "name": "John Smith",
+          "email": "some@email.com",
+          "branches_limit": 10,
+          "subscription_type": "scale"
+        },
+        "org_id": "org-morning-bread-81040908",
+        "owner_id": "629982cc-de05-43db-ae16-28f2399c4910",
+        "data_storage_bytes_hour": 2831928,
+        "branch_logical_size_limit": 10,
+        "branch_logical_size_limit_bytes": 10485760,
+        "data_transfer_bytes": 1000,
+        "written_data_bytes": 193990002,
+        "compute_time_seconds": 2485760,
+        "active_time_seconds": 621440,
+        "cpu_used_sec": 155350,
+        "consumption_period_start": "2022-11-01T00:00:00Z",
+        "consumption_period_end": "2022-12-01T00:00:00Z"
+      },
+      "connection_uris": [],
+      "roles": [],
+      "databases": [],
+      "operations": [],
+      "branch": {
+        "id": "br-wispy-meadow-118737",
+        "project_id": "spring-example-302709",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1DE2850",
+        "name": "dev2",
+        "protected": false,
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "creation_source": "console",
+        "created_at": "2022-11-30T19:09:48Z",
+        "updated_at": "2022-12-01T19:53:05Z",
+        "default": true,
+        "init_source": "parent-data",
+        "data_transfer_bytes": 72911987,
+        "written_data_bytes": 542998300,
+        "compute_time_seconds": 823880990,
+        "active_time_seconds": 922200,
+        "cpu_used_sec": 461100
+      },
+      "endpoints": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branches",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches",
+    "input": {
+      "project_id": "example"
+    },
+    "response": {
+      "branches": [
+        {
+          "id": "br-aged-salad-637688",
+          "project_id": "shiny-wind-028834",
+          "name": "main",
+          "current_state": "ready",
+          "state_changed_at": "2022-11-30T20:09:48Z",
+          "logical_size": 28,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:26Z",
+          "data_transfer_bytes": 1000000,
+          "written_data_bytes": 100800,
+          "compute_time_seconds": 100,
+          "active_time_seconds": 100,
+          "cpu_used_sec": 100,
+          "default": true,
+          "protected": false,
+          "creation_source": "console",
+          "init_source": "parent-data"
+        },
+        {
+          "id": "br-sweet-breeze-497520",
+          "project_id": "shiny-wind-028834",
+          "parent_id": "br-aged-salad-637688",
+          "parent_lsn": "0/1DE2850",
+          "name": "dev2",
+          "current_state": "ready",
+          "state_changed_at": "2022-11-30T20:09:48Z",
+          "logical_size": 28,
+          "created_at": "2022-11-30T19:09:48Z",
+          "updated_at": "2022-11-30T19:09:49Z",
+          "data_transfer_bytes": 1000000,
+          "written_data_bytes": 100800,
+          "compute_time_seconds": 100,
+          "active_time_seconds": 100,
+          "cpu_used_sec": 100,
+          "default": true,
+          "protected": false,
+          "creation_source": "console",
+          "init_source": "parent-data"
+        },
+        {
+          "id": "br-raspy-hill-832856",
+          "project_id": "shiny-wind-028834",
+          "parent_id": "br-aged-salad-637688",
+          "parent_lsn": "0/19623D8",
+          "name": "dev1",
+          "current_state": "ready",
+          "state_changed_at": "2022-11-30T20:09:48Z",
+          "logical_size": 21,
+          "created_at": "2022-11-30T17:36:57Z",
+          "updated_at": "2022-11-30T17:36:57Z",
+          "data_transfer_bytes": 1000000,
+          "written_data_bytes": 100800,
+          "compute_time_seconds": 100,
+          "active_time_seconds": 100,
+          "cpu_used_sec": 100,
+          "default": true,
+          "protected": false,
+          "creation_source": "console",
+          "init_source": "parent-data"
+        }
+      ],
+      "annotations": {
+        "br-aged-salad-637688": {
+          "object": {
+            "type": "console/branch",
+            "id": "br-aged-salad-637688"
+          },
+          "value": {
+            "vercel-commit-ref": "test"
+          },
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:26Z"
+        }
+      },
+      "pagination": {
+        "next": "eyJjcmVhdGV",
+        "sort_by": "updated_at",
+        "sort_order": "desc"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_branch",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "branch": {
+        "id": "br-aged-salad-637688",
+        "project_id": "shiny-wind-028834",
+        "name": "main",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "logical_size": 28,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "cpu_used_sec": 100,
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "annotation": {
+        "object": {
+          "type": "console/branch",
+          "id": "br-aged-salad-637688"
+        },
+        "value": {
+          "vercel-commit-ref": "test"
+        },
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_branch",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches",
+    "input": {
+      "project_id": "example",
+      "body": {}
+    },
+    "response": {
+      "branch": {
+        "id": "br-wispy-meadow-118737",
+        "project_id": "spring-example-302709",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1DE2850",
+        "name": "dev2",
+        "protected": false,
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "creation_source": "console",
+        "created_at": "2022-11-30T19:09:48Z",
+        "updated_at": "2022-12-01T19:53:05Z",
+        "default": true,
+        "init_source": "parent-data",
+        "data_transfer_bytes": 72911987,
+        "written_data_bytes": 542998300,
+        "compute_time_seconds": 823880990,
+        "active_time_seconds": 922200,
+        "cpu_used_sec": 461100
+      },
+      "endpoints": [],
+      "operations": [],
+      "roles": [],
+      "databases": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_branch",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "branch": {
+        "id": "br-aged-salad-637688",
+        "project_id": "shiny-wind-028834",
+        "name": "main",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "logical_size": 28,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "cpu_used_sec": 100,
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "operations": [
+        {
+          "id": "b6afbc21-2990-4a76-980b-b57d8c2948f2",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-sweet-breeze-497520",
+          "endpoint_id": "ep-soft-violet-752733",
+          "action": "suspend_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:53:05Z",
+          "updated_at": "2022-12-01T19:53:05Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "b6afbc21-2990-4a76-980b-b57d8c2948f2",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-sweet-breeze-497520",
+          "action": "delete_timeline",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:53:05Z",
+          "updated_at": "2022-12-01T19:53:05Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_databases",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "databases": [
+        {
+          "id": 834686,
+          "branch_id": "br-aged-salad-637688",
+          "name": "main",
+          "owner_name": "casey",
+          "created_at": "2022-11-30T18:25:15Z",
+          "updated_at": "2022-11-30T18:25:15Z"
+        },
+        {
+          "id": 834686,
+          "branch_id": "br-aged-salad-637688",
+          "name": "mydb",
+          "owner_name": "casey",
+          "created_at": "2022-10-30T17:14:13Z",
+          "updated_at": "2022-10-30T17:14:13Z"
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_endpoints",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/endpoints",
+    "input": {
+      "project_id": "example"
+    },
+    "response": {
+      "endpoints": [
+        {
+          "host": "ep-little-smoke-851426.us-east-2.aws.neon.tech",
+          "creation_source": "console",
+          "suspend_timeout_seconds": 10800,
+          "provisioner": "k8s-pod",
+          "id": "ep-little-smoke-851426",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "autoscaling_limit_min_cu": 1,
+          "autoscaling_limit_max_cu": 1,
+          "region_id": "aws-us-east-2",
+          "type": "read_write",
+          "current_state": "idle",
+          "settings": {
+            "pg_settings": {}
+          },
+          "pooler_enabled": false,
+          "pooler_mode": "transaction",
+          "disabled": false,
+          "passwordless_access": true,
+          "last_active": "2022-11-23T17:00:00Z",
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-30T18:25:21Z",
+          "proxy_host": "us-east-2.aws.neon.tech"
+        },
+        {
+          "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+          "creation_source": "console",
+          "suspend_timeout_seconds": 10800,
+          "provisioner": "k8s-pod",
+          "id": "ep-steep-bush-777093",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "autoscaling_limit_min_cu": 1,
+          "autoscaling_limit_max_cu": 1,
+          "region_id": "aws-us-east-2",
+          "type": "read_write",
+          "current_state": "idle",
+          "settings": {
+            "pg_settings": {}
+          },
+          "pooler_enabled": false,
+          "pooler_mode": "transaction",
+          "disabled": false,
+          "passwordless_access": true,
+          "last_active": "2022-11-30T17:00:00Z",
+          "created_at": "2022-11-30T17:36:57Z",
+          "updated_at": "2022-11-30T18:42:58Z",
+          "proxy_host": "us-east-2.aws.neon.tech"
+        },
+        {
+          "host": "ep-soft-violet-752733.us-east-2.aws.neon.tech",
+          "creation_source": "console",
+          "suspend_timeout_seconds": 10800,
+          "provisioner": "k8s-pod",
+          "id": "ep-soft-violet-752733",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-sweet-breeze-497520",
+          "autoscaling_limit_min_cu": 1,
+          "autoscaling_limit_max_cu": 1,
+          "region_id": "aws-us-east-2",
+          "type": "read_write",
+          "current_state": "idle",
+          "settings": {
+            "pg_settings": {}
+          },
+          "pooler_enabled": false,
+          "pooler_mode": "transaction",
+          "disabled": false,
+          "passwordless_access": true,
+          "last_active": "2022-11-30T19:00:00Z",
+          "created_at": "2022-11-30T19:09:48Z",
+          "updated_at": "2022-11-30T19:14:51Z",
+          "proxy_host": "us-east-2.aws.neon.tech"
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_endpoint",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example"
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-little-smoke-851426.us-east-2.aws.neon.tech",
+        "id": "ep-little-smoke-851426",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-aged-salad-637688",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-11-23T17:00:00Z",
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-30T18:25:21Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_operation",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/operations/{operation_id}",
+    "input": {
+      "project_id": "example",
+      "operation_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "response": {
+      "operation": {
+        "id": "a07f8772-1877-4da9-a939-3a3ae62d1d8d",
+        "project_id": "floral-king-961888",
+        "branch_id": "br-bitter-sound-247814",
+        "endpoint_id": "ep-dark-snowflake-942567",
+        "action": "create_timeline",
+        "status": "finished",
+        "failures_count": 0,
+        "created_at": "2022-10-04T18:20:17Z",
+        "updated_at": "2022-10-04T18:20:18Z",
+        "total_duration_ms": 100
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_operations",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/operations",
+    "input": {
+      "project_id": "example"
+    },
+    "response": {
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_branch_schema",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/schema",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "db_name": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_compare_branch_schema",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/compare_schema",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "db_name": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_project",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}",
+    "input": {
+      "project_id": "example",
+      "body": {
+        "project": {}
+      }
+    },
+    "response": {
+      "operations": [],
+      "project": {
+        "id": "shiny-wind-028834",
+        "platform_id": "aws",
+        "region_id": "aws-us-east-2",
+        "name": "myproject",
+        "provisioner": "k8s-pod",
+        "pg_version": 15,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-12-04T02:39:25Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "branch_logical_size_limit": 0,
+        "cpu_used_sec": 213230,
+        "owner_id": "1232111",
+        "creation_source": "console",
+        "store_passwords": true,
+        "branch_logical_size_limit_bytes": 10500,
+        "data_storage_bytes_hour": 1040,
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "history_retention_seconds": 604800,
+        "consumption_period_start": "2023-02-01T00:00:00Z",
+        "consumption_period_end": "2023-03-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_branch",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "branch": {}
+      }
+    },
+    "response": {
+      "branch": {
+        "id": "br-icy-dream-250089",
+        "project_id": "shiny-wind-028834",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1E19478",
+        "name": "mybranch",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "data_transfer_bytes": 1000000,
+        "written_data_bytes": 100800,
+        "compute_time_seconds": 100,
+        "active_time_seconds": 100,
+        "cpu_used_sec": 100,
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_set_default_branch",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/set_as_default",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "branch": {
+        "cpu_used_sec": 1,
+        "active_time_seconds": 1,
+        "compute_time_seconds": 1,
+        "written_data_bytes": 100,
+        "data_transfer_bytes": 100,
+        "id": "br-icy-dream-250089",
+        "project_id": "shiny-wind-028834",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1E19478",
+        "name": "mybranch",
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:26Z",
+        "default": true,
+        "protected": false,
+        "creation_source": "console",
+        "init_source": "parent-data"
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_endpoint",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/endpoints",
+    "input": {
+      "project_id": "example",
+      "body": {
+        "endpoint": {
+          "branch_id": "example",
+          "type": "read_only"
+        }
+      }
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-shrill-thunder-454069.us-east-2.aws.neon.tech",
+        "id": "ep-shrill-thunder-454069",
+        "project_id": "bitter-meadow-966132",
+        "branch_id": "br-proud-paper-090813",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "init",
+        "pending_state": "active",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:37:07Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "suspend_timeout_seconds": 10800,
+        "provisioner": "k8s-pod"
+      },
+      "operations": [
+        {
+          "id": "874f8bfe-f51d-4c61-85af-a29bea73e0e2",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "start_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:37:07Z",
+          "updated_at": "2022-12-03T15:37:07Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_endpoint",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example",
+      "body": {
+        "endpoint": {}
+      }
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+        "id": "ep-steep-bush-777093",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-raspy-hill-832856",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-12-03T15:00:00Z",
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:49:10Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      },
+      "operations": [
+        {
+          "id": "3fc98ab8-f191-47b8-a427-5eb668ccc5b9",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "9ffda74b-a582-4cff-b0f0-aaa8d14b8e6a",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_endpoint",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example"
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+        "id": "ep-steep-bush-777093",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-raspy-hill-832856",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-12-03T15:00:00Z",
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:49:10Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      },
+      "operations": [
+        {
+          "id": "fd11748e-3c68-458f-b9e3-66d409e3eef0",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "suspend_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_start_endpoint",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}/start",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example"
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+        "id": "ep-steep-bush-777093",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-raspy-hill-832856",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-12-03T15:00:00Z",
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:49:10Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      },
+      "operations": [
+        {
+          "id": "e061087e-3c99-4856-b9c8-6b7751a253af",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "start_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_suspend_endpoint",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}/suspend",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example"
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+        "id": "ep-steep-bush-777093",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-raspy-hill-832856",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-12-03T15:00:00Z",
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:49:10Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      },
+      "operations": [
+        {
+          "id": "e061087e-3c99-4856-b9c8-6b7751a253af",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "suspend_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_restart_endpoint",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/endpoints/{endpoint_id}/restart",
+    "input": {
+      "project_id": "example",
+      "endpoint_id": "example"
+    },
+    "response": {
+      "endpoint": {
+        "host": "ep-steep-bush-777093.us-east-2.aws.neon.tech",
+        "id": "ep-steep-bush-777093",
+        "project_id": "shiny-wind-028834",
+        "branch_id": "br-raspy-hill-832856",
+        "autoscaling_limit_min_cu": 1,
+        "autoscaling_limit_max_cu": 1,
+        "region_id": "aws-us-east-2",
+        "type": "read_write",
+        "current_state": "idle",
+        "settings": {
+          "pg_settings": {}
+        },
+        "pooler_enabled": false,
+        "pooler_mode": "transaction",
+        "disabled": false,
+        "passwordless_access": true,
+        "last_active": "2022-12-03T15:00:00Z",
+        "created_at": "2022-12-03T15:37:07Z",
+        "updated_at": "2022-12-03T15:49:10Z",
+        "proxy_host": "us-east-2.aws.neon.tech",
+        "creation_source": "console",
+        "provisioner": "k8s-pod",
+        "suspend_timeout_seconds": 10800
+      },
+      "operations": [
+        {
+          "id": "e061087e-3c99-4856-b9c8-6b7751a253af",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "suspend_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "e061087e-3c99-4856-b9c8-6b7751a253af",
+          "project_id": "bitter-meadow-966132",
+          "branch_id": "br-proud-paper-090813",
+          "endpoint_id": "ep-shrill-thunder-454069",
+          "action": "start_compute",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T15:51:06Z",
+          "updated_at": "2022-12-03T15:51:06Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branch_endpoints",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/endpoints",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "endpoints": [
+        {
+          "host": "ep-little-smoke-851426.us-east-2.aws.neon.tech",
+          "id": "ep-little-smoke-851426",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "autoscaling_limit_min_cu": 1,
+          "autoscaling_limit_max_cu": 1,
+          "region_id": "aws-us-east-2",
+          "type": "read_write",
+          "current_state": "idle",
+          "settings": {
+            "pg_settings": {}
+          },
+          "pooler_enabled": false,
+          "pooler_mode": "transaction",
+          "disabled": false,
+          "passwordless_access": true,
+          "last_active": "2022-11-23T17:00:00Z",
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-30T18:25:21Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "creation_source": "console",
+          "provisioner": "k8s-pod",
+          "suspend_timeout_seconds": 10800
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_database",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example"
+    },
+    "response": {
+      "database": {
+        "id": 834686,
+        "branch_id": "br-aged-salad-637688",
+        "name": "main",
+        "owner_name": "casey",
+        "created_at": "2022-11-30T18:25:15Z",
+        "updated_at": "2022-11-30T18:25:15Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_database",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "database": {
+          "name": "example",
+          "owner_name": "example"
+        }
+      }
+    },
+    "response": {
+      "database": {
+        "id": 876692,
+        "branch_id": "br-aged-salad-637688",
+        "name": "mydb",
+        "owner_name": "casey",
+        "created_at": "2022-12-04T00:15:04Z",
+        "updated_at": "2022-12-04T00:15:04Z"
+      },
+      "operations": [
+        {
+          "id": "39426015-db00-40fa-85c5-1c7072df46d0",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:15:04Z",
+          "updated_at": "2022-12-04T00:15:04Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "b7483d4e-33da-4d40-b319-ac858d4d3e69",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:15:04Z",
+          "updated_at": "2022-12-04T00:15:04Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_database",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example",
+      "body": {
+        "database": {}
+      }
+    },
+    "response": {
+      "database": {
+        "id": 876692,
+        "branch_id": "br-aged-salad-637688",
+        "name": "mydb",
+        "owner_name": "sally",
+        "created_at": "2022-12-04T00:15:04Z",
+        "updated_at": "2022-12-04T00:15:04Z"
+      },
+      "operations": [
+        {
+          "id": "9ef1c2ed-dce4-43aa-bae8-78aea636bf8a",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:21:01Z",
+          "updated_at": "2022-12-04T00:21:01Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "42dafb46-f861-497b-ae89-f2bec54f4966",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:21:01Z",
+          "updated_at": "2022-12-04T00:21:01Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_database",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example"
+    },
+    "response": {
+      "database": {
+        "id": 851537,
+        "branch_id": "br-raspy-hill-832856",
+        "name": "mydb",
+        "owner_name": "casey",
+        "created_at": "2022-12-01T19:41:46Z",
+        "updated_at": "2022-12-01T19:41:46Z"
+      },
+      "operations": [
+        {
+          "id": "9ef1c2ed-dce4-43aa-bae8-78aea636bf8a",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:51:41Z",
+          "updated_at": "2022-12-01T19:51:41Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "42dafb46-f861-497b-ae89-f2bec54f4966",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:51:41Z",
+          "updated_at": "2022-12-01T19:51:41Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_regions",
+    "method": "GET",
+    "path": "/v2/regions",
+    "input": {},
+    "response": {
+      "regions": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_auth_details",
+    "method": "GET",
+    "path": "/v2/auth",
+    "input": {},
+    "response": {
+      "account_id": "example",
+      "auth_method": "keycloak"
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_organizations",
+    "method": "GET",
+    "path": "/v2/users/me/organizations",
+    "input": {},
+    "response": {
+      "organizations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_shared_projects",
+    "method": "GET",
+    "path": "/v2/projects/shared",
+    "input": {},
+    "response": {
+      "projects": [
+        {
+          "id": "shiny-wind-028834",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "shiny-wind-028834",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100
+        },
+        {
+          "id": "winter-boat-259881",
+          "platform_id": "aws",
+          "region_id": "aws-us-east-2",
+          "name": "winter-boat-259881",
+          "provisioner": "k8s-pod",
+          "pg_version": 15,
+          "created_at": "2022-11-23T17:52:25Z",
+          "updated_at": "2022-11-23T17:52:25Z",
+          "proxy_host": "us-east-2.aws.neon.tech",
+          "cpu_used_sec": 0,
+          "branch_logical_size_limit": 0,
+          "owner_id": "1232111",
+          "creation_source": "console",
+          "store_passwords": true,
+          "branch_logical_size_limit_bytes": 10800,
+          "active_time": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_snapshot",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/snapshot",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "snapshot": {
+        "id": "example",
+        "name": "example",
+        "created_at": "2025-01-15T10:30:00Z"
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_snapshots",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/snapshots",
+    "input": {
+      "project_id": "example"
+    },
+    "response": {
+      "snapshots": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_snapshot",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/snapshots/{snapshot_id}",
+    "input": {
+      "project_id": "example",
+      "snapshot_id": "example",
+      "body": {
+        "snapshot": {}
+      }
+    },
+    "response": {
+      "snapshot": {
+        "id": "example",
+        "name": "example",
+        "created_at": "2025-01-15T10:30:00Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_snapshot",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/snapshots/{snapshot_id}",
+    "input": {
+      "project_id": "example",
+      "snapshot_id": "example"
+    },
+    "response": {
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_restore_snapshot",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/snapshots/{snapshot_id}/restore",
+    "input": {
+      "project_id": "example",
+      "snapshot_id": "example"
+    },
+    "response": {
+      "branch": {
+        "id": "br-wispy-meadow-118737",
+        "project_id": "spring-example-302709",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1DE2850",
+        "name": "dev2",
+        "protected": false,
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "creation_source": "console",
+        "created_at": "2022-11-30T19:09:48Z",
+        "updated_at": "2022-12-01T19:53:05Z",
+        "default": true,
+        "init_source": "parent-data",
+        "data_transfer_bytes": 72911987,
+        "written_data_bytes": 542998300,
+        "compute_time_seconds": 823880990,
+        "active_time_seconds": 922200,
+        "cpu_used_sec": 461100
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_snapshot_schedule",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/backup_schedule",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "schedule": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_set_snapshot_schedule",
+    "method": "PUT",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/backup_schedule",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "schedule": [
+          {
+            "frequency": "daily"
+          }
+        ]
+      }
+    },
+    "response": {}
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_restore_branch",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/restore",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "source_branch_id": "source-branch"
+      }
+    },
+    "response": {
+      "branch": {
+        "id": "br-wispy-meadow-118737",
+        "project_id": "spring-example-302709",
+        "parent_id": "br-aged-salad-637688",
+        "parent_lsn": "0/1DE2850",
+        "name": "dev2",
+        "protected": false,
+        "current_state": "ready",
+        "state_changed_at": "2022-11-30T20:09:48Z",
+        "creation_source": "console",
+        "created_at": "2022-11-30T19:09:48Z",
+        "updated_at": "2022-12-01T19:53:05Z",
+        "default": true,
+        "init_source": "parent-data",
+        "data_transfer_bytes": 72911987,
+        "written_data_bytes": 542998300,
+        "compute_time_seconds": 823880990,
+        "active_time_seconds": 922200,
+        "cpu_used_sec": 461100
+      },
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_finalize_restore_branch",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/finalize_restore",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "operations": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_query_branch_logs",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/query",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {}
+    },
+    "response": {
+      "logs": [],
+      "is_truncated": false
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branch_log_fields",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/fields",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "fields": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branch_log_field_values",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/fields/{field_name}/values",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "field_name": "example"
+    },
+    "response": {
+      "values": [],
+      "is_truncated": false
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_project_consumption",
+    "method": "GET",
+    "path": "/v2/consumption_history/v2/projects",
+    "input": {
+      "from": "2026-09-01T00:00:00Z",
+      "to": "2026-09-02T00:00:00Z",
+      "granularity": "hourly",
+      "org_id": "example",
+      "metrics": ["compute_unit_seconds"]
+    },
+    "response": {
+      "projects": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_branch_consumption",
+    "method": "GET",
+    "path": "/v2/consumption_history/v2/branches",
+    "input": {
+      "project_ids": ["example"],
+      "from": "2026-09-01T00:00:00Z",
+      "to": "2026-09-02T00:00:00Z",
+      "granularity": "hourly",
+      "org_id": "example",
+      "metrics": ["compute_unit_seconds"]
+    },
+    "response": {
+      "branches": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_roles",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "roles": [
+        {
+          "branch_id": "br-aged-salad-637688",
+          "name": "casey",
+          "protected": false,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:25Z"
+        },
+        {
+          "branch_id": "br-aged-salad-637688",
+          "name": "thomas",
+          "protected": false,
+          "created_at": "2022-10-22T17:38:21Z",
+          "updated_at": "2022-10-22T17:38:21Z"
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_role",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles/{role_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "role_name": "example"
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-noisy-sunset-458773",
+        "name": "casey",
+        "protected": false,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:25Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_role",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "role": {
+          "name": "example"
+        }
+      }
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-noisy-sunset-458773",
+        "name": "sally",
+        "password": "Onf1AjayKwe0",
+        "protected": false,
+        "created_at": "2022-12-03T11:58:29Z",
+        "updated_at": "2022-12-03T11:58:29Z"
+      },
+      "operations": [
+        {
+          "id": "2c2be371-d5ac-4db5-8b68-79f05e8bc287",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-noisy-sunset-458773",
+          "endpoint_id": "ep-small-pine-767857",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T11:58:29Z",
+          "updated_at": "2022-12-03T11:58:29Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_role",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles/{role_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "role_name": "example"
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-raspy-hill-832856",
+        "name": "thomas",
+        "protected": false,
+        "created_at": "2022-12-01T14:36:23Z",
+        "updated_at": "2022-12-01T14:36:23Z"
+      },
+      "operations": [
+        {
+          "id": "db646be3-eace-4910-9f60-8150823c5cb8",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:48:11Z",
+          "updated_at": "2022-12-01T19:48:11Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "ab94cdad-7630-4943-a55e-5a0952d2e598",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:48:11Z",
+          "updated_at": "2022-12-01T19:48:11Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  }
+]
