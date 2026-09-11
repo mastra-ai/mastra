@@ -345,6 +345,12 @@ describe('KnowledgePage', () => {
     await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
     expect(subgraphParams.every(id => id !== '33333333-3333-4333-8333-333333333333')).toBe(true);
 
+    // Selected scopes get visible active styling matching aria-pressed.
+    const features = within(scopes).getByRole('button', { name: 'features' });
+    expect(features).toHaveAttribute('aria-pressed', 'true');
+    expect(features).toHaveClass('font-medium');
+    expect(within(scopes).getByRole('button', { name: 'mastra' })).not.toHaveClass('font-medium');
+
     // Clicking a member scope node inside the structural lens drills down —
     // no record flyout opens for structural members.
     fireEvent.click(await screen.findByText('observational'));
@@ -408,6 +414,13 @@ describe('KnowledgePage', () => {
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     expect(await within(scopes).findByRole('button', { name: /Organization/ })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: /Project/ })).toBeInTheDocument();
+
+    // Identity rung selections get visible active styling matching aria-pressed.
+    const project = within(scopes).getByRole('button', { name: /Project/ });
+    await user.click(project);
+    expect(project).toHaveAttribute('aria-pressed', 'true');
+    expect(project).toHaveClass('font-medium');
+    expect(within(scopes).getByRole('button', { name: /Organization/ })).not.toHaveClass('font-medium');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
