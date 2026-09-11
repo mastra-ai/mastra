@@ -450,8 +450,15 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.cloneThread(args);
   }
 
-  async updateThreadResourceId(args: { threadId: string; resourceId: string }): Promise<StorageThreadType> {
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.updateThreadResourceId(args);
+    return memoryStorage.updateThreadResourceId({ threadId, resourceId });
   }
 }
