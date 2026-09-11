@@ -848,18 +848,10 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
-export interface TransferMemoryThreadParams {
-  /**
-   * The target resource id to reassign the thread (and its messages) to.
-   */
-  resourceId: string;
-  /**
-   * Optional agent id. Used by the server to detect gateway agents; not required
-   * for the local-storage transfer path.
-   */
-  agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type TransferMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
+> &
+  RequestContextOptions;
 
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
