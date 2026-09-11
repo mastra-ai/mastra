@@ -230,6 +230,7 @@ type AgentThreadRuntimeState = {
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
+  claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
@@ -327,6 +328,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
+    claimedThreadOwnerDiscoveries: new Map(),
     claimedThreadOwners: new Map(),
     advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
@@ -1076,6 +1078,21 @@ export class AgentThreadStreamRuntime {
     });
   }
 
+  async #deliverAfterClaimedOwnerDiscovery<OUTPUT>(
+    pubsub: PubSub,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    discovery: Promise<string | undefined>,
+  ): Promise<SendAgentSignalAccepted<OUTPUT>> {
+    const claimedOwnerSourceId = await discovery;
+    if (!claimedOwnerSourceId) {
+      throw new Error(`No claimed thread owner responded for ${key}`);
+    }
+    const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
+    return { action: 'deliver', runId: acceptedRunId };
+  }
+
   async #findClaimedThreadOwner(
     pubsub: PubSub,
     key: string,
@@ -1522,6 +1539,7 @@ export class AgentThreadStreamRuntime {
     state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
+    state.claimedThreadOwnerDiscoveries.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
       claim.unsubscribe();
     }
@@ -3429,6 +3447,18 @@ export class AgentThreadStreamRuntime {
         // by another runtime instance is reached only via PubSub; treat it as a
         // follow-up, since the sender cannot see the owner's request state.
         const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
+        const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
+        if (claimedOwnerDiscovery) {
+          const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
+            this.#getPubSub(pubsub),
+            key,
+            randomUUID(),
+            signal,
+            claimedOwnerDiscovery,
+          );
+          void accepted.catch(() => {});
+          return { signal, accepted };
+        }
         if (isLocalReservedRun) {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
@@ -3553,28 +3583,25 @@ export class AgentThreadStreamRuntime {
       }
 
       if (target.ifIdle?.requireClaimedOwner) {
-        const claimedOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, {
-          includeLocal: false,
-        });
-        if (claimedOwnerSourceId) {
-          if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
-            state.activeThreadRunIds.delete(reservedKey);
-          }
-          state.threadKeysByRunId.delete(reservedRunId);
-          const acceptedRunId = await this.#deliverToClaimedThreadOwner(
+        const discovery = this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, { includeLocal: false });
+        state.claimedThreadOwnerDiscoveries.set(reservedKey, discovery);
+        try {
+          return await this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
             resolvedPubSub,
             reservedKey,
             reservedRunId,
             signal,
-            claimedOwnerSourceId,
+            discovery,
           );
-          return { action: 'deliver' as const, runId: acceptedRunId };
+        } finally {
+          if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {
+            state.claimedThreadOwnerDiscoveries.delete(reservedKey);
+          }
+          if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+            state.activeThreadRunIds.delete(reservedKey);
+          }
+          state.threadKeysByRunId.delete(reservedRunId);
         }
-        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
-          state.activeThreadRunIds.delete(reservedKey);
-        }
-        state.threadKeysByRunId.delete(reservedRunId);
-        throw new Error(`No claimed thread owner responded for ${reservedKey}`);
       }
 
       // Fail-open on pubsub errors: if the lease backend is unreachable we treat the

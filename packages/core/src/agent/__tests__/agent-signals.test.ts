@@ -1652,6 +1652,73 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('routes concurrent idle signals that arrive during claimed-owner discovery', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ownerAgent = new Agent({
+      id: 'concurrent-discovery-owner',
+      name: 'Concurrent Discovery Owner',
+      instructions: 'Test',
+      model: createTextStreamModel('concurrent owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'concurrent-discovery-sender',
+      name: 'Concurrent Discovery Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const subscription = await ownerRuntime.subscribeToThread(
+      ownerAgent,
+      { resourceId: 'concurrent-discovery-user', threadId: 'concurrent-discovery-thread' },
+      pubsub,
+    );
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+    const claim = await ownerRuntime.claimThreadOwnership(
+      ownerAgent,
+      { resourceId: 'concurrent-discovery-user', threadId: 'concurrent-discovery-thread' },
+      pubsub,
+    );
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'first concurrent signal' },
+        {
+          resourceId: 'concurrent-discovery-user',
+          threadId: 'concurrent-discovery-thread',
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+        },
+        pubsub,
+      );
+      const secondSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'second concurrent signal' },
+        {
+          resourceId: 'concurrent-discovery-user',
+          threadId: 'concurrent-discovery-thread',
+          ifIdle: { behavior: 'wake' },
+        },
+        pubsub,
+      );
+
+      await expect(Promise.all([firstSignal.accepted, secondSignal.accepted])).resolves.toEqual([
+        expect.objectContaining({ action: 'deliver' }),
+        expect.objectContaining({ action: 'deliver' }),
+      ]);
+      expect((await firstRun).value.text).toBe('concurrent owner response');
+      expect(
+        (await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for concurrent owner run')).value.text,
+      ).toBe('concurrent owner response');
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it('acknowledges remote claimed-owner delivery only after stream admission', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -2264,6 +2331,45 @@ describe('Agent signals', () => {
     expect(
       agent.getActiveThreadRunId({ resourceId: 'required-owner-resource', threadId: 'required-owner-thread' }),
     ).toBe(undefined);
+  });
+
+  it('rejects every concurrent idle wake when claimed-owner discovery times out', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'concurrent-required-owner-agent',
+      name: 'Concurrent Required Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('must not run'),
+      pubsub,
+    });
+
+    const firstSignal = agent.sendSignal(
+      { type: 'user-message', contents: 'first remote delivery' },
+      {
+        resourceId: 'concurrent-required-owner-resource',
+        threadId: 'concurrent-required-owner-thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+    );
+    const secondSignal = agent.sendSignal(
+      { type: 'user-message', contents: 'second remote delivery' },
+      {
+        resourceId: 'concurrent-required-owner-resource',
+        threadId: 'concurrent-required-owner-thread',
+        ifIdle: { behavior: 'wake' },
+      },
+    );
+
+    const outcomes = await Promise.allSettled([firstSignal.accepted, secondSignal.accepted]);
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) {
+      expect(outcome.status).toBe('rejected');
+      if (outcome.status === 'rejected') {
+        expect(outcome.reason).toEqual(
+          expect.objectContaining({ message: expect.stringContaining('No claimed thread owner responded') }),
+        );
+      }
+    }
   });
 
   it('does not answer ownership discovery after a claim is synchronously released', async () => {
