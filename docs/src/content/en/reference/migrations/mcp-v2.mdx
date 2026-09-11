@@ -162,6 +162,16 @@ Persisted credentials changed shape too: tokens are stored per authorization-ser
   });
 ```
 
+### Server `id` is used verbatim
+
+MCP 1.x slugified the configured `id` (`myMcpServer` became `my-mcp-server`) and that slug appeared in hosted routes and registry listings. A v2 server keeps the `id` exactly as configured, so `/api/mcp/:serverId/mcp` and `/api/mcp/v0/servers/:id` use the value you passed. Pass a slug yourself if you need one.
+
+```diff
+  const server = new MCPServer({ id: 'myMcpServer', /* ... */ });
+- // routes: /api/mcp/my-mcp-server/mcp
++ // routes: /api/mcp/myMcpServer/mcp
+```
+
 ### Docs server `Prompt` metadata
 
 `MastraPrompt` and its deprecated `version` field are gone; prompt providers return the SDK `Prompt` type, re-exported from `@mastra/mcp`.
