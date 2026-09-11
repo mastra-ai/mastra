@@ -1,5 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -134,7 +135,10 @@ function ScopeTree({
       <button
         type="button"
         aria-pressed={selection?.scopeNodeId === node.id}
-        className="hover:text-icon6 truncate text-left"
+        className={cn(
+          'hover:text-icon6 truncate text-left',
+          selection?.scopeNodeId === node.id && 'text-icon6 font-medium',
+        )}
         style={{ paddingLeft: `${depth * 12}px` }}
         title={node.description ?? node.name}
         onClick={() => onSelect({ scopeNodeId: node.id })}
@@ -155,7 +159,10 @@ function ScopeTree({
             key={root.level}
             type="button"
             aria-pressed={selection?.scopeLevel === root.level}
-            className="hover:text-icon6 truncate text-left"
+            className={cn(
+              'hover:text-icon6 truncate text-left',
+              selection?.scopeLevel === root.level && 'text-icon6 font-medium',
+            )}
             style={{ paddingLeft: `${index * 12}px` }}
             onClick={() => onSelect({ scopeLevel: root.level })}
           >
