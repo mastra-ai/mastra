@@ -181,11 +181,13 @@ describe.each([false, true])('stream adapter parity (explicit workflow: %s)', ne
     );
     expect(optedIn).toHaveBeenCalledTimes(1);
     expect(skipped).not.toHaveBeenCalled();
-    expect(custom).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'data-derived', data: { source: 'data-source' } }),
-    );
+    expect(custom).toHaveBeenCalledTimes(2);
+    expect(custom.mock.calls[0]?.[0]).toMatchObject({ type: 'data-derived', data: { source: 'data-source' } });
+    expect(custom.mock.calls[1]?.[0]).toMatchObject({
+      type: 'data-signal',
+      data: { tagName: 'system-reminder', contents: 'Review output' },
+    });
     expect(messages.get.all.db().some(message => message.role === 'signal')).toBe(true);
-    expect(custom).toHaveBeenCalledTimes(1);
   });
 
   it('preserves TripWire identity, retry metadata and stops the chain', async () => {

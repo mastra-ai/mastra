@@ -599,7 +599,9 @@ export class ProcessorRunner {
       abortSignal,
       agent: this.agent,
     };
-    const outputWriter: OutputWriter | undefined = writer ? (chunk, options) => writer.custom(chunk, options) : undefined;
+    const outputWriter: OutputWriter | undefined = writer
+      ? (chunk, options) => writer.custom(chunk, options)
+      : undefined;
     if (isPerChunkPhase && workflow.__executeOutputStream) {
       const execute = workflow.__executeOutputStream;
       return executeWithContext({
