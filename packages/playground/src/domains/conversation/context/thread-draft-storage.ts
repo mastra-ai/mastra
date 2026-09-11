@@ -46,6 +46,7 @@ interface DraftVersion {
 }
 
 export class DraftLimitError extends Error {}
+export class CorruptedDraftError extends Error {}
 export class DraftConflictError extends Error {
   constructor() {
     super('This draft changed in another tab. Your edits are kept in this tab; copy them before reloading.');
@@ -102,7 +103,9 @@ export function loadThreadDraft(key: string): Promise<{ draft: ThreadDraft; revi
   return transaction(async store => {
     const raw = await store.get(key);
     if (!raw) return { draft: { text: '', attachments: [] }, revision: undefined };
-    const record = recordSchema.parse(raw);
+    const parsed = recordSchema.safeParse(raw);
+    if (!parsed.success) throw new CorruptedDraftError('The saved draft is unreadable.');
+    const record = parsed.data;
     if (!isFresh(record.updatedAt)) {
       await store.delete(key);
       return { draft: { text: '', attachments: [] }, revision: undefined };
@@ -118,6 +121,14 @@ export function loadThreadDraft(key: string): Promise<{ draft: ThreadDraft; revi
         })),
       },
     };
+  });
+}
+
+export function discardCorruptedThreadDraft(key: string): Promise<void> {
+  return transaction(async store => {
+    const raw = await store.get(key);
+    if (raw && recordSchema.safeParse(raw).success) throw new DraftConflictError();
+    await store.delete(key);
   });
 }
 

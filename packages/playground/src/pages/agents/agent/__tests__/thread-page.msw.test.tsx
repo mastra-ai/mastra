@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { deleteDB } from 'idb';
+import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -547,6 +547,39 @@ describe('Standalone thread page', () => {
       },
     );
   });
+  describe('when a saved draft cannot be decoded', () => {
+    it('requires confirmation to discard it and resumes saving current edits', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'Original' } });
+      await waitFor(() => expect(screen.queryByText('Saving draft…')).toBeNull());
+      cleanup();
+      const db = await openDB('mastra-composer-drafts');
+      const [key] = await db.getAllKeys('drafts');
+      await db.put('drafts', { key, text: 42 });
+      db.close();
+      renderAt(path);
+      const discard = await screen.findByRole('button', { name: 'Discard unreadable saved draft' });
+      fireEvent.change(await composerInput(), { target: { value: 'Keep my current edits' } });
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      try {
+        fireEvent.click(discard);
+        expect(screen.getByRole('alert').textContent).toContain('could not be restored');
+        confirm.mockReturnValue(true);
+        fireEvent.click(discard);
+        await waitFor(() =>
+          expect(screen.queryByRole('button', { name: 'Discard unreadable saved draft' })).toBeNull(),
+        );
+        cleanup();
+        renderAt(path);
+        expect((await composerInput()).value).toBe('Keep my current edits');
+      } finally {
+        confirm.mockRestore();
+      }
+    });
+  });
+
   describe('when an unsent draft is entered', () => {
     it('keeps a newer New Chat draft when an earlier legacy stream finishes', async () => {
       installHandlers();

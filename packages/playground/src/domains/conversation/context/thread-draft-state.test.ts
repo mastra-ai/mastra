@@ -1,7 +1,7 @@
 // @vitest-environment node
 import 'fake-indexeddb/auto';
 import { IDBObjectStore } from 'fake-indexeddb';
-import { deleteDB } from 'idb';
+import { deleteDB, openDB } from 'idb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createThreadDraftState as createState } from './thread-draft-state';
 import { readThreadDraft, writeThreadDraft } from './thread-draft-storage';
@@ -189,6 +189,38 @@ describe('complete draft lifecycle', () => {
     expect(state.getSnapshot().status.error).toContain('could not be restored');
     expect((await readThreadDraft('scope')).text).toBe('Recover this saved draft');
     expect(state.getDraft('thread').text).toBe('Keep this new text in memory');
+  });
+
+  describe('when a saved draft is corrupted', () => {
+    it('preserves the record until explicitly discarded and then saves current edits', async () => {
+      await writeThreadDraft('scope', { text: 'Original', attachments: [] });
+      const db = await openDB('mastra-composer-drafts');
+      const corrupted = { key: 'scope', text: 42 };
+      await db.put('drafts', corrupted);
+      const { state } = mount();
+      await ready(state);
+      state.updateDraft('thread', { text: 'Keep these edits', attachments: [] });
+      const stored = await db.get('drafts', 'scope');
+      db.close();
+      expect(state.getSnapshot().status.canDiscard).toBe(true);
+      expect(stored).toEqual(corrupted);
+      await state.discardUnreadable();
+      expect(state.getSnapshot().status.error).toBeUndefined();
+      expect((await readThreadDraft('scope')).text).toBe('Keep these edits');
+    });
+
+    it('does not discard a draft repaired by another tab', async () => {
+      await writeThreadDraft('scope', { text: 'Original', attachments: [] });
+      const db = await openDB('mastra-composer-drafts');
+      await db.put('drafts', { key: 'scope', text: 42 });
+      db.close();
+      const { state } = mount();
+      await ready(state);
+      await writeThreadDraft('scope', { text: 'Repaired elsewhere', attachments: [] });
+      await state.discardUnreadable();
+      expect(state.getSnapshot().status.error).toContain('another tab');
+      expect((await readThreadDraft('scope')).text).toBe('Repaired elsewhere');
+    });
   });
 
   it('keeps an in-memory draft and feedback when browser writes fail', async () => {

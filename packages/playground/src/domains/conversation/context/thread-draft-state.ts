@@ -1,5 +1,7 @@
 import type { SetStateAction } from 'react';
 import {
+  CorruptedDraftError,
+  discardCorruptedThreadDraft,
   DraftConflictError,
   DraftLimitError,
   loadThreadDraft,
@@ -13,6 +15,7 @@ export interface DraftStatus {
   restoring: boolean;
   saving: boolean;
   error?: string;
+  canDiscard?: boolean;
 }
 interface Snapshot {
   drafts: Map<PropertyKey, ThreadDraft>;
@@ -24,6 +27,7 @@ interface DraftState {
   getSnapshot: () => Snapshot;
   subscribe: (listener: () => void) => () => void;
   move: (to: string) => Promise<void>;
+  discardUnreadable: () => Promise<void>;
 }
 const EMPTY_DRAFT: ThreadDraft = { text: '', attachments: [] };
 const PERSISTED = Symbol('persisted-draft');
@@ -35,6 +39,7 @@ function createState(initialKey?: string): DraftState {
   let snapshot: Snapshot = { drafts: new Map(), status: { restoring: initialKey !== undefined, saving: false } };
   let started = false;
   let restorationFailed = false;
+  let unreadableKey: string | undefined;
   let loading = Promise.resolve();
   let revision = 0;
   let storedRevision: string | undefined;
@@ -85,6 +90,7 @@ function createState(initialKey?: string): DraftState {
           setStatus({
             restoring: false,
             saving: false,
+            canDiscard: unreadableKey !== undefined,
             error:
               error instanceof DraftConflictError
                 ? error.message
@@ -128,11 +134,13 @@ function createState(initialKey?: string): DraftState {
       storedRevision = saved.revision;
       snapshot = { drafts: new Map([[PERSISTED, saved.draft]]), status: { restoring: false, saving: false } };
       notify();
-    } catch {
+    } catch (error) {
       restorationFailed = true;
+      if (error instanceof CorruptedDraftError) unreadableKey = storageKey;
       setStatus({
         restoring: false,
         saving: false,
+        canDiscard: unreadableKey !== undefined,
         error: 'The saved draft could not be restored. Keep this conversation open; new edits are not saved.',
       });
     }
@@ -153,6 +161,17 @@ function createState(initialKey?: string): DraftState {
         listeners.delete(listener);
         release();
       };
+    },
+    async discardUnreadable() {
+      const key = unreadableKey;
+      if (key === undefined) return;
+      await save(async () => {
+        await discardCorruptedThreadDraft(key);
+        unreadableKey = undefined;
+        restorationFailed = false;
+        storedRevision = undefined;
+        if (storageKey !== undefined) await persist(storageKey, getDraft(PERSISTED));
+      });
     },
     async move(to) {
       if (snapshot.status.restoring) await loading;
@@ -184,5 +203,6 @@ export function createThreadDraftState(persistence?: { key: string; threadId: st
     getSnapshot: state.getSnapshot,
     subscribe: state.subscribe,
     move: state.move,
+    discardUnreadable: state.discardUnreadable,
   };
 }

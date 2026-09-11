@@ -28,7 +28,12 @@ export const ThreadInputProvider = ({
           ...previous,
           text: typeof value === 'function' ? value(previous.text) : value,
         })),
-      drafts: { get: state.getDraft, update: state.updateDraft, status: snapshot.status },
+      drafts: {
+        get: state.getDraft,
+        update: state.updateDraft,
+        status: snapshot.status,
+        discardUnreadable: state.discardUnreadable,
+      },
     }),
     [state, snapshot],
   );

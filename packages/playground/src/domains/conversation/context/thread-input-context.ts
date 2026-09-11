@@ -10,6 +10,7 @@ export interface ThreadInputContextValue {
     get: (threadId?: string) => ThreadDraft;
     update: (threadId: string | undefined, value: SetStateAction<ThreadDraft>) => void;
     status: DraftStatus;
+    discardUnreadable: () => Promise<void>;
   };
 }
 
