@@ -116,7 +116,20 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({}),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, ({ request }) => {
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+      const threadId = new URL(request.url).searchParams.get('threadId');
+      if (threadId === 'gone-thread')
+        return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
+      return HttpResponse.json({
+        roots: [
+          { level: 'org', id: 'org-1', available: true },
+          { level: 'resource', id: FACTORY_ID, available: true },
+          ...(threadId ? [{ level: 'thread', id: threadId, available: true }] : []),
+        ],
+        defaultLevel: 'resource',
+      });
+    }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
       if ('status' in graph)
         return HttpResponse.json({ error: 'error', message: graph.message }, { status: graph.status });
       const threadId = new URL(request.url).searchParams.get('threadId');
@@ -175,7 +188,7 @@ function stubKnowledgeRoute(
   );
 }
 
-function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
+function renderRoute(path = `/factories/${FACTORY_ID}/knowledge?scope=resource`) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
   });
@@ -183,12 +196,42 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 }
 
 describe('KnowledgePage', () => {
-  it('keeps the selected Knowledge key on graph, activity, and detail requests', async () => {
+  it('keeps the canvas empty until the user selects a scope', async () => {
+    stubKnowledgeRoute();
+    let subgraphReads = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, () => {
+        subgraphReads += 1;
+        return HttpResponse.json(graphFixture);
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    expect(await screen.findByText('Select a scope to explore its knowledge.')).toBeVisible();
+    expect(subgraphReads).toBe(0);
+    await user.click(screen.getByRole('button', { name: /Project/ }));
+    expect(await screen.findByText('Payments Service')).toBeVisible();
+    expect(subgraphReads).toBe(1);
+  });
+
+  it('keeps the selected Knowledge key on scope, subgraph, activity, and detail requests', async () => {
     stubKnowledgeRoute();
     const requests: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/graph`, ({ request }) => {
-        requests.push(`graph:${new URL(request.url).searchParams.get('knowledgeKey')}`);
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+        requests.push(`scopes:${new URL(request.url).searchParams.get('knowledgeKey')}`);
+        return HttpResponse.json({
+          roots: [
+            { level: 'org', id: 'org-1', available: true },
+            { level: 'resource', id: FACTORY_ID, available: true },
+          ],
+          defaultLevel: 'resource',
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        const url = new URL(request.url);
+        requests.push(`subgraph:${url.searchParams.get('knowledgeKey')}:${url.searchParams.get('scopeLevel')}`);
         return HttpResponse.json(graphFixture);
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
@@ -201,16 +244,16 @@ describe('KnowledgePage', () => {
       }),
     );
     const user = userEvent.setup();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team`);
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team&scope=resource`);
     fireEvent.click(await screen.findByText('Payments Service'));
     await waitFor(() => expect(requests).toContain('node:team'));
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     await waitFor(() => expect(requests).toContain('activity:team'));
-    expect(requests).toContain('graph:team');
-    expect(requests.every(request => request.endsWith(':team'))).toBe(true);
+    expect(requests).toContain('scopes:team');
+    expect(requests).toContain('subgraph:team:resource');
 
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=second`));
-    await waitFor(() => expect(requests).toContain('graph:second'));
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=second&scope=resource`));
+    await waitFor(() => expect(requests).toContain('subgraph:second:resource'));
     await screen.findByText('Payments Service');
     expect(requests).not.toContain('node:second');
     expect(
@@ -274,8 +317,8 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    expect(within(scopes).getByRole('button', { name: 'Organization scope' })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: 'Project scope' })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /Organization/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /Project/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
