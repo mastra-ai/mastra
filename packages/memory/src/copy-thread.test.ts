@@ -80,11 +80,14 @@ describe('Memory.copyThread / cloneThread', () => {
   function setupSemanticRecallMemory() {
     const dim = 4;
     const upsert = vi.fn().mockResolvedValue(undefined);
+    const indexes = new Set<string>();
     const mockVector = {
-      createIndex: vi.fn().mockResolvedValue(undefined),
+      createIndex: vi.fn(async ({ indexName }: { indexName: string }) => {
+        indexes.add(indexName);
+      }),
       upsert,
       query: vi.fn().mockResolvedValue([]),
-      listIndexes: vi.fn().mockResolvedValue([]),
+      listIndexes: vi.fn(async () => [...indexes]),
       deleteVectors: vi.fn().mockResolvedValue(undefined),
       describeIndex: vi.fn().mockResolvedValue({ dimension: dim }),
       id: 'mock-vector',
@@ -132,29 +135,90 @@ describe('Memory.copyThread / cloneThread', () => {
     expect(listSpy.mock.calls.some(([a]) => a.threadId === thread.id)).toBe(false);
   });
 
+  // Copied rows keep the source createdAt. A backend with no stable secondary sort may return
+  // tied rows in a different order on every query, so createdAt-ordered OFFSET paging can skip
+  // or repeat a message across a batch boundary. These tests wrap the store so every
+  // `listMessages` call reverses the previous call's tie order — the worst case for OFFSET.
+  function makeTieOrderUnstable(memoryStore: { listMessages: (...a: any[]) => any }) {
+    const originalList = memoryStore.listMessages.bind(memoryStore);
+    let flip = false;
+    vi.spyOn(memoryStore, 'listMessages').mockImplementation(async (args: any) => {
+      const res = await originalList({ ...args, page: undefined, perPage: false });
+      const ordered = flip ? [...res.messages].reverse() : res.messages;
+      flip = !flip;
+      const perPage = typeof args.perPage === 'number' ? args.perPage : ordered.length;
+      const page = args.page ?? 0;
+      const messages = ordered.slice(page * perPage, (page + 1) * perPage);
+      return { ...res, messages, hasMore: (page + 1) * perPage < ordered.length };
+    });
+  }
+
   it('embeds every copied message exactly once when equal createdAt values straddle a batch boundary', async () => {
     const { upsert } = setupSemanticRecallMemory();
-    // 150 messages with one shared timestamp: createdAt-ordered OFFSET paging has no stable
-    // order across ties, so a store may return a different tie order per page.
     const tied = new Date('2024-01-01T10:00:00Z');
     await seedThread('src-ties', 150, () => tied);
     upsert.mockClear();
     const memoryStore = (await memory.storage.getStore('memory'))!;
-    // Simulate a backend whose tie order differs between paginated reads.
-    const originalList = memoryStore.listMessages.bind(memoryStore);
-    vi.spyOn(memoryStore, 'listMessages').mockImplementation(async args => {
-      const res = await originalList({ ...args, perPage: false });
-      const shuffled = [...res.messages].sort(() => Math.random() - 0.5);
-      const perPage = typeof args.perPage === 'number' ? args.perPage : shuffled.length;
-      const page = args.page ?? 0;
-      const messages = shuffled.slice(page * perPage, (page + 1) * perPage);
-      return { ...res, messages, hasMore: (page + 1) * perPage < shuffled.length };
-    });
+    makeTieOrderUnstable(memoryStore);
 
     const { messageIdMap } = await memory.copyThread({ sourceThreadId: 'src-ties' });
 
+    // Batches are fetched by destination id, so the store's read order is irrelevant.
+    expect(memoryStore.listMessages).not.toHaveBeenCalled();
     const ids = embeddedMessageIds(upsert);
-    expect(new Set(ids).size).toBe(ids.length);
+    expect(new Set(ids).size).toBe(150);
     expect(ids.sort()).toEqual(Object.values(messageIdMap ?? {}).sort());
+  });
+
+  it('rolls back the copied thread and its vectors when a later embedding batch fails', async () => {
+    const { upsert } = setupSemanticRecallMemory();
+    await seedThread('src-rollback', 150);
+    upsert.mockClear();
+    const vector = memory.vector!;
+    const deleteVectors = vi.mocked(vector.deleteVectors);
+    // First batch succeeds, second batch fails.
+    upsert.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('vector store down'));
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    const deleteThread = vi.spyOn(memoryStore, 'deleteThread');
+
+    await expect(memory.copyThread({ sourceThreadId: 'src-rollback', newThreadId: 'dest-rollback' })).rejects.toThrow(
+      'vector store down',
+    );
+
+    expect(deleteThread).toHaveBeenCalledWith({ threadId: 'dest-rollback' });
+    expect(await memoryStore.getThreadById({ threadId: 'dest-rollback' })).toBeNull();
+    expect((await memoryStore.listMessages({ threadId: 'dest-rollback', perPage: false })).messages).toHaveLength(0);
+    expect(deleteVectors).toHaveBeenCalledWith(expect.objectContaining({ filter: { thread_id: 'dest-rollback' } }));
+    // A retry with the same id no longer collides with the half-built copy.
+    upsert.mockResolvedValue(undefined);
+    const retry = await memory.copyThread({ sourceThreadId: 'src-rollback', newThreadId: 'dest-rollback' });
+    expect(retry.thread.id).toBe('dest-rollback');
+  });
+
+  it('embeds every copied message exactly once for adapters that return no messageIdMap', async () => {
+    const { upsert } = setupSemanticRecallMemory();
+    const tied = new Date('2024-01-01T10:00:00Z');
+    await seedThread('src-ties-nomap', 150, () => tied);
+    upsert.mockClear();
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    // A custom adapter that overrides cloneThread without reporting the id map.
+    const originalCopy = memoryStore.copyThread.bind(memoryStore);
+    vi.spyOn(memoryStore, 'copyThread').mockImplementation(async args => {
+      const { thread } = await originalCopy(args);
+      return { thread };
+    });
+    makeTieOrderUnstable(memoryStore);
+
+    const { thread } = await memory.copyThread({ sourceThreadId: 'src-ties-nomap' });
+
+    const ids = embeddedMessageIds(upsert);
+    expect(new Set(ids).size).toBe(150);
+    const { messages: dest } = await memoryStore.listMessages({ threadId: thread.id, perPage: false });
+    expect(ids.sort()).toEqual(dest.map(m => m.id).sort());
+    // Without a map the fallback must read the destination once, never OFFSET-page it.
+    const reads = vi
+      .mocked(memoryStore.listMessages)
+      .mock.calls.filter(([a]) => a.threadId === thread.id && a.perPage !== false);
+    expect(reads).toHaveLength(0);
   });
 });

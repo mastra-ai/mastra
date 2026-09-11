@@ -1264,6 +1264,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       multi.set(threadKey, JSON.stringify(processRecord(TABLE_THREADS, newThread).processedRecord));
 
       const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = {};
       const targetResourceId = resourceId || sourceThread.resourceId;
       const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
 
@@ -1286,6 +1287,7 @@ export class StoreMemoryRedis extends MemoryStorage {
         multi.zAdd(newThreadMessagesKey, { score, value: newMessageId });
 
         clonedMessages.push(newMessage);
+        messageIdMap[sourceMsg.id] = newMessageId;
       }
 
       await multi.exec();
@@ -1293,6 +1295,7 @@ export class StoreMemoryRedis extends MemoryStorage {
       return {
         thread: newThread,
         clonedMessages,
+        messageIdMap,
       };
     } catch (error) {
       if (error instanceof MastraError) {

@@ -3073,23 +3073,61 @@ Notes:
       try {
         await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
       } catch (error) {
-        // Rollback the already-persisted clone to avoid orphaned threads
-        try {
-          await memoryStore.deleteThread({ threadId: result.thread.id });
-        } catch (rollbackError) {
-          this.logger.error('Failed to rollback cloned thread after OM clone failure', rollbackError);
-        }
+        await this.rollbackCopiedThread(memoryStore, result.thread, 'OM clone', false);
         throw error;
       }
     }
 
-    // Embed copied messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors.
     // Batches through the new thread so large threads are embedded without loading every payload at once.
     if (this.vector && this.embedder && config.semanticRecall) {
-      await this.embedCopiedMessagesInBatches(memoryStore, result, config);
+      try {
+        await this.embedCopiedMessagesInBatches(memoryStore, result, config);
+      } catch (error) {
+        // Earlier batches may already be upserted; drop them with the thread so a retry with the
+        // same newThreadId doesn't collide with a half-built copy.
+        await this.rollbackCopiedThread(memoryStore, result.thread, 'embedding', true);
+        throw error;
+      }
     }
 
     return result;
+  }
+
+  /**
+   * Best-effort compensation when a later step of copyThread fails after the destination thread
+   * was persisted. deleteThread removes the thread, its messages and thread-scoped working memory.
+   * When `afterOmClone` is set the OM step already succeeded, so the thread-scoped OM record and
+   * any vectors written so far are dropped too. Resource-scoped OM is left alone: it may be
+   * shared with a pre-existing resource and isn't safe to clear blindly.
+   */
+  private async rollbackCopiedThread(
+    memoryStore: MemoryStorage,
+    thread: StorageThreadType,
+    failedStep: string,
+    afterOmClone: boolean,
+  ): Promise<void> {
+    const threadId = thread.id;
+    try {
+      await memoryStore.deleteThread({ threadId });
+    } catch (rollbackError) {
+      this.logger.error(`Failed to rollback copied thread after ${failedStep} failure`, rollbackError);
+    }
+    if (!afterOmClone) return;
+    if (memoryStore.supportsObservationalMemory) {
+      try {
+        await memoryStore.clearObservationalMemory(threadId, thread.resourceId);
+      } catch (rollbackError) {
+        this.logger.error(`Failed to rollback copied thread OM after ${failedStep} failure`, rollbackError);
+      }
+    }
+    try {
+      const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
+      await Promise.all(
+        messageIndexes.map(indexName => this.vector!.deleteVectors({ indexName, filter: { thread_id: threadId } })),
+      );
+    } catch (rollbackError) {
+      this.logger.error(`Failed to rollback copied thread vectors after ${failedStep} failure`, rollbackError);
+    }
   }
 
   private static readonly CLONE_EMBED_PAGE_SIZE = 100;
@@ -3114,20 +3152,17 @@ Notes:
       return;
     }
 
-    // Adapters that don't report a messageIdMap: page the destination thread instead.
-    for (let page = 0; ; page++) {
-      const { messages, hasMore } = await memoryStore.listMessages({
-        threadId: copied.thread.id,
-        resourceId: copied.thread.resourceId,
-        page,
-        perPage: size,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-        includeTotal: false,
-      });
-      if (messages.length > 0) {
-        await this.embedClonedMessages(messages, config);
-      }
-      if (!hasMore || messages.length < size) break;
+    // Custom adapters that don't report a messageIdMap fall through the base copyThread, whose
+    // cloneThread already hydrated every message, so one unbounded read is no worse than the copy
+    // itself and — unlike createdAt-ordered OFFSET paging — cannot skip or repeat tied rows.
+    const { messages } = await memoryStore.listMessages({
+      threadId: copied.thread.id,
+      resourceId: copied.thread.resourceId,
+      perPage: false,
+      includeTotal: false,
+    });
+    for (let i = 0; i < messages.length; i += size) {
+      await this.embedClonedMessages(messages.slice(i, i + size), config);
     }
   }
 
