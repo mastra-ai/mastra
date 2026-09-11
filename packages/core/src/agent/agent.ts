@@ -140,7 +140,7 @@ import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
-import { createStep, isProcessor } from '../workflows/workflow';
+import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -1785,6 +1785,7 @@ export class Agent<
     workflow.__setLogger(this.logger);
 
     const stateSignalProcessors: Processor[] = [];
+    const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -1796,8 +1797,11 @@ export class Agent<
         // Set processorIndex on the processor for span attributes
         const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
-        // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const processorStep = createStepFromProcessor(processor);
+        step = processorStep;
+        if (processor.processOutputStream) {
+          streamSteps.push(processorStep);
+        }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
@@ -1815,6 +1819,16 @@ export class Agent<
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
       );
+      if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
+        committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
+          let result = inputData;
+          for (const step of streamSteps) {
+            if (result.part == null) break;
+            result = await step.execute({ inputData: result, ...context });
+          }
+          return result;
+        };
+      }
     }
     // Register the parent Mastra instance on this internal processor workflow so that its
     // createRun() -> getWorkflowRunById() can read configured storage instead of logging
@@ -1858,6 +1872,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
@@ -1867,7 +1884,7 @@ export class Agent<
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
     // Memory processors run last to persist the final form.
-    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...effectiveMemoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1896,6 +1913,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get workspace instructions processors (with deduplication)
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
@@ -1916,7 +1936,7 @@ export class Agent<
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
     return [
-      ...memoryProcessors,
+      ...effectiveMemoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
@@ -4840,6 +4860,10 @@ export class Agent<
   private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(message => {
+        if (message.id === 'om-continuation') {
+          return null;
+        }
+
         if (message.role === 'assistant') {
           const content = message.content;
           const parts = Array.isArray(content) ? content : content?.parts;

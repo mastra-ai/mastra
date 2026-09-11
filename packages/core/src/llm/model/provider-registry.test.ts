@@ -73,6 +73,39 @@ describe('modelSupportsTemperature', () => {
   });
 });
 
+describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () => {
+  beforeEach(() => {
+    _resetCapabilityCaches();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('falls back to the underlying vendor for Bedrock router ids', () => {
+    // aws-bedrock has no capability file; claude-sonnet-5 must inherit anthropic's
+    // (unsupported) temperature fact, while claude-sonnet-4-6 stays supported.
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('aws-bedrock/claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('normalizes provider-instance ids (region + vendor prefixes)', () => {
+    // @ai-sdk/amazon-bedrock exposes provider `amazon-bedrock` and region/vendor-qualified ids.
+    expect(modelSupportsTemperature('amazon-bedrock/us.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/eu.anthropic.claude-sonnet-4-6')).toBe(true);
+    // Global and geographic (JP/AU) inference-profile prefixes resolve the same way.
+    expect(modelSupportsTemperature('amazon-bedrock/global.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/jp.anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/au.anthropic.claude-sonnet-4-6')).toBe(true);
+  });
+
+  it('applies the Bedrock grok temperature override without affecting direct xai', () => {
+    // Bedrock-hosted grok-4.6 rejects temperature even though direct xai accepts it.
+    expect(modelSupportsTemperature('aws-bedrock/grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/us.xai.grok-4.6')).toBe(false);
+    expect(modelSupportsTemperature('xai/grok-4.6')).toBe(true);
+  });
+});
+
 describe('modelSupportsStructuredOutput', () => {
   afterEach(() => {
     _resetCapabilityCaches();
