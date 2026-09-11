@@ -805,6 +805,33 @@ describe('BackgroundTaskManager', () => {
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 
+    it('resumes a delegation whose run id arrives only in the suspend options', async () => {
+      // Agent-as-tool relays a nested approval this way: the payload describes the gated tool,
+      // and the nested run id travels in `suspendOptions.runId` only.
+      const approvalPayload = { requireToolApproval: { toolCallId: 'inner-call', toolName: 'book', args: {} } };
+      const executeFn = vi.fn(async (args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend(approvalPayload, { runId: 'delegated-run-id', isAgentSuspend: true });
+          return undefined;
+        }
+        return { suspendedToolRunId: args.suspendedToolRunId };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 'agent-helper', toolCallId: 'cres-opts', args: { prompt: 'book it' }, agentId: 'a1', runId: 'r3b' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+      expect(suspended?.suspendPayload).toEqual(approvalPayload);
+
+      await manager.resume(task.id, { approved: true });
+      await tick(200);
+
+      expect((await manager.getTask(task.id))?.result).toEqual({ suspendedToolRunId: 'delegated-run-id' });
+    });
+
     it('emits background-task-resumed on the stream when resumed', async () => {
       const executeFn = vi.fn(async (_args, opts: any) => {
         if (!opts.resumeData) {

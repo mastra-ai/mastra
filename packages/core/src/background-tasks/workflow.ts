@@ -33,6 +33,22 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
+ * Delegating tools (agent-as-tool, workflow-as-tool) relay a nested run's
+ * suspension and hand that run's id back in `suspendOptions.runId`; the
+ * payload itself carries no id (an approval pause's payload only describes the
+ * gated tool). Keep the id on the `run-attempt` step's suspend payload, which
+ * the runtime returns as `suspendData` on resume, so the resumed delegation
+ * reaches the suspended run. The task row keeps the payload as reported.
+ */
+function withDelegatedRunId(data: unknown, suspendOptions?: SuspendOptions): unknown {
+  const runId = suspendOptions?.runId;
+  if (typeof runId !== 'string') return data;
+  if (data === undefined || data === null) return { suspendedToolRunId: runId };
+  if (typeof data !== 'object' || Array.isArray(data)) return data;
+  return { suspendedToolRunId: runId, ...data };
+}
+
+/**
  * Builds the per-task workflow that owns executor + retries.
  *
  * Uses the standard (default) execution engine so the workflow runs entirely
@@ -173,7 +189,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         });
 
         if (pendingSuspend) {
-          return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
+          return suspend(
+            withDelegatedRunId(pendingSuspend.data, pendingSuspend.suspendOptions),
+            pendingSuspend.suspendOptions as SuspendOptions,
+          );
         }
 
         return { taskId, outcome: 'success' as const, result };
