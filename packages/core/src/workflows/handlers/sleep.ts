@@ -16,6 +16,7 @@ import type {
   StepFlowEntry,
   StepResult,
 } from '../types';
+import { getControlFlowIdentityAttributes } from './control-flow';
 
 export interface ExecuteSleepParams extends ObservabilityContext {
   workflowId: string;
@@ -24,6 +25,8 @@ export interface ExecuteSleepParams extends ObservabilityContext {
   entry: {
     type: 'sleep';
     id: string;
+    description?: string;
+    metadata?: Record<string, any>;
     duration?: number;
     fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
   };
@@ -71,6 +74,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
       attributes: {
         durationMs: duration,
         sleepType: fn ? 'dynamic' : 'fixed',
+        ...getControlFlowIdentityAttributes(entry),
       },
     },
     executionContext,
@@ -151,6 +155,8 @@ export interface ExecuteSleepUntilParams extends ObservabilityContext {
   entry: {
     type: 'sleepUntil';
     id: string;
+    description?: string;
+    metadata?: Record<string, any>;
     date?: Date;
     fn?: ExecuteFunction<any, any, any, any, any, DefaultEngineType>;
   };
@@ -202,6 +208,7 @@ export async function executeSleepUntil(
         untilDate: date,
         durationMs: date ? Math.max(0, date.getTime() - Date.now()) : undefined,
         sleepType: fn ? 'dynamic' : 'fixed',
+        ...getControlFlowIdentityAttributes(entry),
       },
     },
     executionContext,

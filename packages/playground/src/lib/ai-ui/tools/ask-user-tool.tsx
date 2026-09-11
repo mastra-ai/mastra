@@ -1,6 +1,6 @@
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { AskUserBadge } from './badges/ask-user-badge';
 import type { AskUserResult, AskUserSuspendPayload } from './badges/types';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface AskUserToolProps {
   toolName: string;

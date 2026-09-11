@@ -1,8 +1,8 @@
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CodeModeBadge, getCodeModeCall } from '../code-mode-badge';
-import { ToolCallProvider } from '@/services/tool-call-provider';
+import { CodeModeBadge } from '../code-mode-badge';
 
 const renderWithProvider = (node: ReactNode) =>
   render(
@@ -22,41 +22,6 @@ const renderWithProvider = (node: ReactNode) =>
   );
 
 afterEach(() => cleanup());
-
-describe('getCodeModeCall', () => {
-  it('detects a code mode call from object args and a result shape', () => {
-    const call = getCodeModeCall({ code: 'return 1 + 1;' }, { success: true, result: 2, logs: ['done'] });
-
-    expect(call).toEqual({
-      code: 'return 1 + 1;',
-      result: { success: true, result: 2, logs: ['done'] },
-    });
-  });
-
-  it('detects a code mode call before the program has run (no result)', () => {
-    expect(getCodeModeCall({ code: 'return 1;' }, undefined)).toEqual({ code: 'return 1;' });
-  });
-
-  it('parses code from a stringified args payload', () => {
-    const call = getCodeModeCall(JSON.stringify({ code: 'return 3;' }), { success: false, error: { message: 'x' } });
-    expect(call?.code).toBe('return 3;');
-  });
-
-  it('returns null when args have no string code field', () => {
-    expect(getCodeModeCall({ command: 'ls' }, { success: true })).toBeNull();
-    expect(getCodeModeCall({ code: 42 }, undefined)).toBeNull();
-  });
-
-  it('returns null when the result is not a CodeModeResult', () => {
-    // A tool that happens to take `code` but returns an unrelated shape.
-    expect(getCodeModeCall({ code: 'x' }, { rows: [1, 2, 3] })).toBeNull();
-    expect(getCodeModeCall({ code: 'x' }, 'plain string result')).toBeNull();
-  });
-
-  it('returns null for unparseable string args', () => {
-    expect(getCodeModeCall('not json', undefined)).toBeNull();
-  });
-});
 
 describe('CodeModeBadge', () => {
   it('renders the program, result, and logs when expanded', () => {

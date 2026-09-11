@@ -99,6 +99,7 @@ describe('AgentController fork clone metadata wiring', () => {
         forkedSubagent: true,
         parentThreadId: 'parent-thread-xyz',
       },
+      options: { hydrateMessages: false },
     });
   });
 

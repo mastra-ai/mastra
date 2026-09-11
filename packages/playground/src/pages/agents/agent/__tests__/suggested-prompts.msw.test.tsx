@@ -51,7 +51,7 @@ afterEach(() => cleanup());
 
 describe('agent suggested prompts', () => {
   describe('when an existing thread is still loading its messages', () => {
-    it('withholds the prompts until the message query resolves', async () => {
+    it('shows the history skeleton and withholds the prompts until the message query resolves', async () => {
       const messagesGate = createGate();
 
       server.use(
@@ -90,12 +90,15 @@ describe('agent suggested prompts', () => {
 
       renderPage();
 
-      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(await screen.findByTestId('thread-history-skeleton')).not.toBeNull();
+      expect(screen.queryByText('How can I help you today?')).toBeNull();
       expect(screen.queryByRole('button', { name: SUGGESTED_PROMPT })).toBeNull();
 
       messagesGate.release();
 
       expect(await screen.findByRole('button', { name: SUGGESTED_PROMPT })).not.toBeNull();
+      expect(screen.getByText('How can I help you today?')).not.toBeNull();
+      expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
     });
   });
 });

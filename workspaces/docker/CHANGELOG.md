@@ -1,5 +1,27 @@
 # @mastra/docker
 
+## 0.8.0-alpha.0
+
+### Minor Changes
+
+- Implement the optional `writeFiles()` bulk upload API on `DockerSandbox`. ([#23571](https://github.com/mastra-ai/mastra/pull/23571))
+
+  You can now upload multiple files to a running Docker sandbox in a single call instead of relying on host bind mounts or shell writes:
+
+  ```ts
+  await sandbox.writeFiles([
+    { path: 'src/index.js', content: 'console.log("hello")' },
+    { path: 'data.json', content: Buffer.from('{"count":1}') },
+  ]);
+  ```
+
+  Files are uploaded in one operation using Docker's native archive transfer (`container.putArchive`). Relative paths resolve against the sandbox `workingDirectory`, absolute paths are honored as-is, missing parent directories are created automatically, existing files are overwritten, and both `string` and `Buffer` contents are preserved. New files are created with mode `0644`. The upload is not atomic across files: if it fails, the promise rejects and partially written files may remain. Calling `writeFiles()` before the sandbox has started throws `SandboxNotReadyError`.
+
+### Patch Changes
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+
 ## 0.7.1
 
 ### Patch Changes

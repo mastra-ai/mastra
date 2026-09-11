@@ -21,7 +21,7 @@ export const executeCommandInputSchema = z.object({
     .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
-    .preprocess(coerceNumericString, z.number())
+    .preprocess(coerceNumericString, z.number().int())
     .nullish()
     .describe(
       `For foreground commands: limit output to the last N lines, similar to tail -n. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,

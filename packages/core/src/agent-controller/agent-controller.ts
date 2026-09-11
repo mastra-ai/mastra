@@ -2211,6 +2211,10 @@ export class AgentController<TState = {}> {
                   forkedSubagent: true,
                   parentThreadId: sourceThreadId,
                 },
+                // The fork only needs the new thread id; skip hydrating message payloads
+                // into the Node heap. Memory.cloneThread re-enables hydration when semantic
+                // recall is active so embeddings still work.
+                options: { hydrateMessages: false },
               });
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }

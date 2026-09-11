@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 
-import { useChatRunning, useChatSend } from './chat/chat-context';
+import { useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 interface SuggestedPromptListProps {
