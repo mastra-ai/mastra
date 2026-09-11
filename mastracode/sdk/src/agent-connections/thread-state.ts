@@ -88,7 +88,13 @@ export function sortConnectedPeers(peers: ConnectedAgentPeer[]): ConnectedAgentP
 }
 
 const agentSignalPriorities = new Set<AgentSignalPriority>(['low', 'medium', 'high', 'urgent']);
-const agentSignalRoutingActions = new Set<AgentSignalRoutingAction>(['wake', 'deliver', 'persist', 'discard', 'blocked']);
+const agentSignalRoutingActions = new Set<AgentSignalRoutingAction>([
+  'wake',
+  'deliver',
+  'persist',
+  'discard',
+  'blocked',
+]);
 
 export function normalizeSentAgentSignals(signals: unknown[]): SentAgentSignal[] {
   return signals.flatMap(signal => {

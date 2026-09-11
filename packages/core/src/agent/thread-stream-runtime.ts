@@ -3552,24 +3552,24 @@ export class AgentThreadStreamRuntime {
         return { action: 'deliver' as const, runId: localAcceptance.runId };
       }
 
-      const claimedOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, {
-        includeLocal: false,
-      });
-      if (claimedOwnerSourceId) {
-        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
-          state.activeThreadRunIds.delete(reservedKey);
-        }
-        state.threadKeysByRunId.delete(reservedRunId);
-        const acceptedRunId = await this.#deliverToClaimedThreadOwner(
-          resolvedPubSub,
-          reservedKey,
-          reservedRunId,
-          signal,
-          claimedOwnerSourceId,
-        );
-        return { action: 'deliver' as const, runId: acceptedRunId };
-      }
       if (target.ifIdle?.requireClaimedOwner) {
+        const claimedOwnerSourceId = await this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, {
+          includeLocal: false,
+        });
+        if (claimedOwnerSourceId) {
+          if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+            state.activeThreadRunIds.delete(reservedKey);
+          }
+          state.threadKeysByRunId.delete(reservedRunId);
+          const acceptedRunId = await this.#deliverToClaimedThreadOwner(
+            resolvedPubSub,
+            reservedKey,
+            reservedRunId,
+            signal,
+            claimedOwnerSourceId,
+          );
+          return { action: 'deliver' as const, runId: acceptedRunId };
+        }
         if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
           state.activeThreadRunIds.delete(reservedKey);
         }

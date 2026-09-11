@@ -1509,12 +1509,14 @@ describe('Agent signals', () => {
     }
   });
 
-  it('starts an idle thread run when a user-message signal is sent', async () => {
+  it('starts an idle thread run without cross-agent owner discovery when a user-message signal is sent', async () => {
+    const pubsub = new ControlledLeasePubSub();
     const agent = new Agent({
       id: 'idle-signal-agent',
       name: 'Idle Signal Agent',
       instructions: 'Test',
       model: createTextStreamModel('signal response'),
+      pubsub,
     });
 
     const subscription = await agent.subscribeToThread({
@@ -1534,6 +1536,7 @@ describe('Agent signals', () => {
 
     const subscribedRun = await nextRun;
     await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
+    expect(pubsub.publishedData.some(data => data?.type === 'thread-owner-discovery')).toBe(false);
     expect(signalResult.signal.id).toBeDefined();
     expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
@@ -1636,7 +1639,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'owner-user',
         threadId: 'owner-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1688,7 +1691,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'admission-user',
         threadId: 'admission-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1733,7 +1736,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'rejected-user',
         threadId: 'rejected-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1780,7 +1783,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'delivered-ack-user',
         threadId: 'delivered-ack-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1836,7 +1839,7 @@ describe('Agent signals', () => {
         {
           resourceId: 'queued-admission-user',
           threadId: 'queued-admission-thread',
-          ifIdle: { behavior: 'wake' },
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
         },
         pubsub,
       );
@@ -1849,7 +1852,7 @@ describe('Agent signals', () => {
         {
           resourceId: 'queued-admission-user',
           threadId: 'queued-admission-thread',
-          ifIdle: { behavior: 'wake' },
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
         },
         pubsub,
       );
@@ -1912,7 +1915,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'queued-lease-user',
         threadId: 'queued-lease-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1925,7 +1928,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'queued-lease-user',
         threadId: 'queued-lease-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -1991,7 +1994,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'initial-lease-loss-user',
         threadId: 'initial-lease-loss-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -2007,7 +2010,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'initial-lease-loss-user',
         threadId: 'initial-lease-loss-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
@@ -2064,7 +2067,7 @@ describe('Agent signals', () => {
         {
           resourceId: 'expired-admission-user',
           threadId: 'expired-admission-thread',
-          ifIdle: { behavior: 'wake' },
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
         },
         pubsub,
       );
@@ -2165,7 +2168,7 @@ describe('Agent signals', () => {
       {
         resourceId: 'simultaneous-user',
         threadId: 'simultaneous-thread',
-        ifIdle: { behavior: 'wake' },
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       },
       pubsub,
     );
