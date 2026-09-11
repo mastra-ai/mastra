@@ -52,6 +52,7 @@ const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
+  providerId: string;
   file: string;
   actionSlug: string;
   toolKey: string;
@@ -309,17 +310,27 @@ function execBodyStatements(execBody: string): string {
   return execBody.trim().replace(/^\{/, '').replace(/\}$/, '').trim();
 }
 
+function modelOutputOverride(action: ExtractedAction): { importStatement: string; toolProperty: string } | undefined {
+  if (action.candidate.providerId !== 'openai' || action.candidate.actionSlug !== 'create-image') return undefined;
+
+  return {
+    importStatement: "import { toImageGenerationModelOutput } from '../../../runtime/model-output.js';",
+    toolProperty: '    toModelOutput: toImageGenerationModelOutput,',
+  };
+}
+
 function emitActionFile(action: ExtractedAction): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
   );
   const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
+  const modelOutput = modelOutputOverride(action);
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-${proxyImport}
+${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}
 ${action.moduleStatements.join('\n\n')}
 
 export function ${action.toolFactoryName}(proxy: PlatformProxy) {
@@ -328,7 +339,7 @@ export function ${action.toolFactoryName}(proxy: PlatformProxy) {
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
     outputSchema: ${action.outputSchemaName},
-    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+${modelOutput ? `${modelOutput.toolProperty}\n` : ''}    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
 ${execBodyStatements(action.execBody)}
     },
@@ -426,6 +437,7 @@ export async function generateProvider({
     .sort()) {
     const actionSlug = filename.replace(/\.ts$/, '');
     const candidate: ActionCandidate = {
+      providerId,
       file: resolve(actionDir, filename),
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,

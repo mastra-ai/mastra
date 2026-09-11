@@ -26,6 +26,33 @@ const action = createAction({
 export default action;
 `;
 
+const imageActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ prompt: z.string() });
+const OutputSchema = z.object({
+  data: z.array(z.object({
+    url: z.string().optional(),
+    b64_json: z.string().optional(),
+    revised_prompt: z.string().optional(),
+  })),
+});
+
+const action = createAction({
+  description: 'Generate an image.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const response = await nango.post({ endpoint: '/images', data: input });
+    return OutputSchema.parse(response.data);
+  },
+});
+
+export default action;
+`;
+
 const proxyConfigurationTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 import type { ProxyConfiguration } from 'nango';
@@ -139,6 +166,10 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
       }
     }
+    const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
+    mkdirSync(openaiActionDir, { recursive: true });
+    writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
+
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync(
@@ -213,6 +244,16 @@ describe('maintainer provider commands', () => {
     const [header, ...body] = generatedTool.split('\n');
     expect(header).toContain('AUTO-GENERATED');
     expect(body.join('\n')).not.toMatch(/nango/i);
+  });
+
+  it('adds model-native image output to the OpenAI image generation tool', async () => {
+    await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/openai/tools/create-image.ts'), 'utf8');
+    expect(generatedTool).toMatch(
+      /import \{ toImageGenerationModelOutput \} from ["']\.\.\/\.\.\/\.\.\/runtime\/model-output\.js["'];/,
+    );
+    expect(generatedTool).toContain('toModelOutput: toImageGenerationModelOutput,');
   });
 
   it('lists available providers and searches by installed alias', async () => {
