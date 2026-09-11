@@ -297,6 +297,15 @@ function supportsAssistantPrefill(modelId: string): boolean | undefined {
   return major < 4 || (major === 4 && minor < 6);
 }
 
+const GEMINI_VERSION_PATTERN = /gemini-(\d+)/i;
+
+function supportsTrailingModelTurn(modelId: string): boolean | undefined {
+  const match = GEMINI_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+
+  return Number(match[1]) < 3;
+}
+
 /**
  * Detects Anthropic models that removed assistant-message prefill support.
  * Claude 4.6 and later reject assistant-prefill requests, while earlier
@@ -321,6 +330,36 @@ export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean
 
   if (!modelId) return true;
   return supportsAssistantPrefill(modelId) !== true;
+}
+
+/**
+ * Detects Google models that reject a request ending on a model turn.
+ *
+ * Gemini 3 and later return 400 "Requests ending with a model turn are not
+ * supported"; Gemini 2.x accepted the same prompt, including under native
+ * structured output. Unknown Google model versions are matched conservatively
+ * so a new model cannot silently bypass compatibility guards.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/23320
+ */
+export function isMaybeGoogleWithoutTrailingModelTurn(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeGoogleWithoutTrailingModelTurn((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (getModelProviderFamily(model) !== 'google') return false;
+
+  const modelId =
+    typeof model === 'string'
+      ? model
+      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
+        ? (model as { modelId: string }).modelId
+        : undefined;
+
+  if (!modelId) return true;
+  return supportsTrailingModelTurn(modelId) !== true;
 }
 
 export function isMaybeAzure(

@@ -29,7 +29,10 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
+import {
+  isMaybeAnthropicWithoutAssistantPrefill,
+  isMaybeGoogleWithoutTrailingModelTurn,
+} from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
@@ -1485,9 +1488,12 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model does not support assistant prefill
+    // Append the trailing assistant guard when the resolved model rejects a prompt ending on an
+    // assistant turn (Anthropic 4.6+ assistant prefill, Gemini 3+ trailing model turn)
     const processors =
-      stepInput.model && isMaybeAnthropicWithoutAssistantPrefill(stepInput.model)
+      stepInput.model &&
+      (isMaybeAnthropicWithoutAssistantPrefill(stepInput.model) ||
+        isMaybeGoogleWithoutTrailingModelTurn(stepInput.model))
         ? [...this.inputProcessors, new TrailingAssistantGuard()]
         : this.inputProcessors;
 

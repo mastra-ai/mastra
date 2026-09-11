@@ -33,7 +33,10 @@ import type {
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
-import { isMaybeAnthropicWithoutAssistantPrefill } from '../../../processors/provider-history-compat';
+import {
+  isMaybeAnthropicWithoutAssistantPrefill,
+  isMaybeGoogleWithoutTrailingModelTurn,
+} from '../../../processors/provider-history-compat';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
@@ -1396,7 +1399,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
         ];
-        if (inputStepProcessors.length > 0 || isMaybeAnthropicWithoutAssistantPrefill(model)) {
+        if (
+          inputStepProcessors.length > 0 ||
+          isMaybeAnthropicWithoutAssistantPrefill(model) ||
+          isMaybeGoogleWithoutTrailingModelTurn(model)
+        ) {
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
