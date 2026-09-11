@@ -69,6 +69,7 @@ function ImportRunDetail({
   if (detail.isError) return <Notice variant="destructive">{detail.error.message}</Notice>;
 
   const run = detail.data.pages[0]!.run;
+  const transcript = detail.data.pages[0]?.transcript;
   const activity = detail.data.pages.flatMap(page => page.activity);
   return (
     <section
