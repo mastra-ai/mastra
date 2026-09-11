@@ -61,7 +61,7 @@
   align-items: center;
   overflow: clip;
   border: 1px solid var(--border1);
-  border-radius: 9999px;
+  border-radius: var(--tab-inner-radius);
   background: var(--surface4);
 }
 
@@ -185,7 +185,7 @@
 
   [data-slot='tabbed-container-query'] {
     width: 100%;
-    border-radius: 9999px;
+    border-radius: var(--tab-inner-radius);
   }
 
   [data-slot='tabbed-container-search'] {
