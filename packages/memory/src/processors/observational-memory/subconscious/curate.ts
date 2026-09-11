@@ -148,6 +148,23 @@ async function reportCuratorError(
   }
 }
 
+function createKnowledgeDescriptionInstructions(memory: Memory, scope: KnowledgeScope): string | undefined {
+  const context = memory.getKnowledgeInstance()?.__getDescriptionContext(scope);
+  if (!context || (!context.description && context.scopes.length === 0)) return undefined;
+
+  const sections = [
+    context.description ? `Knowledge instance: ${context.description}` : undefined,
+    context.scopes.length > 0
+      ? `Visible configured scopes:\n${context.scopes
+          .map(item => `- ${item.address} (${item.name}): ${item.description}`)
+          .join('\n')}`
+      : undefined,
+  ];
+  return `Host-configured Knowledge placement context. Use these descriptions to choose the appropriate allowed scope for each durable fact.\n${sections
+    .filter(Boolean)
+    .join('\n')}`;
+}
+
 export async function createCuratorAgent(
   memory: Memory,
   curatorMemory: Memory,
@@ -169,6 +186,7 @@ export async function createCuratorAgent(
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
+      createKnowledgeDescriptionInstructions(memory, scope),
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]
