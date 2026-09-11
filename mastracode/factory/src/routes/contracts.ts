@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import {
+  BOARD_IDENTIFIER_RE,
+  IDENTIFIER_RE,
+  MAX_BOARD_IDENTIFIER_LENGTH,
+  MAX_ROLE_LENGTH,
+} from '../rules/validation.js';
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -154,6 +159,16 @@ export const startWorkItemBodySchema = z.object({
     input: createWorkItemBodySchema,
   }),
 });
+
+export const automationRunStartBodySchema = z
+  .object({
+    requestId: trimmedUuidSchema,
+    expectedRevision: z.number().int().min(1),
+    role: z.string().trim().min(1).max(MAX_ROLE_LENGTH).regex(IDENTIFIER_RE),
+    skillName: nonEmptyTrimmed(128),
+    arguments: nonEmptyTrimmed(4_096).optional(),
+  })
+  .strict();
 
 export const metricsQuerySchema = z.object({
   from: z.string().optional(),
@@ -430,6 +445,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Explicitly start a Factory work-item run',
     pathSchema: projectPathSchema,
     bodySchema: startWorkItemBodySchema,
+    responseSchema: entitySchema,
+  },
+  workItemAutomationRun: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/work-items/:workItemId/automation-runs',
+    description: 'Enqueue an idempotent deferred skill dispatch for a trusted external orchestrator',
+    pathSchema: transitionPathSchema,
+    bodySchema: automationRunStartBodySchema,
     responseSchema: entitySchema,
   },
   decisionList: {
