@@ -474,7 +474,6 @@ export class SessionRunEngine {
     );
 
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
 
     return result;
   }
@@ -1223,7 +1222,6 @@ export class SessionRunEngine {
           : 'complete';
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
@@ -1235,7 +1233,6 @@ export class SessionRunEngine {
     }
     this.#session.stream.detach();
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {

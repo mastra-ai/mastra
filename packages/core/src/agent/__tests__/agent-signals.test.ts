@@ -3687,10 +3687,443 @@ describe('Agent signals', () => {
     const secondRun = await readNextRunWithParts(iterator);
     expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
+    expect(
+      agent.cancelQueuedMessages({
+        resourceId: 'queue-message-user',
+        threadId: 'queue-message-thread',
+        signalIds: [result.signal.id],
+      }),
+    ).toEqual({ cancelledSignalIds: [] });
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
 
     subscription.unsubscribe();
+  });
+
+  it('observes only relevant owner-scoped queue changes and validates cancellation selectors', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'observed-queue-resource';
+    const threadId = 'observed-queue-thread';
+    const ownerId = 'observed-owner';
+    const activeRunId = 'observed-active-run';
+    const neverFinished = new Promise<void>(() => {});
+    const agent = { id: 'observed-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const otherAgent = { id: 'other-observed-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, neverFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    const events: Array<{ type: 'queue-count-changed'; count: number }> = [];
+    const counts: number[] = [];
+    const unsubscribe = runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId: ownerId },
+      event => {
+        if (event.type === 'queue-count-changed') {
+          events.push(event);
+          counts.push(event.count);
+        }
+      },
+      pubsub,
+    );
+    const sharedCounts: number[] = [];
+    const unsubscribeShared = runtime.subscribeThreadEvents(
+      otherAgent,
+      { resourceId, threadId },
+      event => {
+        if (event.type === 'queue-count-changed') sharedCounts.push(event.count);
+      },
+      pubsub,
+    );
+    const owned = runtime.queueMessage(
+      agent,
+      'owned queued message',
+      { resourceId, threadId, queueOwnerId: ownerId },
+      pubsub,
+    );
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('other-resource-run', neverFinished),
+      { memory: { resource: 'other-resource', thread: threadId } } as any,
+      pubsub,
+    );
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('other-thread-run', neverFinished),
+      { memory: { resource: resourceId, thread: 'other-thread' } } as any,
+      pubsub,
+    );
+    runtime.queueMessage(
+      agent,
+      'other resource queued message',
+      { resourceId: 'other-resource', threadId, queueOwnerId: ownerId },
+      pubsub,
+    );
+    runtime.queueMessage(
+      agent,
+      'other thread queued message',
+      { resourceId, threadId: 'other-thread', queueOwnerId: ownerId },
+      pubsub,
+    );
+    const untagged = runtime.queueMessage(agent, 'untagged supervisor message', { resourceId, threadId }, pubsub);
+    const other = runtime.queueMessage(
+      otherAgent,
+      'other agent queued message',
+      { resourceId, threadId, queueOwnerId: ownerId },
+      pubsub,
+    );
+
+    expect(counts).toEqual([0, 1]);
+    expect(sharedCounts).toEqual([0, 1, 2, 3]);
+    expect(runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub)).toEqual({
+      cancelledSignalIds: [other.signal.id],
+    });
+    expect(counts).toEqual([0, 1]);
+    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub)).toEqual({
+      cancelledSignalIds: [owned.signal.id],
+    });
+    expect(
+      runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
+    ).toEqual({
+      cancelledSignalIds: [],
+    });
+    expect(
+      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
+    ).toEqual({
+      cancelledSignalIds: [untagged.signal.id],
+    });
+    expect(counts).toEqual([0, 1, 0]);
+    expect(events).toEqual([
+      { type: 'queue-count-changed', count: 0 },
+      { type: 'queue-count-changed', count: 1 },
+      { type: 'queue-count-changed', count: 0 },
+    ]);
+    expect(() => runtime.cancelQueuedMessages(agent, { resourceId, threadId } as any, pubsub)).toThrow(
+      'exactly one of signalIds or queueOwnerId',
+    );
+
+    expect(sharedCounts).toEqual([0, 1, 2, 3, 2, 1, 0]);
+    unsubscribeShared();
+    unsubscribeShared();
+    unsubscribe();
+    unsubscribe();
+    runtime.queueMessage(agent, 'unobserved queued message', { resourceId, threadId, queueOwnerId: ownerId }, pubsub);
+    expect(counts).toEqual([0, 1, 0]);
+    expect(sharedCounts).toEqual([0, 1, 2, 3, 2, 1, 0]);
+  });
+
+  it('isolates listener errors and permits reentrant owner cancellation', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'reentrant-queue-resource';
+    const threadId = 'reentrant-queue-thread';
+    const queueOwnerId = 'reentrant-owner';
+    const activeRunId = 'reentrant-active-run';
+    const neverFinished = new Promise<void>(() => {});
+    const agent = { id: 'reentrant-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, neverFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    const counts: number[] = [];
+    runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId },
+      event => {
+        if (event.type === 'queue-count-changed') {
+          counts.push(event.count);
+          if (event.count > 0) {
+            runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub);
+          }
+        }
+      },
+      pubsub,
+    );
+    runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId },
+      () => {
+        throw new Error('listener failure must not interrupt the queue');
+      },
+      pubsub,
+    );
+
+    const queued = runtime.queueMessage(agent, 'cancel from listener', { resourceId, threadId, queueOwnerId }, pubsub);
+    expect(counts).toEqual([0, 1, 0]);
+    expect(
+      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
+    ).toEqual({
+      cancelledSignalIds: [],
+    });
+  });
+
+  it('keeps observed messages pending through lease handoff and drops them before stream registration', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const handoff = Promise.withResolvers<void>();
+    const resourceId = 'handoff-observation-resource';
+    const threadId = 'handoff-observation-thread';
+    const queueOwnerId = 'handoff-observation-owner';
+    const activeRunId = 'handoff-observation-active-run';
+    let finishActiveRun!: () => void;
+    let handoffStarted = false;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const counts: number[] = [];
+    const agent = {
+      id: 'handoff-observation-agent',
+      stream: vi.fn(async () => {
+        expect(counts).toEqual([0, 1, 0]);
+        return { runId: 'handoff-observation-next-run' };
+      }),
+    } as unknown as Agent<any, any, any, any>;
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId },
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
+      pubsub,
+    );
+    const queued = runtime.queueMessage(
+      agent,
+      'handoff observed message',
+      { resourceId, threadId, queueOwnerId },
+      pubsub,
+    );
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(counts).toEqual([0, 1]);
+    handoff.resolve();
+    await waitForCondition(() => (agent.stream as any).mock.calls.length === 1);
+    expect(counts).toEqual([0, 1, 0]);
+    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
+      cancelledSignalIds: [],
+    });
+    expect(queued.signal.id).toBeDefined();
+  });
+
+  it('removes observed messages when a lease loss forwards them or execution fails', async () => {
+    const resourceId = 'queue-terminal-resource';
+    const threadId = 'queue-terminal-thread';
+    const queueOwnerId = 'queue-terminal-owner';
+
+    for (const outcome of ['forward', 'fail'] as const) {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new ControlledLeasePubSub();
+      const activeRunId = `queue-terminal-active-${outcome}`;
+      let finishActiveRun!: () => void;
+      const activeRunFinished = new Promise<void>(resolve => {
+        finishActiveRun = resolve;
+      });
+      const stream = vi.fn().mockRejectedValue(new Error('queued stream failure'));
+      const agent = { id: `queue-terminal-agent-${outcome}`, stream } as unknown as Agent<any, any, any, any>;
+      const counts: number[] = [];
+      pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+      if (outcome === 'forward') {
+        pubsub.transferLeaseWait = new Promise<void>(resolve => {
+          pubsub.onTransferLease = () => {
+            pubsub.owners.set(`${resourceId}\u0000${threadId}`, 'remote-winner');
+            resolve();
+          };
+        });
+      }
+
+      runtime.registerRun(
+        agent,
+        createFakeThreadRun(activeRunId, activeRunFinished),
+        { memory: { resource: resourceId, thread: threadId } } as any,
+        pubsub,
+      );
+      runtime.subscribeThreadEvents(
+        agent,
+        { resourceId, threadId, queueOwnerId },
+        event => {
+          if (event.type === 'queue-count-changed') counts.push(event.count);
+        },
+        pubsub,
+      );
+      const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
+      finishActiveRun();
+
+      await waitForCondition(() => counts.at(-1) === 0);
+      expect(counts).toEqual([0, 1, 0]);
+      if (outcome === 'forward') {
+        expect(stream).not.toHaveBeenCalled();
+        expect(pubsub.publishedData).toContainEqual(
+          expect.objectContaining({
+            type: 'signal-enqueued',
+            signal: expect.objectContaining({ id: queued.signal.id }),
+          }),
+        );
+      } else {
+        expect(stream).toHaveBeenCalledTimes(1);
+      }
+    }
+  });
+
+  it('removes observed messages after lease acquisition failure', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'lease-failure-observation-resource';
+    const threadId = 'lease-failure-observation-thread';
+    const queueOwnerId = 'lease-failure-observation-owner';
+    const activeRunId = 'lease-failure-observation-active-run';
+    let finishActiveRun!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const stream = vi.fn();
+    const agent = { id: 'lease-failure-observation-agent', stream } as unknown as Agent<any, any, any, any>;
+    const counts: number[] = [];
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+    vi.spyOn(pubsub, 'transferLease').mockRejectedValue(new Error('lease backend unavailable'));
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId },
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
+      pubsub,
+    );
+    runtime.queueMessage(agent, 'lease failure', { resourceId, threadId, queueOwnerId }, pubsub);
+    finishActiveRun();
+
+    await waitForCondition(() => counts.at(-1) === 0);
+    expect(counts).toEqual([0, 1, 0]);
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  it('does not forward a cancelled observed message after losing the lease', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'lease-loss-cancel-resource';
+    const threadId = 'lease-loss-cancel-thread';
+    const queueOwnerId = 'lease-loss-cancel-owner';
+    const activeRunId = 'lease-loss-cancel-active-run';
+    let finishActiveRun!: () => void;
+    let transferStarted!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const transferStartedPromise = new Promise<void>(resolve => {
+      transferStarted = resolve;
+    });
+    let releaseTransfer!: () => void;
+    const stream = vi.fn();
+    const agent = { id: 'lease-loss-cancel-agent', stream } as unknown as Agent<any, any, any, any>;
+    const counts: number[] = [];
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+    pubsub.transferLeaseWait = new Promise<void>(resolve => {
+      releaseTransfer = resolve;
+    });
+    pubsub.onTransferLease = transferStarted;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    runtime.subscribeThreadEvents(
+      agent,
+      { resourceId, threadId, queueOwnerId },
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
+      pubsub,
+    );
+    const queued = runtime.queueMessage(
+      agent,
+      'cancel before lease loss',
+      { resourceId, threadId, queueOwnerId },
+      pubsub,
+    );
+    finishActiveRun();
+    await transferStartedPromise;
+
+    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
+      cancelledSignalIds: [queued.signal.id],
+    });
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, 'remote-winner');
+    releaseTransfer();
+    await waitForCondition(() => runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub) === undefined);
+    expect(counts).toEqual([0, 1, 0]);
+    expect(stream).not.toHaveBeenCalled();
+    expect(pubsub.publishedData).not.toContainEqual(expect.objectContaining({ type: 'signal-enqueued' }));
+  });
+
+  it('cancels a queueMessage after dequeue but before the lease handoff starts execution', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const handoff = Promise.withResolvers<void>();
+    const stream = vi.fn().mockResolvedValue({ runId: 'should-not-start' });
+    const agent = { id: 'cancel-prestart-agent', stream } as unknown as Agent<any, any, any, any>;
+    const resourceId = 'cancel-prestart-resource';
+    const threadId = 'cancel-prestart-thread';
+    const activeRunId = 'cancel-prestart-active';
+    let finishActiveRun!: () => void;
+    let handoffStarted = false;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const queued = runtime.queueMessage(agent, 'cancel before execution', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(
+      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
+    ).toEqual({
+      cancelledSignalIds: [queued.signal.id],
+    });
+    handoff.resolve();
+    await nextTick();
+    await nextTick();
+
+    expect(stream).not.toHaveBeenCalled();
   });
 
   it('fans out sequential idle signal runs to many same-thread subscribers', async () => {
@@ -3829,6 +4262,12 @@ describe('Agent signals', () => {
     // observable via the subscription's active run id before registerRun populates the stream.
     expect(result.accepted).toBeInstanceOf(Promise);
     expect(subscription.activeRunId()).not.toBeNull();
+
+    const queued = runtime.queueMessage(agent, 'separate queued message', { resourceId, threadId });
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] })).toEqual({
+      cancelledSignalIds: [queued.signal.id],
+    });
 
     subscription.unsubscribe();
   });
@@ -4348,6 +4787,55 @@ describe('Agent signals', () => {
     expect(agent.stream).not.toHaveBeenCalled();
     finishRecovery();
     await pubsub.releaseLease(key, winnerRunId);
+  });
+
+  it('drains queued messages when a pre-registration reservation is released', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'released-reservation-resource';
+    const threadId = 'released-reservation-thread';
+    const agent = {
+      id: 'released-reservation-agent',
+      stream: vi.fn(async (_signal, options) => ({ runId: options.runId })),
+    } as any;
+
+    await runtime.waitForCrossAgentThreadRun(agent, {
+      runId: 'reservation-run',
+      memory: { resource: resourceId, thread: threadId },
+    });
+    const queued = runtime.queueMessage(agent, { contents: 'queued after reservation' }, { resourceId, threadId });
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    runtime.releaseThreadRunReservation('reservation-run');
+    await waitForCondition(() => agent.stream.mock.calls.length === 1);
+
+    expect(agent.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued after reservation' }),
+      expect.objectContaining({ memory: expect.objectContaining({ resource: resourceId, thread: threadId }) }),
+    );
+  });
+
+  it('updates the controller request context with the prepared run abort signal', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const requestContext = new RequestContext();
+    const upstreamAbortController = new AbortController();
+    requestContext.set('controller', { abortSignal: upstreamAbortController.signal });
+
+    const prepared = runtime.prepareRunOptions({
+      runId: 'controller-abort-run',
+      memory: { resource: 'controller-abort-resource', thread: 'controller-abort-thread' },
+      abortSignal: upstreamAbortController.signal,
+      requestContext,
+    } as any);
+    const controller = prepared.requestContext?.get('controller') as { abortSignal: AbortSignal };
+
+    expect(controller.abortSignal).toBe(prepared.abortSignal);
+    expect(controller.abortSignal).not.toBe(upstreamAbortController.signal);
+    expect((requestContext.get('controller') as { abortSignal: AbortSignal }).abortSignal).toBe(
+      upstreamAbortController.signal,
+    );
+
+    expect(runtime.abortRun('controller-abort-run')).toBe(true);
+    expect(controller.abortSignal.aborted).toBe(true);
   });
 
   it('preserves abort intent for a thread reserved by a signal wake before its run is prepared', async () => {

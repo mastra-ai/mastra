@@ -190,7 +190,7 @@ export function updateStatusLine(state: TUIState): void {
   const centerTextShort =
     centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
   const now = Date.now();
-  const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
+  const queuedCount = state.pendingQueuedActions.length + displayState.queuedFollowUps;
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
