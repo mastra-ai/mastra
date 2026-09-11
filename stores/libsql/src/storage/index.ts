@@ -3,6 +3,7 @@ import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
+import { gateFileTransactionClient, getLocalFileDatabaseKey } from '../vector/write-lock';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
 import { AgentsLibSQL } from './domains/agents';
@@ -229,6 +230,16 @@ export class LibSQLStore extends MastraCompositeStore {
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
       this.client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
+      if (this.isLocalDb && !config.url.includes(':memory:') && !config.syncUrl) {
+        // Coordinate interactive transactions with LibSQLVector clients on the
+        // same database file: vector mutations serialize behind a path-keyed
+        // write lock, and an uncoordinated store transaction can wedge a pooled
+        // connection when its BEGIN IMMEDIATE is interrupted by that lock.
+        this.client = gateFileTransactionClient(
+          this.client,
+          getLocalFileDatabaseKey({ url: config.url, syncUrl: config.syncUrl, cwd: process.cwd() }),
+        );
+      }
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;

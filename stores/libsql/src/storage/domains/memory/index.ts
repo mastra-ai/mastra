@@ -798,17 +798,19 @@ export class MemoryLibSQL extends MemoryStorage {
       const threadUpdateStatement = batchStatements[batchStatements.length - 1];
 
       // Process message statements in batches
-      for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
-        const batch = messageStatements.slice(i, i + BATCH_SIZE);
-        if (batch.length > 0) {
-          await this.#client.batch(batch, 'write');
+      await withClientWriteLock(this.#client, async () => {
+        for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
+          const batch = messageStatements.slice(i, i + BATCH_SIZE);
+          if (batch.length > 0) {
+            await this.#client.batch(batch, 'write');
+          }
         }
-      }
 
-      // Execute thread update separately
-      if (threadUpdateStatement) {
-        await this.#client.execute(threadUpdateStatement);
-      }
+        // Execute thread update separately
+        if (threadUpdateStatement) {
+          await this.#client.execute(threadUpdateStatement);
+        }
+      });
 
       const list = new MessageList().add(messages as any, 'memory');
       return { messages: list.get.all.db() };
