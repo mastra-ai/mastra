@@ -12,7 +12,9 @@ const PROJECT_SCOPE_ID = '10000000-0000-4000-8000-000000000002';
 const OTHER_SCOPE_ID = '10000000-0000-4000-8000-000000000003';
 const MISSING_SCOPE_ID = '10000000-0000-4000-8000-000000000099';
 
-export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
+export function createKnowledgeStorageTests(
+  createStore: (reopen?: boolean) => Promise<KnowledgeStorage> | KnowledgeStorage,
+): void {
   describe('knowledge storage canonical contract', () => {
     let store: KnowledgeStorage;
 
