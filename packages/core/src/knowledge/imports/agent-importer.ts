@@ -6,6 +6,16 @@ import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
 import type { KnowledgeAgentImportInput, KnowledgeAgentImportResult, KnowledgeImporterAgentConfig } from './types';
 
+const MAX_AGENTIC_IMPORT_PAYLOAD_BYTES = 64_000;
+
+function boundSerializedPayload(serialized: string): string {
+  const bytes = Buffer.from(serialized, 'utf8');
+  if (bytes.byteLength <= MAX_AGENTIC_IMPORT_PAYLOAD_BYTES) return serialized;
+  const kept = bytes.subarray(0, MAX_AGENTIC_IMPORT_PAYLOAD_BYTES).toString('utf8');
+  const dropped = bytes.byteLength - MAX_AGENTIC_IMPORT_PAYLOAD_BYTES;
+  return `${kept}\n\n[Truncated: ${dropped} bytes of the payload were omitted to stay within the import budget. Work only from the evidence above; do not invent omitted evidence.]`;
+}
+
 function memoryIdentity(knowledge: Knowledge, importerId: string, binding: string): string {
   const digest = createHash('sha256')
     .update(JSON.stringify([knowledge.id, importerId, binding]))
@@ -121,8 +131,8 @@ export async function runAgenticKnowledgeImport(input: {
   const checkpoint = input.request.checkpoint.trim();
   if (!instructions) throw new Error('Knowledge agentic import instructions are required');
   if (!checkpoint) throw new Error('Knowledge agentic import checkpoint is required');
-  const serializedData = JSON.stringify(input.request.data);
-  if (serializedData === undefined) throw new Error('Knowledge agentic import data must be JSON-serializable');
+  const serializedData = boundSerializedPayload(JSON.stringify(input.request.data) ?? '');
+  if (!serializedData) throw new Error('Knowledge agentic import data must be JSON-serializable');
 
   const resourceId = memoryIdentity(input.knowledge, input.importerId, input.binding);
   const threadId = `knowledge-import-run:${input.runId}`;
