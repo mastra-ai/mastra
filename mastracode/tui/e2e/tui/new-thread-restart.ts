@@ -35,6 +35,11 @@ export const newThreadRestartScenario: McE2eScenario = {
     terminal.submit('/thread');
     await runtime.waitForScreenText(/Title: \(untitled\)/i, terminal);
 
+    if (!runtime.stopApp || !runtime.restartApp) {
+      throw new Error('The TUI E2E backend does not support restarting the app');
+    }
+    await runtime.stopApp();
+
     const db = new DatabaseSync(dbPath);
     let newThreadId: string;
     try {
@@ -49,7 +54,6 @@ export const newThreadRestartScenario: McE2eScenario = {
       db.close();
     }
 
-    if (!runtime.restartApp) throw new Error('The TUI E2E backend does not support restarting the app');
     let restartedSession: Session | undefined;
     await runtime.restartApp({
       onCreated(result) {
