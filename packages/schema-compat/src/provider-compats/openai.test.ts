@@ -620,6 +620,31 @@ describe('OpenAISchemaCompatLayer', () => {
     });
   });
 
+  describe('optional scalar enum and const properties', () => {
+    it('accepts null while retaining enum and const validation', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          format: { enum: ['image', 'text'] },
+          kind: { const: 'input' },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      expect(result.properties.format).toEqual({
+        anyOf: [{ type: 'string', enum: ['image', 'text'] }, { type: 'null' }],
+      });
+      expect(result.properties.kind).toEqual({
+        anyOf: [{ type: 'string', const: 'input' }, { type: 'null' }],
+      });
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ format: null, kind: null })).toBe(true);
+      expect(validate({ format: 'image', kind: 'input' })).toBe(true);
+      expect(validate({ format: 'audio', kind: 'output' })).toBe(false);
+    });
+  });
+
   // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
   // See https://github.com/mastra-ai/mastra/issues/19273
   describe('z.record() under strict mode', () => {
