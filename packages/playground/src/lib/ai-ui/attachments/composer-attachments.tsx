@@ -1,12 +1,11 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
+import { classifyAttachment } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
+import type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
 import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui/utils/file';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { classifyAttachment } from './attachment-kind';
-import type { ComposerAttachmentKind } from './attachment-kind';
-
-export type { ComposerAttachmentKind } from './attachment-kind';
+export type { ComposerAttachmentKind } from '@mastra/playground-ui/domains/chat/attachments/attachment-kind';
 
 export interface ComposerAttachment {
   id: string;

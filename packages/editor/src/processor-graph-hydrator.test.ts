@@ -494,6 +494,78 @@ describe('hydrateProcessorGraph', () => {
 
       expect(createSpy).toHaveBeenCalledWith({ threshold: 0.8 });
     });
+
+    it('should throw when stored config fails the provider configSchema', async () => {
+      const createSpy = vi.fn().mockReturnValue({
+        id: 'strict-instance',
+        processInput: async ({ messages }: { messages: MastraDBMessage[] }) => messages,
+      });
+
+      const provider: ProcessorProvider = {
+        info: { id: 'strict-provider', name: 'Strict' },
+        configSchema: z.object({ threshold: z.number().min(0).max(1) }),
+        availablePhases: ['processInput'],
+        createProcessor: createSpy,
+      };
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'step',
+            step: {
+              id: 'strict-step',
+              providerId: 'strict-provider',
+              config: { threshold: 'high' },
+              enabledPhases: ['processInput'],
+            },
+          },
+        ],
+      };
+
+      expect(() =>
+        hydrateProcessorGraph(graph, 'input', {
+          providers: { 'strict-provider': provider },
+        }),
+      ).toThrow(/strict-step[\s\S]*strict-provider/);
+      expect(createSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass schema defaults and transforms to createProcessor', async () => {
+      const createSpy = vi.fn().mockReturnValue({
+        id: 'transform-instance',
+        processInput: async ({ messages }: { messages: MastraDBMessage[] }) => messages,
+      });
+
+      const provider: ProcessorProvider = {
+        info: { id: 'transform-provider', name: 'Transform' },
+        configSchema: z.object({
+          label: z.string().trim(),
+          retries: z.number().default(2),
+        }),
+        availablePhases: ['processInput'],
+        createProcessor: createSpy,
+      };
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'step',
+            step: {
+              id: 'transform-step',
+              providerId: 'transform-provider',
+              config: { label: ' input ' },
+              enabledPhases: ['processInput'],
+            },
+          },
+        ],
+      };
+
+      hydrateProcessorGraph(graph, 'input', {
+        providers: { 'transform-provider': provider },
+      });
+
+      expect(createSpy).toHaveBeenCalledWith({ label: 'input', retries: 2 });
+    });
   });
 
   describe('__registerMastra propagation', () => {

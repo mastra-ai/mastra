@@ -36,6 +36,8 @@ function createSession(
     signalAccepted?: Promise<{ accepted: true; action?: string }>;
     emitAgentEndDuringSignal?: boolean;
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
+    /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
+    omObservationError?: string;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
     /** The run that swallowed the dropped signal ends, freeing the session. */
@@ -65,8 +67,13 @@ function createSession(
 ) {
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
-  const agentEndListeners = new Set<(event: { type: string; reason?: string }) => void>();
+  const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: string }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
+    if (options?.omObservationError) {
+      for (const listener of agentEndListeners) {
+        listener({ type: 'om_observation_failed', error: options.omObservationError });
+      }
+    }
     for (const listener of agentEndListeners) {
       listener({ type: 'agent_end', reason });
     }
@@ -184,7 +191,7 @@ function createSession(
       if (redelivered) return { accepted: Promise.resolve({ accepted: true as const, action: 'wake' }) };
       return { accepted: options?.signalAccepted ?? Promise.resolve({ accepted: true, action: 'deliver' }) };
     }),
-    subscribe: vi.fn((listener: (event: { type: string; reason?: string }) => void) => {
+    subscribe: vi.fn((listener: (event: { type: string; reason?: string; error?: string }) => void) => {
       agentEndListeners.add(listener);
       return () => agentEndListeners.delete(listener);
     }),
@@ -1530,6 +1537,105 @@ describe('FactoryDecisionDispatcher', () => {
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
         status: 'retry',
         lastError: expect.stringContaining('ended in error'),
+      });
+    });
+
+    it('fails terminally when an abort follows a permanent OM provider rejection', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-permanent'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'HTTP 400: model not supported with ChatGPT account',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_configuration_invalid',
+        lastError: expect.stringContaining('model not supported'),
+      });
+    });
+
+    it('surfaces the real OM error but stays retryable for an ambiguous abort', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-transient'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'network timeout while observing',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('network timeout while observing'),
+      });
+    });
+
+    it('stays retryable when a bare 400 appears without HTTP status context', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-bare-400'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'observation retry failed after 400 attempts',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('observation retry failed after 400 attempts'),
+      });
+    });
+
+    it('reapplies managed memory settings when reusing an existing session', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-refresh-reuse'));
+      const { controller, session } = createSession();
+      await bindRole(storage, item.id, 'plan');
+      const refreshManagedMemorySettings = vi.fn(async () => {});
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        refreshManagedMemorySettings,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect(refreshManagedMemorySettings).toHaveBeenCalledWith(
+        expect.objectContaining({ binding: expect.objectContaining({ role: 'plan' }), session }),
+      );
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 1,
       });
     });
   });

@@ -13,13 +13,6 @@ This is the #1 way to validate changes here — ABOVE Playwright E2E.
 Use the `playground-msw-tests` skill for business hooks, data components,
 gating, and React Query flows.
 
-After tests pass, mutation testing is mandatory on exactly the production
-`.ts`/`.tsx` files the task changed (none changed = skip):
-`pnpm --filter ./packages/playground-ui test:mutate "src/foo.ts,src/bar.tsx"`.
-No dirs/globs, no unrelated files, no direct `stryker run`, no
-tests/fixtures/generated/config/docs. Strengthen the TDD/BDD tests to kill
-survivors (never weaken assertions); report truly equivalent/unreachable ones.
-
 Rules:
 
 - Drive the real @mastra/client-js + React Query stack; only mock the network.

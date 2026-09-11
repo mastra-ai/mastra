@@ -723,6 +723,27 @@ const attachedLoggerOwners = new WeakMap<object, unknown>();
 const SCHEDULER_WAKE_TOPIC = 'scheduler';
 const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 
+/**
+ * Registers and coordinates agents, workflows, storage, and other Mastra services.
+ *
+ * @example
+ * `yourAgent` is an agent you have already configured.
+ * ```typescript
+ * import { Mastra } from '@mastra/core/mastra';
+ *
+ * const mastra = new Mastra({
+ *   agents: { assistant: yourAgent },
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Mastra documentation](https://mastra.ai/reference/core/mastra-class)
+ * if packaged docs are unavailable.
+ */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,

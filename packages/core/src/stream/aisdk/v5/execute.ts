@@ -5,7 +5,7 @@ import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
-import { modelSupportsStructuredOutput } from '../../../llm/model/provider-registry';
+import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
@@ -278,7 +278,16 @@ export function execute<OUTPUT = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
+        let filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'timeout']);
+
+        // Capability-gated stripping of sampling params for models that reject them
+        // (e.g. Claude Sonnet 5, reasoning models). The model router applies this for
+        // router-id models, but provider instances passed directly (e.g. @ai-sdk/anthropic,
+        // @ai-sdk/amazon-bedrock) never enter the router, so strip here on the shared path
+        // too. Only drop on an explicit `false`; leave `true`/`undefined` untouched.
+        if (modelSupportsTemperature(modelRoute) === false) {
+          filteredModelSettings = omit(filteredModelSettings, ['temperature', 'topP', 'topK']);
+        }
 
         // Bound this single model call by modelSettings.timeout.stepMs, composed with
         // whatever signal the run already carries. The budget stays armed until the

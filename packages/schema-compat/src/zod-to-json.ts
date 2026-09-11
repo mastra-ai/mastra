@@ -113,7 +113,7 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
       // Normalize sibling fields (like properties/items) before returning
       const { anyOf, ...rest } = result;
       const fixedRest = fixAnyOfNullable(rest as JSONSchema7);
-      const fixedOther = fixAnyOfNullable(otherSchema as JSONSchema7);
+      const fixedOther = fixAnyOfNullable(otherSchema);
       return {
         ...fixedRest,
         ...fixedOther,
@@ -171,6 +171,26 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
 }
 
 /**
+ * Apply a strict-mode pass to every schema hoisted into `$defs`/`definitions`.
+ * zod-to-json-schema (v3 path, `$refStrategy: 'relative'`) lifts reused subschemas into
+ * these definition maps and references them via `$ref`, so the referenced schemas must be
+ * processed with the same pass as inline nodes or their unsupported keywords leak through.
+ */
+function applyToDefinitions(result: JSONSchema7, fn: (schema: JSONSchema7) => JSONSchema7): void {
+  for (const defKey of ['$defs', 'definitions'] as const) {
+    const defs = (result as Record<string, unknown>)[defKey];
+    if (defs && typeof defs === 'object' && !Array.isArray(defs)) {
+      (result as Record<string, unknown>)[defKey] = Object.fromEntries(
+        Object.entries(defs as Record<string, unknown>).map(([key, value]) => [
+          key,
+          typeof value === 'object' && value !== null ? fn(value as JSONSchema7) : value,
+        ]),
+      );
+    }
+  }
+}
+
+/**
  * Recursively ensures all properties in an object schema are included in the `required` array.
  * OpenAI's strict structured output mode requires every key in `properties` to also appear in `required`.
  *
@@ -195,12 +215,12 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
     if (Array.isArray(result.items)) {
       result.items = result.items.map(item => ensureAllPropertiesRequired(item as JSONSchema7));
     } else if (typeof result.items === 'object') {
-      result.items = ensureAllPropertiesRequired(result.items as JSONSchema7);
+      result.items = ensureAllPropertiesRequired(result.items);
     }
   }
 
   if (result.additionalProperties && typeof result.additionalProperties === 'object') {
-    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties as JSONSchema7);
+    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties);
   }
 
   if (result.anyOf && Array.isArray(result.anyOf)) {
@@ -213,6 +233,8 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
     result.allOf = result.allOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
   }
 
+  applyToDefinitions(result, ensureAllPropertiesRequired);
+
   return result;
 }
 
@@ -222,7 +244,277 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
  */
 export function prepareJsonSchemaForOpenAIStrictMode(schema: JSONSchema7): JSONSchema7 {
   const withRequired = ensureAllPropertiesRequired(schema);
-  return ensureAdditionalPropertiesFalse(withRequired);
+  const withoutAdditional = ensureAdditionalPropertiesFalse(withRequired);
+  return stripUnsupportedStrictModeKeywords(withoutAdditional);
+}
+
+// Keywords OpenAI Structured Outputs strict mode rejects and that carry no natural-language
+// intent worth preserving. They are removed silently.
+// @see https://platform.openai.com/docs/guides/structured-outputs#supported-schemas
+const STRICT_MODE_DROPPED_KEYWORDS = [
+  'contains',
+  'minContains',
+  'maxContains',
+  'minProperties',
+  'maxProperties',
+  'patternProperties',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+  // Conditional/dependency keywords: unsupported by OpenAI strict mode with no
+  // useful structural mapping, so they are dropped.
+  'not',
+  'if',
+  'then',
+  'else',
+  'dependentRequired',
+  'dependentSchemas',
+] as const;
+
+function isDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => isDeepEqual(v, b[i]));
+  }
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  return (
+    keysA.length === keysB.length &&
+    keysA.every(
+      k => Object.hasOwn(b, k) && isDeepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+    )
+  );
+}
+
+/**
+ * Merge `allOf` subschemas into the containing node. OpenAI strict mode rejects `allOf`
+ * (only `anyOf` composition is supported), so the intersection is flattened into a single
+ * node. Every keyword from every branch is hoisted so nothing (e.g. `enum`, `const`,
+ * `items`, `anyOf`) is silently discarded:
+ *
+ * - `properties` are unioned; a property present in more than one branch must be identical.
+ * - `required` is unioned. `additionalProperties: false` wins. Descriptions are concatenated.
+ * - Any other keyword must either be absent from the target or deep-equal to the branch value.
+ *
+ * Intersections that cannot be represented this way (conflicting property schemas, types,
+ * enums, nested `anyOf`, ...) are rejected with an error instead of producing a schema that
+ * accepts values the original would have rejected. This mirrors the tool-path behaviour in
+ * SchemaCompatLayer ("Cannot flatten intersections with overlapping keys").
+ */
+function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, subschemas: JSONSchema7[]): void {
+  const mergedProps: Record<string, JSONSchema7> = { ...((target.properties as Record<string, JSONSchema7>) ?? {}) };
+  const requiredSet = new Set<string>(Array.isArray(target.required) ? target.required : []);
+  const descriptions: string[] =
+    typeof target.description === 'string' && target.description ? [target.description] : [];
+
+  for (const sub of subschemas) {
+    if (!sub || typeof sub !== 'object') {
+      continue;
+    }
+    for (const [key, value] of Object.entries(sub as Record<string, unknown>)) {
+      switch (key) {
+        case 'properties': {
+          for (const [propName, propSchema] of Object.entries(value as Record<string, JSONSchema7>)) {
+            if (propName in mergedProps && !isDeepEqual(mergedProps[propName], propSchema)) {
+              throw new Error(
+                `Cannot flatten allOf for OpenAI strict mode: property "${propName}" is defined differently in multiple branches`,
+              );
+            }
+            mergedProps[propName] = propSchema;
+          }
+          break;
+        }
+        case 'required': {
+          if (Array.isArray(value)) {
+            for (const name of value) {
+              requiredSet.add(name);
+            }
+          }
+          break;
+        }
+        case 'additionalProperties': {
+          if (value === false) {
+            target.additionalProperties = false;
+          }
+          break;
+        }
+        case 'description': {
+          if (typeof value === 'string' && value) {
+            descriptions.push(value);
+          }
+          break;
+        }
+        default: {
+          if (target[key] === undefined) {
+            target[key] = value;
+          } else if (!isDeepEqual(target[key], value)) {
+            throw new Error(`Cannot flatten allOf for OpenAI strict mode: conflicting "${key}" values across branches`);
+          }
+        }
+      }
+    }
+  }
+
+  if (Object.keys(mergedProps).length) {
+    target.properties = mergedProps;
+  }
+  if (requiredSet.size) {
+    target.required = [...requiredSet];
+  }
+  if (descriptions.length) {
+    target.description = descriptions.join(' ');
+  }
+}
+
+/**
+ * Merge constraint phrases into a schema node's description.
+ * Mirrors SchemaCompatLayer.mergeParameterDescription phrasing so the strict-mode
+ * output path degrades identically to the tool path.
+ */
+function appendConstraintsToDescription(description: string | undefined, constraints: string[]): string | undefined {
+  if (constraints.length === 0) {
+    return description;
+  }
+  const suffix = constraints.join(', ');
+  return description ? `${description} (${suffix})` : suffix;
+}
+
+/**
+ * Recursively remove JSON Schema validation keywords that OpenAI strict mode rejects.
+ * Constraints with useful intent (length/number/pattern/format/uniqueness bounds) are folded
+ * into the node's `description` — matching how the tool-path SchemaCompatLayer degrades them
+ * in schema-compatibility.ts — while purely structural unsupported keywords are dropped.
+ */
+function stripUnsupportedStrictModeKeywords(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema } as JSONSchema7 & Record<string, unknown>;
+  const constraints: string[] = [];
+
+  // Array bounds
+  const { minItems, maxItems } = result;
+  if (minItems !== undefined && maxItems !== undefined && minItems === maxItems) {
+    constraints.push(`exact length ${minItems}`);
+  } else {
+    if (minItems !== undefined) {
+      constraints.push(`minimum length ${minItems}`);
+    }
+    if (maxItems !== undefined) {
+      constraints.push(`maximum length ${maxItems}`);
+    }
+  }
+  delete result.minItems;
+  delete result.maxItems;
+
+  if (result.uniqueItems === true) {
+    constraints.push('all items must be unique');
+  }
+  delete result.uniqueItems;
+
+  // String bounds
+  if (result.minLength !== undefined) {
+    constraints.push(`minimum length ${result.minLength}`);
+    delete result.minLength;
+  }
+  if (result.maxLength !== undefined) {
+    constraints.push(`maximum length ${result.maxLength}`);
+    delete result.maxLength;
+  }
+  if (result.format !== undefined) {
+    constraints.push(`a valid ${result.format}`);
+    delete result.format;
+  }
+  if (result.pattern !== undefined) {
+    constraints.push(`input must match this regex ${result.pattern}`);
+    delete result.pattern;
+  }
+
+  // Number bounds
+  if (result.minimum !== undefined) {
+    if (result.minimum !== Number.MIN_SAFE_INTEGER) {
+      constraints.push(`greater than or equal to ${result.minimum}`);
+    }
+    delete result.minimum;
+  }
+  if (result.maximum !== undefined) {
+    if (result.maximum !== Number.MAX_SAFE_INTEGER) {
+      constraints.push(`lower than or equal to ${result.maximum}`);
+    }
+    delete result.maximum;
+  }
+  if (result.exclusiveMinimum !== undefined) {
+    constraints.push(`greater than ${result.exclusiveMinimum}`);
+    delete result.exclusiveMinimum;
+  }
+  if (result.exclusiveMaximum !== undefined) {
+    constraints.push(`lower than ${result.exclusiveMaximum}`);
+    delete result.exclusiveMaximum;
+  }
+  if (result.multipleOf !== undefined) {
+    constraints.push(`multiple of ${result.multipleOf}`);
+    delete result.multipleOf;
+  }
+
+  // Structural unsupported keywords with no useful natural-language mapping
+  for (const keyword of STRICT_MODE_DROPPED_KEYWORDS) {
+    delete result[keyword];
+  }
+
+  if (constraints.length) {
+    result.description = appendConstraintsToDescription(result.description, constraints);
+  }
+
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [
+        key,
+        stripUnsupportedStrictModeKeywords(value as JSONSchema7),
+      ]),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => stripUnsupportedStrictModeKeywords(item as JSONSchema7));
+    } else if (typeof result.items === 'object') {
+      result.items = stripUnsupportedStrictModeKeywords(result.items as JSONSchema7);
+    }
+  }
+
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = stripUnsupportedStrictModeKeywords(result.additionalProperties as JSONSchema7);
+  }
+
+  // anyOf is the only composition keyword OpenAI strict mode supports; keep it, strip its branches.
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+  }
+
+  // oneOf is unsupported; anyOf is the documented replacement, so convert it.
+  // When both are present the schema is a conjunction (value must satisfy both lists);
+  // concatenating the branches would turn that into a union, so reject instead.
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    if (Array.isArray(result.anyOf)) {
+      throw new Error(
+        'Cannot convert schema for OpenAI strict mode: "oneOf" and "anyOf" on the same node cannot be merged without changing semantics',
+      );
+    }
+    result.anyOf = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    delete result.oneOf;
+  }
+
+  // allOf is unsupported; flatten the intersection into the containing node.
+  if (result.allOf && Array.isArray(result.allOf)) {
+    const merged = result.allOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    delete result.allOf;
+    mergeAllOfSubschemas(result, merged);
+  }
+
+  applyToDefinitions(result, stripUnsupportedStrictModeKeywords);
+
+  return result;
 }
 
 function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
@@ -249,7 +541,7 @@ function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
     if (Array.isArray(result.items)) {
       result.items = result.items.map(item => ensureAdditionalPropertiesFalse(item as JSONSchema7));
     } else if (typeof result.items === 'object') {
-      result.items = ensureAdditionalPropertiesFalse(result.items as JSONSchema7);
+      result.items = ensureAdditionalPropertiesFalse(result.items);
     }
   }
 
@@ -262,6 +554,8 @@ function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
   if (result.allOf && Array.isArray(result.allOf)) {
     result.allOf = result.allOf.map(s => ensureAdditionalPropertiesFalse(s as JSONSchema7));
   }
+
+  applyToDefinitions(result, ensureAdditionalPropertiesFalse);
 
   return result;
 }
