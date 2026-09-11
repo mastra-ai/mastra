@@ -2,6 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import {
+  ImageEntry,
+  TxtEntry,
+  PdfEntry,
+  FileChipEntry,
+} from '@mastra/playground-ui/domains/chat/attachments/attachment-preview-dialog';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui/utils/file';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
@@ -9,7 +15,6 @@ import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
-import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from './attachment-preview-dialog';
 import { useComposerAttachments } from './composer-attachments';
 import type { ComposerAttachment } from './composer-attachments';
 

@@ -4,6 +4,22 @@ import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { AssistantTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/assistant-text-part-renderer';
+import { DataPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/data-part-renderer';
+import { messageTextKind } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text-kind';
+import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
+import { messageStatusRenderers } from '@mastra/playground-ui/domains/chat/messages/renderers/status-renderers';
+import { readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { UserTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-text-part-renderer';
+import {
+  getSignalType,
+  isRecord,
+  isSignalData,
+  isUserSignalType,
+  toReactiveSignalData,
+} from '@mastra/playground-ui/domains/chat/messages/signal-data';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -19,16 +35,6 @@ import { badgeStatus } from '../tools/tool-card-kind';
 import type { ToolCardContext } from '../tools/tool-card-kind';
 import { collectToolGroups } from '../tools/tool-groups';
 import { DatasetSaveAction } from './dataset-save-action';
-import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
-import { DataPartRenderer } from './renderers/data-part-renderer';
-import { messageTextKind } from './renderers/message-text-kind';
-import { ReasoningPartRenderer } from './renderers/reasoning-part-renderer';
-import { messageStatusRenderers } from './renderers/status-renderers';
-import { readToolPart } from './renderers/tool-part';
-import type { ToolPart } from './renderers/tool-part';
-import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
-import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
-import { getSignalType, isRecord, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 

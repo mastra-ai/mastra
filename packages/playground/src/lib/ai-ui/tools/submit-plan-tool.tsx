@@ -17,8 +17,8 @@ import {
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useToolCall } from '@/services/tool-call-provider';
 
 export interface SubmitPlanToolProps {
