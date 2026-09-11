@@ -443,10 +443,19 @@ describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
       const num = (p: string) => Number(Object.values((db.pragma(p) as any[])[0])[0]);
       const integrity = String(Object.values((db.pragma('integrity_check') as any[])[0])[0]);
       const rows = Number((db.prepare('SELECT COUNT(*) AS n FROM t').get() as any).n);
-      const topK = db
-        .prepare(`SELECT v.id FROM vector_top_k('t_vector_idx', (SELECT embedding FROM t LIMIT 1), 5) AS v`)
-        .all() as unknown[];
-      return { integrity, rows, topK: topK.length, pageCount: num('page_count'), freelist: num('freelist_count') };
+      // A corrupted index can throw here rather than return nothing; treat that
+      // as "search is broken" so the failure stays a clean assertion.
+      let topK = 0;
+      try {
+        topK = (
+          db
+            .prepare(`SELECT v.id FROM vector_top_k('t_vector_idx', (SELECT embedding FROM t LIMIT 1), 5) AS v`)
+            .all() as unknown[]
+        ).length;
+      } catch {
+        topK = 0;
+      }
+      return { integrity, rows, topK, pageCount: num('page_count'), freelist: num('freelist_count') };
     } finally {
       db.close();
     }

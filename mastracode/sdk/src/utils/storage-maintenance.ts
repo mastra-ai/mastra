@@ -136,6 +136,8 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
  * statement, and a statement opened before the exclusivity probe pins the
  * connection past close() (libsql-js#228) and makes the probe's
  * `journal_mode = DELETE` fail with SQLITE_BUSY on files nobody else has open.
+ * The caller's connection must therefore already be in rollback mode — a
+ * pinned statement holds no lock there.
  *
  * Matched by schema, not filename — the main database can carry vector indexes
  * too. SQLite stores `CREATE INDEX` SQL verbatim, so the match is deliberately
