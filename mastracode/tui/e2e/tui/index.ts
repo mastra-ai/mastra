@@ -3,6 +3,7 @@ import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
 import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
+import { agentsMdAutoloadScenario } from './agents-md-autoload.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
@@ -12,6 +13,7 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
+import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserModelPickerScenario } from './browser-model-picker.js';
@@ -162,6 +164,7 @@ import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
+import { subagentsCommandScenario } from './subagents-command.js';
 import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
@@ -197,6 +200,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
   'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
   'agent-connections-tool-flow': agentConnectionsToolFlowScenario,
+  'agents-md-autoload': agentsMdAutoloadScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
@@ -270,6 +274,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'mcp-skipped-validation': mcpSkippedValidationScenario,
+  'bedrock-model-discovery': bedrockModelDiscoveryScenario,
   'model-search': modelSearchScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
@@ -350,6 +355,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,
+  'subagents-command': subagentsCommandScenario,
   'subagent-delegation': subagentDelegationScenario,
   'subagent-plan-execute-tools': subagentPlanExecuteToolsScenario,
   'subagent-model-startup-restore': subagentModelStartupRestoreScenario,

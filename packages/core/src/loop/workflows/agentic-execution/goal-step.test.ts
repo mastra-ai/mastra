@@ -441,7 +441,7 @@ describe('goal step waiting semantics', () => {
     expect(done.record.pausedReason).toBeUndefined();
   });
 
-  it('emits a goal-judge signal through the current loop signal path on continue', async () => {
+  it('adds a goal-judge signal and exposes the system reminder in the live stream', async () => {
     const { messages, dataParts, inputData } = await runGoalStep('continue', makeRecord({ runsUsed: 1, maxRuns: 10 }));
 
     expect(messages).toHaveLength(1);

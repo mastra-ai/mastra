@@ -2,6 +2,7 @@ import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import { attentionKindSummaries } from '../../../e2e/ui/attention';
 import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -15,15 +16,7 @@ const PAST_ONE_POLL_MS = ATTENTION_POLL_MS + 2_000;
 function attentionHandler(counter: { requests: number }) {
   return http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/attention`, () => {
     counter.requests += 1;
-    return HttpResponse.json({
-      items: [],
-      openCount: 0,
-      approvalCount: 0,
-      badgeCount: 0,
-      unreadCount: 0,
-      activityUnreadCount: 0,
-      hasMore: false,
-    });
+    return HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false });
   });
 }
 

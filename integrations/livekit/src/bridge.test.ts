@@ -103,6 +103,20 @@ describe('MastraVoiceAgent.llmNode', () => {
     expect((options.requestContext as { get: (k: string) => unknown }).get('tenant')).toBe('acme');
   });
 
+  it('forwards memory.options (e.g. readOnly) to agent.stream', async () => {
+    const { agent, stream } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'ok' } }]);
+    const voiceAgent = new MastraVoiceAgent({
+      agent,
+      memory: { thread: 'thread-1', resource: 'user-1', options: { readOnly: true } },
+    });
+    const ctx = llm.ChatContext.empty();
+    ctx.addMessage({ role: 'user', content: 'question', id: 'u1' });
+    await readAll((await voiceAgent.llmNode(ctx, toolCtx, modelSettings))!);
+
+    const [, options] = stream.mock.calls[0]! as [unknown, Record<string, unknown>];
+    expect(options.memory).toEqual({ thread: 'thread-1', resource: 'user-1', options: { readOnly: true } });
+  });
+
   it('sends the full LiveKit context when memory is disabled', async () => {
     const { agent, stream } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'ok' } }]);
     const voiceAgent = new MastraVoiceAgent({ agent, memory: false });

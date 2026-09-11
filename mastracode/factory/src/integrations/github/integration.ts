@@ -47,6 +47,8 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
+import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -154,6 +156,8 @@ export interface ListRepoOpenIssuesOptions {
 }
 
 export interface GithubIntegrationConfig {
+  /** Replace an event handler, or disable it with null; omitted events keep defaults. */
+  rules?: GithubRuleOverrides;
   /** GitHub App id (the numeric id, as a string). */
   appId: string;
   /**
@@ -188,6 +192,11 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
+  readonly #rules: GithubEventRules;
+
+  get rules(): GithubEventRules {
+    return this.#rules;
+  }
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
@@ -365,6 +374,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   constructor(config: GithubIntegrationConfig) {
+    this.#rules = resolveGithubRules(config.rules);
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
     if (missing.length > 0) {
       throw new Error(

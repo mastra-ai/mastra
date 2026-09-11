@@ -20,6 +20,7 @@ export {
   SandboxExecutionError,
   SandboxTimeoutError,
   SandboxNotReadyError,
+  SandboxAbortError,
   IsolationUnavailableError,
   MountError,
   MountNotSupportedError,
@@ -78,6 +79,11 @@ export type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  WalkEntry,
+  WalkOptions,
+  FilesystemGrepOptions,
+  FilesystemGrepMatch,
+  FilesystemGrepResult,
 } from './filesystem';
 
 // Mount types (provider-specific configs are in their respective packages)
@@ -93,6 +99,7 @@ export type {
   ComputerScreenSize,
   ComputerPosition,
   SandboxFileInput,
+  WriteFilesOptions,
   SandboxCloneOptions,
   SandboxStartOutcome,
   SandboxStartResult,

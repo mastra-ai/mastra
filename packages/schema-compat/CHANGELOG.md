@@ -1,5 +1,33 @@
 # @mastra/schema-compat
 
+## 1.3.10-alpha.0
+
+### Patch Changes
+
+- Fixed structured output 400s on OpenAI strict endpoints by stripping JSON Schema validation keywords that strict mode rejects. `prepareJsonSchemaForOpenAIStrictMode` now recursively removes these keywords — including inside `$defs`/`definitions` referenced schemas — and folds their intent into each node's `description`, matching how the tool path already degrades constraints. ([#23547](https://github.com/mastra-ai/mastra/pull/23547))
+
+  **Keywords removed**
+
+  - Array: `uniqueItems`, `minItems`, `maxItems`
+  - String: `minLength`, `maxLength`, `pattern`, `format`
+  - Number: `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
+  - Structural (dropped, no useful mapping): `contains`, `minContains`, `maxContains`, `minProperties`, `maxProperties`, `patternProperties`, `unevaluatedItems`, `unevaluatedProperties`
+  - Composition/conditional: `allOf` is flattened into the containing node, `oneOf` is converted to the supported `anyOf`, and `not`/`if`/`then`/`else`/`dependentRequired`/`dependentSchemas` are dropped
+
+  Referenced schemas hoisted into `$defs`/`definitions` receive the same required-property, `additionalProperties: false`, and keyword handling as inline schemas.
+
+## 1.3.9
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
+## 1.3.9-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
 ## 1.3.8
 
 ### Patch Changes

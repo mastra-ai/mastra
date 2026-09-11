@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
+import { CopyIcon, DownloadIcon, LockIcon, CircleSlashIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';
 import { getSkillOrigin } from '@/domains/agent-builder/utils/skill-origin';
@@ -27,9 +27,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
 
   if (filtered.length === 0) {
     return (
-      <div className="flex items-center justify-center pt-10">
+      <div className="flex items-center-safe justify-center-safe">
         <EmptyState
-          iconSlot={<SearchIcon className="text-neutral3 h-8 w-8" />}
+          iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
           titleSlot="No skills match your search"
           descriptionSlot="Try a different name or description."
         />
@@ -69,7 +69,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className="bg-surface5 text-neutral4 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          className="bg-surface5 text-neutral4 text-ui-xs inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-medium"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >

@@ -195,7 +195,7 @@ await assistant.generate('Help me plan the next project milestone.', {
 
 The example assumes storage is configured on the registered Mastra instance or directly on `Memory`. `lastMessages` controls how many recent messages Mastra loads from the thread. The default is 10.
 
-Message history works well for shorter conversations where recent turns contain the context the agent needs. For long-running conversations, Mastra recommends [Observational Memory](/docs/memory/observational-memory), which keeps recent conversation available and turns older history into a dense observation log.
+Message history works well for shorter conversations where recent turns contain the context the agent needs. Because the `lastMessages` window slides forward on every request, each turn past the limit removes the oldest message from the start of the prompt and invalidates the provider prompt cache. For long-running conversations, Mastra recommends [Observational Memory](/docs/memory/observational-memory), which keeps recent conversation available and turns older history into a dense observation log while keeping the prompt prefix stable for caching.
 
 ## Observational Memory
 

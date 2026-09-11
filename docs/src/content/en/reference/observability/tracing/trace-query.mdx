@@ -1,0 +1,385 @@
+---
+title: 'Advanced trace queries'
+description: 'Query completed logical traces with recursive predicates, related span and score conditions, grouping, ordering, and cursor pagination.'
+packages:
+  - '@mastra/client-js'
+  - '@mastra/server'
+---
+
+# Advanced trace queries
+
+Use `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span or score records. The endpoint returns a fixed lightweight trace projection, or distinct thread IDs when you group by `threadId`.
+
+The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support advanced trace queries.
+
+## Query traces with the client SDK
+
+Pass the query to `queryTraces()`:
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    scores: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+          { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: '2.1.0' } },
+          { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+        ],
+      },
+    },
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 25 },
+})
+```
+
+A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId`, `scorerVersion`, and `score` must match on the same score record. A `none` clause uses anti-existence semantics: it matches when no related record satisfies its complete nested predicate. A trace with no related scores therefore matches `scores.none`.
+
+Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans and scores can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+
+## Send an HTTP request
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/traces/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-08-01T00:00:00.000Z",
+      "to": "2026-08-08T00:00:00.000Z"
+    },
+    "where": {
+      "spans": {
+        "some": {
+          "op": "and",
+          "args": [
+            { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+            { "op": "exists", "path": "error" }
+          ]
+        }
+      }
+    }
+  }'
+```
+
+## Request fields
+
+| Field | Required | Description |
+| - | - | - |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive, `to` is exclusive, and the range can span at most 31 days. Both values must be ISO timestamps. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some`, `spans.none`, `scores.some`, and `scores.none`. |
+| `group` | No | Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. |
+| `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group`. |
+| `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+
+Unknown fields are rejected. The request can't select a projection, declare joins, or control authorization. Request bodies are limited to 256 KiB.
+
+## Query limits
+
+The planner rejects a query before storage execution when it exceeds any of these limits:
+
+| Input | Maximum |
+| - | - |
+| Root `timeRange` | 31 days |
+| Predicate nesting depth | 12 levels |
+| Predicate nodes | 100 |
+| Related `spans` and `scores` clauses | 8 total |
+| Values in one `in` or `notIn` set | 100 |
+| Comparison literals and membership values | 1,000 total |
+| String literal | 4,096 UTF-8 bytes |
+| Raw predicate path | 128 UTF-8 bytes |
+| `page.limit` | 1,000 |
+| HTTP request body | 256 KiB |
+
+Each comparison literal counts as one literal. Each member of an `in` or `notIn` set also counts as one literal, even when the set is within its per-set limit.
+
+Hono and Fastify enforce the request-body limit before JSON parsing. Express and Elysia reject an oversized body before the route handler or storage runs, but the host framework may already have parsed a request without a reliable `Content-Length` header. Configure the host application's JSON parser or body limit when you need a hard pre-parse memory ceiling.
+
+## Fields and operators
+
+| Predicate context | Fields | Operators |
+| - | - | - |
+| Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `startedAt`, `endedAt` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Span | `error` | `exists`, `notExists` |
+| Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Score | `score`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Score | `spanId` | `exists`, `notExists` |
+| Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `comment` | `exists`, `notExists` |
+
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
+
+String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by span properties
+
+Every condition inside one `spans.some` or `spans.none` clause applies to the same current span. For example, this predicate finds a failed tool span whose name is `medication_lookup`; a matching name on one span and an error on another don't satisfy it:
+
+```typescript
+const failedMedicationLookup = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+        { op: 'exists', path: 'error' },
+      ],
+    },
+  },
+}
+```
+
+Use `status` for the derived `success` or `error` outcome. Use `error` when you only need to test whether error details are present.
+
+`durationMs` is the span's elapsed time in milliseconds. Span `startedAt` and `endedAt` conditions filter related spans independently of the top-level root `timeRange`:
+
+```typescript
+const slowModelCalls = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+        {
+          op: 'gte',
+          left: { path: 'startedAt' },
+          right: { literal: '2026-07-15T00:00:00.000Z' },
+        },
+      ],
+    },
+  },
+}
+```
+
+`model` and `provider` read the canonical `attributes.model` and `attributes.provider` span attributes. Only stored string values are queryable; missing, null, and non-string values count as missing.
+
+```typescript
+const selectedModel = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        {
+          op: 'eq',
+          left: { path: 'model' },
+          right: { literal: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+        },
+        { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+      ],
+    },
+  },
+}
+```
+
+Use generic entity fields for tool and retrieval identity. The version fields let one clause qualify the same span by its entity lineage:
+
+```typescript
+const versionedRetrieval = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'entityType' }, right: { literal: 'rag_ingestion' } },
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication-index' } },
+        { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'index-v3' } },
+        { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v2' } },
+      ],
+    },
+  },
+}
+```
+
+### Filter by score time
+
+Score timestamps are independent of the required top-level trace `timeRange`. The top-level range selects trace candidates by trace start time. A nested `timestamp` predicate limits related score records:
+
+```typescript
+const query = {
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    scores: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'scoreSource' }, right: { literal: 'automated' } },
+          {
+            op: 'gte',
+            left: { path: 'timestamp' },
+            right: { literal: '2026-07-15T00:00:00.000Z' },
+          },
+          {
+            op: 'lt',
+            left: { path: 'timestamp' },
+            right: { literal: '2026-08-01T00:00:00.000Z' },
+          },
+        ],
+      },
+    },
+  },
+}
+```
+
+### Filter by span anchoring
+
+Use `spanId` only to test whether a score targets a span. The predicate doesn't join the score to a matching span predicate:
+
+```typescript
+// At least one score targets a span.
+const anchoredToSpanWhere = { scores: { some: { op: 'exists', path: 'spanId' } } }
+
+// At least one score applies to the trace rather than a span.
+const traceLevelScoreWhere = { scores: { some: { op: 'notExists', path: 'spanId' } } }
+```
+
+The deprecated `source` field and `scorerName` aren't available as score predicate fields. Use the canonical `scoreSource` and `scorerId` fields.
+
+### Filter by metadata
+
+Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
+
+```typescript
+const messageTrace = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+    { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+    { op: 'exists', path: 'metadata.protocolVersion' },
+    {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'run-456' } },
+        { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'trace-789' } },
+      ],
+    },
+    { op: 'not', arg: { op: 'exists', path: 'metadata.parentMessageId' } },
+  ],
+}
+```
+
+The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
+
+Metadata fields aren't available for grouping or field discovery.
+
+### Filter by feedback
+
+Every condition inside one `feedback.some` or `feedback.none` clause applies to the same current feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
+
+```typescript
+const negativePatientRating = {
+  feedback: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+        { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+      ],
+    },
+  },
+}
+```
+
+Strict stored-value types are the portable contract for feedback predicates. PostgreSQL and ClickHouse distinguish numeric `3` from textual `'3'` for equality and ordered comparisons. DuckDB currently persists feedback values as `VARCHAR`, so numeric-looking strings may be coerced for equality and ordered numeric predicates. OBS-306 will remove this DuckDB exception through typed persistence. Ordered operators require a finite numeric literal. `eq` and `ne` accept one string or number, while `in` and `notIn` require a non-empty set containing only strings or only numbers. `exists` and `notExists` test for either value type.
+
+Use `none` to select traces without a matching record. Traces with no feedback also match:
+
+```typescript
+const missingClinicianReview = {
+  feedback: {
+    none: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+      ],
+    },
+  },
+}
+```
+
+Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
+
+## Responses
+
+An ungrouped query returns only lightweight completed traces:
+
+```json
+{
+  "traces": [
+    {
+      "traceId": "trace-123",
+      "rootSpanId": "span-123",
+      "threadId": "thread-123",
+      "resourceId": "resource-123",
+      "startedAt": "2026-08-03T10:00:00.000Z",
+      "endedAt": "2026-08-03T10:00:01.000Z",
+      "entityName": "support-agent",
+      "entityType": "agent",
+      "environment": "production",
+      "status": "success"
+    }
+  ],
+  "page": { "next": null }
+}
+```
+
+A grouped query returns distinct non-null thread IDs in ascending order:
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  group: { by: ['threadId'] },
+})
+// { groups: [{ threadId: 'thread-123' }], page: { next: null } }
+```
+
+Related evidence isn't embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
+
+## Pagination and errors
+
+Ordering is deterministic. Ungrouped ordering appends `traceId` ascending as a tie-breaker. Grouped queries always order by `threadId` ascending.
+
+Cursors are bound to the accepted normalized query shape and ordering. Reusing a cursor after changing the time range, predicates, grouping, or ordering returns `409`. A malformed cursor returns `400`.
+
+Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
+
+PostgreSQL and ClickHouse stop an advanced trace query after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
+
+| Status | Meaning |
+| - | - |
+| `400` | Malformed JSON or malformed cursor. |
+| `409` | The cursor doesn't match the query. |
+| `413` | The request body exceeds 256 KiB. |
+| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. |
+| `501` | The configured observability store doesn't support advanced trace queries. |
+| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. |
+
+## Limitations
+
+The endpoint returns completed traces only. It doesn't support running traces, custom projections, embedded evidence, summaries, aggregations, grouping by fields other than `threadId`, or conditions over an entire group.
+
+## Related
+
+- [Client SDK observability reference](/reference/client-js/observability)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Span interfaces](/reference/observability/tracing/spans)

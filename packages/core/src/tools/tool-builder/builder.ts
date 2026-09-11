@@ -717,6 +717,7 @@ export class CoreToolBuilder extends MastraBase {
                 resourceId,
                 outputWriter: options.outputWriter || execOptions.outputWriter,
                 flushMessages: execOptions.flushMessages,
+                ...(execOptions.isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
             };
           } else if (isWorkflowExecution) {
@@ -826,6 +827,7 @@ export class CoreToolBuilder extends MastraBase {
           ? {
               mcpServer: mcpMeta.serverName,
               serverVersion: mcpMeta.serverVersion,
+              toolType: logType || 'tool',
               toolDescription: options.description,
               toolCallId: execOptions?.toolCallId,
             }

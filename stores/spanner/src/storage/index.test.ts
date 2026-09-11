@@ -737,6 +737,47 @@ if (ENABLE_TESTS) {
       );
     });
 
+    it('listExperimentResults filters by tags (all must match)', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      const now = Date.now();
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'only-a', tags: ['a'], status: 'reviewed', startedAt: new Date(now) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'a-and-b', tags: ['a', 'b'], startedAt: new Date(now + 1000) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'only-b', tags: ['b'], startedAt: new Date(now + 2000) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'untagged', tags: null, startedAt: new Date(now + 3000) }),
+      );
+      const pagination = { page: 0, perPage: 10 };
+
+      const both = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['a', 'b'], pagination });
+      expect(both.results.map(r => r.itemId)).toEqual(['a-and-b']);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['a'], pagination });
+      expect(onlyA.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+      expect(onlyA.pagination.total).toBe(2);
+
+      const withStatus = await experiments.listExperimentResults({
+        experimentId: exp.id,
+        tags: ['a'],
+        status: 'reviewed',
+        pagination,
+      });
+      expect(withStatus.results.map(r => r.itemId)).toEqual(['only-a']);
+
+      const empty = await experiments.listExperimentResults({ experimentId: exp.id, tags: [], pagination });
+      expect(empty.pagination.total).toBe(4);
+
+      const missing = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['nope'], pagination });
+      expect(missing.results).toHaveLength(0);
+      expect(missing.pagination.total).toBe(0);
+    });
+
     it('updateExperimentResult sets review status/tags/comment and is a no-op without changes', async () => {
       const exp = await experiments.createExperiment(baseExp());
       const r = await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1' }));
@@ -5741,6 +5782,21 @@ if (ENABLE_TESTS) {
           expect(result.metrics[0]!.timestamp.getTime()).toBeGreaterThanOrEqual(
             result.metrics[result.metrics.length - 1]!.timestamp.getTime(),
           );
+        });
+
+        it('batchDeleteTraces deletes trace-linked metrics and preserves unrelated or trace-less metrics', async () => {
+          await observability.batchCreateMetrics({
+            metrics: [
+              makeMetric({ metricId: 'metric-delete', traceId: 'trace-delete' }),
+              makeMetric({ metricId: 'metric-keep', traceId: 'trace-keep' }),
+              makeMetric({ metricId: 'metric-trace-less', traceId: null }),
+            ],
+          });
+
+          await observability.batchDeleteTraces({ traceIds: ['trace-delete'] });
+
+          const result = await observability.listMetrics({ pagination: { page: 0, perPage: 50 } });
+          expect(result.metrics.map(metric => metric.metricId).sort()).toEqual(['metric-keep', 'metric-trace-less']);
         });
 
         it('round-trips JSON columns (labels, tags, costMetadata, metadata, scope)', async () => {

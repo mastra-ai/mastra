@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Link, Outlet, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   DatasetItemsView,
+  DatasetTagsEditor,
   DatasetVersions,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
@@ -118,12 +119,13 @@ function DatasetPage() {
 
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full" className="grid-rows-[1fr] p-0">
           <PageLayout.MainArea>
             <DatasetItemsView
               datasetId={datasetId}
               onAddItemClick={() => setAddItemDialogOpen(true)}
+              belowToolbarSlot={<DatasetTagsEditor datasetId={datasetId} />}
               leftSlot={
                 <span className="text-ui-sm text-neutral3 mr-3 whitespace-nowrap">
                   {dataset?.createdAt ? `Created ${format(new Date(dataset.createdAt), 'MMM d')}` : ''}

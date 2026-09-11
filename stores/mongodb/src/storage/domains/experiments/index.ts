@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ExperimentsStorage,
   createStorageErrorId,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   normalizePerPage,
@@ -30,6 +31,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import type { ClientSession } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { cutoffFor, DEFAULT_PRUNE_BATCH_SIZE, ensureAnchorIndex, runBatchedDelete } from '../../retention';
@@ -97,7 +99,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     itemDatasetVersion: row.itemDatasetVersion != null ? Number(row.itemDatasetVersion) : null,
     organizationId: (row.organizationId as string | null) ?? null,
     projectId: (row.projectId as string | null) ?? null,
-    input: parseJsonField(row.input),
+    input: row.input === null ? null : parseJsonField(row.input),
     output: parseJsonField(row.output) ?? null,
     groundTruth: parseJsonField(row.groundTruth) ?? null,
     metadata: parseJsonField(row.metadata) ?? null,
@@ -147,6 +149,34 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
+  }
+
+  async #withPurgeBarrier<T>(
+    experimentId: string,
+    itemId: string,
+    fn: (session: ClientSession | undefined, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
+  ): Promise<T> {
+    const experiments = await this.getCollection(TABLE_EXPERIMENTS);
+    const items = await this.getCollection(TABLE_DATASET_ITEMS);
+    return this.#connector.withTransaction(async session => {
+      const experiment = await experiments.findOne<{ datasetId?: string | null }>({ id: experimentId }, { session });
+      const datasetId = experiment?.datasetId ?? null;
+      let purgeMetadata: Record<string, unknown> | null = null;
+      if (datasetId) {
+        const item = (await items.findOneAndUpdate(
+          { id: itemId, datasetId },
+          { $inc: { purgeBarrierRevision: 1 } },
+          {
+            projection: { metadata: 1 },
+            returnDocument: 'after',
+            session,
+            sort: { datasetVersion: -1 },
+          },
+        )) as { metadata?: Record<string, unknown> } | null;
+        purgeMetadata = item?.metadata?.__purged === true ? item.metadata : null;
+      }
+      return fn(session, purgeMetadata);
+    });
   }
 
   /**
@@ -521,55 +551,34 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     const id = input.id ?? randomUUID();
     const now = new Date();
 
-    const doc = {
-      id,
-      experimentId: input.experimentId,
-      itemId: input.itemId,
-      itemDatasetVersion: input.itemDatasetVersion ?? null,
-      organizationId: input.organizationId ?? null,
-      projectId: input.projectId ?? null,
-      input: input.input,
-      output: input.output ?? null,
-      groundTruth: input.groundTruth ?? null,
-      metadata: input.metadata ?? null,
-      error: input.error ?? null,
-      startedAt: input.startedAt,
-      completedAt: input.completedAt,
-      retryCount: input.retryCount,
-      attempt: input.attempt ?? 0,
-      traceId: input.traceId ?? null,
-      status: input.status ?? null,
-      tags: input.tags ?? null,
-      toolMockReport: input.toolMockReport ?? null,
-      createdAt: now,
-    };
-
     try {
-      const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await collection.insertOne(doc);
-
-      return {
-        id,
-        experimentId: input.experimentId,
-        itemId: input.itemId,
-        itemDatasetVersion: input.itemDatasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output ?? null,
-        groundTruth: input.groundTruth ?? null,
-        metadata: input.metadata ?? null,
-        error: input.error ?? null,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        retryCount: input.retryCount,
-        attempt: input.attempt ?? 0,
-        traceId: input.traceId ?? null,
-        status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
-        createdAt: now,
-      };
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (session, marker) => {
+        const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+        const doc = {
+          id,
+          experimentId: input.experimentId,
+          itemId: input.itemId,
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          input: marker ? null : input.input,
+          output: marker ? null : (input.output ?? null),
+          groundTruth: marker ? null : (input.groundTruth ?? null),
+          metadata: marker ?? input.metadata ?? null,
+          error: marker ? null : (input.error ?? null),
+          startedAt: input.startedAt,
+          completedAt: input.completedAt,
+          retryCount: input.retryCount,
+          attempt: input.attempt ?? 0,
+          traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: marker ? null : (input.tags ?? null),
+          toolMockReport: marker ? null : (input.toolMockReport ?? null),
+          createdAt: now,
+        };
+        await collection.insertOne(doc, { session });
+        return transformExperimentResultRow(doc);
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -586,44 +595,47 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
     const attempt = input.attempt ?? 0;
     try {
-      const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (session, marker) => {
+        const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
 
-      // Natural key: (experimentId, itemId, attempt). Last write wins while the
-      // row id and createdAt stay stable; $setOnInsert supplies them on first write.
-      const result = await collection.findOneAndUpdate(
-        {
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          $or: [{ attempt }, ...(attempt === 0 ? [{ attempt: null }, { attempt: { $exists: false } }] : [])],
-        },
-        {
-          $set: {
-            itemDatasetVersion: input.itemDatasetVersion ?? null,
-            organizationId: input.organizationId ?? null,
-            projectId: input.projectId ?? null,
-            input: input.input,
-            output: input.output ?? null,
-            groundTruth: input.groundTruth ?? null,
-            metadata: input.metadata ?? null,
-            error: input.error ?? null,
-            startedAt: input.startedAt,
-            completedAt: input.completedAt,
-            retryCount: input.retryCount,
-            attempt,
-            traceId: input.traceId ?? null,
-            status: input.status ?? null,
-            tags: input.tags ?? null,
-            toolMockReport: input.toolMockReport ?? null,
+        // Natural key: (experimentId, itemId, attempt). Last write wins while the
+        // row id and createdAt stay stable; $setOnInsert supplies them on first write.
+        const result = await collection.findOneAndUpdate(
+          {
+            experimentId: input.experimentId,
+            itemId: input.itemId,
+            $or: [{ attempt }, ...(attempt === 0 ? [{ attempt: null }, { attempt: { $exists: false } }] : [])],
           },
-          $setOnInsert: {
-            id: randomUUID(),
-            createdAt: new Date(),
+          {
+            $set: {
+              itemDatasetVersion: input.itemDatasetVersion ?? null,
+              organizationId: input.organizationId ?? null,
+              projectId: input.projectId ?? null,
+              input: marker ? null : input.input,
+              output: marker ? null : (input.output ?? null),
+              groundTruth: marker ? null : (input.groundTruth ?? null),
+              metadata: marker ?? input.metadata ?? null,
+              error: marker ? null : (input.error ?? null),
+              startedAt: input.startedAt,
+              completedAt: input.completedAt,
+              retryCount: input.retryCount,
+              attempt,
+              traceId: input.traceId ?? null,
+              status: input.status ?? null,
+              tags: marker ? null : (input.tags ?? null),
+              toolMockReport: marker ? null : (input.toolMockReport ?? null),
+              ...(marker ? { comment: null } : {}),
+            },
+            $setOnInsert: {
+              id: randomUUID(),
+              createdAt: new Date(),
+            },
           },
-        },
-        { upsert: true, returnDocument: 'after' },
-      );
+          { upsert: true, returnDocument: 'after', session },
+        );
 
-      return transformExperimentResultRow(result as unknown as Record<string, unknown>);
+        return transformExperimentResultRow(result as unknown as Record<string, unknown>);
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -659,15 +671,10 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-
       const filter: Record<string, unknown> = { id: input.id };
-      if (input.experimentId) {
-        filter.experimentId = input.experimentId;
-      }
-
-      const result = await collection.findOneAndUpdate(filter, { $set: updateFields }, { returnDocument: 'after' });
-
-      if (!result) {
+      if (input.experimentId) filter.experimentId = input.experimentId;
+      const existing = await collection.findOne<{ experimentId: string; itemId: string }>(filter);
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -676,7 +683,26 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         });
       }
 
-      return transformExperimentResultRow(result as unknown as Record<string, unknown>);
+      return await this.#withPurgeBarrier(existing.experimentId, existing.itemId, async (session, marker) => {
+        if (marker) {
+          updateFields.tags = null;
+          updateFields.comment = null;
+        }
+        const result = await collection.findOneAndUpdate(
+          filter,
+          { $set: updateFields },
+          { returnDocument: 'after', session },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { resultId: input.id },
+          });
+        }
+        return transformExperimentResultRow(result as unknown as Record<string, unknown>);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -729,6 +755,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       }
       if (args.status) {
         filter.status = args.status;
+      }
+      if (args.tags?.length) {
+        filter.tags = { $all: args.tags };
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

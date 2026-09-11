@@ -37,6 +37,16 @@ export function formatSpanDurationExact(
   return durationMs < 1000 ? `${durationMs}ms` : `${durationMs / 1000}s`;
 }
 
+/** `X.XXX s`, matching the timeline timing column. */
+export function formatSpanDurationSeconds(
+  startedAt: Date | string | null | undefined,
+  endedAt: Date | string | null | undefined,
+): string | undefined {
+  const durationMs = getSpanDurationMs(startedAt, endedAt);
+  if (durationMs === undefined) return undefined;
+  return `${(durationMs / 1000).toFixed(3)} s`;
+}
+
 export function formatSpanTimestamp(value: Date | string | null | undefined): string | undefined {
   const timestamp = toTimestamp(value);
   return timestamp === undefined ? undefined : format(new Date(timestamp), 'h:mm:ss a');
@@ -45,11 +55,6 @@ export function formatSpanTimestamp(value: Date | string | null | undefined): st
 export function formatSpanTimestampExact(value: Date | string | null | undefined): string | undefined {
   const timestamp = toTimestamp(value);
   return timestamp === undefined ? undefined : format(new Date(timestamp), 'MMM d, yyyy, h:mm:ss.SSS a');
-}
-
-export function formatSpanPanelTimestamp(value: Date | string | null | undefined): string | undefined {
-  const timestamp = toTimestamp(value);
-  return timestamp === undefined ? undefined : format(new Date(timestamp), 'MMM dd, h:mm:ss.SSS aaa');
 }
 
 /**

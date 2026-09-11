@@ -70,7 +70,15 @@ import {
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
 import { clearAllMemoryTables, initMemorySchema } from './schema';
-import { deleteThread, getThreadById, insertThreadRow, listThreads, saveThread, updateThread } from './threads';
+import {
+  deleteThread,
+  getThreadById,
+  insertThreadRow,
+  listThreads,
+  saveThread,
+  updateThread,
+  updateThreadResourceId,
+} from './threads';
 import { storageError } from './utils';
 import type { MemoryContext } from './utils';
 
@@ -164,6 +172,10 @@ export class MemoryOracle extends MemoryStorage {
 
   async deleteThread(args: { threadId: string }): Promise<void> {
     return deleteThread(this.ctx, args);
+  }
+
+  async updateThreadResourceId(args: { threadId: string; resourceId: string }): Promise<StorageThreadType> {
+    return updateThreadResourceId(this.ctx, args);
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {

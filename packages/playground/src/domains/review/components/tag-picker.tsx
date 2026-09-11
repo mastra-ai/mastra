@@ -3,6 +3,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X, Plus } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export function TagPicker({
   tags,
@@ -40,21 +41,23 @@ export function TagPicker({
   return (
     <div className="flex flex-wrap items-center gap-1">
       {tags.map(tag => (
-        <span
-          key={tag}
-          className="bg-accent1/10 text-accent1 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
-        >
+        <ComputedTag key={tag} value={tag} className="gap-0.5 pr-1">
           {tag}
-          <button type="button" onClick={() => removeTag(tag)} className="hover:text-accent1/70">
+          <button
+            type="button"
+            aria-label={`Remove tag ${tag}`}
+            onClick={() => removeTag(tag)}
+            className="cursor-pointer hover:opacity-70"
+          >
             <X className="h-2.5 w-2.5" />
           </button>
-        </span>
+        </ComputedTag>
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="text-neutral3 hover:text-neutral5 hover:bg-surface3 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] transition-colors"
+            className="text-neutral3 hover:text-neutral5 hover:bg-surface3 text-ui-xs inline-flex items-center gap-0.5 rounded px-1 py-0.5 transition-colors"
           >
             <Plus className="h-3 w-3" />
             tag
@@ -67,7 +70,7 @@ export function TagPicker({
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="mb-1 h-7 text-xs"
+            className="text-ui-sm mb-1 h-7"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -76,7 +79,7 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-surface3 text-neutral4 w-full rounded px-2 py-1 text-left text-xs"
+                className="hover:bg-surface3 text-neutral4 text-ui-sm w-full rounded px-2 py-1 text-left"
               >
                 {tag}
               </button>
@@ -85,7 +88,7 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
+                className="hover:bg-surface3 text-accent1 text-ui-sm w-full rounded px-2 py-1 text-left"
               >
                 Create &quot;{search.trim()}&quot;
               </button>

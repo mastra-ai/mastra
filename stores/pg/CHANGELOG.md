@@ -1,5 +1,477 @@
 # @mastra/pg
 
+## 1.25.0-alpha.1
+
+### Minor Changes
+
+- Add thread ownership transfer (resourceId reassignment). ([#23533](https://github.com/mastra-ai/mastra/pull/23533))
+
+  You can now transfer an existing thread to a different resource, reassigning both the thread and its messages to the new `resourceId` while preserving the thread's original `createdAt` timestamp. This supports scenarios like moving a private thread into a shared workspace without the previous upsert workaround.
+
+  - `@mastra/core` / `@mastra/memory`: new `Memory.updateThreadResourceId({ threadId, resourceId })` method, backed by a default `MemoryStorage.updateThreadResourceId` implementation. When semantic recall is enabled, the message vectors are migrated to the new `resourceId` so resource-scoped retrieval keeps surfacing the transferred thread.
+  - `@mastra/server`: new `POST /memory/threads/:threadId/transfer` route. The endpoint is restricted to privileged, non-resource-scoped callers and rejects requests made with a resolved resource scope.
+  - `@mastra/client-js`: new `MemoryThread.transfer({ resourceId })` method.
+  - `@mastra/pg`, `@mastra/libsql`, `@mastra/mssql`, `@mastra/dsql`, `@mastra/oracledb`, `@mastra/mysql`, `@mastra/spanner`: atomic, serialized `updateThreadResourceId` overrides. The thread and all of its messages are moved inside a single transaction, so overlapping transfers of the same thread cannot interleave and leave split ownership. Postgres, MySQL, SQL Server and Oracle take a row lock (`SELECT ... FOR UPDATE` / `UPDLOCK, HOLDLOCK`); libSQL and Spanner serialize their write transactions; Aurora DSQL relies on its optimistic concurrency control with automatic retry. Adapters without a transaction primitive fall back to the base best-effort implementation, which fails closed by reverting on error.
+
+  ```typescript
+  // Server-side, from a privileged (non-resource-scoped) context:
+  const thread = await memory.updateThreadResourceId({
+    threadId: 'thread-123',
+    resourceId: 'new-resource-456',
+  });
+
+  // Client-side:
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const thread = client.getMemoryThread('thread-123', 'agent-id');
+  await thread.transfer({ resourceId: 'new-resource-456' });
+  ```
+
+### Patch Changes
+
+- Fix PostgresStoreVNext observability trace reader dropping scalar-string span inputs and outputs. The pg driver already decodes JSONB columns into native JS values, but the reader re-parsed decoded strings, so a stored string like `hello` threw during `JSON.parse` and was returned as `undefined`, while JSON-looking strings such as `123` or `true` were coerced to a number or boolean. Decoded JSONB values are now returned unchanged, preserving both value and type. Fixes #23575. ([#23577](https://github.com/mastra-ai/mastra/pull/23577))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+
+## 1.24.1-alpha.0
+
+### Patch Changes
+
+- Avoid loading every message payload into the Node heap when cloning a thread for a forked subagent. ([#23567](https://github.com/mastra-ai/mastra/pull/23567))
+
+  `memory.cloneThread()` previously parsed and accumulated all source message payloads into memory, then discarded them on the fork path where only the new thread id is needed. `StorageCloneThreadInput.options` now accepts `hydrateMessages` (default `true`); when `false`, the LibSQL, Postgres, and in-memory adapters copy message rows inside the database via `INSERT … SELECT` and return an empty `clonedMessages` array. `Memory.cloneThread` re-enables hydration when semantic recall is active so embeddings still work, and forked subagents now clone with `hydrateMessages: false`. Fixes #23434.
+
+  Callers can opt into lazy hydration directly:
+
+  ```ts
+  const { messageIdMap } = await memory.cloneThread({
+    sourceThreadId,
+    newThreadId,
+    resourceId,
+    options: { hydrateMessages: false },
+  });
+  ```
+
+- Fixed dataset item writes so purged payloads cannot be restored during concurrent updates or deletes. ([#23467](https://github.com/mastra-ai/mastra/pull/23467))
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+
+## 1.24.0
+
+### Minor Changes
+
+- Added PostgreSQL trace filtering by richer same-span properties, including model, duration, outcome, identity, and lineage. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } } } },
+  });
+  ```
+
+- Added PostgreSQL support for filtering traces by related feedback. Repeated writes for one `feedbackId`, including writes with the same timestamp and repeated IDs in one batch, now retain the last accepted record for feedback predicates. ([#23033](https://github.com/mastra-ai/mastra/pull/23033))
+
+  ```typescript
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { feedback: { none: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } } } },
+  });
+  ```
+
+- Added PostgreSQL support for top-level metadata predicates in advanced trace queries. ([#23027](https://github.com/mastra-ai/mastra/pull/23027))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+  });
+  ```
+
+- Added PostgreSQL support for richer score predicates in advanced trace queries. ([#22956](https://github.com/mastra-ai/mastra/pull/22956))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { scores: { some: { op: 'exists', path: 'spanId' } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added observability feedback and score deletion by id, with optional scope predicates. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  import { ObservabilityStoragePostgresVNext } from '@mastra/pg';
+
+  const observability = new ObservabilityStoragePostgresVNext({
+    connectionString: process.env.OBSERVABILITY_DATABASE_URL!,
+  });
+
+  await observability.deleteFeedback({ feedbackIds: ['feedback-1'] });
+  await observability.deleteScores({ scoreIds: ['score-1'], organizationId: 'org-1' });
+  ```
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Added support for filtering experiment results by tags in `listExperimentResults`. All requested tags must be present on a result for it to match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results, pagination } = await storage.listExperimentResults({
+    experimentId: 'exp-id',
+    pagination: { page: 0, perPage: 50 },
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  `@mastra/libsql` also fixes `addExperimentResult` double-encoding `tags` on insert, and backfills previously affected rows on `init()` so they match the new filter.
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`4cbb201`](https://github.com/mastra-ai/mastra/commit/4cbb201261df30574a98c241615cd096d9f223f3), [`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`44a6da9`](https://github.com/mastra-ai/mastra/commit/44a6da9cd61b7767a73c66da42ab1eca4073cd42), [`1e1fe34`](https://github.com/mastra-ai/mastra/commit/1e1fe3483102459e6ec9da096756b4efb12f5221), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f), [`67315b1`](https://github.com/mastra-ai/mastra/commit/67315b10f2058a17bfadcb053e49b0d4655bf3bb), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`cc91725`](https://github.com/mastra-ai/mastra/commit/cc917251a39b60050b9d8b004f5d281f4a578b75), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa), [`50c588e`](https://github.com/mastra-ai/mastra/commit/50c588ebe5e3fe407efe3a36e46c380a9d2492fb), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0
+
+## 1.24.0-alpha.3
+
+### Minor Changes
+
+- Added PostgreSQL support for filtering traces by related feedback. Repeated writes for one `feedbackId`, including writes with the same timestamp and repeated IDs in one batch, now retain the last accepted record for feedback predicates. ([#23033](https://github.com/mastra-ai/mastra/pull/23033))
+
+  ```typescript
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { feedback: { none: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } } } },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`cf9cd79`](https://github.com/mastra-ai/mastra/commit/cf9cd7963c664c7e9bcebe41fe7e492d1557ff6f), [`0d56f39`](https://github.com/mastra-ai/mastra/commit/0d56f398f08a1527eff72de4c0b66f74606b17d6), [`3da908f`](https://github.com/mastra-ai/mastra/commit/3da908fdf7b80b4e1577aa85cc45f28bb54aebc9), [`0096d5c`](https://github.com/mastra-ai/mastra/commit/0096d5c819d058ecc4de645774e4f46b8c122656), [`119d2aa`](https://github.com/mastra-ai/mastra/commit/119d2aaded03df03325fe25b167e71603cd8a2aa)]:
+  - @mastra/core@1.66.0-alpha.4
+
+## 1.24.0-alpha.2
+
+### Patch Changes
+
+- Added observability feedback and score deletion by id, with optional scope predicates. ([#22558](https://github.com/mastra-ai/mastra/pull/22558))
+
+  ```typescript
+  import { ObservabilityStoragePostgresVNext } from '@mastra/pg';
+
+  const observability = new ObservabilityStoragePostgresVNext({
+    connectionString: process.env.OBSERVABILITY_DATABASE_URL!,
+  });
+
+  await observability.deleteFeedback({ feedbackIds: ['feedback-1'] });
+  await observability.deleteScores({ scoreIds: ['score-1'], organizationId: 'org-1' });
+  ```
+
+- Updated dependencies [[`4d72bce`](https://github.com/mastra-ai/mastra/commit/4d72bceaf323dfe617a882b80defb2ab21b97ed9), [`1fc8225`](https://github.com/mastra-ai/mastra/commit/1fc82255bdca4340a7e0fd42aa61a97359d6c87f)]:
+  - @mastra/core@1.66.0-alpha.2
+
+## 1.24.0-alpha.1
+
+### Minor Changes
+
+- Added PostgreSQL trace filtering by richer same-span properties, including model, duration, outcome, identity, and lineage. ([#23018](https://github.com/mastra-ai/mastra/pull/23018))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } } } },
+  });
+  ```
+
+- Added PostgreSQL support for top-level metadata predicates in advanced trace queries. ([#23027](https://github.com/mastra-ai/mastra/pull/23027))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+  });
+  ```
+
+- Added PostgreSQL support for richer score predicates in advanced trace queries. ([#22956](https://github.com/mastra-ai/mastra/pull/22956))
+
+  ```ts
+  await mastraClient.queryTraces({
+    timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+    where: { scores: { some: { op: 'exists', path: 'spanId' } } },
+  });
+  ```
+
+### Patch Changes
+
+- Added support for filtering experiment results by tags in `listExperimentResults`. All requested tags must be present on a result for it to match. ([#23311](https://github.com/mastra-ai/mastra/pull/23311))
+
+  ```ts
+  const { results, pagination } = await storage.listExperimentResults({
+    experimentId: 'exp-id',
+    pagination: { page: 0, perPage: 50 },
+    tags: ['regression', 'p0'],
+  });
+  ```
+
+  `@mastra/libsql` also fixes `addExperimentResult` double-encoding `tags` on insert, and backfills previously affected rows on `init()` so they match the new filter.
+
+- Updated dependencies [[`bb09e86`](https://github.com/mastra-ai/mastra/commit/bb09e860dd6c510365f0d7ab068b194707e99fa4), [`2efa6ba`](https://github.com/mastra-ai/mastra/commit/2efa6bab6dde4e77e21adf1a9d59e8e44710194b), [`7865a79`](https://github.com/mastra-ai/mastra/commit/7865a79253be403bd79a307224c9968d98ea0b72), [`de5db60`](https://github.com/mastra-ai/mastra/commit/de5db6055519fd22d1673a2ad90e69d1b45ac54d)]:
+  - @mastra/core@1.66.0-alpha.1
+
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
+## 1.23.0
+
+### Minor Changes
+
+- Added read/write pool separation to `PostgresStore`. Pass `writePool` together with an optional `readPool` to route plain reads to a replica while writes, schema setup, transactions, locking reads, and every read-modify-write path stay on the primary. When `readPool` is omitted, reads fall back to the writer, and the existing single `pool` configuration keeps working unchanged. Closes #12035. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+  ```ts
+  import { Pool } from 'pg';
+  import { PostgresStore } from '@mastra/pg';
+
+  const store = new PostgresStore({
+    id: 'pg',
+    writePool: new Pool({ connectionString: process.env.PG_PRIMARY_URL }),
+    readPool: new Pool({ connectionString: process.env.PG_REPLICA_URL }),
+  });
+
+  store.pool; // writer
+  store.readPool; // reader (falls back to the writer when readPool is omitted)
+  ```
+
+  Standalone reads such as `getThreadById`, `listThreads`, `agents.getById`, or `knowledge.search` hit `readPool`. Lookups that feed a mutation (for example the thread check inside `saveMessages`, the metadata merge in `updateThread`, or version resolution inside `skills.update`) always hit `writePool`, so a lagging replica cannot cause false "not found" errors or overwrite recent writes. Caller-provided pools are never closed by the store.
+
+- Added portable advanced trace-query execution with parameterized PostgreSQL plans, bounded reusable relation scopes, completed-root filtering before pagination, current-row conformance, and a configurable 15-second transaction-local execution timeout. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+### Patch Changes
+
+- Fixed trace deletion to cascade to metrics, logs, scores, and feedback while respecting tenant scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Fixed PgVector `query()`, `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` failing with `column "namespace" does not exist` on vector tables created before `@mastra/pg` 1.22. ([#23281](https://github.com/mastra-ai/mastra/pull/23281))
+
+  The namespace column migration previously ran only inside `createIndex()`, so tables that were only read after upgrading were never migrated. The migration now runs lazily (once per index per process) from every data path, and is applied atomically under a database-scoped advisory lock so it is safe across concurrent processes.
+
+  When schema changes are disabled via `disableInit` or `MASTRA_DISABLE_STORAGE_INIT`, a descriptive `MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED` error is thrown instead. In that case, either call `createIndex()` with init enabled, or run the following migration as a single transaction (replace `<index>` with the table name):
+
+  ```sql
+  BEGIN;
+  SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | '<index>'::regclass::oid::bigint);
+  ALTER TABLE <index> ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default';
+  CREATE UNIQUE INDEX IF NOT EXISTS <index>_namespace_vector_id_idx ON <index> (namespace, vector_id);
+  ALTER TABLE <index> DROP CONSTRAINT IF EXISTS <index>_vector_id_key;
+  COMMIT;
+  ```
+
+  **What automatic migration requires**
+
+  - First access to a legacy table requires table-owner DDL permissions.
+  - First access takes a transaction-scoped advisory lock and PostgreSQL DDL locks.
+  - Already-migrated tables remain usable with SELECT-only access.
+  - Failed or incomplete migrations are retried on the next operation.
+  - Equivalent composite unique indexes are recognized regardless of name or key order.
+  - For long table names, automatic migration uses a bounded hashed index name and rolls back if a conflicting index prevents reconciliation.
+
+  **Before you run the SQL above**
+
+  - The example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed.
+  - For a long table name, choose a unique index name of at most 63 characters.
+  - If an index with the same name already exists, verify it is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint.
+
+  Fixes #23272
+
+- Improved PostgresStore last-N message reads. Paginated reads now avoid materializing message content for every matching row before applying the page limit, letting the `(thread_id, createdAt DESC)` index serve the page. Totals and single-round-trip behavior remain unchanged. ([#23369](https://github.com/mastra-ai/mastra/pull/23369))
+
+- # Fix namespace migration for long vector table names ([#23280](https://github.com/mastra-ai/mastra/pull/23280))
+  - Fix `PgVector.createIndex()` failing for table names of 40 or more characters by bounding generated index names with a 128-bit hash suffix. Short names remain unchanged.
+  - Preserve legacy vector-ID uniqueness if replacement-index creation fails by creating the namespace unique index before dropping the legacy constraint.
+  - Repair tables left half-migrated by earlier versions on the next `createIndex()` call, provided they contain no duplicate `(namespace, vector_id)` pairs.
+
+  Fixes #23273
+
+- `PgFactoryStorage` now widens an `integer` column to `bigint` when the collection schema says so, the way it already adds missing columns and drops stale `NOT NULL`. A Factory deployed before `factory_attention_receipts.occurrence` became `bigint` no longer needs a hand-run `ALTER TABLE` before parked-run receipts can be written. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Fixed vector operations timing out with small PostgreSQL connection pools when index metadata is not cached. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+
+## 1.23.0-alpha.7
+
+### Patch Changes
+
+- Fixed PgVector `query()`, `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` failing with `column "namespace" does not exist` on vector tables created before `@mastra/pg` 1.22. ([#23281](https://github.com/mastra-ai/mastra/pull/23281))
+
+  The namespace column migration previously ran only inside `createIndex()`, so tables that were only read after upgrading were never migrated. The migration now runs lazily (once per index per process) from every data path, and is applied atomically under a database-scoped advisory lock so it is safe across concurrent processes.
+
+  When schema changes are disabled via `disableInit` or `MASTRA_DISABLE_STORAGE_INIT`, a descriptive `MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED` error is thrown instead. In that case, either call `createIndex()` with init enabled, or run the following migration as a single transaction (replace `<index>` with the table name):
+
+  ```sql
+  BEGIN;
+  SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | '<index>'::regclass::oid::bigint);
+  ALTER TABLE <index> ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default';
+  CREATE UNIQUE INDEX IF NOT EXISTS <index>_namespace_vector_id_idx ON <index> (namespace, vector_id);
+  ALTER TABLE <index> DROP CONSTRAINT IF EXISTS <index>_vector_id_key;
+  COMMIT;
+  ```
+
+  **What automatic migration requires**
+
+  - First access to a legacy table requires table-owner DDL permissions.
+  - First access takes a transaction-scoped advisory lock and PostgreSQL DDL locks.
+  - Already-migrated tables remain usable with SELECT-only access.
+  - Failed or incomplete migrations are retried on the next operation.
+  - Equivalent composite unique indexes are recognized regardless of name or key order.
+  - For long table names, automatic migration uses a bounded hashed index name and rolls back if a conflicting index prevents reconciliation.
+
+  **Before you run the SQL above**
+
+  - The example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed.
+  - For a long table name, choose a unique index name of at most 63 characters.
+  - If an index with the same name already exists, verify it is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint.
+
+  Fixes #23272
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+
+## 1.23.0-alpha.6
+
+### Patch Changes
+
+- Improved PostgresStore last-N message reads. Paginated reads now avoid materializing message content for every matching row before applying the page limit, letting the `(thread_id, createdAt DESC)` index serve the page. Totals and single-round-trip behavior remain unchanged. ([#23369](https://github.com/mastra-ai/mastra/pull/23369))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- `PgFactoryStorage` now widens an `integer` column to `bigint` when the collection schema says so, the way it already adds missing columns and drops stale `NOT NULL`. A Factory deployed before `factory_attention_receipts.occurrence` became `bigint` no longer needs a hand-run `ALTER TABLE` before parked-run receipts can be written. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- # Fix namespace migration for long vector table names ([#23280](https://github.com/mastra-ai/mastra/pull/23280))
+  - Fix `PgVector.createIndex()` failing for table names of 40 or more characters by bounding generated index names with a 128-bit hash suffix. Short names remain unchanged.
+  - Preserve legacy vector-ID uniqueness if replacement-index creation fails by creating the namespace unique index before dropping the legacy constraint.
+  - Repair tables left half-migrated by earlier versions on the next `createIndex()` call, provided they contain no duplicate `(namespace, vector_id)` pairs.
+
+  Fixes #23273
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed vector operations timing out with small PostgreSQL connection pools when index metadata is not cached. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
+## 1.23.0-alpha.2
+
+### Minor Changes
+
+- Added read/write pool separation to `PostgresStore`. Pass `writePool` together with an optional `readPool` to route plain reads to a replica while writes, schema setup, transactions, locking reads, and every read-modify-write path stay on the primary. When `readPool` is omitted, reads fall back to the writer, and the existing single `pool` configuration keeps working unchanged. Closes #12035. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+  ```ts
+  import { Pool } from 'pg';
+  import { PostgresStore } from '@mastra/pg';
+
+  const store = new PostgresStore({
+    id: 'pg',
+    writePool: new Pool({ connectionString: process.env.PG_PRIMARY_URL }),
+    readPool: new Pool({ connectionString: process.env.PG_REPLICA_URL }),
+  });
+
+  store.pool; // writer
+  store.readPool; // reader (falls back to the writer when readPool is omitted)
+  ```
+
+  Standalone reads such as `getThreadById`, `listThreads`, `agents.getById`, or `knowledge.search` hit `readPool`. Lookups that feed a mutation (for example the thread check inside `saveMessages`, the metadata merge in `updateThread`, or version resolution inside `skills.update`) always hit `writePool`, so a lagging replica cannot cause false "not found" errors or overwrite recent writes. Caller-provided pools are never closed by the store.
+
+### Patch Changes
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Fixed trace deletion to cascade to metrics, logs, scores, and feedback while respecting tenant scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
+## 1.23.0-alpha.0
+
+### Minor Changes
+
+- Added portable advanced trace-query execution with parameterized PostgreSQL plans, bounded reusable relation scopes, completed-root filtering before pagination, current-row conformance, and a configurable 15-second transaction-local execution timeout. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.22.3
 
 ### Patch Changes

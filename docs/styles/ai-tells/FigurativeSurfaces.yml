@@ -1,0 +1,56 @@
+---
+extends: existence
+message: "AI discovery metaphor: '%s'. Say what reported the problem and when. Disable this rule for marine or graphics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Surfaces" is an AI fingerprint for discovery as emergence: a defect
+# "surfaces" during review, a bump "surfaced" three findings, "nothing
+# surfaced this earlier." The plain statement says what reported the
+# problem and when. The verb tokens gate on an object or a defect-family
+# subject, so the singular noun ("the API surface," "the surface of the
+# sphere") never matches, and a submarine surfacing takes the marine note
+# in the message. The one match across the Go and Python standard
+# libraries is a Go comment where an error "was surfaced from a background
+# process," the figure itself, so it fires by design.
+#
+# The transitive token once required a determiner after the verb, which a
+# documentation-corpus audit (2026-09) found leaving the bare-noun object
+# unread ("Surfaces skills whose definition matches"). The object is open
+# now, refusing only the prepositions, copulas, and auxiliaries that would
+# admit the plural noun ("the API surfaces are," "surfaces exposed by")
+# and the physical compounds ("surface tension," "surface temperature");
+# the open token measures zero across both standard libraries.
+#
+# A documentation-corpus census (2026-09) then found the uninflected verb
+# escaping behind a modal or an infinitive marker ("tooling to surface
+# changes," "will surface reports," "can surface bugs"), because every
+# token here read an inflected form. The bare token gates on the word
+# before the verb, since after "to" or "will" the word is the verb and
+# only the compounds need refusing. Thirteen hits across the seven
+# pre-LLM corpora, each the figure ("static analysis tooling to surface
+# only the vulnerabilities," "we have to surface this requirement,"
+# "panic during development to surface any imperfections"), flagged by
+# design. The noun figure ("the prose surface," "its canonical surface")
+# is FigurativeNouns' to read.
+tokens:
+  # --- Transitive and adverbial emergence: the discovery verb with its
+  # object or adverb ("the audit surfaced a defect," "surfaces skills
+  # whose definition matches," "the difference surfaces only when
+  # somebody reads the object").
+  - "\\bsurfac(?:es|ed|ing) (?!(?:of|on|in|at|to|from|for|with|by|and|or|but|is|are|was|were|that|which|it|they|have|has|had|do|does|did|can|will|would|should|may|might|must|not|also|so|area|areas|roughness|finish|tension|treatment|mount|layer|water|temperature|level|texture|normal|normals|type|types|exposed|available|provided|defined|used)\\b)[a-z][a-z-]+\\b"
+
+  # --- Subject-gated emergence: a defect-family noun that rises ("drift
+  # surfaces on the change that caused it," "the failure surfaced in CI").
+  # An auxiliary or adverb may sit between subject and verb.
+  - "\\b(?:defects?|drift|findings?|failures?|differences?|mistakes?|errors?|gaps?|bugs?|tells?|regressions?|problems?|issues?|questions?) (?:[a-z]+ )?surfac(?:es|ed)\\b"
+
+  # --- The negative report ("nothing surfaced this earlier").
+  - "\\bnothing surfaced\\b"
+
+  # --- The bare verb behind a modal, an infinitive marker, or a negation
+  # ("tooling to surface changes," "will surface reports," "can surface
+  # bugs," "doesn't surface the failure," "never surface in CI"). The
+  # lookahead refuses only the compounds, since nothing else after "to"
+  # or "will" is the noun.
+  - "\\b(?:to|will|would|may|might|can|could|should|must|shall|also|never|not|doesn't|don't|didn't|won't|can't|cannot) surface (?!(?:area|areas|api|apis|syntax|syntaxes|rust|roughness|finish|tension|treatment|mount|mounts|layer|layers|water|temperature|temperatures|level|levels|texture|textures|normal|normals|type|types)\\b)[a-z][a-z-]+\\b"

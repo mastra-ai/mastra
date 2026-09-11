@@ -115,7 +115,7 @@ export function AppSidebar() {
           <span className="flex h-7 items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -125,7 +125,7 @@ export function AppSidebar() {
         ) : (
           <span className="flex h-7 items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+            <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -156,7 +156,7 @@ export function AppSidebar() {
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                    className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>

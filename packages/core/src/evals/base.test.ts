@@ -857,6 +857,149 @@ describe('createScorer', () => {
       }
     });
 
+    it('forwards scorer-level judge modelSettings to the V1 generateLegacy run', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+      try {
+        const scorer = createScorer({
+          id: 'model-settings-v1-scorer',
+          name: 'model-settings-v1-scorer',
+          description: 'Forwards scorer-level modelSettings to a V1 judge',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            modelSettings: { temperature: 0.42 },
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
+    it('forwards scorer-level judge modelSettings to the judge run', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'model-settings-scorer',
+          name: 'model-settings-scorer',
+          description: 'Forwards scorer-level modelSettings',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            modelSettings: { temperature: 0.42 },
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('lets the per-step judge override the scorer-level modelSettings', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
+      try {
+        const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'model-settings-override-scorer',
+          name: 'model-settings-override-scorer',
+          description: 'Per-step override of modelSettings',
+          judge: {
+            model,
+            instructions: 'Top-level instructions',
+            modelSettings: { temperature: 0.42 },
+          },
+        })
+          .analyze({
+            description: 'analyze',
+            outputSchema: z.object({ value: z.number() }),
+            createPrompt: () => 'analyze this',
+            judge: {
+              model,
+              instructions: 'Step instructions',
+              modelSettings: { temperature: 0.9 },
+            },
+          })
+          .generateScore(({ results }) => results.analyzeStepResult?.value ?? 0);
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.9 });
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('omits modelSettings from the judge run when none is configured', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'no-model-settings-scorer',
+          name: 'no-model-settings-scorer',
+          description: 'No modelSettings configured',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toBeUndefined();
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('forwards judge modelSettings to the V1 generateLegacy run', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+      try {
+        const scorer = createScorer({
+          id: 'v1-model-settings-scorer',
+          description: 'Forwards modelSettings on the V1 judge path',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            modelSettings: { temperature: 0.42 },
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
     it('retries the judge with jsonPromptInjection when the first attempt yields no structured object', async () => {
       // Regression guard: a judge model can resolve *without throwing* but
       // produce no parseable structured object. The judge must recover via the

@@ -363,8 +363,10 @@ export default function Workspace() {
     );
   }
 
+  const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
+
   return (
-    <PageLayout>
+    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">
@@ -375,13 +377,13 @@ export default function Workspace() {
         </PageLayout.TopArea>
       )}
 
-      <PageLayout.MainArea className="grid content-start gap-6">
+      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-6' : 'grid content-start gap-6'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <div className="relative">
             <button
               onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-              className="border-border1 bg-surface2 hover:bg-surface3 flex w-full max-w-md items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="border-border1 bg-surface2 hover:bg-surface3 text-ui-md flex w-full max-w-md items-center gap-2 rounded-lg border px-3 py-2 transition-colors"
             >
               {selectedWorkspace?.source === 'agent' ? (
                 <Bot className="text-accent1 h-4 w-4" />
@@ -418,25 +420,25 @@ export default function Workspace() {
                       <Server className="text-neutral4 h-4 w-4 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-neutral6 truncate text-sm font-medium">{workspace.name}</div>
-                      <div className="text-neutral4 truncate text-xs">
+                      <div className="text-neutral6 text-ui-md truncate font-medium">{workspace.name}</div>
+                      <div className="text-neutral4 text-ui-sm truncate">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-1">
                       {workspace.safety?.readOnly && (
-                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
+                        <span className="text-ui-xs rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">
                           Read-only
                         </span>
                       )}
                       {workspace.capabilities.hasFilesystem && (
-                        <span className="bg-surface4 text-neutral4 rounded px-1.5 py-0.5 text-[10px]">FS</span>
+                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">FS</span>
                       )}
                       {workspace.capabilities.hasSandbox && (
-                        <span className="bg-surface4 text-neutral4 rounded px-1.5 py-0.5 text-[10px]">Sandbox</span>
+                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Sandbox</span>
                       )}
                       {workspace.capabilities.hasSkills && (
-                        <span className="bg-surface4 text-neutral4 rounded px-1.5 py-0.5 text-[10px]">Skills</span>
+                        <span className="bg-surface4 text-neutral4 text-ui-xs rounded px-1.5 py-0.5">Skills</span>
                       )}
                     </div>
                   </button>
@@ -448,7 +450,7 @@ export default function Workspace() {
 
         {/* Single workspace info badge - shown when only one workspace */}
         {workspaces.length === 1 && selectedWorkspace && (
-          <div className="text-neutral4 flex items-center gap-2 text-sm">
+          <div className="text-neutral4 text-ui-md flex items-center gap-2">
             {selectedWorkspace.source === 'agent' ? (
               <Bot className="text-accent1 h-4 w-4" />
             ) : (
@@ -459,7 +461,7 @@ export default function Workspace() {
               <span className="text-neutral3">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Read-only</span>
+              <span className="text-ui-xs rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-400">Read-only</span>
             )}
           </div>
         )}
@@ -488,7 +490,12 @@ export default function Workspace() {
         )}
 
         {(hasFilesystem || hasSkills) && (
-          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={activeTab}>
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            defaultTab={activeTab}
+            className={showSkillsEmptyState ? 'flex flex-1 flex-col' : undefined}
+          >
             <TabList>
               {hasFilesystem && (
                 <Tab value="files">
@@ -501,7 +508,7 @@ export default function Workspace() {
                   <Wand2 className="h-4 w-4" />
                   Skills
                   {isSkillsConfigured && skills.length > 0 && (
-                    <span className="bg-surface4 text-neutral4 rounded px-1.5 py-0.5 text-xs">{skills.length}</span>
+                    <span className="bg-surface4 text-neutral4 text-ui-sm rounded px-1.5 py-0.5">{skills.length}</span>
                   )}
                 </Tab>
               )}
@@ -544,7 +551,7 @@ export default function Workspace() {
             )}
 
             {hasSkills && (
-              <TabContent value="skills" className="pb-8">
+              <TabContent value="skills" className={showSkillsEmptyState ? 'flex-1 pb-8' : 'pb-8'}>
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}
@@ -617,12 +624,12 @@ function WorkspaceSearchPanel({
     <div className="border-border1 bg-surface2 space-y-4 rounded-lg border p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-neutral5 mb-3 flex items-center gap-2 text-sm font-medium">
+          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
             <FileText className="h-4 w-4" />
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="mb-3 text-xs text-amber-400">
+            <p className="text-ui-sm mb-3 text-amber-400">
               File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
               configured <code className="text-amber-300">autoIndexPaths</code>.
             </p>
@@ -647,7 +654,7 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-neutral5 mb-3 flex items-center gap-2 text-sm font-medium">
+          <h3 className="text-neutral5 text-ui-md mb-3 flex items-center gap-2 font-medium">
             <Wand2 className="h-4 w-4" />
             Search Skills
           </h3>

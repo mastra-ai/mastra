@@ -76,35 +76,90 @@ const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: str
   );
 
 describe('TraceSpanPanel', () => {
-  describe('when partial thread is enabled for an agent trace with a thread id', () => {
-    it('renders the selected trace as a chat turn in the Messages tab', async () => {
+  describe('given partial thread is enabled for an agent trace with a thread id', () => {
+    it('when rendered, then the Messages column shows the chat turn without any tab click', async () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });
 
-      fireEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
-
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(await screen.findByText('Will it rain?')).not.toBeNull();
       expect(screen.getByText('No rain is expected.')).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
+
+    it('reports the spans behind each message when the highlight action is clicked', async () => {
+      installHandlers();
+      const onHighlightSpans = vi.fn();
+      const { queryClient } = renderPanel({ showPartialThread: true, onHighlightSpans });
+
+      await screen.findByText('No rain is expected.');
+
+      // One action per message: user, the two tool calls, and the assistant reply.
+      const actions = screen.getAllByRole('button', { name: 'Highlight spans' });
+      expect(actions).toHaveLength(4);
+      const [userAction, , , assistantAction] = actions;
+      if (!userAction || !assistantAction) throw new Error('expected one highlight action per message');
+
+      fireEvent.click(assistantAction);
+      expect(onHighlightSpans).toHaveBeenCalledWith(['span-root']);
+
+      fireEvent.click(userAction);
+      expect(onHighlightSpans).toHaveBeenLastCalledWith(['span-root']);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when rendered, then a "View full thread" link points to the advanced thread view', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+
+      const link = screen.getByRole('link', { name: 'View full thread' });
+      expect(link.getAttribute('href')).toBe(
+        '/agents/weather-agent/threads/weather-thread?variant=advanced&traceId=trace-panel',
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('does not render the highlight action when no handler is provided', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+
+      expect(screen.queryByRole('button', { name: 'Highlight spans' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
   });
 
-  describe('when partial thread is enabled without a complete agent thread context', () => {
-    it('hides the tab for a trace without a thread id', () => {
+  it('fades timeline spans that are not featured', async () => {
+    installHandlers();
+    const { queryClient } = renderPanel({ featuredSpanIds: ['span-root'] });
+
+    await screen.findByLabelText('View details for span Root agent run');
+    expect(screen.getByLabelText('View details for span Root agent run').className).not.toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span First tool call').className).toContain('opacity-30');
+    expect(screen.getByLabelText('View details for span Second tool call').className).toContain('opacity-30');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
+
+  describe('given partial thread is enabled without a complete agent thread context', () => {
+    it('when the trace has no thread id, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({
         showPartialThread: true,
         spans: panelTraceSpans.spans.map(span => (span.parentSpanId == null ? { ...span, threadId: null } : span)),
       });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
 
-    it('hides the tab for a branch view', () => {
+    it('when viewing a branch, then the Messages column is absent', () => {
       installHandlers();
       renderPanel({ showPartialThread: true, anchorSpanId: 'span-root' });
 
-      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
     });
   });
 
@@ -112,12 +167,12 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel();
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     expect(screen.getByText('Root agent run')).not.toBeNull();
     expect(screen.getByText('First tool call')).not.toBeNull();
     expect(screen.getByText('Second tool call')).not.toBeNull();
     // No span selected → no span detail panel.
-    expect(screen.queryByText(/# span-/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: /span-/ })).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -129,7 +184,7 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(await screen.findByText('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith('span-child-1');
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(onSpanDetailRequest).toHaveBeenCalledWith('span-child-1');
   });
@@ -138,18 +193,18 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1' });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     fireEvent.click(screen.getByLabelText('Next span'));
-    expect(await screen.findByText(/# span-child-2/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     fireEvent.click(screen.getByLabelText('Previous span'));
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
     fireEvent.click(screen.getByLabelText('Previous span'));
-    expect(await screen.findByText(/# span-root/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -158,7 +213,7 @@ describe('TraceSpanPanel', () => {
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1', onSpanSelect });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Two close buttons are visible (trace panel + span panel); the span panel's is the last.
@@ -166,7 +221,7 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(closeButtons[closeButtons.length - 1]);
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
-    await waitFor(() => expect(screen.queryByText(/# span-child-1/)).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child-1/ })).toBeNull());
   });
 
   it('when the trace panel is closed, then onClose is called', async () => {
@@ -174,7 +229,7 @@ describe('TraceSpanPanel', () => {
     const onClose = vi.fn();
     const { queryClient } = renderPanel({ onClose });
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     fireEvent.click(screen.getByLabelText('Close Panel'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -184,7 +239,7 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel();
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Entity block: type label + name linking to the agent page. ("Agent" also
@@ -220,9 +275,10 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel({ anchorSpanId: 'span-child-1', initialSpanId: 'span-child-1' });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    // Anchor spans render the trace-context fields even though they have a parent.
-    expect(screen.getByText('Trace Id')).not.toBeNull();
+    // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
+    expect(screen.getByText('Session Id')).not.toBeNull();
+    expect(screen.getByText('session-42')).not.toBeNull();
   });
 });

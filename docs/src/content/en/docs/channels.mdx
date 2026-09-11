@@ -73,7 +73,7 @@ export const mastra = new Mastra({
 
 ## Webhook routes
 
-Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message and starts processing it, plus responds in the same channel.
+Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. The webhook delivers the message to your agent for processing, and the agent responds in the same channel.
 
 Mastra registers a webhook route for each configured adapter and handles the request for you:
 
@@ -142,6 +142,29 @@ export const deleteFile = createTool({
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
+
+### Custom action handling
+
+Use `handlers.onAction` to handle button clicks and select changes from cards you post yourself. The handler is called with the Chat SDK action event and the default handler, plus the same `ctx` the other channel handlers receive. Values you set on `ctx.requestContext` before delegating carry through to the resumed tool call. The default handler processes the built-in Approve and Deny buttons and ignores every other action ID, so call it for events you don't handle to keep tool approval working:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onAction: async (event, defaultHandler, ctx) => {
+      if (event.actionId === 'retry') {
+        await event.thread?.post('Retrying...')
+        return
+      }
+      await defaultHandler()
+    },
+  },
+},
+```
+
+Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.channels.sdk`.
 
 ## Reply formatting
 

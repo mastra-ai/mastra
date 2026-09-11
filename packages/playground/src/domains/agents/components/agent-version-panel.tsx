@@ -67,7 +67,7 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 text-sm transition-colors border-l-2',
+                      'w-full text-left px-3 py-2.5 text-ui-md transition-colors border-l-2',
                       isSelected
                         ? 'bg-surface2 text-neutral5 border-accent1'
                         : 'border-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',

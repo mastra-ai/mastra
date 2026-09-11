@@ -473,4 +473,37 @@ describe('MemoryThread', () => {
       expect(result).toEqual(mockResponse);
     });
   });
+
+  describe('transfer', () => {
+    it('should POST to the transfer endpoint with the target resourceId', async () => {
+      const mockThread = {
+        id: threadId,
+        resourceId: 'resource-b',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      mockFetchResponse(mockThread);
+
+      const result = await thread.transfer({ resourceId: 'resource-b' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}/transfer?agentId=${agentId}`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ resourceId: 'resource-b' }),
+        }),
+      );
+      expect(result).toEqual(mockThread);
+    });
+
+    it('should omit the agentId query when no agentId is available', async () => {
+      const noAgentThread = new MemoryThread(clientOptions, threadId);
+      mockFetchResponse({ id: threadId, resourceId: 'resource-b' });
+
+      await noAgentThread.transfer({ resourceId: 'resource-b' });
+
+      const [url] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe(`http://localhost:4111/api/memory/threads/${threadId}/transfer`);
+    });
+  });
 });

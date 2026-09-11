@@ -19,6 +19,7 @@ import {
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
   CLONE_THREAD_ROUTE,
+  TRANSFER_THREAD_ROUTE,
   SEARCH_MEMORY_ROUTE,
   getTextContent,
 } from './memory';
@@ -2272,6 +2273,90 @@ describe('Memory Handlers', () => {
       });
     });
 
+    describe('UPDATE_THREAD_ROUTE - clearing title/metadata', () => {
+      it('should clear the title when an empty string is provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'thread-1', resourceId: 'user-1', title: 'Old Title' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-1',
+          title: '',
+        });
+
+        expect(result.title).toBe('');
+      });
+
+      it('should keep the stored title when title is absent', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'thread-2', resourceId: 'user-1', title: 'Old Title' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-2',
+          metadata: { foo: 'bar' },
+        });
+
+        expect(result.title).toBe('Old Title');
+      });
+
+      it('should replace metadata with an empty object when provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'thread-3',
+          resourceId: 'user-1',
+          title: 'Old Title',
+          metadata: { foo: 'bar' },
+        });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-3',
+          metadata: {},
+        });
+
+        expect(result.metadata).toEqual({});
+      });
+
+      it('should keep the stored metadata when metadata is absent', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'thread-4',
+          resourceId: 'user-1',
+          title: 'Old Title',
+          metadata: { foo: 'bar' },
+        });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-1' }),
+          agentId: 'test-agent',
+          threadId: 'thread-4',
+          title: 'New Title',
+        });
+
+        expect(result.metadata).toEqual({ foo: 'bar' });
+      });
+    });
+
     describe('SAVE_MESSAGES_ROUTE - resourceId validation', () => {
       it('should return 403 when saving messages for different resource', async () => {
         const mastra = new Mastra({
@@ -2467,6 +2552,176 @@ describe('Memory Handlers', () => {
           }),
         );
         expect(result.thread.resourceId).toBe('user-a');
+      });
+    });
+
+    describe('TRANSFER_THREAD_ROUTE', () => {
+      it('transfers a thread and its messages to a new resource for a privileged caller', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        const createdAt = new Date('2024-01-01T00:00:00.000Z');
+        await mockMemory.createThread({ threadId: 'transfer-thread', resourceId: 'user-a', title: 'Src' });
+        // Overwrite createdAt to a fixed value so we can assert it is preserved.
+        const seeded = await mockMemory.getThreadById({ threadId: 'transfer-thread' });
+        await mockMemory.saveThread({ thread: { ...seeded!, createdAt } });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'tmsg-1',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'transfer-thread',
+              resourceId: 'user-a',
+              content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+            },
+          ] as MastraDBMessage[],
+        });
+
+        // Privileged context: no MASTRA_RESOURCE_ID_KEY set.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          threadId: 'transfer-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        expect(new Date(result.createdAt).getTime()).toBe(createdAt.getTime());
+
+        const reread = await mockMemory.getThreadById({ threadId: 'transfer-thread' });
+        expect(reread!.resourceId).toBe('user-b');
+
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        const { messages } = await memoryStore.listMessages({ threadId: 'transfer-thread', perPage: false });
+        expect(messages.every(m => m.resourceId === 'user-b')).toBe(true);
+      });
+
+      it('rejects with 403 when the caller is resource-scoped', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        await mockMemory.createThread({ threadId: 'scoped-thread', resourceId: 'user-a' });
+
+        // Resource-scoped context: MASTRA_RESOURCE_ID_KEY is set.
+        const ctx = createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'scoped-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+      });
+
+      it('returns 404 when the thread does not exist', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'missing-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toMatchObject({ status: 404 });
+      });
+
+      it('transfers via the storage fallback when no agentId is provided', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          storage,
+        });
+        await mockMemory.createThread({ threadId: 'no-agent-thread', resourceId: 'user-a', title: 'Src' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'na-msg-1',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'no-agent-thread',
+              resourceId: 'user-a',
+              content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            },
+          ] as MastraDBMessage[],
+        });
+
+        // Privileged context, no agentId: must resolve memory via the storage fallback.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: undefined,
+          threadId: 'no-agent-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        const reread = await mockMemory.getThreadById({ threadId: 'no-agent-thread' });
+        expect(reread!.resourceId).toBe('user-b');
+      });
+
+      it('rejects with 403 when auth is configured without an FGA provider', async () => {
+        // An authenticated deployment with no FGA provider cannot authorize a privileged,
+        // non-resource-scoped transfer, so the route must fail closed rather than treat the
+        // absence of a resource scope as sufficient privilege.
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          server: { auth: {} } as any,
+        });
+        await mockMemory.createThread({ threadId: 'authless-fga-thread', resourceId: 'user-a' });
+
+        // Privileged-looking context (no MASTRA_RESOURCE_ID_KEY), but auth-without-FGA must reject.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        await expect(
+          TRANSFER_THREAD_ROUTE.handler({
+            ...ctx,
+            agentId: 'test-agent',
+            threadId: 'authless-fga-thread',
+            resourceId: 'user-b',
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+      });
+
+      it('allows the transfer when neither auth nor an FGA provider is configured (open by design)', async () => {
+        // Intentional, documented posture: on a server with no auth mechanism the entire
+        // memory API is already open (thread update/delete are unauthenticated), so transfer
+        // treats an unscoped context as privileged rather than adding a route-specific gate.
+        // This locks in that behavior so a future change to fail closed here is a deliberate
+        // decision rather than an accident.
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+        await mockMemory.createThread({ threadId: 'open-server-thread', resourceId: 'user-a', title: 'Src' });
+
+        // Privileged-looking context (no MASTRA_RESOURCE_ID_KEY) on a server with no auth/FGA.
+        const ctx = createTestContextWithReservedKeys({ mastra });
+
+        const result = await TRANSFER_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          threadId: 'open-server-thread',
+          resourceId: 'user-b',
+        });
+
+        expect(result.resourceId).toBe('user-b');
+        const reread = await mockMemory.getThreadById({ threadId: 'open-server-thread' });
+        expect(reread!.resourceId).toBe('user-b');
       });
     });
 

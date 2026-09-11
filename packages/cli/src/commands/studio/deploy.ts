@@ -10,8 +10,12 @@ import { config } from 'dotenv';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
+import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -65,7 +69,7 @@ export function getMastraVersion(projectDir: string): string | null {
     return null;
   }
 }
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string, workersManifestOverride?: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -81,7 +85,12 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    const ignore = ['node_modules/**'];
+    if (workersManifestOverride !== undefined) ignore.push('workers.json');
+    archive.glob('**', { cwd: outputDir, ignore, dot: true }, { prefix: 'output' });
+    if (workersManifestOverride !== undefined) {
+      archive.append(workersManifestOverride, { name: 'output/workers.json' });
+    }
     void archive.finalize();
   });
 }
@@ -416,6 +425,18 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   // Gather context
   const packageName = getPackageName(targetDir);
+  // Studio deploys have no way to flag a project as a Factory project, so a
+  // Factory build ends up without sandboxes or the factory route. Say so and
+  // point at the unified command rather than failing a deploy that may still
+  // be wanted for the Studio half.
+  if ((await detectProjectType(targetDir)) === 'factory') {
+    p.log.warn(
+      [
+        'This directory builds a Mastra Factory, but `mastra studio deploy` cannot enable Factory support on the project.',
+        'Use `mastra deploy` instead; it creates Factory projects with the flag and registers the Factory URL.',
+      ].join('\n'),
+    );
+  }
   const gitBranch = getGitBranch(targetDir);
   const mastraVersion = getMastraVersion(targetDir);
 
@@ -556,6 +577,19 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
+  // Legacy pipeline: never ship a worker manifest. Only the unified
+  // `mastra deploy` flow may trigger worker-service provisioning, so
+  // overwrite `.mastra/output/workers.json` with `null` inside the archive.
+  // The app still runs its BackgroundTaskWorker in-process (mode: 'full'
+  // default), so background tasks execute — just co-located with the API
+  // replica.
+  const workersGuard = await resolveLegacyWorkersManifestOverride(join(targetDir, '.mastra', 'output'));
+  if (workersGuard.status === 'stripped') {
+    p.log.info(
+      'Background workers run in-process on studio deploys — use `mastra deploy` for a dedicated worker service.',
+    );
+  }
+
   // If the user didn't pass --env-file and no ambient .env* file exists,
   // skip the local env-var upload entirely and let the platform use the
   // env vars stored on the project. The server-side deploy handler merges
@@ -595,7 +629,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   t = performance.now();
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, workersGuard.manifestOverride);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
@@ -616,15 +650,25 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollDeploy(deployResult.id, token, orgId);
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
+  const finalStatus = await pollDeploy(deployResult.id, token, orgId, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
-    process.exit(1);
   } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs: collectedLogs?.entries() ?? [],
+      dashboardUrl: deployDashboardUrl('environment', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     process.exit(1);
   }
 }

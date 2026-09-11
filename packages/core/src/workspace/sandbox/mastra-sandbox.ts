@@ -31,7 +31,13 @@ import type { ProviderStatus, SandboxStartOutcome, SandboxStartResult } from '..
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { SandboxComputer, SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
+import type {
+  SandboxComputer,
+  SandboxFileInput,
+  SandboxNetworking,
+  WorkspaceSandbox,
+  WriteFilesOptions,
+} from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -194,7 +200,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * `useDefineForClassFields` from emitting `this.writeFiles = undefined`
    * which would shadow prototype methods defined by subclasses.
    */
-  writeFiles?(files: SandboxFileInput[]): Promise<void>;
+  writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   /** Process manager */
   readonly processes?: SandboxProcessManager;
@@ -318,7 +324,11 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
           const fullCommand = args?.length ? `${command} ${args.map(a => shellQuote(a)).join(' ')}` : command;
           this.logger.debug('Executing command', { sandbox: this.name, command: fullCommand, cwd: opts?.cwd });
 
-          const handle = await pm.spawn(fullCommand, { ...opts, maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity });
+          const handle = await pm.spawn(fullCommand, {
+            ...opts,
+            ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
+            maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity,
+          });
           try {
             const result = await handle.wait();
 

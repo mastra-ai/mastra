@@ -51,7 +51,7 @@ export function ScorerEditSidebar({
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-name" className="text-neutral5 text-xs">
+            <Label htmlFor="scorer-name" className="text-neutral5 text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -61,12 +61,12 @@ export function ScorerEditSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+            {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
           </div>
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-description" className="text-neutral5 text-xs">
+            <Label htmlFor="scorer-description" className="text-neutral5 text-ui-sm">
               Description <span className="text-accent2">*</span>
             </Label>
             <Textarea
@@ -76,12 +76,12 @@ export function ScorerEditSidebar({
               {...register('description')}
               error={!!errors.description}
             />
-            {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+            {errors.description && <span className="text-accent2 text-ui-sm">{errors.description.message}</span>}
           </div>
 
           {/* Provider */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">
+            <Label className="text-neutral5 text-ui-sm">
               Provider <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -91,12 +91,12 @@ export function ScorerEditSidebar({
                 <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
               )}
             />
-            {errors.model?.provider && <span className="text-accent2 text-xs">{errors.model.provider.message}</span>}
+            {errors.model?.provider && <span className="text-accent2 text-ui-sm">{errors.model.provider.message}</span>}
           </div>
 
           {/* Model */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">
+            <Label className="text-neutral5 text-ui-sm">
               Model <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -111,12 +111,12 @@ export function ScorerEditSidebar({
                 />
               )}
             />
-            {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
+            {errors.model?.name && <span className="text-accent2 text-ui-sm">{errors.model.name.message}</span>}
           </div>
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Score Range</Label>
+            <Label className="text-neutral5 text-ui-sm">Score Range</Label>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -131,7 +131,7 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-neutral3 text-xs">to</span>
+              <span className="text-neutral3 text-ui-sm">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -150,7 +150,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Default Sampling</Label>
+            <Label className="text-neutral5 text-ui-sm">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -158,13 +158,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5 text-xs">
+                    <Label htmlFor="sampling-none" className="text-neutral5 text-ui-sm">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5 text-xs">
+                    <Label htmlFor="sampling-ratio" className="text-neutral5 text-ui-sm">
                       Ratio
                     </Label>
                   </div>

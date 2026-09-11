@@ -74,7 +74,13 @@ const filesystem = new S3Filesystem({
 })
 ```
 
-Provider functions only apply to `S3Filesystem` API calls. When mounting the filesystem into an E2B sandbox, mount configuration only supports static `accessKeyId`, `secretAccessKey`, and `sessionToken` values, so credential refresh must be handled outside the mount.
+Provider functions only apply to `S3Filesystem` API calls. When mounting the filesystem into an E2B or Daytona sandbox, mount configuration only supports static `accessKeyId`, `secretAccessKey`, and `sessionToken` values, so credential refresh must be handled outside the mount. See [temporary credentials in Daytona](/integrations/sandboxes/daytona#temporary-s3-credentials) for mount lifetime and isolation requirements.
+
+### Prefix-scoped permissions
+
+When `prefix` is set, initialization calls `ListObjectsV2` with the normalized prefix, including its trailing `/`, and `MaxKeys: 1`. Credentials must permit listing that prefix. Without a prefix, initialization uses `HeadBucket`. These checks verify access, not whether a directory exists.
+
+The prefix limits which keys the filesystem addresses; it isn't an authorization boundary. For isolation, use credentials whose storage-provider policy restricts access to that prefix. Keep parent credentials on your backend. Read and write permissions alone aren't sufficient for prefixed filesystem initialization.
 
 ### Cloudflare R2
 

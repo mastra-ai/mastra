@@ -43,6 +43,8 @@ export const MemorySearch = ({
   const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
   const lastSearchTimeRef = useRef<number>(0);
   const pendingSearchRef = useRef<string | null>(null);
+  const queryRef = useRef(query);
+  queryRef.current = query;
 
   // Debounced search
   const handleSearch = useCallback(
@@ -158,9 +160,10 @@ export const MemorySearch = ({
     prevThreadIdRef.current = currentThreadId;
   }, [currentThreadId, query, handleSearch]);
 
-  // Sync chat input value with internal state when provided
+  // Sync chat input value with internal state when provided.
+  // Keyed on chatInputValue only: re-running on local `query` edits would overwrite the user's typing.
   useEffect(() => {
-    if (chatInputValue !== undefined && chatInputValue !== query) {
+    if (chatInputValue !== undefined && chatInputValue !== queryRef.current) {
       setQuery(chatInputValue);
 
       if (searchTimeoutRef.current) {
@@ -202,7 +205,7 @@ export const MemorySearch = ({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [chatInputValue]);
+  }, [chatInputValue, handleSearch]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
     onResultClick?.(messageId, threadId);
@@ -277,7 +280,7 @@ export const MemorySearch = ({
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="space-y-1 text-xs opacity-50">
+                      <div className="text-ui-sm space-y-1 opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
@@ -293,7 +296,7 @@ export const MemorySearch = ({
                         <div className="mb-1 flex items-center gap-2">
                           <span
                             className={cn(
-                              'text-xs font-medium px-2 py-0.5 rounded',
+                              'text-ui-sm font-medium px-2 py-0.5 rounded',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
@@ -330,7 +333,7 @@ export const MemorySearch = ({
 
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="space-y-1 text-xs opacity-50">
+                      <div className="text-ui-sm space-y-1 opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>

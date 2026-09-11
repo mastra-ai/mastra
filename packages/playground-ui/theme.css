@@ -287,6 +287,36 @@ html.light {
   --leading-header-lg: 133%;
   --leading-header-xl: 129%;
 
+  /* Paired line-heights: `text-ui-md` alone yields the DS line-height. */
+  --text-ui-xs--line-height: var(--leading-ui-xs);
+  --text-ui-sm--line-height: var(--leading-ui-sm);
+  --text-ui-smd--line-height: var(--leading-ui-smd);
+  --text-ui-md--line-height: var(--leading-ui-md);
+  --text-ui-lg--line-height: var(--leading-ui-lg);
+  --text-header-xs--line-height: var(--leading-header-xs);
+  --text-header-sm--line-height: var(--leading-header-sm);
+  --text-header-md--line-height: var(--leading-header-md);
+  --text-header-lg--line-height: var(--leading-header-lg);
+  --text-header-xl--line-height: var(--leading-header-xl);
+
+  /* Tailwind default scale aliased onto DS tokens (safety net; prefer text-ui-* / text-header-*). */
+  --text-xs: var(--text-ui-sm);
+  --text-xs--line-height: var(--leading-ui-sm);
+  --text-sm: var(--text-ui-md);
+  --text-sm--line-height: var(--leading-ui-md);
+  --text-base: var(--text-ui-lg);
+  --text-base--line-height: var(--leading-ui-lg);
+  --text-lg: var(--text-header-sm);
+  --text-lg--line-height: var(--leading-header-sm);
+  --text-xl: var(--text-header-md);
+  --text-xl--line-height: var(--leading-header-md);
+  --text-2xl: var(--text-header-lg);
+  --text-2xl--line-height: var(--leading-header-lg);
+  --text-3xl: var(--text-header-xl);
+  --text-3xl--line-height: var(--leading-header-xl);
+  --text-4xl: var(--text-header-xl);
+  --text-4xl--line-height: var(--leading-header-xl);
+
   --radius-none: 0px;
   --radius-sm: 4px;
   --radius-md: 6px;

@@ -38,8 +38,8 @@ function splitTextWithRegex(text: string, separator: string, separatorPosition?:
 
     for (let i = 1; i < splits.length - 1; i += 2) {
       const separator = splits[i];
-      const text = splits[i + 1];
-      if (separator && text) {
+      const text = splits[i + 1] ?? '';
+      if (separator) {
         result.push(separator + text);
       }
     }

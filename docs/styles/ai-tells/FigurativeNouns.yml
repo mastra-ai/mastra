@@ -1,0 +1,113 @@
+---
+extends: existence
+message: "AI figurative noun: '%s'. Name the concrete thing it stands for."
+level: error
+nonword: true
+ignorecase: true
+# Nominalized figuration: the figure carried by a noun rather than a verb,
+# which every Figurative rule in the package anchors on and so never sees.
+# A documentation-corpus audit (2026-09) found "reach" as a retrieval path
+# ("its primary reach is the whole-token index," "per-rule reach," "picks
+# between two reaches"), "wrinkle" as a complication, "story" as a design
+# ("the migration story," "a similar story applies"), and "knob" as an
+# option, none of them read by any rule. The plain sentence names the
+# thing: the index the query consults, the complication, the design, the
+# option.
+#
+# Each token gates on the determiner or compound that makes the noun
+# figurative, and each measures at zero to two across the Go and Python
+# standard libraries ("Graph pruning adds an extra wrinkle," "the knobs
+# for turning on," "A similar story applies to factory functions"), each
+# the figure itself. The nominal "reach" matches six, all one RFC 2965
+# definition of a host's reach, and the plural "reaches" is admitted only
+# at a clause end or before a copula, since "the count reaches 0" is the
+# verb. Left uncovered on purpose: "heartbeat" (a distributed-systems
+# term), "waterfall" (a process model), "gap" (too ordinary), and "the
+# poles" (too rare to gate). Prose about anatomy, textiles, radio, or
+# fiction disables the rule.
+#
+# A documentation-corpus census (2026-09) added "surface" as the set of
+# things a reader or a caller sees ("the prose surface," "its canonical
+# surface," "a reader-facing surface," "the whole surface"), sixty-odd
+# occurrences with the verb's rule reading none of them, since
+# FigurativeSurfaces gates on an inflected verb. The modifier slot
+# refuses the software term for a set of exported names ("the API
+# surface," "the attack surface," "its public surface") and the lookahead
+# the physical and linguistic compounds ("surface area," "surface
+# syntax," "the surface language," "the surface of the moon"). Across
+# the seven pre-LLM corpora it fires seven times, all in the Rust RFCs
+# and PEPs: five making the same figure ("the surface of `foo` includes
+# Input and Output," "decreasing the surface of change") and two on "on
+# the surface," whose hedging frame DefensiveHedges reads and whose bare
+# idiom lands here. Geometry and graphics prose disables the rule.
+#
+# The same census added five more nouns, each a physical thing standing
+# in for a plain one: "grain" for granularity ("one grain of the
+# analysis," "at a coarser grain"), "lens" for a point of view ("read
+# the diff through a security lens"), "headline" for the number that
+# gets quoted ("the headline number"), "cascade" for a chain of
+# consequences ("a cascade of retries"), and the spatial pair "dead
+# end" and "blind spot," plus "seam" for a join between components
+# ("the injection seam"). Across the seven pre-LLM corpora the grain
+# token matches seven times, the Rust RFCs arguing error recovery "at a
+# coarse grain" and a PEP offering "finer grain control," each the
+# figure; the cascade, the lens, the dead end, and the blind spot match
+# once or twice apiece, and the headline and the seam never. The
+# hyphenated "fine-grained" stays out as the granularity adjective,
+# "seamless" belongs to OverusedVocabulary, and "a grain of sand" and
+# "the lens cap" are refused by the trailing checks.
+tokens:
+  # --- Reach as a retrieval path ("its primary reach," "per-rule reach,"
+  # "the whole reach of the index," "picks between two reaches").
+  - "\\b(?:its|their|the|a|per-[a-z]+|whole|primary|secondary|total|full|widest|narrowest) (?:[a-z]+ )?reach\\b(?! (?:for|out|of the (?:hand|arm|child|children|reader|user|law|state|empire))\\b)"
+  - "\\b(?:two|three|both|several|multiple|these|those|its|their) (?:[a-z]+ )?reaches\\b(?= ?[.,;:)]| (?:is|are|of|and|or|that|which|were|was)\\b)"
+
+  # --- Wrinkle as a complication ("one wrinkle," "an extra wrinkle,"
+  # "the wrinkle is").
+  - "\\b(?:a|an|the|one|another|this|that|its|their|each|every|no|first|second|only|last|extra|new|small|minor|major|obvious|real|known) (?:[a-z]+ )?wrinkles?\\b"
+
+  # --- Story as a design ("the migration story," "our testing story," "a
+  # similar story applies"). The lookahead keeps fiction and journalism
+  # out ("a short story about," "the story behind").
+  - "\\b(?:a|an|the|its|their|this|that|our|your|no|each|every|one|another|whole|full|entire|complete|coherent|better|good|bad|weak|strong|similar|same) (?:[a-z-]+ ){1,2}story\\b(?! (?:of|about|behind|from|line|lines|point|points|arc|arcs|mode|book|books|telling|teller|tellers|board|boards|writer|writers|time|hour)\\b)"
+
+  # --- Knob as an option ("a tuning knob," "one more knob," "exposes
+  # several knobs").
+  - "\\b(?:a|an|the|its|their|this|that|one|each|every|no|another|single|extra|new|tuning|exposed|available|many|several|few|more|two|three|four|five|[a-z]+ing) knobs?\\b"
+
+  # --- Surface as what a reader sees ("the prose surface," "its canonical
+  # surface," "the whole surface," "a reader-facing surface"). The
+  # determiner-gated token refuses the exported-names term in the modifier
+  # slot and the physical compounds after the noun, and takes the singular
+  # only, since "the submarine surfaces" is the verb; the second token
+  # takes the compounds agent prose builds without a determiner.
+  - "\\b(?:the|a|an|its|their|this|that|each|every|one|same|whole|entire|full|new|old|current|final) (?!(?:api|public|attack|testable|exposed|exported|external|internal|control|planar|flat|curved|solid|hard|smooth|rough|top|bottom|upper|lower|outer|inner|back|front|work|working|table|desk|road|sea|water|ocean|earth|moon|lunar|planetary|land|ground|metal|glass|rust) )(?:[a-z-]+ )?surface\\b(?! (?:area|areas|api|apis|syntax|syntaxes|language|languages|grammar|form|forms|complexity|representation|rust|roughness|finish|tension|treatment|mount|mounts|layer|layers|water|temperature|temperatures|level|levels|texture|textures|normal|normals|type|types|of (?:the|a|an|its) (?:sphere|earth|moon|planet|sun|disk|disc|window|screen|image|glyph|water|sea|ocean|lake|lens|cell|body|object|solid|cube|polygon|mesh|skin|table|board|plate|wafer|chip|die|metal|liquid|material))\\b)"
+  - "\\b(?:prose|canonical|[a-z]+-facing|documented|visible|readable|printed|rendered) surfaces?\\b(?! (?:area|areas|api|apis|syntax|syntaxes|tension|treatment|level|levels|type|types)\\b)"
+
+  # --- Grain as granularity ("one grain of the analysis," "at a
+  # coarser grain," "per-skill grain"). The lookahead refuses the
+  # literal grain and the physical compounds.
+  - "\\b(?:a|the|at a|at the|its|their|this|that|finer|coarser|fine|coarse|right|wrong|same|one|natural|per-[a-z]+|[a-z]+-level) grain\\b(?! (?:of (?:sand|salt|rice|wheat|truth|wood|the wood|the timber)|size|sizes|boundary|boundaries)\\b)"
+
+  # --- Lens as a point of view ("through a security lens," "a wider
+  # lens"), refusing the optical compounds.
+  - "\\bthrough (?:the|a|an|its|their|this|that|one|another|[a-z]+) (?:[a-z]+ )?lens\\b"
+  - "\\b(?:a|an|the|its|their|this|that|one|another|each|every|different|second|wider|narrower|[a-z]+ing) (?:[a-z]+ )?lens\\b(?! (?:cap|caps|flare|hood|mount|element|elements|array|barrel|system|systems|distortion|assembly)\\b)"
+
+  # --- Headline as the quoted number ("the headline number," "the
+  # headline result," "the headline is").
+  - "\\bheadline (?:number|numbers|figure|figures|result|results|metric|metrics|count|counts|finding|findings|stat|stats|claim|claims|feature|features|change|changes|item|items|win|wins)\\b"
+  - "\\bthe headline (?:is|was)\\b"
+
+  # --- Cascade as a chain of consequences ("a cascade of retries").
+  - "\\b(?:a|the|this|that|one|another|its|their|every|each) (?:[a-z]+ )?cascade of\\b"
+
+  # --- The spatial pair ("a dead end," "a blind spot").
+  - "\\b(?:a|the|another|its|this|that|every|each) dead[ -]end\\b"
+  - "\\bdead[ -]ends\\b"
+  - "\\bblind[ -]spots?\\b"
+
+  # --- Seam as a join between components ("the injection seam," "a
+  # seam between the parser and the writer"), refusing the sewing
+  # compounds.
+  - "\\b(?:the|a|an|its|their|this|that|one|every|each|another|[a-z]+ing) (?:[a-z]+ )?seams?\\b(?! (?:allowance|ripper|tape|welding|welded|weld)\\b)"

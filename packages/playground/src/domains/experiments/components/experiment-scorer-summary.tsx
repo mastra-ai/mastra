@@ -68,12 +68,12 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
   }
 
   return (
-    <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+    <div className="flex flex-col gap-2">
       {scorerSummaries.map(({ scorerId, avg }) => {
         const scorerName = scorers?.[scorerId]?.scorer?.config?.name ?? scorerId;
 
         return (
-          <MetricsKpiCard key={scorerId} className="w-52 min-w-0 flex-none p-3">
+          <MetricsKpiCard key={scorerId} className="min-w-0 p-3">
             <LinkComponent
               href={paths.scorerLink(scorerId)}
               className="text-ui-sm text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3 [&>svg]:shrink-0"

@@ -11,8 +11,8 @@ tokens:
   # arrival-verb sense (a request lands on a node, a PR lands in main) lives in
   # FigurativeLands, which exempts these assessment nouns and literal landings.
   # ==========================================================================
-  - "[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really |actually |just |finally )?lands?\\b"
-  - "[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really|actually|just|finally) landed\\b"
+  - "\\b[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really |actually |just |finally )?lands?\\b"
+  - "\\b[Tt]he (?:joke|point|argument|line|metaphor|analogy|comparison|critique|distinction|observation|framing|insight|takeaway|punchline|callback|bit|reference|callout) (?:really|actually|just|finally) landed\\b"
   - "\\b(?:really|actually) lands\\b"
   - "\\b(?:really|actually) landed\\b"
   # Figurative "lands" beyond the curated nouns: abstract subjects and
@@ -22,7 +22,7 @@ tokens:
 
   # ==========================================================================
   # "X is the move" — anchored verdict. Bare "the move" is too broad (chess,
-  # dance, real-estate), so we only catch the assessment shape.
+  # dance, real-estate), so we only catch the assessment construction.
   # ==========================================================================
   - "\\bis the move\\b"
   - "\\bwas the move\\b"
@@ -45,3 +45,14 @@ tokens:
   - "\\bwhat matters most\\b"
   - "\\ball that (?:really |truly |actually )?matters\\b"
   - "\\bthe only thing that (?:really |truly |actually )?matters\\b"
+
+  # ==========================================================================
+  # "Handy" — the folksy usefulness grade ("Handy for auditing which items
+  # never made it through," "comes in handy"). Added after a
+  # documentation-corpus audit (2026-09) found it in the densest line of
+  # its corpus. Six hits across the Go and Python standard libraries
+  # ("Handy for external data analysis"), each the figure itself.
+  # ==========================================================================
+  - "\\bhandy (?:for|when|if|to have|in|as)\\b"
+  - "\\bcomes? in handy\\b"
+  - "\\bcame in handy\\b"

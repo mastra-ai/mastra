@@ -2,13 +2,14 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -71,6 +72,7 @@ import {
   MEMORY_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
@@ -1343,7 +1345,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice?: ToolChoice<TOOLS> | undefined;
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
-          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          modelSettings?: MastraModelSettings | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
           workspace?: Workspace;
         } = {
@@ -1666,6 +1668,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           throw error;
         }
 
+        const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+        const omContinuationText = omContinuation?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('');
+        const delegationMessages = omContinuationText
+          ? inputMessages.filter(message => {
+              if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+              const text = message.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join('');
+              return text !== omContinuationText;
+            })
+          : inputMessages;
+        writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
+
         if (cachedResponse) {
           // Short-circuit: replay cached chunks instead of calling the model.
           // Output processors are skipped on cache hit because the cached
@@ -1683,9 +1702,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           modelResult = new ReadableStream({
             start(controller) {
               for (const chunk of replayChunks) {
-                // Reattach per-run metadata that was stripped at cache time.
+                // Reattach per-run metadata that was stripped at cache time. A cached
+                // step-start timestamp belongs to the original provider call, so omit it
+                // rather than reporting stale inference timing for the replay.
+                let replayChunk = chunk;
+                if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
+                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
+                  replayChunk = { ...chunk, payload };
+                }
                 controller.enqueue({
-                  ...chunk,
+                  ...replayChunk,
                   runId,
                   from: ChunkFrom.AGENT,
                 });
@@ -1703,6 +1729,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             parameters: {
               ...currentStep.modelSettings,
               ...modelConfig.modelSettings,
+              timeout:
+                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                  : undefined,
             } as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
@@ -1713,6 +1743,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
+          const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1731,6 +1762,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
+                  timeout:
+                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                      : undefined,
                   maxRetries: modelConfig.maxRetriesConfigured
                     ? modelConfig.maxRetries
                     : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
@@ -1771,6 +1806,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       request: request || {},
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
+                      startedAt: inferenceStartedAt,
                     },
                   };
                 },
@@ -2438,6 +2474,38 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
+      // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
+      // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
+      // may also emit a partial/truncated tool call. Retrying with the same parameters produces
+      // the same truncation → infinite loop until maxSteps. PR #13861 / issue #13012 explicitly
+      // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
+      // inadvertently re-enabling it.
+      // See: https://github.com/mastra-ai/mastra/issues/15717
+      // `error` failures, `length` truncation, and `content-filter` refusals
+      // must never be overridden by a pending tool call: retrying re-sends the
+      // same request (reproducing the failure/truncation, or re-triggering the
+      // same refusal) and the loop spins until maxSteps — or forever when
+      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
+      // some models return finishReason='stop' alongside tool calls, which the
+      // loop must process.
+      const hasPendingToolCalls =
+        toolCalls &&
+        toolCalls.some(tc => !tc.providerExecuted) &&
+        finishReason !== 'error' &&
+        finishReason !== 'length' &&
+        finishReason !== 'content-filter';
+      const shouldContinue =
+        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+
+      // Fail abandoned provider calls before creating snapshots so persisted history
+      // cannot retain pending calls after a terminal error. Only target this step's IDs.
+      if (runState.state.hasErrored && !shouldContinue && !shouldRetry) {
+        const providerToolCallIds = toolCalls.filter(tc => tc.providerExecuted === true).map(tc => tc.toolCallId);
+        if (providerToolCallIds.length > 0) {
+          messageList.addOutputErrorsToProviderToolCalls(outputStream.messageId, providerToolCallIds);
+        }
+      }
+
       const steps = inputData.output?.steps || [];
 
       // Only include content from this iteration, not all accumulated content.
@@ -2503,29 +2571,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // - OR finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
-      //
-      // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
-      // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
-      // may also emit a partial/truncated tool call. Retrying with the same parameters produces
-      // the same truncation → infinite loop until maxSteps. PR #13861 / issue #13012 explicitly
-      // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
-      // inadvertently re-enabling it.
-      // See: https://github.com/mastra-ai/mastra/issues/15717
-      // `error` failures, `length` truncation, and `content-filter` refusals
-      // must never be overridden by a pending tool call: retrying re-sends the
-      // same request (reproducing the failure/truncation, or re-triggering the
-      // same refusal) and the loop spins until maxSteps — or forever when
-      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
-      // some models return finishReason='stop' alongside tool calls, which the
-      // loop must process.
-      const hasPendingToolCalls =
-        toolCalls &&
-        toolCalls.some(tc => !tc.providerExecuted) &&
-        finishReason !== 'error' &&
-        finishReason !== 'length' &&
-        finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      // The shouldContinue/hasPendingToolCalls decision is computed above so reconciliation can run
+      // before the returned snapshots are built.
 
       // On terminal exit, materialize spans for provider tool calls whose result never arrived.
       // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —

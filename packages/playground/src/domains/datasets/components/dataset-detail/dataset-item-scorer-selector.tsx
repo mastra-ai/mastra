@@ -30,7 +30,7 @@ export function DatasetItemScorerSelector({
         />
         <Label htmlFor="override-dataset-scorers">Override dataset scorers</Label>
       </div>
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground text-ui-sm">
         {overrideEnabled
           ? 'Only selected scorers run for this item. Leave empty to run no scorers.'
           : 'Use scorers attached to the dataset.'}

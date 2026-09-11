@@ -9,6 +9,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -21,6 +23,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -31,9 +35,10 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
@@ -102,6 +107,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -225,6 +231,25 @@ import type {
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
 
+/**
+ * Provides typed access to agents, workflows, and other APIs on a running Mastra server.
+ * Point `baseUrl` at your server and configure authentication when required.
+ *
+ * @example
+ * ```typescript
+ * import { MastraClient } from '@mastra/client-js';
+ *
+ * const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/client-js/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Client documentation](https://mastra.ai/reference/client-js/mastra-client)
+ * if packaged docs are unavailable.
+ */
 export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
@@ -1088,6 +1113,11 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
+  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.observability.queryTraces(params);
+  }
+
   /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
@@ -1122,6 +1152,16 @@ export class MastraClient extends BaseResource {
     return this.observability.listScoresBySpan(params);
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
+  }
+
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;
@@ -1151,6 +1191,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single score record in the observability store. */
   createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
     return this.observability.createScore(params);
+  }
+
+  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.observability.deleteScores(params);
   }
 
   /** Returns an aggregated score value with optional period-over-period comparison. */
@@ -1185,6 +1230,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.observability.deleteFeedback(params);
   }
 
   /** Updates a feedback record's review workflow status. */
@@ -2001,6 +2051,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(
+    datasetId: string,
+    itemId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Batch inserts items to a dataset
    */
   public batchInsertDatasetItems(
@@ -2158,6 +2222,48 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Updates a dataset experiment's name, description or metadata
    */
   public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
@@ -2169,16 +2275,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists results for a dataset experiment
+   * Lists results for a dataset experiment.
+   * `tags` restricts the list to results that have all of the given tags.
    */
   public listDatasetExperimentResults(
     datasetId: string,
     experimentId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; tags?: string[] },
   ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) searchParams.set('page', String(options.page));
+    if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
+    for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,

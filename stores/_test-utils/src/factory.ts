@@ -44,6 +44,14 @@ export type TestCapabilities = {
   toolMocks?: boolean;
   /** Whether identity-aware dataset item insertion is supported (defaults to true). */
   datasetItemIdentity?: boolean;
+  /** Whether permanent dataset item purge is supported by the test topology (defaults to true). */
+  datasetItemPurge?: boolean;
+  /**
+   * Whether batchDeleteTraces supports tenant-scoped deletion via
+   * organizationId/resourceId (defaults to false). Adapters without tenant
+   * columns must reject scoped calls; the suite asserts that rejection.
+   */
+  scopedTraceDeletion?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -130,7 +138,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createWorkflowsTests({ storage });
     createMemoryTest({ storage });
     createScoresTest({ storage, capabilities });
-    createObservabilityTests({ storage });
+    createObservabilityTests({ storage, capabilities });
     createAgentsTests({ storage });
     createDatasetsTests({ storage, capabilities });
     createExperimentsTests({ storage, capabilities });

@@ -42,7 +42,7 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -612,6 +612,12 @@ export class MessageList {
           downloadConcurrency?: number;
           downloadRetries?: number;
           supportedUrls?: Record<string, RegExp[]>;
+          /**
+           * Provider this prompt is being sent to. Lets conversion drop stored
+           * provider-executed tool results a different provider produced.
+           * @see https://github.com/mastra-ai/mastra/issues/23082
+           */
+          targetProvider?: string;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
@@ -731,6 +737,8 @@ export class MessageList {
           });
         }
 
+        messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
+
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
         return messages
@@ -750,6 +758,7 @@ export class MessageList {
         downloadConcurrency?: number;
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
+        targetProvider?: string;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
     aiV7: {
@@ -761,6 +770,7 @@ export class MessageList {
         downloadConcurrency?: number;
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
+        targetProvider?: string;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
@@ -1258,9 +1268,9 @@ export class MessageList {
         ...(backgroundTasks ? { backgroundTasks } : {}),
       };
 
+      // Update ordering and queue the edited metadata for persistence.
       this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
       this.updateLastCreatedAt(msg);
-
       if (!this.stateManager.isResponseMessage(msg)) {
         this.stateManager.removeMessage(msg);
         this.stateManager.addToSource(msg, 'response');
@@ -1271,6 +1281,76 @@ export class MessageList {
 
     this.logger?.warn(`updateMessageMetadataByToolCallId: no matching tool call found for toolCallId=${toolCallId}`);
     return false;
+  }
+
+  /**
+   * Fail explicitly selected provider calls still in `call` or `partial-call` state.
+   * Explicit IDs prevent masking unrelated missing-result bugs. Preserves args and
+   * metadata, syncs legacy AIV4 invocations, and queues the message for persistence.
+   * Returns whether any call changed.
+   */
+  public addOutputErrorsToProviderToolCalls(messageId: string, toolCallIds: string[], errorText?: string): boolean {
+    if (!messageId || !toolCallIds?.length) {
+      return false;
+    }
+
+    const targetIds = new Set(toolCallIds);
+    const resolvedErrorText =
+      errorText ?? 'Provider tool call did not complete: the model stream terminated with an error.';
+
+    const msg = this.messages.find(m => m.id === messageId && m.role === 'assistant');
+    if (!msg?.content?.parts) {
+      return false;
+    }
+
+    let changed = false;
+    const erroredToolCallIds: string[] = [];
+
+    for (let i = 0; i < msg.content.parts.length; i++) {
+      const part = msg.content.parts[i];
+      if (part?.type !== 'tool-invocation') continue;
+      // Cast to access providerExecuted which exists at runtime but isn't in the base type
+      const candidate = part as typeof part & { providerExecuted?: boolean };
+      const state = candidate.toolInvocation?.state;
+      if (
+        candidate.providerExecuted !== true ||
+        !targetIds.has(candidate.toolInvocation?.toolCallId) ||
+        (state !== 'call' && state !== 'partial-call')
+      ) {
+        continue;
+      }
+
+      candidate.toolInvocation = {
+        ...candidate.toolInvocation,
+        state: 'output-error',
+        errorText: resolvedErrorText,
+      };
+      erroredToolCallIds.push(candidate.toolInvocation.toolCallId);
+      changed = true;
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    // The legacy AIV4 `content.toolInvocations` array has no `output-error`
+    // state (its union is partial-call | call | result), so drop the abandoned
+    // entries instead of leaving them as a dangling `call` in AIV4 transcripts.
+    if (Array.isArray(msg.content.toolInvocations)) {
+      msg.content.toolInvocations = msg.content.toolInvocations.filter(
+        invocation => !erroredToolCallIds.includes(invocation.toolCallId),
+      );
+    }
+
+    // Update ordering and queue the failed calls for persistence.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+    this.updateLastCreatedAt(msg);
+    if (!this.stateManager.isResponseMessage(msg)) {
+      this.stateManager.removeMessage(msg);
+      this.stateManager.addToSource(msg, 'response');
+    }
+
+    return true;
   }
 
   /**
@@ -1350,8 +1430,6 @@ export class MessageList {
         : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-    this.updateLastCreatedAt(msg);
 
     // `backgroundTasks` is a per-toolCallId record — merge instead of
     // overwrite so multiple concurrent background dispatches on the
@@ -1388,8 +1466,9 @@ export class MessageList {
       );
     }
 
-    // Move the message to the response source so it gets
-    // picked up by drainUnsavedMessages for re-saving.
+    // Update ordering and queue the merged result for persistence.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+    this.updateLastCreatedAt(msg);
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');

@@ -7,6 +7,66 @@ import {
   convertFullStreamChunkToUIMessageStream,
 } from './helpers';
 
+describe('replay-safe text metadata', () => {
+  for (const type of ['text-start', 'text-delta', 'text-end'] as const) {
+    for (const sendReasoning of [undefined, false, true]) {
+      it(`${type} preserves unrelated metadata with sendReasoning=${sendReasoning}`, () => {
+        const providerMetadata = Object.freeze({
+          openai: Object.freeze({ itemId: 'msg_test', logprobs: [0.5] }),
+          other: Object.freeze({ itemId: 'other-id' }),
+        });
+        const part = Object.freeze({ type, id: 'text', text: 'Hello', providerMetadata });
+        expect(convertFullStreamChunkToUIMessageStream({ part, sendReasoning, onError: String })).toEqual({
+          type,
+          id: 'text',
+          ...(type === 'text-delta' ? { delta: 'Hello' } : {}),
+          providerMetadata: {
+            openai: { ...(sendReasoning ? { itemId: 'msg_test' } : {}), logprobs: [0.5] },
+            other: { itemId: 'other-id' },
+          },
+        });
+        expect(part.providerMetadata.openai.itemId).toBe('msg_test');
+      });
+    }
+
+    it(`${type} leaves absent metadata absent`, () => {
+      expect(
+        convertFullStreamChunkToUIMessageStream({
+          part: { type, id: 'text', text: 'Hello' },
+          onError: String,
+        }),
+      ).not.toHaveProperty('providerMetadata');
+    });
+
+    it(`${type} preserves metadata without an OpenAI item ID`, () => {
+      const providerMetadata = { openai: { logprobs: [0.5] }, other: { itemId: 'other-id' } };
+      expect(
+        convertFullStreamChunkToUIMessageStream({
+          part: { type, id: 'text', text: 'Hello', providerMetadata },
+          onError: String,
+        }),
+      ).toHaveProperty('providerMetadata', providerMetadata);
+    });
+  }
+
+  it('does not strip tool item IDs or provider execution metadata', () => {
+    const providerMetadata = { openai: { itemId: 'tool_test' }, mastra: { modelOutput: 'result' } };
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-call',
+          toolCallId: 'call',
+          toolName: 'lookup',
+          input: {},
+          providerExecuted: true,
+          providerMetadata,
+        },
+        onError: String,
+      }),
+    ).toMatchObject({ providerExecuted: true, providerMetadata });
+  });
+});
+
 describe('tool payload transform conversion', () => {
   it('uses display transforms for tool-call input', () => {
     const result = convertMastraChunkToAISDKv5({
@@ -349,5 +409,71 @@ describe('finish reason on UI message chunks (issue #20562)', () => {
         onError: String,
       }),
     ).toEqual({ type: 'finish', finishReason: 'length', messageMetadata: { custom: true } });
+  });
+});
+
+// Regression: both conversion hops dropped the tool result's providerMetadata, so the
+// `mastra.modelOutput` projection never reached the browser. Without Mastra Memory that
+// made `toModelOutput` a single-turn feature (issue #22012).
+describe('tool-result provider metadata forwarding (issue #22012)', () => {
+  const modelOutput = { type: 'content', value: [{ type: 'text', text: 'Found 5 vendors' }] };
+
+  const mastraToolResultChunk = () =>
+    ({
+      type: 'tool-result',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: 'call-1',
+        toolName: 'listVendors',
+        args: { region: 'emea' },
+        result: { vendors: [{ id: 1 }, { id: 2 }] },
+        providerMetadata: { mastra: { modelOutput } },
+      },
+    }) as any;
+
+  it('keeps providerMetadata on the v6 tool-result stream part', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() }) as any;
+
+    expect(part.type).toBe('tool-result');
+    expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
+  });
+
+  it('keeps providerMetadata on the v5 tool-result stream part', () => {
+    const part = convertMastraChunkToAISDKv5({ chunk: mastraToolResultChunk() }) as any;
+
+    expect(part.type).toBe('tool-result');
+    expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
+  });
+
+  it('forwards providerMetadata onto the tool-output-available ui chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() });
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: part as any,
+      onError: err => (err instanceof Error ? err.message : String(err)),
+    }) as any;
+
+    expect(uiChunk).toMatchObject({
+      type: 'tool-output-available',
+      toolCallId: 'call-1',
+      providerMetadata: { mastra: { modelOutput } },
+    });
+  });
+
+  it('omits providerMetadata entirely when the tool result carries none', () => {
+    const chunk = mastraToolResultChunk();
+    delete chunk.payload.providerMetadata;
+
+    const part = convertMastraChunkToAISDKv6({ chunk }) as any;
+    expect(part).not.toHaveProperty('providerMetadata');
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: part as any,
+      onError: String,
+    }) as any;
+
+    expect(uiChunk.type).toBe('tool-output-available');
+    expect(uiChunk).not.toHaveProperty('providerMetadata');
   });
 });

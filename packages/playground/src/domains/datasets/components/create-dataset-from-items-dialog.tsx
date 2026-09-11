@@ -40,13 +40,11 @@ export function CreateDatasetFromItemsDialog({
     setProgress(0);
 
     try {
-      // Create the dataset
-      const dataset = (await createDataset.mutateAsync({
+      const dataset = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
-      })) as { id: string };
+      });
 
-      // Copy items to new dataset
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await addItem.mutateAsync({
@@ -63,14 +61,12 @@ export function CreateDatasetFromItemsDialog({
 
       toast.success(`Dataset created with ${items.length} items`);
 
-      // Reset form
       setName('');
       setDescription('');
       setIsCreating(false);
       setProgress(0);
       onOpenChange(false);
 
-      // Navigate to new dataset
       onSuccess?.(dataset.id);
     } catch (error) {
       toast.error(`Failed to create dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -80,7 +76,7 @@ export function CreateDatasetFromItemsDialog({
   };
 
   const handleCancel = () => {
-    if (isCreating) return; // Prevent cancel during creation
+    if (isCreating) return;
     setName('');
     setDescription('');
     onOpenChange(false);
@@ -119,7 +115,7 @@ export function CreateDatasetFromItemsDialog({
               />
             </div>
 
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-ui-md">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the new dataset
             </p>
 
@@ -131,7 +127,7 @@ export function CreateDatasetFromItemsDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-ui-md">
                   Copying items: {progress} / {items.length}
                 </p>
               </div>
