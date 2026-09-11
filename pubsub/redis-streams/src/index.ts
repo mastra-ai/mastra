@@ -56,7 +56,7 @@ export interface RedisStreamsPubSubConfig {
    */
   streamIdleTtlMs?: number;
   /**
-   * How often (in ms) each subscription runs XAUTOCLAIM to recover messages
+   * How often (in ms) each subscription runs a reclaim pass (XPENDING + XCLAIM) to recover messages
    * that an earlier consumer in the group read but never acked. Defaults to
    * 30_000 ms. Set to 0 to disable.
    */
@@ -359,7 +359,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Periodically run XAUTOCLAIM against this subscription's group so that
+   * Periodically reclaim idle pending entries in this subscription's group so that
    * messages a crashed/stuck consumer read but never acked get redelivered to
    * a live sibling. Runs only for grouped subscriptions — fan-out groups are
    * private to one consumer, so there's no sibling to claim from.
@@ -371,29 +371,39 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const reply = await this.#writeClient.xAutoClaim(
-          sub.streamKey,
-          sub.group,
-          sub.consumer,
-          this.#reclaimIdleMs,
-          '0-0',
-          { COUNT: 100 },
-        );
-        const messages = (reply?.messages ?? []) as Array<{ id: string; message: Record<string, string> } | null>;
-        for (const entry of messages) {
-          // A successful claim already transferred ownership; drain its full batch.
+        // List idle pending entries first and only claim the ones this
+        // subscription is not already processing. Claiming (XAUTOCLAIM/XCLAIM)
+        // resets the entry's idle clock even when the claimant already owns it,
+        // so a claim-then-skip design would let a handler running longer than
+        // reclaimIdleMs re-invoke itself (pre-fix) or keep refreshing the idle
+        // timer on every tick and starve a live sibling of a genuinely stalled
+        // entry. Filtering before the claim leaves in-flight entries untouched:
+        // if the handler settles, ack/nack removes them from the PEL; if it is
+        // truly hung, the idle clock keeps running and a sibling claims them.
+        const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, '-', '+', 100, {
+          IDLE: this.#reclaimIdleMs,
+        });
+        const ids = pending.map(p => String(p.id)).filter(id => !sub.inFlight.has(id));
+        // XCLAIM re-checks min-idle atomically, so if a sibling claimed an entry
+        // between the XPENDING and here it is simply omitted from the reply.
+        const claimed =
+          ids.length === 0
+            ? []
+            : ((await this.#writeClient.xClaim(
+                sub.streamKey,
+                sub.group,
+                sub.consumer,
+                this.#reclaimIdleMs,
+                ids,
+              )) as Array<{ id: string; message: Record<string, string> } | null>);
+        for (const entry of claimed) {
+          // Null means the stream entry was trimmed; Redis drops it from the
+          // PEL as part of the claim, so there is nothing left to deliver.
           if (!entry) continue;
-          // The claim may return an entry this subscription is still processing
-          // locally (a handler running longer than reclaimIdleMs). Redelivering
-          // it here would invoke the callback a second time, concurrently, for
-          // the same event. Skip it — the original in-flight delivery still owns
-          // the ack/nack, and it will become reclaim-eligible again only after it
-          // settles (or truly stalls) and clears itself from inFlight.
-          if (sub.inFlight.has(entry.id)) continue;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
       } catch (err) {
-        this.#logger?.debug?.('redis-streams: XAUTOCLAIM failed', {
+        this.#logger?.debug?.('redis-streams: reclaim failed', {
           topic: sub.topic,
           group: sub.group,
           err: err instanceof Error ? err.message : err,
@@ -814,7 +824,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       }
       // Republish with incremented deliveryAttempt FIRST, then ack the
       // original entry. If the republish fails we deliberately leave the
-      // original message pending so XAUTOCLAIM (or another consumer) can
+      // original message pending so the reclaim loop (or another consumer) can
       // pick it up on a future tick — acking first would silently drop it.
       const next: Event = {
         ...event,
@@ -843,7 +853,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           err: err instanceof Error ? err.message : err,
         });
         // Allow this entry to be redelivered: reset settled so the next
-        // delivery attempt (via XAUTOCLAIM) can ack/nack it again. The entry
+        // delivery attempt (via reclaim) can ack/nack it again. The entry
         // is intentionally left pending, so clear the in-flight guard now to
         // make it eligible for a future reclaim.
         settled = false;
