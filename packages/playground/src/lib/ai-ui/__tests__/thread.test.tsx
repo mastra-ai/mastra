@@ -108,10 +108,11 @@ interface RenderThreadOptions {
   hasModelList?: boolean;
   threadId?: string;
   suggestedPrompts?: string[];
+  isHistoryLoading?: boolean;
 }
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
-  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts } = options;
+  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts, isHistoryLoading } = options;
 
   return (
     <Wrapper threadId={threadId}>
@@ -130,6 +131,7 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
             threadId={threadId}
             suggestedPrompts={suggestedPrompts}
             hasModelList={hasModelList}
+            isHistoryLoading={isHistoryLoading}
           />
         </ChatProvider>
       </ThreadInputProvider>
@@ -205,6 +207,69 @@ describe('Thread', () => {
 
     expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('Thread history loading', () => {
+    describe('when history is loading and there are no messages', () => {
+      it('shows the history skeleton instead of the welcome screen', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByTestId('thread-history-skeleton')).toBeTruthy();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+      });
+
+      it('keeps the composer available', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByRole('textbox')).toBeTruthy();
+      });
+
+      it('does not render suggested prompts', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: true, suggestedPrompts: ['Check the weather'] });
+        });
+
+        expect(screen.queryByRole('button', { name: 'Check the weather' })).toBeNull();
+      });
+    });
+
+    describe('when history is loading but live messages already exist', () => {
+      it('renders the messages and no skeleton', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([userMessage('live question')], { isHistoryLoading: true });
+        });
+
+        expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+      });
+    });
+
+    describe('when history finished loading with no messages', () => {
+      it('shows the welcome screen with suggested prompts', async () => {
+        server.use(...baseHandlers());
+
+        await act(async () => {
+          renderThread([], { isHistoryLoading: false, suggestedPrompts: ['Check the weather'] });
+        });
+
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+        expect(screen.getByText('How can I help you today?')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
+      });
+    });
   });
 
   describe('when suggested prompts are provided for an empty thread', () => {

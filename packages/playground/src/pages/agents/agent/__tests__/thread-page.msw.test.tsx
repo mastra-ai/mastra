@@ -25,6 +25,11 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'thread-1';
+// Live output travels through a real SSE stream (subscribe → parse → useChat merge)
+// and is then paced word by word by the markdown reveal buffer, which replays when
+// the message row remounts. Both are far slower than a JSON fetch when the whole
+// suite runs in parallel, so those assertions get more than waitFor's 1s default.
+const SSE_TIMEOUT = { timeout: 5000 };
 
 // jsdom has no layout, so react-resizable-panels never resizes anything and
 // `collapse()`/`expand()` are silently ignored. Replace Group/Panel with a
@@ -310,7 +315,9 @@ describe('Standalone thread page', () => {
         await screen.findByText('OpenAI');
         await waitFor(() => expect(push).toBeDefined());
         await act(async () => push?.());
-        await waitFor(() => expect(document.body.textContent).toContain('Live response survives'));
+        await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
+        // Live messages take precedence over the history skeleton.
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
         await act(async () => releaseHistory());
         await waitFor(() =>
           expect(queryClient.getQueryState(['memory', 'messages', THREAD_ID, AGENT_ID, 'requestContext'])?.status).toBe(
@@ -318,13 +325,81 @@ describe('Standalone thread page', () => {
           ),
         );
         expect(historyReturned).toHaveBeenCalledOnce();
-        await waitFor(() => expect(document.body.textContent?.split('Live response survives')).toHaveLength(2));
+        await waitFor(
+          () => expect(document.body.textContent?.split('Live response survives')).toHaveLength(2),
+          SSE_TIMEOUT,
+        );
         expect(document.body.textContent).not.toContain('Old partial output');
         if (history.messages.length) expect(document.body.textContent).toContain('Earlier prompt');
       } finally {
         releaseHistory();
         close();
       }
+    });
+  });
+
+  describe('when opening an existing thread whose history is still loading', () => {
+    it('shows the history skeleton, then the messages once history resolves', async () => {
+      installHandlers();
+      let releaseHistory = () => {};
+      const gate = new Promise<void>(resolve => {
+        releaseHistory = resolve;
+      });
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, async () => {
+          await gate;
+          return HttpResponse.json(staleHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      try {
+        expect(await screen.findByTestId('thread-history-skeleton')).not.toBeNull();
+        expect(screen.queryByText('How can I help you today?')).toBeNull();
+
+        await act(async () => releaseHistory());
+
+        expect(await screen.findByText('Earlier prompt')).not.toBeNull();
+        expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      } finally {
+        releaseHistory();
+      }
+    });
+  });
+
+  describe('when opening a new thread', () => {
+    it('shows the welcome screen immediately without a skeleton', async () => {
+      installHandlers();
+      const messagesRequested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => {
+          messagesRequested();
+          return HttpResponse.json(emptyHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      expect(messagesRequested).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the agent has memory disabled', () => {
+    it('shows the welcome screen immediately without a skeleton', async () => {
+      installHandlers();
+      const messagesRequested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: false })),
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => {
+          messagesRequested();
+          return HttpResponse.json(emptyHistory);
+        }),
+      );
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByText('How can I help you today?')).not.toBeNull();
+      expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
+      expect(messagesRequested).not.toHaveBeenCalled();
     });
   });
 
@@ -400,7 +475,7 @@ describe('Standalone thread page', () => {
               cleanup();
               renderAt(savedPath);
               await waitFor(() => expect(ids).toHaveLength(2));
-              await waitFor(() => expect(document.body.textContent).toContain('Live response survives'));
+              await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
             }
             expect(new Set(ids).size).toBe(1);
           }
