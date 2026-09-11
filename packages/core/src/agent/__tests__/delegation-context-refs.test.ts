@@ -206,8 +206,45 @@ describe('delegation result references — agent integration', () => {
     expect(results[0]).toBe(EXPLORER_FINDING);
     expect(results[0]).not.toContain('[ref:');
 
-    const tools = await supervisor.listTools();
-    expect(JSON.stringify(tools)).not.toContain('contextFromRefs');
+    // `listTools()` only reports user-registered tools; the derived `agent-*`
+    // delegation tools come from `getToolsForExecution()`, so assert there.
+    const offTools = await supervisor.getToolsForExecution({});
+    const offSchema = JSON.stringify(offTools['agent-explorer']!.parameters);
+    expect(offSchema).toContain('prompt');
+    expect(offSchema).not.toContain('contextFromRefs');
+
+    const onTools = await supervisor.getToolsForExecution({ delegation: { enableResultReferences: true } });
+    expect(JSON.stringify(onTools['agent-explorer']!.parameters)).toContain('contextFromRefs');
+  });
+
+  it('does not mint a reference for a background delegation', async () => {
+    const { supervisor, implementerPrompts } = buildAgents([]);
+    const tools = await supervisor.getToolsForExecution({ delegation: { enableResultReferences: true } });
+    const explorerTool = tools['agent-explorer']!;
+    const implementerTool = tools['agent-implementer']!;
+
+    // The tool-call step marks dispatched background work with `isBackgroundTask`.
+    const bg = (await explorerTool.execute!({ prompt: 'Find the bug' }, {
+      toolCallId: 'bg-1',
+      messages: [],
+      isBackgroundTask: true,
+    } as any)) as { text: string; ref?: string };
+    expect(bg.text).toBe(EXPLORER_FINDING);
+    expect(bg.ref).toBeUndefined();
+
+    // Nothing was registered, so a later reference to explorer-1 is unknown and skipped.
+    await implementerTool.execute!({ prompt: 'Fix it', contextFromRefs: ['explorer-1'] }, {
+      toolCallId: 'fg-1',
+      messages: [],
+    } as any);
+    expect(userText(implementerPrompts[0]!)).not.toContain(EXPLORER_FINDING);
+
+    // Same tool, foreground: the ref is minted.
+    const fg = (await explorerTool.execute!({ prompt: 'Find the bug' }, {
+      toolCallId: 'fg-2',
+      messages: [],
+    } as any)) as { text: string; ref?: string };
+    expect(fg.ref).toBe('explorer-1');
   });
 
   it('relays an earlier result verbatim to a later delegation', async () => {
@@ -328,7 +365,7 @@ describe('delegation result references — agent integration', () => {
   it('keeps the flag-off schema intact after a flag-on run on the same agent', async () => {
     const { supervisor } = buildAgents([{ toolName: 'agent-explorer', input: { prompt: 'Find the bug' } }]);
     await supervisor.generate('go', { maxSteps: 3, delegation: { enableResultReferences: true } });
-    const tools = await supervisor.listTools();
-    expect(JSON.stringify(tools)).not.toContain('contextFromRefs');
+    const tools = await supervisor.getToolsForExecution({});
+    expect(JSON.stringify(tools['agent-explorer']!.parameters)).not.toContain('contextFromRefs');
   });
 });

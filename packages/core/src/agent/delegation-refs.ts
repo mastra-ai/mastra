@@ -5,8 +5,8 @@ import { randomBytes } from 'node:crypto';
  * run. Powers `delegation.enableResultReferences`: each successful, non-empty
  * delegation result is stored under a deterministic `<agentName>-<n>` ID so a
  * later delegation can name it via `contextFromRefs` and receive the text
- * verbatim. Never persisted — the registry lives in the run scope (or in the
- * tool-builder closure when no run scope exists).
+ * verbatim. Never persisted — the registry lives in the tool-builder closure
+ * for the run and is discarded when the run's tools are.
  */
 export interface DelegationRefEntry {
   text: string;

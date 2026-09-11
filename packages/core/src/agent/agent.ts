@@ -232,7 +232,6 @@ import type {
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
-import { DELEGATION_REF_REGISTRY_KEY } from './workflows/prepare-stream/run-scope-keys';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -4957,18 +4956,14 @@ export class Agent<
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
 
-    // Result registry for `delegation.enableResultReferences`. Parked on the run
-    // scope so it survives a rebuild of these tools within the same run; falls
-    // back to a closure-local registry when the run has no scope.
-    let refRegistry: DelegationRefRegistry | undefined;
-    if (delegation?.enableResultReferences) {
-      const runScope = runId ? this.#mastra?.__getRunScope(runId) : undefined;
-      refRegistry = runScope?.get(DELEGATION_REF_REGISTRY_KEY);
-      if (!refRegistry) {
-        refRegistry = createDelegationRefRegistry();
-        runScope?.set(DELEGATION_REF_REGISTRY_KEY, refRegistry);
-      }
-    }
+    // Result registry for `delegation.enableResultReferences`. The delegation
+    // tools are built once per run (prepare-tools-step, before the agentic loop
+    // registers its run scope), so the registry lives in this closure and is
+    // shared by every `agent-*` tool of the run. It is not persisted and does
+    // not survive a suspend/resume rebuild.
+    const refRegistry: DelegationRefRegistry | undefined = delegation?.enableResultReferences
+      ? createDelegationRefRegistry()
+      : undefined;
 
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
@@ -5835,8 +5830,11 @@ export class Agent<
 
               // Mint the reference after the hook so a `resultText` replacement is
               // what later delegations receive. Empty or failed results get no ref.
+              // Background delegations get none either: the parent already received
+              // a placeholder, so a `[ref: …]` marker would never reach its model.
               if (
                 refRegistry &&
+                !context?.agent?.isBackgroundTask &&
                 typeof result?.text === 'string' &&
                 result.text.trim() &&
                 result.finishReason !== 'error'
