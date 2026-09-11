@@ -10,6 +10,7 @@ import {
   getPriorExtractedValues,
 } from '../extracted-values';
 import type { Extractor } from '../extractor';
+import { formatMessagesForExtractorHooks } from '../hook-message-context';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -18,7 +19,6 @@ import {
 } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
-import { formatMessagesForObserver } from '../observer-agent';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
@@ -311,7 +311,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         failures: result.extractionFailures,
         previousValues,
         rawObservations: result.observations,
-        recentMessages: formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
+        activeObservations: existingObservations,
+        recentMessages: formatMessagesForExtractorHooks(threadMessages),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,

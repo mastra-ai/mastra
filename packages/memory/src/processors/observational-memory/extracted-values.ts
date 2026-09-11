@@ -238,6 +238,7 @@ export async function applyExtractorHooks(opts: {
   failures?: ExtractionFailure[];
   previousValues?: Record<string, unknown>;
   rawObservations?: string;
+  activeObservations?: string;
   recentMessages?: string;
   threadId: string;
   resourceId?: string;
@@ -278,6 +279,7 @@ export async function applyExtractorHooks(opts: {
         previous: isHook ? undefined : opts.previousValues?.[extractor.slug],
         current,
         rawObservations: opts.rawObservations,
+        activeObservations: opts.activeObservations,
         recentMessages: opts.recentMessages,
         mainAgent: opts.mainAgent,
         memory: opts.memory,

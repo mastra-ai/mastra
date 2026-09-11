@@ -7,12 +7,12 @@ import {
   buildThreadMetadataFromExtractedValues,
   getPriorExtractedValues,
 } from '../extracted-values';
+import { formatMessagesForExtractorHooks } from '../hook-message-context';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
-import { formatMessagesForObserver } from '../observer-agent';
 import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
@@ -60,6 +60,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
+    // Copy before inference: activation may mutate the shared record while the observer awaits.
+    const activeObservations = this.opts.record.activeObservations ?? '';
     const result = await this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
@@ -75,7 +77,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
+      activeObservations,
+      recentMessages: formatMessagesForExtractorHooks(messages),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

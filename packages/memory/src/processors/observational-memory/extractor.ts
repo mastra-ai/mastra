@@ -22,6 +22,8 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   previous?: T;
   current: T;
   rawObservations?: string;
+  /** Accumulated active observation memory at the observation boundary, excluding pending buffers and the new delta. Not the full live model context. */
+  activeObservations?: string;
   /** Formatted recent conversation messages from the observed window — content already visible to the main agent. */
   recentMessages?: string;
   sendSignal?: ProcessorContext['sendSignal'];

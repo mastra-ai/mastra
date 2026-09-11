@@ -499,6 +499,16 @@ const memory = new Memory({
 ]}
 />
 
+### Observation hook context
+
+During observation, `onExtracted` receives these optional context fields:
+
+- `rawObservations`: Newly extracted observation text from the current operation.
+- `activeObservations`: Accumulated active observation memory at the observation boundary, excluding pending buffers and the new observation delta.
+- `recentMessages`: A bounded head-and-tail representation of the observed conversation window, capped at 11,264 characters and 3,072 estimated tokens across all messages, including formatting and omission markers. The token estimate isn't a provider-tokenizer guarantee. Oversized text, reasoning, tool arguments, and tool results keep their beginning and ending content, with explicit markers identifying whatever middle content was omitted. Tool results also retain the existing `DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS` safeguard of 10,000 tokens, and these window limits bound neither the other hook fields nor the reminder prompt as a whole.
+
+Neither `activeObservations` nor `recentMessages` represents the full live model context. Passive Subconscious reminders use these fields to compare candidate facts with information already available to the parent. This comparison is model-based, not a guarantee of semantic deduplication. Supplying more context can increase input-token usage, especially for large text parts.
+
 ### Extraction behavior
 
 - Extracted values are stored in thread OM metadata under `om.extracted`.
