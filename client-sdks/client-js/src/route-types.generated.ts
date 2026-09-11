@@ -128,7 +128,7 @@ type Shared_Auxiliary_608 =
       arg: Shared_Auxiliary_608;
     };
 
-type Shared_Auxiliary_1148 =
+type Shared_Auxiliary_1143 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -173,19 +173,19 @@ type Shared_Auxiliary_1148 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1148[];
+      args: Shared_Auxiliary_1143[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1148;
+      arg: Shared_Auxiliary_1143;
     };
 
-type Shared_Auxiliary_1288 = {
+type Shared_Auxiliary_1283 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1288[] | undefined;
+  children?: Shared_Auxiliary_1283[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2618,7 +2618,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1148[];
+  predicates: Shared_Auxiliary_1143[];
 };
 
 type Shared_Type_112 = {
@@ -2641,7 +2641,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1148;
+  predicate: Shared_Auxiliary_1143;
 };
 
 type Shared_Type_113 =
@@ -2995,7 +2995,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1288[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9187,11 +9187,6 @@ export type PostObservabilityTracesQuery_Body = {
     to: string;
   };
   where?: Shared_Auxiliary_590 | undefined;
-  group?:
-    | {
-        by: ['threadId'];
-      }
-    | undefined;
   orderBy?:
     | {
         field: 'startedAt' | 'endedAt';
@@ -9204,32 +9199,23 @@ export type PostObservabilityTracesQuery_Body = {
   };
 };
 
-export type PostObservabilityTracesQuery_Response =
-  | {
-      traces: {
-        traceId: string;
-        rootSpanId: string;
-        threadId: string | null;
-        resourceId: string | null;
-        startedAt: string;
-        endedAt: string;
-        entityName: string | null;
-        entityType: string | null;
-        environment: string | null;
-        status: 'success' | 'error';
-      }[];
-      page: {
-        next: string | null;
-      };
-    }
-  | {
-      groups: {
-        threadId: string;
-      }[];
-      page: {
-        next: string | null;
-      };
-    };
+export type PostObservabilityTracesQuery_Response = {
+  traces: {
+    traceId: string;
+    rootSpanId: string;
+    threadId: string | null;
+    resourceId: string | null;
+    startedAt: string;
+    endedAt: string;
+    entityName: string | null;
+    entityType: string | null;
+    environment: string | null;
+    status: 'success' | 'error';
+  }[];
+  page: {
+    next: string | null;
+  };
+};
 
 export type PostObservabilityTracesQuery_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -16927,7 +16913,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1288[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16985,7 +16971,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1288[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1283[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
