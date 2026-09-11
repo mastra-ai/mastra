@@ -21,6 +21,19 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model'
  * This test reproduces the issue at the agent level by simulating the network loop's
  * behavior: passing an assistant-role message as input with structuredOutput + memory.
  */
+const TRAILING_ASSISTANT_GUARD_TEXT = 'Generate the structured response.';
+
+function expectTrailingAssistantGuard(prompt: any[]) {
+  const nonSystemMessages = prompt.filter(message => message.role !== 'system');
+  expect(nonSystemMessages.slice(-2)).toMatchObject([
+    { role: 'assistant' },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: TRAILING_ASSISTANT_GUARD_TEXT }],
+    },
+  ]);
+}
+
 describe('Structured output with memory - assistant message in final position (#12800)', () => {
   it('should not send prompt ending with assistant message when input is assistant-role with structuredOutput and memory', async () => {
     const threadId = randomUUID();
@@ -139,16 +152,8 @@ describe('Structured output with memory - assistant message in final position (#
       },
     });
 
-    // The critical assertion: the prompt sent to the model should NOT end with an assistant message
     expect(capturedPrompts.length).toBeGreaterThan(0);
-    const lastPrompt = capturedPrompts[capturedPrompts.length - 1];
-
-    // Find the last non-system message in the prompt
-    const nonSystemMessages = lastPrompt.filter((msg: any) => msg.role !== 'system');
-    expect(nonSystemMessages.length).toBeGreaterThan(0);
-
-    const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-    expect(lastMessage.role).toBe('user');
+    expectTrailingAssistantGuard(capturedPrompts.at(-1));
   });
 
   it('guards Claude 5 assistant-role input without configured input processors or memory', async () => {
@@ -178,8 +183,7 @@ describe('Structured output with memory - assistant message in final position (#
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
 
-    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
-    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expectTrailingAssistantGuard(capturedPrompts[0]);
   });
 
   it('preserves assistant prefill for Claude 4.5', async () => {
@@ -275,8 +279,7 @@ describe('Structured output with memory - assistant message in final position (#
       { structuredOutput: { schema: z.object({ answer: z.string() }) } },
     );
 
-    const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
-    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expectTrailingAssistantGuard(capturedPrompts[0]);
   });
 
   it("guards routed Gemini 3 when jsonPromptInjection: 'auto' resolves to native structured output", async () => {
@@ -316,8 +319,7 @@ describe('Structured output with memory - assistant message in final position (#
     );
 
     expect(capturedCalls[0].responseFormat?.type).toBe('json');
-    const nonSystemMessages = capturedCalls[0].prompt.filter((message: any) => message.role !== 'system');
-    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+    expectTrailingAssistantGuard(capturedCalls[0].prompt);
   });
 
   it('preserves the trailing assistant turn for Gemini 2.5', async () => {
@@ -410,7 +412,7 @@ describe('Structured output with memory - assistant message in final position (#
       structuredOutput: { schema: z.object({ answer: z.string() }) },
     });
 
-    expect(geminiPrompts[0].filter((message: any) => message.role !== 'system').at(-1)).toMatchObject({ role: 'user' });
+    expectTrailingAssistantGuard(geminiPrompts[0]);
     expect(openAIPrompts[0].filter((message: any) => message.role !== 'system').at(-1)).toMatchObject({
       role: 'assistant',
     });
@@ -553,13 +555,8 @@ describe('Structured output with memory - assistant message in final position (#
 
     await response.consumeStream();
 
-    // The critical assertion: the last message in the prompt should NOT be an assistant message.
     expect(capturedPrompts.length).toBeGreaterThan(0);
-    const lastPrompt = capturedPrompts[capturedPrompts.length - 1];
-    const nonSystemMessages = lastPrompt.filter((msg: any) => msg.role !== 'system');
-    expect(nonSystemMessages.length).toBeGreaterThan(0);
-    const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
-    expect(lastMessage.role).toBe('user');
+    expectTrailingAssistantGuard(capturedPrompts.at(-1));
   });
 });
 

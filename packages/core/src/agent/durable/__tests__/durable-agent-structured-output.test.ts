@@ -13,6 +13,19 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
+const TRAILING_ASSISTANT_GUARD_TEXT = 'Generate the structured response.';
+
+function expectTrailingAssistantGuard(prompt: any[]) {
+  const nonSystemMessages = prompt.filter(message => message.role !== 'system');
+  expect(nonSystemMessages.slice(-2)).toMatchObject([
+    { role: 'assistant' },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: TRAILING_ASSISTANT_GUARD_TEXT }],
+    },
+  ]);
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -329,8 +342,7 @@ describe('DurableAgent structured output', () => {
         result.cleanup();
       }
 
-      const nonSystemMessages = capturedCalls[0].prompt.filter((message: any) => message.role !== 'system');
-      expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user' });
+      expectTrailingAssistantGuard(capturedCalls[0].prompt);
     });
 
     it('uses the final processor-selected model when deciding whether to guard', async () => {
@@ -365,9 +377,7 @@ describe('DurableAgent structured output', () => {
       }
 
       expect(geminiCalls[0].responseFormat?.type).toBe('json');
-      expect(geminiCalls[0].prompt.filter((message: any) => message.role !== 'system').at(-1)).toMatchObject({
-        role: 'user',
-      });
+      expectTrailingAssistantGuard(geminiCalls[0].prompt);
 
       const openAICalls: any[] = [];
       const selectedOpenAI = createCapturingStructuredOutputModel({
