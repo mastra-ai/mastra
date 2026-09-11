@@ -447,7 +447,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       </header>
       <div className="flex min-h-0 flex-1 gap-4">
         <ScopeTree scopes={scopesQuery.data} selection={selection} onSelect={selectScope} />
-        <div className="min-w-0 flex-1">
+        {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
+            to a sized parent; as a block wrapper it collapses to zero height. */}
+        <div className="flex min-w-0 flex-1 flex-col">
           {activeView === 'activity' ? (
             <ActivityPanel factoryProjectId={factoryProjectId} scopeLevel={scopeLevel} threadId={threadId} />
           ) : (
