@@ -106,19 +106,15 @@ On the client, `enableServerLogs` (default `true`) now attaches the metadata key
   },
 ```
 
-### Resource updates arrive through `subscriptions.listen`
+### Resource subscriptions ride one `subscriptions/listen` stream
 
-`resources.subscribe` and `resources.unsubscribe` are replaced by a single `subscriptions/listen` stream that carries list-changed and resource-updated notifications. Register handlers first, then open the stream with the filter you need; close the returned subscription to stop.
+`resources.subscribe` and `resources.unsubscribe` keep their signatures, but the client no longer sends `resources/subscribe`. It keeps a single `subscriptions/listen` stream open for every subscribed resource and every registered list-changed handler, replaces the stream when that set changes, and reopens it after a reconnect. A subscription the server declines rejects instead of silently dropping.
 
-```diff
-  await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri));
-- await mcp.resources.subscribe('weather', 'weather://forecast');
-+ const subscription = await mcp.subscriptions.listen('weather', {
-+   resourceSubscriptions: ['weather://forecast'],
-+ });
-  // later
-- await mcp.resources.unsubscribe('weather', 'weather://forecast');
-+ await subscription.close();
+```ts
+await mcp.resources.onUpdated('weather', ({ uri }) => refresh(uri))
+await mcp.resources.subscribe('weather', 'weather://forecast')
+// later
+await mcp.resources.unsubscribe('weather', 'weather://forecast')
 ```
 
 ### Client input handlers are configured per server
@@ -225,7 +221,7 @@ Servers keep the static `logging` capability required by the specification but r
 
 ### `resources/subscribe` and `resources/unsubscribe`
 
-Legacy resource subscriptions are removed from both sides; use `subscriptions.listen` as shown above.
+The legacy methods are removed from both sides; `resources.subscribe` now uses `subscriptions/listen` as shown above.
 
 ### Dynamic client registration
 

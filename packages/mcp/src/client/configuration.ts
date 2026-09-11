@@ -5,14 +5,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MCPServerBaseV2 } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
-import type {
-  McpSubscription,
-  ProgressNotification,
-  Prompt,
-  Resource,
-  ResourceTemplateType,
-  SubscriptionFilter,
-} from '@modelcontextprotocol/client';
+import type { ProgressNotification, Prompt, Resource, ResourceTemplateType } from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { InternalMastraMCPClient } from './client';
@@ -233,53 +226,6 @@ To fix this you have three different options:
   }
 
   /**
-   * Provides access to `subscriptions/listen` streams across configured servers.
-   *
-   * Change notifications delivered on a stream dispatch to the handlers registered with
-   * `tools.onListChanged`, `prompts.onListChanged`, `resources.onListChanged` and
-   * `resources.onUpdated`.
-   *
-   * @example
-   * ```typescript
-   * await mcp.resources.onUpdated('weatherServer', ({ uri }) => console.log(`updated ${uri}`));
-   * const subscription = await mcp.subscriptions.listen('weatherServer', {
-   *   resourceSubscriptions: ['file://data.json'],
-   * });
-   * // later
-   * await subscription.close();
-   * ```
-   */
-  public get subscriptions() {
-    this.addToInstanceCache();
-    return {
-      /**
-       * Opens a `subscriptions/listen` stream on a server.
-       *
-       * @param serverName - Name of the server
-       * @param filter - Which change notifications to receive
-       * @returns The subscription handle; call `close()` to tear it down
-       * @throws {MastraError} If the stream cannot be opened
-       */
-      listen: async (serverName: string, filter: SubscriptionFilter): Promise<McpSubscription> => {
-        try {
-          const internalClient = await this.getConnectedClientForServer(serverName);
-          return await internalClient.listen(filter);
-        } catch (error) {
-          throw new MastraError(
-            {
-              id: 'MCP_CLIENT_LISTEN_FAILED',
-              domain: ErrorDomain.MCP,
-              category: ErrorCategory.THIRD_PARTY,
-              details: { serverName },
-            },
-            error,
-          );
-        }
-      },
-    };
-  }
-
-  /**
    * Provides access to resource-related operations across all configured servers.
    *
    * Resources represent data exposed by MCP servers (files, database records, API responses, etc.).
@@ -295,11 +241,11 @@ To fix this you have three different options:
    * // Read a specific resource
    * const content = await mcp.resources.read('weatherServer', 'file://data.json');
    *
-   * // Receive resource updates through a listen stream
+   * // Receive resource updates
    * await mcp.resources.onUpdated('weatherServer', async (params) => {
    *   console.log(`Resource updated: ${params.uri}`);
    * });
-   * await mcp.subscriptions.listen('weatherServer', { resourceSubscriptions: ['file://data.json'] });
+   * await mcp.resources.subscribe('weatherServer', 'file://data.json');
    * ```
    */
   public get resources() {
@@ -380,8 +326,60 @@ To fix this you have three different options:
         }
       },
       /**
+       * Subscribes to update notifications for a resource on a server. Subscriptions ride
+       * the client's single `subscriptions/listen` stream and are restored after reconnects.
+       *
+       * @param serverName - Name of the server
+       * @param uri - URI of the resource to watch
+       * @throws {MastraError} If the server declines the subscription
+       *
+       * @example
+       * ```typescript
+       * await mcp.resources.onUpdated('weatherServer', ({ uri }) => console.log(`updated ${uri}`));
+       * await mcp.resources.subscribe('weatherServer', 'file://data.json');
+       * ```
+       */
+      subscribe: async (serverName: string, uri: string): Promise<void> => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          await internalClient.resources.subscribe(uri);
+        } catch (err) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_SUBSCRIBE_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { serverName, uri },
+            },
+            err,
+          );
+        }
+      },
+      /**
+       * Stops update notifications for a resource on a server.
+       *
+       * @param serverName - Name of the server
+       * @param uri - URI of the resource to stop watching
+       * @throws {MastraError} If the subscription cannot be removed
+       */
+      unsubscribe: async (serverName: string, uri: string): Promise<void> => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          await internalClient.resources.unsubscribe(uri);
+        } catch (err) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_UNSUBSCRIBE_RESOURCE_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { serverName, uri },
+            },
+            err,
+          );
+        }
+      },
+      /**
        * Sets a notification handler for when subscribed resources are updated on a server.
-       * Updates arrive on a `subscriptions/listen` stream (see `subscriptions.listen`).
        *
        * @param serverName - Name of the server to monitor
        * @param handler - Callback function receiving the updated resource URI

@@ -621,10 +621,12 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a server.
+Subscribes to updates for a specific resource on a server. Mastra adds the URI to a single managed `subscriptions/listen` stream per server. Subscribing to the same URI more than once has no effect while the stream is active. Mastra restores the stream after a reconnect and closes it when the client disconnects.
+
+The method rejects if the server doesn't honor the requested URI. If stream restoration fails after a reconnect, the connection remains available and calling `subscribe()` again retries the stream.
 
 ```typescript oxfmt:false
-async subscribe(serverName: string, uri: string): Promise<object>
+async subscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:
@@ -635,10 +637,10 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-Unsubscribes from updates for a specific resource on a server.
+Unsubscribes from updates for a specific resource on a server. Mastra removes the URI from the managed `subscriptions/listen` filter and replaces the stream. When nothing remains to listen for, Mastra closes the stream.
 
 ```typescript oxfmt:false
-async unsubscribe(serverName: string, uri: string): Promise<object>
+async unsubscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:

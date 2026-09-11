@@ -563,6 +563,8 @@ export class InternalMastraMCPClient extends MastraBase {
     stale.onmessage = undefined;
     if (this.client.transport === stale) {
       (this.client as unknown as { _transport?: Transport })._transport = undefined;
+      // The listen stream rode on this transport; connect() reopens it from interest.
+      this.subscriptionStream = undefined;
     }
   }
 
@@ -621,6 +623,20 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
   private reconnectPromise: Promise<void> | null = null;
+
+  /**
+   * Change notifications the caller has asked for. The client keeps exactly one
+   * `subscriptions/listen` stream open for this interest set, replaces it when the
+   * set changes and reopens it after a reconnect.
+   */
+  private subscriptionInterest = {
+    toolsListChanged: false,
+    promptsListChanged: false,
+    resourcesListChanged: false,
+    resourceSubscriptions: new Set<string>(),
+  };
+  private subscriptionStream?: McpSubscription;
+  private subscriptionUpdate: Promise<unknown> = Promise.resolve();
   private lifecycleGeneration = 0;
 
   /**
@@ -651,6 +667,17 @@ export class InternalMastraMCPClient extends MastraBase {
 
         this.serverInstructions = this.client.getInstructions();
 
+        if (this.hasSubscriptionInterest()) {
+          try {
+            await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+          } catch (error) {
+            // The connection stays usable; the next subscribe/handler registration retries.
+            this.log('error', 'Failed to restore subscriptions/listen after connecting', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         resolve(true);
 
         // Scope the reset to this connection so an older handler retained across
@@ -669,6 +696,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.subscriptionStream = undefined;
             if (staleTransport) {
               this.severClientTransportLink(staleTransport);
               void staleTransport.close().catch(() => {});
@@ -750,6 +778,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Disconnecting from MCP server`);
     const disconnectedTransport = this.transport;
     try {
+      await this.closeSubscriptionStream();
       await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
@@ -891,25 +920,129 @@ export class InternalMastraMCPClient extends MastraBase {
     );
   }
 
-  /**
-   * Opens a `subscriptions/listen` stream. Change notifications delivered on the
-   * stream dispatch to the handlers registered via the `on*` methods below.
-   */
-  async listen(filter: SubscriptionFilter): Promise<McpSubscription> {
-    this.log('debug', 'Opening subscriptions/listen stream', { filter });
-    return await this.client.listen(filter, { timeout: this.timeout });
+  private hasSubscriptionInterest(): boolean {
+    const interest = this.subscriptionInterest;
+    return (
+      interest.toolsListChanged ||
+      interest.promptsListChanged ||
+      interest.resourcesListChanged ||
+      interest.resourceSubscriptions.size > 0
+    );
   }
 
-  setPromptListChangedNotificationHandler(handler: () => void): void {
+  private subscriptionFilter(): SubscriptionFilter {
+    const interest = this.subscriptionInterest;
+    return {
+      ...(interest.toolsListChanged ? { toolsListChanged: true } : {}),
+      ...(interest.promptsListChanged ? { promptsListChanged: true } : {}),
+      ...(interest.resourcesListChanged ? { resourcesListChanged: true } : {}),
+      ...(interest.resourceSubscriptions.size > 0
+        ? { resourceSubscriptions: [...interest.resourceSubscriptions].sort() }
+        : {}),
+    };
+  }
+
+  /** Serializes stream replacements so concurrent mutations apply in order. */
+  private enqueueSubscriptionUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const operation = this.subscriptionUpdate.catch(() => {}).then(update);
+    this.subscriptionUpdate = operation;
+    return operation;
+  }
+
+  /**
+   * Opens a `subscriptions/listen` stream for the current interest set, then closes the
+   * previous one so no notification is lost between filters. Resource subscriptions the
+   * server declines are an error; declined list-changed bits only mean the server has
+   * nothing to announce.
+   */
+  private async replaceSubscriptionStream(): Promise<void> {
+    const previous = this.subscriptionStream;
+    const filter = this.subscriptionFilter();
+    const replacement = this.hasSubscriptionInterest()
+      ? await this.client.listen(filter, { timeout: this.timeout })
+      : undefined;
+
+    if (replacement && filter.resourceSubscriptions) {
+      const honored = new Set(replacement.honoredFilter.resourceSubscriptions ?? []);
+      const declined = filter.resourceSubscriptions.filter(uri => !honored.has(uri));
+      if (declined.length > 0) {
+        await replacement.close();
+        throw new Error(`Server declined resource subscriptions for: ${declined.join(', ')}`);
+      }
+    }
+
+    this.subscriptionStream = replacement;
+    if (replacement) {
+      void replacement.closed.then(() => {
+        if (this.subscriptionStream === replacement) this.subscriptionStream = undefined;
+      });
+    }
+    await previous?.close();
+  }
+
+  private async closeSubscriptionStream(): Promise<void> {
+    await this.subscriptionUpdate.catch(() => {});
+    const stream = this.subscriptionStream;
+    this.subscriptionStream = undefined;
+    await stream?.close();
+  }
+
+  /** Applies an interest change to the live stream when connected; otherwise connect() opens it. */
+  private async applySubscriptionInterest(): Promise<void> {
+    if (!this.transport) return;
+    await this.enqueueSubscriptionUpdate(() => this.replaceSubscriptionStream());
+  }
+
+  /**
+   * Subscribes to `notifications/resources/updated` for a resource. The subscription is
+   * carried on the client's single `subscriptions/listen` stream and survives reconnects.
+   */
+  async subscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Subscribing to resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (this.subscriptionInterest.resourceSubscriptions.has(uri) && this.subscriptionStream) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.add(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  async unsubscribeResource(uri: string): Promise<void> {
+    this.log('debug', `Unsubscribing from resource: ${uri}`);
+    await this.enqueueSubscriptionUpdate(async () => {
+      if (!this.subscriptionInterest.resourceSubscriptions.has(uri)) return;
+      const next = new Set(this.subscriptionInterest.resourceSubscriptions);
+      next.delete(uri);
+      await this.updateResourceSubscriptions(next);
+    });
+  }
+
+  private async updateResourceSubscriptions(next: Set<string>): Promise<void> {
+    const previous = this.subscriptionInterest.resourceSubscriptions;
+    this.subscriptionInterest.resourceSubscriptions = next;
+    if (!this.transport) return;
+    try {
+      await this.replaceSubscriptionStream();
+    } catch (error) {
+      this.subscriptionInterest.resourceSubscriptions = previous;
+      throw error;
+    }
+  }
+
+  async setPromptListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.promptsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
-  setToolListChangedNotificationHandler(handler: () => void): void {
+  async setToolListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.toolsListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
   setResourceUpdatedNotificationHandler(handler: (params: { uri: string }) => void): void {
@@ -918,10 +1051,12 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  setResourceListChangedNotificationHandler(handler: () => void): void {
+  async setResourceListChangedNotificationHandler(handler: () => void): Promise<void> {
     this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
+    this.subscriptionInterest.resourcesListChanged = true;
+    await this.applySubscriptionInterest();
   }
 
   setProgressNotificationHandler(handler: ProgressHandler): void {

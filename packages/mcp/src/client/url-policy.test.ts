@@ -531,7 +531,7 @@ describe('MastraMCPClient allowedHosts policy', () => {
       server: { url: server.baseUrl, allowedHosts: [server.host] },
     });
     await client.connect();
-    await client.listen({ toolsListChanged: true });
+    await client.setToolListChangedNotificationHandler(() => {});
 
     // Only the long-lived subscriptions/listen request is detached from the active span.
     const listenCalls = globalFetchSpy.mock.calls.filter(
