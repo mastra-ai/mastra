@@ -172,7 +172,7 @@ describe('TraceSpanPanel', () => {
     expect(screen.getByText('First tool call')).not.toBeNull();
     expect(screen.getByText('Second tool call')).not.toBeNull();
     // No span selected → no span detail panel.
-    expect(screen.queryByText(/# span-/)).toBeNull();
+    expect(screen.queryByRole('heading', { name: /span-/ })).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -184,7 +184,7 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(await screen.findByText('First tool call'));
 
     expect(onSpanSelect).toHaveBeenCalledWith('span-child-1');
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(onSpanDetailRequest).toHaveBeenCalledWith('span-child-1');
   });
@@ -193,18 +193,18 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1' });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     fireEvent.click(screen.getByLabelText('Next span'));
-    expect(await screen.findByText(/# span-child-2/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     fireEvent.click(screen.getByLabelText('Previous span'));
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
 
     fireEvent.click(screen.getByLabelText('Previous span'));
-    expect(await screen.findByText(/# span-root/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-root/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
 
@@ -213,7 +213,7 @@ describe('TraceSpanPanel', () => {
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
     const { queryClient } = renderPanel({ initialSpanId: 'span-child-1', onSpanSelect });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Two close buttons are visible (trace panel + span panel); the span panel's is the last.
@@ -221,7 +221,7 @@ describe('TraceSpanPanel', () => {
     fireEvent.click(closeButtons[closeButtons.length - 1]);
 
     expect(onSpanSelect).toHaveBeenCalledWith(undefined);
-    await waitFor(() => expect(screen.queryByText(/# span-child-1/)).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: /span-child-1/ })).toBeNull());
   });
 
   it('when the trace panel is closed, then onClose is called', async () => {
@@ -275,7 +275,7 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel({ anchorSpanId: 'span-child-1', initialSpanId: 'span-child-1' });
 
-    expect(await screen.findByText(/# span-child-1/)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
     expect(screen.getByText('Session Id')).not.toBeNull();
