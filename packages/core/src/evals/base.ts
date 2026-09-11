@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
+import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
@@ -122,6 +123,13 @@ export interface ScorerJudgeConfig {
    * 10. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
+  /**
+   * Optional model call settings (e.g. temperature, topP, topK, maxOutputTokens,
+   * maxRetries, frequencyPenalty, presencePenalty, timeout) forwarded to the
+   * internal judge agent run. Step-level `judge.modelSettings` replaces this
+   * scorer-level value.
+   */
+  modelSettings?: AgentExecutionOptions['modelSettings'];
   /**
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
@@ -1386,6 +1394,7 @@ class MastraScorer<
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
+    const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -1595,6 +1604,7 @@ class MastraScorer<
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(modelSettings ? { modelSettings } : {}),
       ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
     const createJudgeStreamRunOptions = () => ({
