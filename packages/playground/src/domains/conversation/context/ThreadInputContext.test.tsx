@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { deleteDB } from 'idb';
+import { deleteDB, openDB } from 'idb';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readThreadDraft, writeThreadDraft } from './thread-draft-storage';
@@ -32,13 +32,19 @@ describe('ThreadInputProvider', () => {
   });
 
   describe('when persistence is not enabled', () => {
-    it('keeps the default composer in memory only', () => {
+    it('keeps the default composer in memory only', async () => {
       const { result } = renderHook(() => useThreadInput(), {
         wrapper: ({ children }: { children: ReactNode }) => <ThreadInputProvider>{children}</ThreadInputProvider>,
       });
       act(() => result.current.setThreadInput('Temporary'));
       expect(result.current.threadInput).toBe('Temporary');
-      expect(localStorage.length).toBe(0);
+      await readThreadDraft('__drain__');
+      const db = await openDB('mastra-composer-drafts');
+      try {
+        expect(await db.count('drafts')).toBe(0);
+      } finally {
+        db.close();
+      }
     });
   });
 
