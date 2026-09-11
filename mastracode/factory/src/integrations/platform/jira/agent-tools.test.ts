@@ -4,9 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../../storage/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
+import { JiraApiError } from '../../jira/api.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
-import { PlatformJiraApiError } from './api.js';
 import { PlatformJiraIntegration } from './integration.js';
 
 // A real integration instance backed by seeded `:memory:` storage. Only the
@@ -61,7 +60,7 @@ beforeEach(async () => {
   PROJECT_ID = '';
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
-    client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' }),
+    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
   });
   vi.spyOn(jira, 'hasActiveConnections').mockResolvedValue(true);
   jira.initialize({ projects: seed.projects, auth: fakeRouteAuth() });
@@ -124,7 +123,7 @@ describe('jira_get_issue', () => {
 
   it('maps credential rejections to an operator-facing error', async () => {
     await seedProject();
-    fetchJiraIssueDetail.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (401)', 401));
+    fetchJiraIssueDetail.mockRejectedValueOnce(new JiraApiError('Jira API request failed (401)', 401));
     const tools = await buildPlatformJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-42' });
     expect(result).toEqual({
@@ -134,7 +133,7 @@ describe('jira_get_issue', () => {
 
   it('surfaces non-auth failures with the underlying message', async () => {
     await seedProject();
-    fetchJiraIssueDetail.mockRejectedValueOnce(new PlatformJiraApiError('Jira API request failed (500)', 500));
+    fetchJiraIssueDetail.mockRejectedValueOnce(new JiraApiError('Jira API request failed (500)', 500));
     const tools = await buildPlatformJiraAgentTools({ jira, requestContext: requestContextFor(PROJECT_ID) });
     const result = await (tools.jira_get_issue!.execute as any)({ issue: 'ENG-42' });
     expect(result).toEqual({ error: 'Failed to fetch Jira issue: Jira API request failed (500)' });

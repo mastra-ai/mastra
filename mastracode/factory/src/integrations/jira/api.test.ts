@@ -28,8 +28,12 @@ afterEach(() => {
 });
 
 describe('JiraApiClient construction', () => {
-  it('throws when a config value is missing', () => {
+  it('throws when a Basic auth config value is missing', () => {
     expect(() => new JiraApiClient({ baseUrl: BASE, email: '', apiToken: 'tok' })).toThrow(/missing required config/);
+  });
+
+  it('throws when the Platform access token is missing', () => {
+    expect(() => new JiraApiClient({ baseUrl: BASE, accessToken: '' })).toThrow(/accessToken/);
   });
 
   it('normalizes the base URL by stripping trailing slashes', () => {
@@ -50,6 +54,20 @@ describe('JiraApiClient requests', () => {
     expect(headers.authorization).toBe(`Basic ${Buffer.from('ops@acme.test:jira-token').toString('base64')}`);
     expect(page.isLast).toBe(true);
     expect(page.values[0]?.key).toBe('ENG');
+  });
+
+  it('uses Bearer auth when pointed at a Platform connection proxy', async () => {
+    const fetchMock = stubFetch(jsonResponse({ baseUrl: 'https://acme.atlassian.net' }));
+    const proxy = new JiraApiClient({
+      baseUrl: 'https://integrations.example.com/v2/connections/a1b_jira/proxy/',
+      accessToken: 'platform-token',
+    });
+
+    await expect(proxy.getServerInfo()).resolves.toEqual({ baseUrl: 'https://acme.atlassian.net' });
+
+    const { url, init } = requestOf(fetchMock);
+    expect(url).toBe('https://integrations.example.com/v2/connections/a1b_jira/proxy/rest/api/3/serverInfo');
+    expect(init.headers).toMatchObject({ authorization: 'Bearer platform-token' });
   });
 
   it('searches issues via POST /search/jql with explicit fields and threads the cursor', async () => {
@@ -158,6 +176,16 @@ describe('JiraApiClient error normalization', () => {
       code: 'jira_request_failed',
       status: 400,
       message: 'Jira API request failed (400): The JQL query is invalid.',
+    });
+  });
+
+  it('surfaces errors returned by the Platform connection proxy', async () => {
+    stubFetch(jsonResponse({ detail: 'provider failed' }, 429));
+
+    await expect(client().getIssue('ENG-42')).rejects.toMatchObject({
+      code: 'jira_request_failed',
+      status: 429,
+      message: 'Jira API request failed (429): provider failed',
     });
   });
 

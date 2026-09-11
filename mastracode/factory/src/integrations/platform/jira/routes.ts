@@ -18,7 +18,7 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
-import { PlatformJiraApiError } from './api.js';
+import { JiraApiError } from '../../jira/api.js';
 import type { PlatformJiraIntegration } from './integration.js';
 
 type RouteContext = Context;
@@ -138,7 +138,7 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 
 /** Map a Jira read failure to the API response for the SPA. */
 function jiraFetchError(c: RouteContext, err: unknown) {
-  if (err instanceof PlatformJiraApiError && err.code === 'jira_auth_failed') {
+  if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
     return c.json(
       {
         error: 'jira_auth_failed',
