@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useRef } from 'react';
+import type { FormEvent } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Combobox } from './combobox';
@@ -121,6 +123,35 @@ describe('Combobox', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
 
     expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+
+  it('does not submit a form when clearing a multi-selection from its portal', async () => {
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
+    const onValueChange = vi.fn();
+
+    function FormCombobox() {
+      const formRef = useRef<HTMLFormElement>(null);
+
+      return (
+        <form ref={formRef} onSubmit={onSubmit}>
+          <Combobox
+            multiple
+            container={formRef}
+            options={options}
+            value={['openai']}
+            onValueChange={onValueChange}
+            clearLabel="Clear"
+          />
+        </form>
+      );
+    }
+
+    render(<FormCombobox />);
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('shows the clear action only when a selected multi-combobox provides its label', async () => {

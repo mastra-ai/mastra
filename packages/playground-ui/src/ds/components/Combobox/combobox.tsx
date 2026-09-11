@@ -184,7 +184,13 @@ export function Combobox(props: ComboboxProps) {
             </BaseCombobox.List>
             {selectedValues.length > 0 && clearLabel ? (
               <div className={cn('border-t', 'border-border1', 'p-1')}>
-                <Button variant="destructive-ghost" size="sm" className="w-full justify-start" onClick={clearSelection}>
+                <Button
+                  type="button"
+                  variant="destructive-ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={clearSelection}
+                >
                   <X />
                   {clearLabel}
                 </Button>
