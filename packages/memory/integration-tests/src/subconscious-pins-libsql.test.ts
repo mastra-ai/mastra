@@ -69,13 +69,14 @@ describe('Subconscious pinned facts against LibSQL', () => {
     ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
     expect(pins).toHaveLength(0);
 
-    const rawDeleted = await store.getKnowledge({ id: edited.id, includeDeleted: true });
+    const rawDeleted = await store.getRecord({ id: edited.id, includeDeleted: true });
     expect(rawDeleted?.deletedAt).toBeTruthy();
   });
 
   it('drives the processor end to end: snapshot, delta, and lane clear on unpin', async () => {
     const { tools, storage } = await createHarness();
     const processor = new PinnedStateProcessor({
+      getKnowledgeInstance: () => undefined,
       getKnowledgeStore: () => (storage as any).getStore('knowledge'),
     });
 
