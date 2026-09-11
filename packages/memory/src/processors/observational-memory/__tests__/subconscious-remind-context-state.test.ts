@@ -445,6 +445,103 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(delta!.contents!.length).toBeLessThan(snapshot.contents!.length);
     });
 
+    // The lane's whole reason to exist is cost, and until this test nothing
+    // asserted it across a sequence: the only size assertion compared one delta
+    // to one snapshot, which cannot see the per-check folding instruction the
+    // lane charges on every request, nor an op that re-sends what it just
+    // called unchanged.
+    it('costs less than re-snapshotting once the fixed instruction is paid off', async () => {
+      const drifts = [
+        'The datastore migration counters rewrite is finished and the blocked flag is cleared.',
+        'The datastore migration counters rewrite shipped and the release notes are drafted.',
+      ];
+      const states = [
+        bigObservations({ first: firstFact, second: secondFact }),
+        bigObservations({ first: drifts[0], second: secondFact }),
+        bigObservations({ first: drifts[1], second: secondFact }),
+      ];
+
+      // What the lane sends today: a snapshot, then deltas folded onto it.
+      const snapshot = await firstSnapshot(states[0]!);
+      const laneEmissions = [snapshot];
+      for (let check = 1; check < states.length; check++) {
+        const processor = new RemindContextStateProcessor({
+          readParentRecord: async () => asRecord(states[check]!),
+        });
+        const emission = await processor.computeStateSignal(
+          args({
+            messages: [checkWith(`check-${check + 1}`, candidates)],
+            contextWindow: { hasSnapshot: true },
+            lastSnapshot: base(snapshot),
+            deltasSinceSnapshot: laneEmissions.slice(1).map(prior => ({ metadata: prior.metadata }) as never),
+          } as Partial<ComputeStateSignalArgs>),
+        );
+        expect(emission!.mode).toBe('delta');
+        laneEmissions.push(emission!);
+      }
+
+      // What it replaced: a full snapshot every check.
+      const snapshotOnly = await Promise.all(states.map(state => firstSnapshot(state)));
+
+      // The instruction is a system message that replaces the untagged system
+      // bucket on every request rather than accumulating, so it is a flat
+      // fixed cost, not a per-check one. Emissions are the opposite: state
+      // signals are exempt from transient dedupe and pile up in the transcript.
+      const folded = new RemindContextStateProcessor({
+        readParentRecord: async () => asRecord(states[0]!),
+      }).processInput({ messages: [], systemMessages: [] } as never) as {
+        systemMessages: { content: string }[];
+      };
+      const instruction = String(folded.systemMessages.at(-1)!.content);
+      expect(instruction.length).toBeGreaterThan(0);
+
+      const laneCost = (checks: number) =>
+        laneEmissions.slice(0, checks).reduce((sum, e) => sum + e.contents!.length, 0) + instruction.length;
+      const snapshotCost = (checks: number) =>
+        snapshotOnly.slice(0, checks).reduce((sum, e) => sum + e.contents!.length, 0);
+
+      // Honest about the shape: the lane starts behind by the instruction it
+      // has to pay before a single delta exists to save anything.
+      expect(laneCost(1)).toBeGreaterThan(snapshotCost(1));
+
+      // Every check after the first is cheaper at the margin. This is the
+      // assertion an op that re-sends an excerpt it just called unchanged
+      // would have to answer to.
+      for (let check = 2; check <= states.length; check++) {
+        const laneMarginal = laneCost(check) - laneCost(check - 1);
+        const snapshotMarginal = snapshotCost(check) - snapshotCost(check - 1);
+        expect(laneMarginal).toBeLessThan(snapshotMarginal);
+      }
+
+      // A marker-only check is the exception, and pinning it here is the
+      // point: `node-activity` re-sends the excerpt it just declared
+      // unchanged, so the one op that should be nearly free is the most
+      // expensive delta the lane emits. It cannot simply be trimmed — the
+      // folding instruction says this op *replaces* the candidate's entry, so
+      // dropping the excerpt would silently erase the candidate's evidence
+      // from the folded state. Fixing it is a folding-contract change. Until
+      // then this assertion holds the cost where it is, so a fix reads as an
+      // improvement and a regression reads as a failure.
+      const markerCheck = await new RemindContextStateProcessor({
+        readParentRecord: async () => asRecord(states.at(-1)!),
+        readRecentNodeActivity: async () => [
+          { id: 'evt-cost', action: 'node-updated', recordType: 'node', recordId: 'source-1' },
+        ],
+      } as never).computeStateSignal(
+        args({
+          messages: [checkWith('check-marker', candidates)],
+          contextWindow: { hasSnapshot: true },
+          lastSnapshot: base(snapshot),
+          deltasSinceSnapshot: laneEmissions.slice(1).map(prior => ({ metadata: prior.metadata }) as never),
+        } as Partial<ComputeStateSignalArgs>),
+      );
+
+      expect((markerCheck as { delta: { ops: { op: string }[] } }).delta.ops).toEqual([
+        expect.objectContaining({ op: 'node-activity' }),
+      ]);
+      expect(markerCheck!.contents!.length).toBeGreaterThan(laneEmissions.at(-1)!.contents!.length);
+    });
+
     it('emits nothing at all when a check changes nothing', async () => {
       const observations = bigObservations({ first: firstFact, second: secondFact });
       const snapshot = await firstSnapshot(observations);
