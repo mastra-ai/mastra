@@ -376,6 +376,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // to pubsub. Main's in-process loop workflow pays no serialization
           // cost for engine step events, so it doesn't set this.
           emitStepEvents: false,
+          // Default engine only: nested runs created by execute() reuse the
+          // parent run's pubsub so inner events reach the outer subscriber.
+          // On the evented engine this flag is a structural no-op — the engine
+          // always publishes on the shared `mastra.pubsub`, and the agent's
+          // CachingPubSub follows that bus (Phase 2 Item 5). Toggling it to
+          // `false` changes nothing there.
           sharePubsub: true,
           // Internal durable-agent execution plumbing — hide workflow spans;
           // the agent/tool/model spans within still surface for users.

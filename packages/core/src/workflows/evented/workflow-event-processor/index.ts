@@ -1747,7 +1747,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (isSingleStepEntry(step)) {
+    // `emitStepEvents: false` suppresses step-lifecycle watch events (the
+    // durable agent loop sets it — #21529). Run-level events (start / finish /
+    // suspend) and the `workflows` routing topic are never gated.
+    if (isSingleStepEntry(step) && workflow.options.emitStepEvents !== false) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
@@ -2714,23 +2717,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     } else if (prevResult.status === 'suspended') {
       // Emit the per-step suspended watch event (fires per branch even inside a parallel/conditional)
-      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-suspended',
-          payload: {
-            id: stepId,
-            // Strip completion fields of the step's *previous* run (a stale
-            // `output` would otherwise re-publish state blobs), then re-add
-            // the fields describing the current suspension.
-            ...omitPriorCompletionFields(prevResult),
-            suspendedAt: Date.now(),
-            suspendPayload: prevResult.suspendPayload,
-            ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
+      if (workflow.options.emitStepEvents !== false) {
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-suspended',
+            payload: {
+              id: stepId,
+              // Strip completion fields of the step's *previous* run (a stale
+              // `output` would otherwise re-publish state blobs), then re-add
+              // the fields describing the current suspension.
+              ...omitPriorCompletionFields(prevResult),
+              suspendedAt: Date.now(),
+              suspendPayload: prevResult.suspendPayload,
+              ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
+            },
           },
-        },
-      });
+        });
+      }
 
       const parentEntry = workflow.stepGraph[executionPath[0]!];
       if ((parentEntry?.type === 'parallel' || parentEntry?.type === 'conditional') && executionPath.length > 1) {
@@ -2826,7 +2831,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step && isSingleStepEntry(step)) {
+    if (step && isSingleStepEntry(step) && workflow.options.emitStepEvents !== false) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,

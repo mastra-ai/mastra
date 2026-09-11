@@ -1752,6 +1752,25 @@ export class EventedWorkflow<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
 
+    // The evented engine cannot function without a Mastra host — it is the
+    // source of the pubsub transport, snapshot storage, and agent/workflow
+    // resolution. Construction legitimately precedes registration (builders
+    // create workflows first; `__registerMastra` wires the host later), so
+    // enforce the precondition here rather than in the constructor. Without
+    // this guard the run would start and then hang or fail deep inside the
+    // event processor, far from the actual mistake.
+    if (!this.mastra) {
+      throw new MastraError({
+        id: 'EVENTED_WORKFLOW_MASTRA_HOST_REQUIRED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${this.id}" runs on the evented execution engine, which requires a Mastra host. ` +
+          `Register this workflow on a Mastra instance (e.g. \`new Mastra({ workflows: { ${this.id}: workflow } })\`) before calling createRun().`,
+        details: { workflowId: this.id },
+      });
+    }
+
     const runIdToUse = options?.runId || randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
