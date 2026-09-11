@@ -414,8 +414,6 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   serverVersion?: string;
   /** Negotiated MCP protocol version, when available. */
   mcpProtocolVersion?: string;
-  /** MCP transport session identifier, when available. */
-  mcpSessionId?: string;
   success?: boolean;
 }
 

@@ -19,7 +19,7 @@ import type {
   ListResourceTemplatesResult,
   Prompt,
 } from '@modelcontextprotocol/server';
-import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { PROTOCOL_VERSION_META_KEY, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import getPort from 'get-port';
 import { Hono } from 'hono';
@@ -2020,10 +2020,11 @@ describe('MCPServer - Agent to Tool Conversion', () => {
           serverName: 'DirectToolServer',
           serverVersion: '1.0.0',
           protocolVersion: '2025-11-25',
-          sessionId: 'auth-test-session',
         },
       }),
     );
+    const legacyInvocation = directToolExecute.mock.calls[0]?.[1]?.mcpServerToolInvocation;
+    expect(legacyInvocation).not.toHaveProperty('sessionId');
 
     let agentToolOptions: any = null;
 
@@ -2155,6 +2156,57 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(agentToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
     expect(agentToolOptions.mcp.elicitation).toBeDefined();
     expect(agentElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
+  });
+
+  it('should read the MCP protocol version from a modern request envelope', async () => {
+    server = new MCPServer({
+      name: 'ModernProtocolServer',
+      version: '1.0.0',
+      tools: {
+        protocolProbe: {
+          description: 'Tool that records modern MCP request provenance',
+          parameters: z.object({}),
+          execute: async () => ({ ok: true }),
+        },
+      },
+    });
+
+    const serverInstance = server.getServer();
+    const negotiatedVersion = vi.spyOn(serverInstance, 'getNegotiatedProtocolVersion').mockReturnValue('2025-11-25');
+    const directToolExecute = vi.spyOn(server.convertedTools.protocolProbe!, 'execute');
+    // @ts-expect-error - accessing internal for testing
+    const callToolHandler = serverInstance._requestHandlers.get('tools/call');
+    const modernExtra = makeMockExtra();
+    modernExtra.mcpReq.envelope = {
+      [PROTOCOL_VERSION_META_KEY]: '2026-07-28',
+    } as typeof modernExtra.mcpReq.envelope;
+
+    await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-modern-protocol',
+        method: 'tools/call' as const,
+        params: {
+          name: 'protocolProbe',
+          arguments: {},
+        },
+      },
+      modernExtra,
+    );
+
+    expect(directToolExecute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        mcpServerToolInvocation: {
+          role: 'server',
+          method: 'tools/call',
+          serverName: 'ModernProtocolServer',
+          serverVersion: '1.0.0',
+          protocolVersion: '2026-07-28',
+        },
+      }),
+    );
+    expect(negotiatedVersion).not.toHaveBeenCalled();
   });
 });
 
