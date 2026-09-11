@@ -2602,4 +2602,193 @@ describe('SemanticRecall', () => {
       expect(recalledBlock(messageList)).toBeUndefined();
     });
   });
+
+  describe('provider-side response chaining', () => {
+    // When the caller hands history ownership to the provider via `previousResponseId`,
+    // re-injecting same-thread recall duplicates items the provider already holds:
+    // recalled parts carry a persisted Responses itemId that the provider SDK turns into
+    // an `item_reference` sent alongside `previous_response_id`, which OpenAI rejects with
+    // `400 Duplicate item found`. Cross-thread context is unaffected — it is not part of
+    // the provider's chain and arrives as a system message, which carries no itemId.
+
+    const inputMessage: MastraDBMessage = {
+      id: 'msg-new',
+      role: 'user',
+      content: {
+        format: 2,
+        content: 'What did we discuss before?',
+        parts: [{ type: 'text', text: 'What did we discuss before?' }],
+      },
+      createdAt: new Date('2024-01-15T12:00:00.000Z'),
+    };
+
+    const sameThreadMessage: MastraDBMessage = {
+      id: 'msg-same',
+      role: 'user',
+      content: {
+        format: 2,
+        content: 'Same thread message',
+        parts: [{ type: 'text', text: 'Same thread message' }],
+      },
+      threadId: 'thread-1',
+      createdAt: new Date('2024-01-15T11:00:00.000Z'),
+    };
+
+    const crossThreadMessage: MastraDBMessage = {
+      id: 'msg-other-1',
+      role: 'user',
+      content: {
+        format: 2,
+        content: 'Previous question',
+        parts: [{ type: 'text', text: 'Previous question' }],
+      },
+      threadId: 'other-thread-1',
+      createdAt: new Date('2024-01-15T10:30:00.000Z'),
+    };
+
+    function contextWithProviderOptions(providerOptions?: Record<string, unknown>) {
+      const context = new RequestContext();
+      context.set('MastraMemory', {
+        thread: { id: 'thread-1', resourceId: 'resource-1' },
+        resourceId: 'resource-1',
+        providerOptions,
+      });
+      return context;
+    }
+
+    function mockRecallResults(messages: MastraDBMessage[]) {
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra-memory']);
+      vi.mocked(mockVector.query).mockResolvedValue(
+        messages.map((m, index) => ({
+          id: m.id!,
+          score: 0.9 - index * 0.05,
+          metadata: { message_id: m.id, thread_id: m.threadId ?? 'thread-1' },
+        })),
+      );
+      vi.mocked(mockStorage.listMessages).mockResolvedValue({
+        messages,
+        total: messages.length,
+        page: 1,
+        perPage: false,
+        hasMore: false,
+      } as any);
+    }
+
+    it('skips same-thread recall but keeps cross-thread context when the provider owns the chain', async () => {
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        scope: 'resource',
+      });
+
+      mockRecallResults([crossThreadMessage, sameThreadMessage]);
+
+      const messageList = new MessageList();
+      messageList.add([inputMessage], 'input');
+
+      const result = await processor.processInput({
+        messages: [inputMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: contextWithProviderOptions({ openai: { previousResponseId: 'resp_1', store: true } }),
+      });
+
+      const promptMessages = Array.isArray(result) ? result : result.get.all.aiV4.prompt();
+
+      // Cross-thread system message + the original input only; the same-thread recall is gone.
+      expect(promptMessages).toHaveLength(2);
+      expect(promptMessages[0]!.role).toBe('system');
+      expect(promptMessages[0]!.content).toContain('<remembered_from_other_conversation>');
+      expect(promptMessages[0]!.content).toContain('Previous question');
+      expect(promptMessages[1]!.role).toBe('user');
+      expect(promptMessages.map(m => JSON.stringify(m.content)).join(' ')).not.toContain('Same thread message');
+    });
+
+    it('still recalls same-thread messages when previousResponseId is absent', async () => {
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        scope: 'resource',
+      });
+
+      mockRecallResults([crossThreadMessage, sameThreadMessage]);
+
+      const messageList = new MessageList();
+      messageList.add([inputMessage], 'input');
+
+      const result = await processor.processInput({
+        messages: [inputMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: contextWithProviderOptions({ openai: { store: true } }),
+      });
+
+      const promptMessages = Array.isArray(result) ? result : result.get.all.aiV4.prompt();
+
+      // System (cross-thread) + same-thread recall + original input.
+      expect(promptMessages).toHaveLength(3);
+      expect(promptMessages.map(m => JSON.stringify(m.content)).join(' ')).toContain('Same thread message');
+    });
+
+    it('skips same-thread recall for the azure namespace', async () => {
+      // Azure declares no previousResponseId of its own; the gateway mirrors azure.* into
+      // openai.* only at call time, which is after memory recall has already run.
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+      });
+
+      mockRecallResults([sameThreadMessage]);
+
+      const messageList = new MessageList();
+      messageList.add([inputMessage], 'input');
+
+      const result = await processor.processInput({
+        messages: [inputMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: contextWithProviderOptions({ azure: { previousResponseId: 'resp_1', store: true } }),
+      });
+
+      const promptMessages = Array.isArray(result) ? result : result.get.all.aiV4.prompt();
+
+      expect(promptMessages).toHaveLength(1);
+      expect(messageList.makeMessageSourceChecker().memory.size).toBe(0);
+    });
+
+    it('still indexes messages in processOutputResult when the provider owns the chain', async () => {
+      // Gating must stay on the read side. Embedding new messages so future recall can
+      // find them is a write-side concern and has to keep running.
+      const storage = { listMessages: vi.fn(), saveMessages: vi.fn() };
+      const embedder = { modelId: 'test-model', doEmbed: vi.fn() };
+      const vector = { upsert: vi.fn(), query: vi.fn(), createIndex: vi.fn(), listIndexes: vi.fn() };
+
+      const processor = new SemanticRecall({
+        storage: storage as any,
+        embedder: embedder as any,
+        vector: vector as any,
+      });
+
+      vi.mocked(embedder.doEmbed).mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] });
+      vi.mocked(vector.listIndexes).mockResolvedValue(['mastra-memory']);
+
+      const messageList = new MessageList();
+      messageList.add([inputMessage], 'input');
+
+      const result = await processor.processOutputResult({
+        messages: [inputMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: contextWithProviderOptions({ openai: { previousResponseId: 'resp_1', store: true } }),
+      });
+
+      expect(result).toBe(messageList);
+      expect(embedder.doEmbed).toHaveBeenCalled();
+      expect(vector.upsert).toHaveBeenCalled();
+    });
+  });
 });

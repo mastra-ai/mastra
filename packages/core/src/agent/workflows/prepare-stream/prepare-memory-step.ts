@@ -215,6 +215,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         resourceId,
         memoryConfig,
         runState: () => runScope.get(MEMORY_RUN_STATE_KEY),
+        providerOptions: options.providerOptions,
       });
 
       // Add user messages - memory processors will handle history/semantic recall/working memory

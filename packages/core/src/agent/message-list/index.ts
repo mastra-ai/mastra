@@ -64,6 +64,7 @@ export {
   getResponseProviderItemKey,
   getResponseProviderItemIds,
   getResponseProviderItemKeys,
+  hasProviderSideResponseChain,
 } from './utils/response-item-metadata';
 export type { ResponseItemIdProvider } from './utils/response-item-metadata';
 export type { ToolResultWithInput } from './utils/provider-compat';

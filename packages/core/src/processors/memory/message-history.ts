@@ -1,5 +1,6 @@
 import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import { hasProviderSideResponseChain } from '../../agent/message-list';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
@@ -118,10 +119,24 @@ export class MessageHistory implements Processor {
     }
 
     const { threadId, resourceId } = context;
-    const memoryRunState = parseMemoryRequestContext(requestContext)?.runState?.();
+    const memoryRequestContext = parseMemoryRequestContext(requestContext);
+    const memoryRunState = memoryRequestContext?.runState?.();
 
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { lastMessages: this.lastMessages } });
+
+    // The caller asked the provider to continue a server-side response chain, so the
+    // provider restores prior state from `previousResponseId`. Replaying thread history
+    // here would duplicate items it already holds: recalled assistant parts carry a
+    // persisted Responses `itemId`, which the provider SDK turns into an `item_reference`
+    // sent alongside `previous_response_id` — OpenAI rejects that with
+    // `400 Duplicate item found`. Recall is skipped, while persistence in
+    // processOutputResult deliberately stays enabled so the stored transcript remains
+    // complete.
+    if (hasProviderSideResponseChain(memoryRequestContext?.providerOptions)) {
+      span?.update({ attributes: { messageCount: 0 } });
+      return messageList;
+    }
 
     try {
       // 1. Fetch historical messages from storage (as DB format)

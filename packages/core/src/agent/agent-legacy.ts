@@ -476,6 +476,7 @@ export class AgentLegacyHandler {
           resourceId,
           memoryConfig,
           runState: () => runScope.get(LEGACY_MEMORY_RUN_STATE_KEY),
+          providerOptions,
         });
 
         // Add new user messages to the list

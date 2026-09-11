@@ -4,6 +4,7 @@ import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
+import type { ProviderOptions } from '../llm/model/provider-options.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
@@ -128,6 +129,12 @@ export type MemoryRequestContext = {
   memoryConfig?: MemoryConfigInternal;
   /** Internal accessor for non-serializable state shared within one agent run. */
   runState?: MemoryRunStateAccessor;
+  /**
+   * Provider options for this call. Memory processors read this to detect provider-side
+   * response chaining (`previousResponseId`), where replaying thread history would
+   * duplicate state the provider already holds. Not persisted across durable recovery.
+   */
+  providerOptions?: ProviderOptions;
 };
 
 /**

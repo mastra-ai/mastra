@@ -2,6 +2,7 @@ import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList, isMastraSignalMessage } from '../../agent';
+import { hasProviderSideResponseChain } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
@@ -187,6 +188,16 @@ export class SemanticRecall implements Processor {
       return messageList;
     }
 
+    // The caller asked the provider to continue a server-side response chain, so the
+    // provider restores prior state from `previousResponseId`. Re-injecting same-thread
+    // history would duplicate items it already holds: recalled parts carry a persisted
+    // Responses itemId that the provider SDK turns into an `item_reference` sent alongside
+    // `previous_response_id`, which OpenAI rejects with `400 Duplicate item found`.
+    //
+    // Cross-thread context is deliberately still injected below — it is not part of the
+    // provider's chain, and it arrives as a system message, which carries no itemId.
+    const providerOwnsChain = hasProviderSideResponseChain(memoryContext.providerOptions);
+
     // Extract user query from the last user message
     const userQuery = this.extractUserQuery(messages);
     if (!userQuery) {
@@ -232,7 +243,7 @@ export class SemanticRecall implements Processor {
         }
       }
 
-      if (sameThreadMessages.length) {
+      if (sameThreadMessages.length && !providerOwnsChain) {
         // Add all recalled messages with 'memory' source
         messageList.add(sameThreadMessages, 'memory');
       }

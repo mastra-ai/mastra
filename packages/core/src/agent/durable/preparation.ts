@@ -383,7 +383,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         saveThread: true,
       }));
     threadExists = true;
-    requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
+    requestContext.set('MastraMemory', {
+      thread: threadObject,
+      resourceId,
+      memoryConfig,
+      providerOptions: execOptions?.providerOptions,
+    });
   } else {
     // This run has no complete per-request memory context. Clear any
     // MastraMemory inherited from a caller-provided requestContext (e.g. a

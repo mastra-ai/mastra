@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import { createSignal } from '../../agent/signals';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import { MemoryRunState } from '../../memory';
-import type { MemoryRuntimeContext } from '../../memory';
+import type { MemoryRequestContext } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
@@ -11,11 +12,16 @@ import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../st
 import { MessageHistory } from './message-history.js';
 
 // Helper to create RequestContext with memory context
-function createRuntimeContextWithMemory(threadId: string, resourceId?: string): RequestContext {
+function createRuntimeContextWithMemory(
+  threadId: string,
+  resourceId?: string,
+  providerOptions?: ProviderOptions,
+): RequestContext {
   const requestContext = new RequestContext();
-  const memoryContext: MemoryRuntimeContext = {
+  const memoryContext: MemoryRequestContext = {
     thread: { id: threadId },
     resourceId,
+    providerOptions,
   };
   requestContext.set('MastraMemory', memoryContext);
   return requestContext;
@@ -1107,6 +1113,158 @@ describe('MessageHistory', () => {
       const savedParts = savedMessages[0].content.parts.filter((p: any) => p.type === 'text');
       // The part with a tag is stripped and trimmed; the untouched part keeps its whitespace.
       expect(savedParts.map((p: any) => p.text)).toEqual(['Saved.', ' untouched ']);
+    });
+  });
+
+  describe('provider-side response chaining', () => {
+    // When the caller hands history ownership to the provider via `previousResponseId`,
+    // replaying thread memory duplicates items the provider already holds: recalled
+    // assistant parts carry a persisted Responses itemId that the provider SDK turns
+    // into an `item_reference` sent alongside `previous_response_id`, which OpenAI
+    // rejects with `400 Duplicate item found`.
+    const historicalMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'first user message' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 2000),
+      },
+      {
+        id: 'msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'assistant reply 1' }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 1000),
+      },
+    ];
+
+    const currentTurn: MastraDBMessage = {
+      id: 'msg-3',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'second user message' }] },
+      threadId: 'thread-1',
+      createdAt: new Date(),
+    };
+
+    function newTurnMessageList() {
+      const messageList = new MessageList();
+      messageList.add([currentTurn], 'input');
+      return messageList;
+    }
+
+    const chainedProviderOptions: Array<[string, ProviderOptions]> = [
+      ['openai', { openai: { previousResponseId: 'resp_1', store: true } }],
+      // Azure declares no previousResponseId of its own; the gateway mirrors azure.*
+      // into openai.* only at call time, after memory recall has already run.
+      ['azure', { azure: { previousResponseId: 'resp_1', store: true } }],
+      ['xai', { xai: { previousResponseId: 'resp_1' } }],
+    ];
+
+    it.each(chainedProviderOptions)(
+      'skips recall for the %s namespace without reading storage',
+      async (_namespace, providerOptions) => {
+        mockStorage.setMessages(historicalMessages);
+        const listMessagesSpy = vi.spyOn(mockStorage, 'listMessages');
+
+        processor = new MessageHistory({ storage: mockStorage, lastMessages: 10 });
+        const messageList = newTurnMessageList();
+
+        const result = await processor.processInput({
+          messages: messageList.get.input.db(),
+          messageList,
+          abort: mockAbort,
+          requestContext: createRuntimeContextWithMemory('thread-1', undefined, providerOptions),
+        });
+
+        // No storage read at all — the gate sits above listMessages.
+        expect(listMessagesSpy).not.toHaveBeenCalled();
+
+        expect(result).toBe(messageList);
+        expect(messageList.makeMessageSourceChecker().memory.size).toBe(0);
+        expect(messageList.get.all.db().map(m => m.id)).toEqual(['msg-3']);
+      },
+    );
+
+    it('still recalls when previousResponseId is absent', async () => {
+      mockStorage.setMessages(historicalMessages);
+      const listMessagesSpy = vi.spyOn(mockStorage, 'listMessages');
+
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 10 });
+      const messageList = newTurnMessageList();
+
+      await processor.processInput({
+        messages: messageList.get.input.db(),
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1', undefined, { openai: { store: true } }),
+      });
+
+      expect(listMessagesSpy).toHaveBeenCalled();
+      expect(messageList.makeMessageSourceChecker().memory.size).toBe(2);
+      expect(messageList.get.all.db().map(m => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    });
+
+    it('still recalls when previousResponseId is explicitly null', async () => {
+      mockStorage.setMessages(historicalMessages);
+
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 10 });
+      const messageList = newTurnMessageList();
+
+      await processor.processInput({
+        messages: messageList.get.input.db(),
+        messageList,
+        abort: mockAbort,
+        requestContext: createRuntimeContextWithMemory('thread-1', undefined, {
+          openai: { previousResponseId: null, store: true },
+        }),
+      });
+
+      expect(messageList.get.all.db().map(m => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    });
+
+    it('still persists the turn when recall is skipped', async () => {
+      // The property `lastMessages: 0` cannot provide: disabling recall must not disable
+      // the save, or the stored transcript diverges from the provider's view.
+      mockStorage.setMessages(historicalMessages);
+      const requestContext = createRuntimeContextWithMemory('thread-1', 'resource-1', {
+        openai: { previousResponseId: 'resp_1', store: true },
+      });
+
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 10 });
+      const messageList = newTurnMessageList();
+      messageList.add(
+        [
+          {
+            id: 'msg-4',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'assistant reply 2' }] },
+            threadId: 'thread-1',
+            createdAt: new Date(),
+          },
+        ],
+        'response',
+      );
+
+      await processor.processInput({
+        messages: messageList.get.input.db(),
+        messageList,
+        abort: mockAbort,
+        requestContext,
+      });
+      expect(messageList.makeMessageSourceChecker().memory.size).toBe(0);
+
+      const saveMessagesSpy = vi.spyOn(mockStorage, 'saveMessages');
+      await processor.processOutputResult({
+        messages: messageList.get.all.db(),
+        messageList,
+        abort: mockAbort,
+        requestContext,
+      });
+
+      expect(saveMessagesSpy).toHaveBeenCalledTimes(1);
+      const saved = (saveMessagesSpy.mock.calls[0] as any)[0].messages as MastraDBMessage[];
+      expect(saved.map(m => m.id).sort()).toEqual(['msg-3', 'msg-4']);
     });
   });
 });

@@ -46,3 +46,38 @@ export function getResponseProviderItemKeys(providerMetadata: Record<string, unk
     formatResponseProviderItemKey(provider, itemId),
   );
 }
+
+/**
+ * Provider namespaces whose AI SDK options declare `previousResponseId`, i.e. providers
+ * that can be asked to restore prior conversation state server-side.
+ *
+ * Distinct from RESPONSE_ITEM_ID_PROVIDERS: that list is where Mastra persists item ids,
+ * this one is where a caller can hand history ownership to the provider. `azure` is
+ * included even though it declares no `previousResponseId` of its own, because
+ * mirrorAzureProviderOptionsForOpenAI (llm/model/gateways/azure.ts) spreads `azure.*` into
+ * `openai.*` only at gateway time — after memory recall has already run.
+ */
+const RESPONSE_CHAIN_PROVIDERS = ['openai', 'azure', 'xai'] as const;
+
+/**
+ * Whether the caller asked a provider to continue an existing server-side response chain.
+ *
+ * When true, replaying thread history from memory duplicates state the provider already
+ * holds. Recalled assistant parts carry a persisted Responses `itemId`, which the provider
+ * SDK converts to an `item_reference` alongside `previous_response_id` — OpenAI rejects
+ * that combination with `400 Duplicate item found`.
+ *
+ * Only a non-empty string counts as set: the OpenAI schema types this option as
+ * `ZodOptional<ZodNullable<ZodString>>`, so `null` and `undefined` both mean "no chain".
+ */
+export function hasProviderSideResponseChain(providerOptions: unknown): boolean {
+  if (!providerOptions || typeof providerOptions !== 'object') return false;
+
+  const options = providerOptions as Record<string, unknown>;
+
+  return RESPONSE_CHAIN_PROVIDERS.some(provider => {
+    const providerOptionsForNamespace = options[provider] as Record<string, unknown> | undefined;
+    const previousResponseId = providerOptionsForNamespace?.previousResponseId;
+    return typeof previousResponseId === 'string' && previousResponseId.length > 0;
+  });
+}
