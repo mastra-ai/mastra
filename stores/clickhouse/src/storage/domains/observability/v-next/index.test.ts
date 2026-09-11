@@ -5,7 +5,6 @@
  * - Insert-only model (no span updates)
  * - ReplacingMergeTree for tracing, append-only MergeTree for signals
  * - Discovery via helper tables (discovery_values / discovery_pairs)
- * - Label-key exclusion in grouped queries
  *
  * Requires a running ClickHouse instance. Use `docker compose up -d` in the
  * clickhouse store directory, or set CLICKHOUSE_URL/CLICKHOUSE_USERNAME/CLICKHOUSE_PASSWORD.
@@ -316,7 +315,6 @@ LIMIT 1`,
         },
         TABLE_SPAN_EVENTS,
       );
-      const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
 
       for (const readRows of [
         spanReadRows,
@@ -327,7 +325,6 @@ LIMIT 1`,
       ]) {
         expect(readRows).toBeLessThan(fixtureSize);
       }
-      expect(groupedReadRows).toBeLessThan(10);
     } finally {
       await client.close();
     }

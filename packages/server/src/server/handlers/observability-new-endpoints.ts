@@ -225,10 +225,10 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
-  handler: async ({ mastra, timeRange, where, group, orderBy, page }) => {
+  handler: async ({ mastra, timeRange, where, orderBy, page }) => {
     let plan;
     try {
-      plan = coreStorage.planTraceQuery({ timeRange, where, group, orderBy, page });
+      plan = coreStorage.planTraceQuery({ timeRange, where, orderBy, page });
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
