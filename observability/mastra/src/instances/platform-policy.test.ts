@@ -36,8 +36,8 @@ afterEach(() => {
 });
 
 describe('Platform storage exporter supersession', () => {
-  it('keeps MastraStorageExporter when the Platform access token is absent', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', undefined);
+  it('keeps MastraStorageExporter when the Platform deployment ID is absent', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', undefined);
     const storageExporter = new MastraStorageExporter();
 
     const instance = createInstance([storageExporter]);
@@ -47,8 +47,8 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getObservabilityBus().getExporters()).toEqual([storageExporter]);
   });
 
-  it('treats an empty Platform access token as absent', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+  it('treats an empty Platform deployment ID as absent', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', '');
     const storageExporter = new MastraStorageExporter();
 
     const instance = createInstance([storageExporter]);
@@ -56,8 +56,18 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getExporters()).toEqual([storageExporter]);
   });
 
-  it('removes MastraStorageExporter before registration when the Platform access token is present', () => {
+  it('keeps MastraStorageExporter when only the Platform access token is present', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', undefined);
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    const storageExporter = new MastraStorageExporter();
+
+    const instance = createInstance([storageExporter]);
+
+    expect(instance.getExporters()).toEqual([storageExporter]);
+  });
+
+  it('removes MastraStorageExporter before registration when the Platform deployment ID is present', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const storageExporter = new MastraStorageExporter();
 
     const instance = createInstance([storageExporter]);
@@ -67,8 +77,8 @@ describe('Platform storage exporter supersession', () => {
     expect(instance.getObservabilityBus().getExporters()).toEqual([]);
   });
 
-  it('removes the deprecated DefaultExporter when the Platform access token is present', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+  it('removes the deprecated DefaultExporter when the Platform deployment ID is present', () => {
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const storageExporter = new DefaultExporter();
 
     const instance = createInstance([storageExporter]);
@@ -77,7 +87,7 @@ describe('Platform storage exporter supersession', () => {
   });
 
   it('retains Platform, legacy Cloud, and custom exporters in their original order', async () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const storageExporter = new MastraStorageExporter();
     const platformExporter = new MastraPlatformExporter();
     const cloudExporter = new CloudExporter({ accessToken: 'cloud-token' });
@@ -93,7 +103,7 @@ describe('Platform storage exporter supersession', () => {
   });
 
   it('applies supersession to every SDK observability instance', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const firstCustomExporter = new CustomExporter();
     const secondCustomExporter = new CustomExporter();
 
@@ -105,7 +115,7 @@ describe('Platform storage exporter supersession', () => {
   });
 
   it('does not initialize a superseded storage exporter after setting the Mastra context', () => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_DEPLOYMENT_ID', 'deployment-id');
     const storageExporter = new TrackingStorageExporter();
     const observability = new Observability({
       configs: {

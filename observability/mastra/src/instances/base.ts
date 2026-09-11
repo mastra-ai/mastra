@@ -44,7 +44,7 @@ import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
-import { isBuiltInStorageExporter, shouldSupersedeStorageExporters } from './platform-policy';
+import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -115,8 +115,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
     const exporters = config.exporters ?? [];
-    const effectiveExporters = shouldSupersedeStorageExporters()
-      ? exporters.filter(exporter => !isBuiltInStorageExporter(exporter))
+    const effectiveExporters = isMastraPlatformDeployment()
+      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
       : exporters;
 
     // Apply defaults for optional fields
