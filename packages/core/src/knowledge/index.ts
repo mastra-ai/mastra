@@ -97,6 +97,22 @@ export class Knowledge extends MastraBase {
     );
   }
 
+  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
+  __getDescriptionContext(scope: KnowledgeScope): {
+    description?: string;
+    scopes: Array<{ address: string; name: string; description: string }>;
+  } {
+    const visibleAddresses = new Set(scope);
+    return {
+      description: this.description?.trim() || undefined,
+      scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
+        const description = configuredScope.description?.trim();
+        if (!description || !visibleAddresses.has(configuredScope.address)) return [];
+        return [{ address: configuredScope.address, name: configuredScope.name, description }];
+      }),
+    };
+  }
+
   /** @internal */
   setStorage(storage: MastraCompositeStore, source: MastraCompositeStore = storage): void {
     if (this.hasOwnStorage) return;
