@@ -12480,7 +12480,7 @@ packages:
     resolution: {integrity: sha512-ABkD1WhyfPZprKRQI3bhATjeiFuNWC9PXhfGWqL+sg/gKrM977oFrYkdb4msM3hgUGonr7KlOsOFT5TU2rht9g==}
 
   '@blaxel/core@0.3.20':
-    resolution: {integrity: sha512-ff0QwzdW+sy7rgoIKoNIWRodvNezZe7Ngnq+i1uj40nJ6Y4ykyEMj3vzY0GTb+4NpHwG7PmGhkje+Cn1rFg1xA==}
+    resolution: {integrity: sha512-bgEN/XEsKqmHZrB5TnqlwjAwkXjT9wn47faiAkQy29VxcY7hzVwwYOXaSz/tNy5sQTKqBwnpF/vSKeU0JQaj5w==}
     engines: {node: '>=18'}
 
   '@borewit/text-codec@0.2.2':
