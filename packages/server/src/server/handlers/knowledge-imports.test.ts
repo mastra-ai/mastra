@@ -42,11 +42,20 @@ describe('Knowledge importer webhook handler', () => {
       payload: { eventId: '42', binding: { source: 'forged', scope: 'resource:other' } },
     });
 
+    // The webhook acknowledges acceptance with the queued run; the drain
+    // completes it asynchronously so long agentic runs cannot outlive the
+    // request's gateway timeout.
     expect(run).toMatchObject({
-      status: 'succeeded',
       triggerKind: 'webhook',
       binding: knowledgeImporterBindingKey(binding),
     });
+    expect(['queued', 'running']).toContain(run.status);
+    let terminal = await knowledge.getImportRun(run.id);
+    while (terminal && !['succeeded', 'failed', 'skipped', 'interrupted'].includes(terminal.status)) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      terminal = await knowledge.getImportRun(run.id);
+    }
+    expect(terminal).toMatchObject({ status: 'succeeded' });
     expect(handler).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({ eventId: '42' }),
