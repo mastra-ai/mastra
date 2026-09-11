@@ -3,6 +3,7 @@ import { useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-con
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { HttpHandler } from 'msw';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +11,13 @@ import { useAgentSettings } from '../agent-context';
 import { WorkingMemoryProvider } from '../agent-working-memory-context';
 import { usePlaygroundModel } from '../playground-model-context';
 import { ThreadPreferencesProvider } from '../thread-preferences-provider';
-import { allowedModels, currentUser, memoryConfig, workingMemory } from './fixtures/thread-preferences';
+import {
+  allowedModels,
+  restrictedModels,
+  currentUser,
+  memoryConfig,
+  workingMemory,
+} from './fixtures/thread-preferences';
 import { buildBuilderSettings } from '@/domains/agent-builder/hooks/__tests__/fixtures/builder-settings';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { server } from '@/test/msw-server';
@@ -77,7 +84,11 @@ function Session({ threadId, agentId = 'agent-1' }: { threadId: string; agentId?
   );
 }
 
-function mountSession(threadId = 'thread-a', modelPolicy: BuilderModelPolicy = { active: false }) {
+function mountSession(
+  threadId = 'thread-a',
+  modelPolicy: BuilderModelPolicy = { active: false },
+  modelsHandler?: HttpHandler,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   client.setQueryData(['builder-settings'], buildBuilderSettings({ modelPolicy }));
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -89,7 +100,8 @@ function mountSession(threadId = 'thread-a', modelPolicy: BuilderModelPolicy = {
   );
   server.use(
     http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings({ modelPolicy }))),
-    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    modelsHandler ??
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemory)),
@@ -169,12 +181,17 @@ describe('ThreadPreferencesProvider', () => {
           });
         }),
       );
-      mountSession('thread-a', {
-        active: true,
-        pickerVisible: !locked,
-        allowed: [{ provider: 'openai', modelId: 'gpt-5-mini' }],
-        default: { provider: 'openai', modelId: 'gpt-5-mini' },
-      });
+      const view = mountSession(
+        'thread-a',
+        {
+          active: true,
+          pickerVisible: !locked,
+          allowed: [{ provider: 'openai', modelId: 'gpt-5-mini' }],
+          default: { provider: 'openai', modelId: 'gpt-5-mini' },
+        },
+        http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(restrictedModels)),
+      );
+      await waitFor(() => expect(view.client.getQueryData(['builder-available-models'])).toEqual(restrictedModels));
       expect(screen.getByText('gpt-5-mini:0.9')).toBeTruthy();
       fireEvent.click(screen.getByText('Send'));
       await waitFor(() => expect(bodies).toHaveLength(1));
