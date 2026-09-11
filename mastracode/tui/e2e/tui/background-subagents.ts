@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod/v3';
 
 import type { McE2eScenario } from './types.js';
@@ -49,6 +51,12 @@ export const backgroundSubagentsScenario = {
   testName: 'keeps background tool and delegated-subagent lifecycle output ordered and deduplicated',
   useOpenAIModel: true,
   aimockFixture: 'background-subagents.json',
+  prepare({ appDataDir }) {
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
+    settings.backgroundTools = { enabled: true };
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  },
   inProcessApp({ startMastraCodeApp }) {
     return startMastraCodeApp({
       config: {
