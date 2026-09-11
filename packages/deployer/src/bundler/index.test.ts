@@ -88,9 +88,9 @@ describe('Bundler.listToolsInputOptions', () => {
 
     expect(second).toEqual(first);
     expect(Object.values(first)).toEqual([
-      join(toolsDir, 'a.ts'),
-      join(toolsDir, 'b.ts'),
-      join(toolsDir, 'nested', 'c.ts'),
+      join(toolsDir, 'a.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'b.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'nested', 'c.ts').replaceAll('\\', '/'),
     ]);
     expect(Object.keys(first)).toEqual([
       'tools/a3576fdd-4db8-3860-0363-043d8e044095',
