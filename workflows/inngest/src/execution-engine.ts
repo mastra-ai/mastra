@@ -66,6 +66,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestStep: BaseContext<Inngest>['step'],
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
+    private parentStream?: { workflowId: string; runId: string },
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -520,6 +521,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
       : undefined;
 
+    const parentStream = this.parentStream ?? {
+      workflowId: executionContext.workflowId,
+      runId: executionContext.runId,
+    };
     const isResume = !!resume?.steps?.length;
     // New invocations return compact output; legacy memoized WorkflowResult
     // envelopes are structural supersets of this parent-facing contract.
@@ -559,6 +564,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             inputData,
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: runId,
             resume: {
               runId: runId,
@@ -597,6 +603,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             timeTravel: timeTravelParams,
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: executionContext.runId,
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
@@ -620,6 +627,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
+            parentStream,
             runId: nestedRunId,
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
