@@ -293,11 +293,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       updatedAt: now,
     };
     if (this.#db.knowledgeNodes.has(node.id)) throw new Error(`Knowledge node already exists: ${node.id}`);
+    // Validate structural placement before mutating anything: every address must
+    // resolve to a live reconciled scope node.
+    const placementIds = (input.scopeAddresses ?? []).map(address => {
+      const target = this.#structureScopes.get(address);
+      if (!target || target.deletedAt) throw new KnowledgeNotFoundError('scope', address);
+      return target.id;
+    });
     this.#db.knowledgeNodes.set(node.id, node);
     this.#db.knowledgeNodeKeys.set(key, node.id);
     this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
     this.#recordActivity('node-created', 'node', node.id, scope);
     this.#enqueue('node', node.id, 'upsert', node.version, scope);
+    // Placement edges go last so no later step can fail after they are added
+    // (#structureParents is instance state, outside the atomic #db snapshot).
+    for (const scopeId of placementIds) this.#structureParents.add(`${node.id}\u0000${scopeId}`);
     return cloneNode(node);
   }
 

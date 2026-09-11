@@ -103,14 +103,53 @@ export class Knowledge extends MastraBase {
     scopes: Array<{ address: string; name: string; description: string }>;
   } {
     const visibleAddresses = new Set(scope);
+    const structural = new Set(this.__getVisibleStructureScopes(scope).map(visibleScope => visibleScope.address));
     return {
       description: this.description?.trim() || undefined,
       scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
         const description = configuredScope.description?.trim();
-        if (!description || !visibleAddresses.has(configuredScope.address)) return [];
+        if (!description) return [];
+        if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
         return [{ address: configuredScope.address, name: configuredScope.name, description }];
       }),
     };
+  }
+
+  /**
+   * Structural scopes a writer holding `scope` may place content into: every configured
+   * scope whose ancestor chain (via declared parent addresses) reaches a held address.
+   * Held identity addresses themselves are excluded — those are placed via rungs. The
+   * structure plan is host configuration, so this frontier is host-vouched. @internal
+   */
+  __getVisibleStructureScopes(scope: KnowledgeScope): Array<{ address: string; name: string; description?: string }> {
+    const held = new Set(scope);
+    const configured = this.#structure?.scopes ?? [];
+    const parentsByAddress = new Map(configured.map(configuredScope => [configuredScope.address, configuredScope]));
+    const reachesHeld = (address: string): boolean => {
+      // DFS over all declared parents (multi-parent scopes are valid); the plan is
+      // validated acyclic, the seen set is just belt-and-braces.
+      const seen = new Set<string>();
+      const stack = [address];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (seen.has(current)) continue;
+        seen.add(current);
+        if (held.has(current)) return true;
+        for (const parent of parentsByAddress.get(current)?.parentAddresses ?? []) stack.push(parent);
+      }
+      return false;
+    };
+    const visible: Array<{ address: string; name: string; description?: string }> = [];
+    for (const configuredScope of configured) {
+      if (held.has(configuredScope.address)) continue;
+      if (!reachesHeld(configuredScope.address)) continue;
+      visible.push({
+        address: configuredScope.address,
+        name: configuredScope.name,
+        ...(configuredScope.description ? { description: configuredScope.description } : {}),
+      });
+    }
+    return visible;
   }
 
   /** @internal */

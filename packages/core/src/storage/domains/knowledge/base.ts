@@ -166,6 +166,8 @@ export interface KnowledgeNode {
    * storage already accepted. Long-form detail belongs in {@link KnowledgeNode.content}.
    */
   description?: string;
+  /** True for scope nodes; absent for ordinary content nodes. */
+  isScope?: boolean;
   scope: KnowledgeScope;
   version: number;
   mergedInto?: string;
@@ -333,6 +335,13 @@ export interface CreateKnowledgeNodeInput {
   content?: string;
   description?: string;
   scope: KnowledgeScope;
+  /**
+   * Structural scope addresses the node is placed into, in addition to its identity scope.
+   * Every address must resolve to a live reconciled scope node; unknown or deleted addresses
+   * throw without creating the node. Placement is additive membership (`node_scopes`) — it does
+   * not change the node's identity scope.
+   */
+  scopeAddresses?: string[];
   resolutionScope?: KnowledgeScope;
 }
 
@@ -739,7 +748,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   /** Applies an additive, idempotent structured scope plan. */
   async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
-    throw new Error('This Knowledge storage adapter does not support structured reconciliation.');
+    throw new KnowledgeUnsupportedCapabilityError('structured reconciliation');
   }
 
   /** Lists reconciled structural scope nodes with their parent membership edges (bounded, name-ordered). */

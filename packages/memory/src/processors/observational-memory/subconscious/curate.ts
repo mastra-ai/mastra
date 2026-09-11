@@ -155,12 +155,12 @@ function createKnowledgeDescriptionInstructions(memory: Memory, scope: Knowledge
   const sections = [
     context.description ? `Knowledge instance: ${context.description}` : undefined,
     context.scopes.length > 0
-      ? `Visible configured scopes:\n${context.scopes
+      ? `Visible configured scopes (identity rungs and structural addresses):\n${context.scopes
           .map(item => `- ${item.address} (${item.name}): ${item.description}`)
           .join('\n')}`
       : undefined,
   ];
-  return `Host-configured Knowledge placement context. Use these descriptions to choose the appropriate allowed scope for each durable fact.\n${sections
+  return `Host-configured Knowledge placement context. Use these descriptions to choose the appropriate allowed scope for each durable fact. To place a node into a structural scope, pass its address as the knowledge_create nodeScope argument.\n${sections
     .filter(Boolean)
     .join('\n')}`;
 }

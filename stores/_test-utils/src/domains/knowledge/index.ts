@@ -1,4 +1,4 @@
-import type { KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeStorage, KnowledgeStructurePlan } from '@mastra/core/storage';
 import {
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
@@ -37,6 +37,17 @@ export function createKnowledgeSchemaResetTests(createFixture: () => Promise<Kno
 const resource = ['org:acme', 'resource:mastra'];
 const thread = [...resource, 'thread:t1'];
 
+const STRUCTURE_PLAN: KnowledgeStructurePlan = {
+  scopes: [
+    { address: 'org:acme', name: 'acme' },
+    { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+  ],
+};
+
+function isUnsupportedStructure(error: unknown): boolean {
+  return error instanceof Error && error.name === 'KnowledgeUnsupportedCapabilityError';
+}
+
 export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
   describe('knowledge storage contract', () => {
     let store: KnowledgeStorage;
@@ -64,6 +75,43 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listNodes({ scope: thread, hasContent: true })).toEqual([
         expect.objectContaining({ id: node.id }),
       ]);
+    });
+
+    it('places created nodes into structural scopes by address', async () => {
+      let scopeIds: Record<string, string>;
+      try {
+        const result = await store.reconcileStructure(STRUCTURE_PLAN);
+        scopeIds = result.scopes;
+      } catch (error) {
+        if (isUnsupportedStructure(error)) {
+          // Adapters without structural scope support must still reject placement
+          // outright — never silently create an unplaced node.
+          await expect(
+            store.createNode({ name: 'Placed', kind: 'doc', scope: resource, scopeAddresses: ['features'] }),
+          ).rejects.toThrow(/does not expose structural scope/);
+          return;
+        }
+        throw error;
+      }
+
+      const node = await store.createNode({
+        name: 'Placed',
+        kind: 'doc',
+        scope: resource,
+        scopeAddresses: ['features'],
+      });
+      // Placement is additive membership: the identity scope is unchanged.
+      expect(node.scope).toEqual(resource);
+      expect(node.isScope).toBeUndefined();
+      expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+
+      // Unknown or deleted addresses fail the whole create without mutation.
+      await expect(
+        store.createNode({ name: 'Lost', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+      ).rejects.toThrow(/scope/i);
+      expect(await store.getNodeByName({ name: 'Lost', scope: resource })).toBeNull();
     });
 
     it('treats scope identifiers literally when checking visibility', async () => {
