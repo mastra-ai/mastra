@@ -126,6 +126,18 @@ Keep dependencies consistent to avoid version conflicts and build errors:
 - Use a **single lockfile** at the monorepo root so all packages resolve the same versions
 - Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates
 
+### Skipping dependency installation
+
+By default `mastra build` installs dependencies into the `.mastra/output` directory and generates a `package-lock.json` for the deploy target. Hermetic build systems (such as Bazel) supply `node_modules` externally and run in a network-less sandbox, where this install is both redundant and fatal.
+
+Set `MASTRA_BUILD_SKIP_INSTALL` to `true` or `1` to skip the output install and lockfile generation:
+
+```bash
+MASTRA_BUILD_SKIP_INSTALL=1 mastra build
+```
+
+When enabled, you are responsible for providing `node_modules` in the output directory yourself.
+
 ## Troubleshooting
 
 ### Workspace package not found

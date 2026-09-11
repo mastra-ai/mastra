@@ -79,6 +79,16 @@ export function getEffectiveResourceId(
 }
 
 /**
+ * Returns the resource id resolved from the request context alone (set via
+ * `mapUserToResourceId` or the `x-resource-id` header), ignoring any
+ * client-provided value. Its presence indicates a resource-scoped caller;
+ * its absence indicates a privileged/service context.
+ */
+export function getContextResourceId(requestContext: RequestContext | undefined): string | undefined {
+  return requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+}
+
+/**
  * Ensures a memory request has a resolvable resource ID. The body's
  * `memory.resource` is optional so authenticated setups can rely on the
  * server-derived resource ID (MASTRA_RESOURCE_ID_KEY set via mapUserToResourceId).

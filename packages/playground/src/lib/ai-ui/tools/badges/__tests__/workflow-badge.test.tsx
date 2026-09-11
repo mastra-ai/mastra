@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -9,7 +10,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowBadge } from '../workflow-badge';
 import { badgeWorkflow, badgeWorkflowRuns, RUN_ID, WORKFLOW_ID } from './fixtures/workflow-badge';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

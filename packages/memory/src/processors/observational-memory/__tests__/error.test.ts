@@ -21,6 +21,77 @@ describe('formatOmError', () => {
     expect(formatOmError(providerError())).toBe(diagnostic);
   });
 
+  it.each([
+    {
+      provider: 'Anthropic',
+      statusCode: 529,
+      responseBody: {
+        type: 'error',
+        error: { type: 'overloaded_error', message: 'Synthetic provider overload' },
+        request_id: 'private-request-id',
+      },
+      diagnostic: 'Synthetic provider overload',
+    },
+    {
+      provider: 'Gemini',
+      statusCode: 429,
+      responseBody: {
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          message: 'Synthetic quota exhausted',
+          details: [{ metadata: { consumer: 'private-project-id', apiKey: 'secret-key' } }],
+        },
+      },
+      diagnostic: 'Synthetic quota exhausted',
+    },
+  ])(
+    'preserves $provider diagnostics without including other response fields',
+    ({ statusCode, responseBody, diagnostic }) => {
+      const error = Object.assign(new Error('Provider request failed'), {
+        statusCode,
+        responseBody: JSON.stringify(responseBody),
+      });
+      expect(formatOmError(error)).toBe(`Provider request failed: HTTP ${statusCode}: ${diagnostic}`);
+
+      // SDKs may also copy the provider diagnostic into the outer error message.
+      error.message = diagnostic;
+      expect(formatOmError(error)).toBe(`${diagnostic}: HTTP ${statusCode}`);
+    },
+  );
+
+  it('preserves Codex string details without including other response fields', () => {
+    const error = Object.assign(new Error('Bad Request'), {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        detail: 'Synthetic Codex rejection for diagnostic testing',
+        request: { prompt: 'private conversation', apiKey: 'secret-key' },
+      }),
+    });
+    const expected = 'Bad Request: HTTP 400: Synthetic Codex rejection for diagnostic testing';
+    expect(formatOmError(error)).toBe(expected);
+    for (const createMarker of [createBufferingFailedMarker, createObservationFailedMarker]) {
+      const marker = createMarker({
+        cycleId: 'cycle',
+        operationType: 'observation',
+        startedAt: new Date().toISOString(),
+        tokensAttempted: 100,
+        error,
+        recordId: 'record',
+        threadId: 'thread',
+      });
+      expect(JSON.parse(JSON.stringify(marker)).data.error).toBe(expected);
+    }
+  });
+
+  it.each([null, 400, { message: 'private conversation' }, [{ input: 'secret-key' }]])(
+    'ignores non-string provider details: %j',
+    detail => {
+      const error = Object.assign(new Error('Bad Request'), { responseBody: JSON.stringify({ detail }) });
+      expect(formatOmError(error)).toBe('Bad Request');
+    },
+  );
+
   it('preserves nested causes and plain serialized errors', () => {
     expect(formatOmError(new Error('Observer failed', { cause: providerError() }))).toBe(
       `Observer failed: ${diagnostic}`,

@@ -747,6 +747,132 @@ describe('AgentController Resource', () => {
     }
   });
 
+  // A controllable stream: the test decides when frames arrive and when the
+  // body closes, so it can drive events precisely around unsubscribe().
+  const controlledSseResponse = () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let cancelled = false;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(c) {
+          controller = c;
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+    const enqueue = (frame: string) => controller.enqueue(new TextEncoder().encode(frame));
+    const close = () => controller.close();
+    return { response, enqueue, close, wasCancelled: () => cancelled };
+  };
+
+  it('does not deliver events read after unsubscribe', async () => {
+    const { response, enqueue } = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(response);
+
+    const received: AgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => received.push(event),
+        reconnect: true,
+      });
+
+    // Frame resolves the pending reader.read(); unsubscribe() lands in the same
+    // tick before the pump dispatches it.
+    enqueue(`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`);
+    sub.unsubscribe();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(received).toEqual([]);
+  });
+
+  it('stops delivering buffered frames when onEvent unsubscribes mid-chunk', async () => {
+    const { response, enqueue } = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(response);
+
+    const received: AgentControllerEvent[] = [];
+    let sub: { unsubscribe: () => void } | undefined;
+    sub = await client
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: event => {
+          received.push(event);
+          sub?.unsubscribe();
+        },
+      });
+
+    // Two frames in a single chunk: the first handler unsubscribes, so the
+    // second must not be delivered.
+    enqueue(
+      `data: ${JSON.stringify({ type: 'agent_start' })}\n\n` +
+        `data: ${JSON.stringify({ type: 'agent_end', reason: 'complete' })}\n\n`,
+    );
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(received).toEqual([{ type: 'agent_start' }]);
+  });
+
+  it('cancels the reconnect response body when onReconnect unsubscribes', async () => {
+    const first = controlledSseResponse();
+    const second = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(first.response).mockResolvedValueOnce(second.response);
+
+    let sub: { unsubscribe: () => void } | undefined;
+    sub = await noRetryClient()
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onReconnect: () => sub?.unsubscribe(),
+        reconnect: { maxRetries: 5, delayMs: 0 },
+      });
+
+    // Drop the first stream to trigger reconnect; onReconnect unsubscribes.
+    first.enqueue(`data: ${JSON.stringify({ type: 'agent_start' })}\n\n`);
+    await new Promise(r => setTimeout(r, 10));
+    // Closing the first stream ends its pump, driving the reconnect.
+    first.close();
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(second.wasCancelled()).toBe(true);
+  });
+
+  it('does not call onError when a reconnect request rejects after unsubscribe', async () => {
+    let rejectRequest!: (error: Error) => void;
+    const first = controlledSseResponse();
+    (global.fetch as any).mockResolvedValueOnce(first.response).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    );
+
+    const onError = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('probe')
+      .session('user-1')
+      .subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+
+    // Drop the first stream so the loop issues the reconnect request.
+    first.close();
+    await new Promise(r => setTimeout(r, 10));
+    // Unsubscribe while the reconnect request is in flight, then reject it.
+    sub.unsubscribe();
+    rejectRequest(new Error('reconnect refused'));
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('sends a notification signal', async () => {
     mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
     const result = await client

@@ -15,7 +15,6 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
-import { isSystemReminderSignalType } from '../../../../memory/system-reminders';
 import type {
   SpanType,
   AIModelGenerationSpan,
@@ -501,6 +500,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
+                        Boolean(registryEntry?.backgroundTaskManager),
                       );
                     } else {
                       convertedTools[name] = tool as CoreTool;
@@ -576,9 +576,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (pubsub) {
               const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
               for (const initialSignal of initialSignalEchoes) {
-                if (!isSystemReminderSignalType(initialSignal.type)) {
-                  await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
-                }
+                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
               }
 
               const isFirstModelRequest = stepIndex === 0;
@@ -589,9 +587,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
                 for (const preRunSignal of preRunSignals) {
                   const signalForTranscript = messageList.addSignal(preRunSignal);
-                  if (!isSystemReminderSignalType(signalForTranscript.type)) {
-                    await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
-                  }
+                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
                 }
               }
             }
@@ -1698,6 +1694,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ...deferredStepFinishChunk,
                   payload: {
                     ...deferredStepFinishChunk.payload,
+                    // The regular loop stamps isContinued on every step-finish chunk it emits
+                    // (loop/workflows/agentic-loop/index.ts). Output processors depend on it:
+                    // ChatChannelOutputProcessor closes its render queue on the first chunk where the
+                    // flag is not `true`, so a durable chunk that omits it ends channel rendering at
+                    // the tool step and drops everything after it (#23341).
+                    stepResult: {
+                      ...deferredStepFinishChunk.payload?.stepResult,
+                      isContinued,
+                    },
                     _durableStepContent: stepContent,
                   },
                 };

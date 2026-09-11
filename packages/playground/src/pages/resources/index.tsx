@@ -66,7 +66,7 @@ export default function Resources() {
                   <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-ui-sm text-text3 leading-relaxed">{resource.description}</p>
+              <p className="text-ui-sm text-text3">{resource.description}</p>
             </a>
           ))}
         </div>

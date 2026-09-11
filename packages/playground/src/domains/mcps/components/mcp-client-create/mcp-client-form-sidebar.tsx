@@ -76,7 +76,7 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-name" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-client-name" className="text-neutral5 text-ui-sm">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -87,11 +87,11 @@ export function MCPClientFormSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+            {errors.name && <span className="text-accent2 text-ui-sm">{errors.name.message}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-client-description" className="text-neutral5 text-ui-sm">
               Description
             </Label>
             <Textarea
@@ -125,7 +125,7 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-server-name" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-server-name" className="text-neutral5 text-ui-sm">
               Server Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -136,11 +136,11 @@ export function MCPClientFormSidebar({
               {...register('serverName')}
               error={!!errors.serverName}
             />
-            {errors.serverName && <span className="text-accent2 text-xs">{errors.serverName.message}</span>}
+            {errors.serverName && <span className="text-accent2 text-ui-sm">{errors.serverName.message}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Server Type</Label>
+            <Label className="text-neutral5 text-ui-sm">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
@@ -161,7 +161,7 @@ export function MCPClientFormSidebar({
           {serverType === 'http' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-url" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-url" className="text-neutral5 text-ui-sm">
                   URL <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -172,11 +172,11 @@ export function MCPClientFormSidebar({
                   {...register('url')}
                   error={!!errors.url}
                 />
-                {errors.url && <span className="text-accent2 text-xs">{errors.url.message}</span>}
+                {errors.url && <span className="text-accent2 text-ui-sm">{errors.url.message}</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-timeout" className="text-neutral5 text-ui-sm">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -194,7 +194,7 @@ export function MCPClientFormSidebar({
           {serverType === 'stdio' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-command" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-command" className="text-neutral5 text-ui-sm">
                   Command <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -205,11 +205,11 @@ export function MCPClientFormSidebar({
                   {...register('command')}
                   error={!!errors.command}
                 />
-                {errors.command && <span className="text-accent2 text-xs">{errors.command.message}</span>}
+                {errors.command && <span className="text-accent2 text-ui-sm">{errors.command.message}</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-args" className="text-neutral5 text-ui-sm">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -222,7 +222,7 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">Environment Variables</Label>
+                <Label className="text-neutral5 text-ui-sm">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
                     <div key={index} className="flex items-center gap-2">

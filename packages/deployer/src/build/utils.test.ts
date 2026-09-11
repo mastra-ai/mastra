@@ -12,6 +12,7 @@ import {
   detectRuntime,
   injectStudioHtmlConfig,
   escapeStudioHtmlValue,
+  shouldSkipInstall,
 } from './utils';
 
 describe('getPackageName', () => {
@@ -696,5 +697,36 @@ describe('escapeStudioHtmlValue', () => {
   it('leaves benign values byte-identical', () => {
     expect(escapeStudioHtmlValue('org-123')).toBe('org-123');
     expect(escapeStudioHtmlValue('https://observability.example.com')).toBe('https://observability.example.com');
+  });
+});
+
+describe('shouldSkipInstall', () => {
+  const original = process.env.MASTRA_BUILD_SKIP_INSTALL;
+
+  afterEach(() => {
+    if (original === undefined) {
+      delete process.env.MASTRA_BUILD_SKIP_INSTALL;
+    } else {
+      process.env.MASTRA_BUILD_SKIP_INSTALL = original;
+    }
+  });
+
+  it('returns true for "true" and "1"', () => {
+    process.env.MASTRA_BUILD_SKIP_INSTALL = 'true';
+    expect(shouldSkipInstall()).toBe(true);
+    process.env.MASTRA_BUILD_SKIP_INSTALL = '1';
+    expect(shouldSkipInstall()).toBe(true);
+  });
+
+  it('returns false when unset', () => {
+    delete process.env.MASTRA_BUILD_SKIP_INSTALL;
+    expect(shouldSkipInstall()).toBe(false);
+  });
+
+  it('returns false for other values', () => {
+    for (const value of ['false', '0', 'yes', 'TRUE', '']) {
+      process.env.MASTRA_BUILD_SKIP_INSTALL = value;
+      expect(shouldSkipInstall()).toBe(false);
+    }
   });
 });

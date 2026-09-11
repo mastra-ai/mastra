@@ -26,3 +26,7 @@ export const LineHeights = {
   'header-lg': '133%', // 32px
   'header-xl': '129%', // 36px
 };
+
+/** SVG/canvas text can't read CSS tokens; these mirror `ui-xs` (10px) and `ui-sm` (12px). */
+export const CHART_TICK_FONT_SIZE = 10;
+export const CHART_LABEL_FONT_SIZE = 12;

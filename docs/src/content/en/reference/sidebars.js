@@ -419,6 +419,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
         { type: 'doc', id: 'memory/settled', label: '.settled()' },
         { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
+        { type: 'doc', id: 'memory/updateThreadResourceId', label: '.updateThreadResourceId()' },
       ],
     },
     {
@@ -671,6 +672,7 @@ const sidebars = {
       label: 'Processors',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'processors/agents-md-injector', label: 'AgentsMDInjector' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },

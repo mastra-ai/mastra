@@ -25,7 +25,7 @@ export interface AskUserResult {
 }
 
 export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-sm', className)} {...props} />
+  <div className={cn('rounded-lg border border-border1 bg-surface2 p-3 text-ui-md', className)} {...props} />
 );
 
 export const AskUserQuestion = ({ className, ...props }: ComponentProps<'legend'>) => (

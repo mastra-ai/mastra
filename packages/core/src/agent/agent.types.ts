@@ -16,6 +16,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { AgentSignalType } from './signals';
 import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
@@ -358,6 +359,21 @@ export interface DelegationConfig {
   includeSubAgentToolResultsInModelContext?: boolean;
 
   /**
+   * Let a later delegation reuse an earlier subagent's result verbatim.
+   *
+   * When enabled, every successful, non-empty subagent result in this run is
+   * registered under a reference ID and the supervisor model sees a
+   * `[ref: <id>]` line after the subagent's text. The `agent-*` delegation
+   * tools gain a `contextFromRefs` input so the supervisor can name earlier
+   * results; their text is inserted into the next subagent's prompt in labeled
+   * blocks instead of the supervisor restating it. References are in-memory
+   * and scoped to a single supervisor run.
+   *
+   * @default false
+   */
+  enableResultReferences?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.
@@ -535,6 +551,13 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
+  /**
+   * Signal chunks to hide from this caller's stream: true hides all recognized signals,
+   * false hides none, and an array hides selected types. Defaults to none.
+   * Does not affect generated results, model context, or storage.
+   */
+  hideSignals?: boolean | AgentSignalType[];
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -766,6 +789,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /** @internal Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: {
+    allowToolDispatch: boolean;
+    allowDelegationDispatch: boolean;
+  };
 
   /**
    * When set, keeps the stream open across background-task continuations.

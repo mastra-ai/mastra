@@ -77,6 +77,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
@@ -966,6 +967,13 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
+                refreshManagedMemorySettings: ({ binding, session }) =>
+                  refreshFactorySessionMemorySettings(session, {
+                    orgId: binding.orgId,
+                    factoryProjectId: binding.factoryProjectId,
+                    projects: factoryProjectsStorage,
+                    memorySettings: memorySettingsStorage,
+                  }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
@@ -1084,6 +1092,7 @@ export class MastraFactory {
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: sourceControlStorage.forIntegration('github'),
+          projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
       { blocking: true },

@@ -9,6 +9,9 @@ import { config } from 'dotenv';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
+import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
+import { createLogCollector } from '../../utils/deploy-log-format.js';
+import { detectProjectType } from '../../utils/detect-project-type.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
@@ -243,7 +246,18 @@ async function resolveProject(
   flagProject?: string,
   defaultName?: string | null,
   autoAccept?: boolean,
+  /** Create new projects as Factory projects (the flag cannot be set later on the unified path). */
+  isFactoryProject = false,
 ): Promise<{ projectId: string; projectName: string; projectSlug: string }> {
+  // Keep the plain call shape for non-factory projects; only Factory builds
+  // pass creation options.
+  const createProjectNamed = async (name: string) => {
+    const created = isFactoryProject
+      ? await createServerProject(token, orgId, name, { factoryEnabled: true })
+      : await createServerProject(token, orgId, name);
+    p.log.success(`Created ${isFactoryProject ? 'Factory project' : 'project'} "${created.name}"`);
+    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
+  };
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
     return { projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
@@ -276,9 +290,7 @@ async function resolveProject(
       }
     }
 
-    const created = await createServerProject(token, orgId, flagProject);
-    p.log.success(`Created project "${created.name}"`);
-    return { projectId: created.id, projectName: created.name, projectSlug: created.slug ?? created.name };
+    return createProjectNamed(flagProject);
   }
 
   if (projectConfig?.projectId && projectConfig.organizationId === orgId) {
@@ -331,8 +343,7 @@ async function resolveProject(
     }
   }
 
-  const project = await createServerProject(token, orgId, name);
-  return { projectId: project.id, projectName: project.name, projectSlug: project.slug ?? project.name };
+  return createProjectNamed(name);
 }
 
 /* ------------------------------------------------------------------ */
@@ -386,6 +397,10 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
   p.intro('mastra server deploy');
 
   const packageName = getPackageName(targetDir);
+  // A Factory build needs the project flagged on the platform; new projects
+  // are created with it and the deploy request carries it for existing ones.
+  const projectType = await detectProjectType(targetDir);
+  const isFactoryProject = projectType === 'factory';
 
   // Step 1: Auth
   let token: string;
@@ -418,6 +433,7 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
     opts.project,
     packageName,
     autoAccept,
+    isFactoryProject,
   );
 
   // Step 5: Confirmation
@@ -561,21 +577,32 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    ...(isFactoryProject ? { factoryEnabled: true } : {}),
   });
   s.stop(`Deploy accepted: ${deployResult.id}`);
 
   await rm(zipPath, { force: true });
 
   p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId);
+  // With --debug every line is already on screen, so no excerpt is needed.
+  const collectedLogs = opts.debug ? undefined : createLogCollector();
+  const finalStatus = await pollServerDeploy(deployResult.id, token, orgId, undefined, {
+    showAllLogs: opts.debug,
+    collectLogs: collectedLogs,
+  });
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded! ${finalStatus.instanceUrl}`);
-  } else if (finalStatus.status === 'failed') {
-    p.log.error(`Deploy failed: ${finalStatus.error}`);
-    process.exit(1);
   } else {
-    p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
+    printDeployFailure({
+      message:
+        finalStatus.status === 'failed'
+          ? `Deploy failed: ${finalStatus.error}`
+          : `Deploy ended with status: ${finalStatus.status}`,
+      collectedLogs: collectedLogs?.entries() ?? [],
+      dashboardUrl: deployDashboardUrl('server', { orgId, projectId, deployId: deployResult.id }),
+      showAllLogs: opts.debug,
+    });
     process.exit(1);
   }
 }

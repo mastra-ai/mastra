@@ -169,7 +169,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
 
       {formState.validationError && (
         <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
-          <p className="text-sm text-red-200">{formState.validationError}</p>
+          <p className="text-ui-md text-red-200">{formState.validationError}</p>
         </div>
       )}
 

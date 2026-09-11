@@ -16,6 +16,7 @@ import { useComposerAttachments } from './composer-attachments';
  */
 export const AttachFilePopover = () => {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
   const { addFiles, addUrl } = useComposerAttachments();
 
   const openFilePicker = () => {
@@ -35,11 +36,16 @@ export const AttachFilePopover = () => {
     // `change` event runs (and reads `files`) before we remove the input.
     const onWindowFocus = () => setTimeout(cleanup, 0);
 
-    input.onchange = e => {
+    input.onchange = async e => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
-        addFiles(fileList);
-        setOpen(false);
+        const rejected = await addFiles(fileList);
+        setError(
+          rejected.length > 0
+            ? `Cannot read these files in Studio: ${rejected.join(', ')}. Export spreadsheet data as CSV or upload a text file instead.`
+            : '',
+        );
+        if (rejected.length === 0) setOpen(false);
       }
       cleanup();
     };
@@ -70,13 +76,20 @@ export const AttachFilePopover = () => {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={value => {
+        setOpen(value);
+        setError('');
+      }}
+    >
       <PopoverTrigger asChild>
         <Button variant="default" size="icon-md" type="button" tooltip="Add attachment">
           <PlusIcon className="text-neutral3 hover:text-neutral6 h-5 w-5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-4">
+        {error && <p role="alert">{error}</p>}
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
           <div className="w-full space-y-1">
             <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">

@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.29.1-alpha.2
+
+## 1.29.1-alpha.1
+
+## 1.29.1-alpha.0
+
 ## 1.29.0
 
 ### Patch Changes

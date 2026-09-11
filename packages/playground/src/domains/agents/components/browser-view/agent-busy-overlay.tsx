@@ -40,7 +40,7 @@ export function AgentBusyOverlay({ toolName }: AgentBusyOverlayProps) {
     <div className="bg-surface1/40 absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center">
       <div className="bg-surface2 border-border1 flex items-center gap-2 rounded-md border px-3 py-1.5 shadow-sm">
         <Loader2 className="text-accent1 h-3.5 w-3.5 animate-spin" />
-        <span className="text-neutral4 text-xs font-medium">Agent: {displayName}</span>
+        <span className="text-neutral4 text-ui-sm font-medium">Agent: {displayName}</span>
       </div>
     </div>
   );

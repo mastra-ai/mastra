@@ -54,6 +54,17 @@ export class SandboxNotReadyError extends SandboxError {
   }
 }
 
+/**
+ * Thrown when a sandbox operation is cancelled via an {@link AbortSignal}.
+ * Carries a stable `code` of `ABORTED` so callers can reliably detect cancellation.
+ */
+export class SandboxAbortError extends SandboxError {
+  constructor(operation: string = 'operation') {
+    super(`Sandbox operation aborted: ${operation}`, 'ABORTED', { operation });
+    this.name = 'SandboxAbortError';
+  }
+}
+
 export class IsolationUnavailableError extends SandboxError {
   constructor(
     public readonly backend: string,

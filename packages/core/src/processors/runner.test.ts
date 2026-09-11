@@ -2878,10 +2878,16 @@ describe('ProcessorRunner', () => {
         cacheKey: 'workflow-state-cache-key',
         contents: 'workflow state',
       }));
-      const processor: Processor = {
+      const firstProcessInputStep = vi.fn(() => ({ runId: 'processor-overwrite-attempt' }) as any);
+      const secondProcessInputStep = vi.fn(() => undefined);
+      const firstProcessor: Processor = {
         id: 'workflow-state-processor',
-        processInputStep: () => undefined,
+        processInputStep: firstProcessInputStep,
         computeStateSignal,
+      };
+      const secondProcessor: Processor = {
+        id: 'workflow-run-id-processor',
+        processInputStep: secondProcessInputStep,
       };
       const workflow = createWorkflow({
         id: 'workflow-state-test',
@@ -2890,9 +2896,10 @@ describe('ProcessorRunner', () => {
         type: 'processor',
         options: { validateInputs: false },
       })
-        .then(createStep(processor as any))
+        .then(createStep(firstProcessor as any))
+        .then(createStep(secondProcessor as any))
         .commit() as ProcessorWorkflow;
-      workflow.__stateSignalProcessors = [processor];
+      workflow.__stateSignalProcessors = [firstProcessor];
       const chunks: unknown[] = [];
 
       runner = new ProcessorRunner({
@@ -2909,6 +2916,7 @@ describe('ProcessorRunner', () => {
         model: {} as any,
         tools: {},
         retryCount: 0,
+        runId: 'run-workflow-processor',
         requestContext,
         memory: memory as any,
         writer: {
@@ -2918,6 +2926,8 @@ describe('ProcessorRunner', () => {
         },
       });
 
+      expect(firstProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
+      expect(secondProcessInputStep).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-workflow-processor' }));
       expect(computeStateSignal).toHaveBeenCalledTimes(1);
       expect(messageList.get.all.db().at(-1)?.content.metadata?.signal).toEqual(
         expect.objectContaining({
@@ -3854,7 +3864,18 @@ describe('ProcessorRunner', () => {
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
       expect(signalMessage?.role).toBe('signal');
       expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
-      expect(chunks).toEqual([]);
+      expect(chunks).toEqual([
+        expect.objectContaining({
+          type: 'data-signal',
+          data: expect.objectContaining({
+            type: 'reactive',
+            tagName: 'system-reminder',
+            contents: 'remember this',
+            metadata: { type: 'test-reminder' },
+          }),
+          transient: true,
+        }),
+      ]);
     });
   });
 });
