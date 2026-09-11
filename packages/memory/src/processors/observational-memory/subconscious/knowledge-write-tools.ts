@@ -314,7 +314,11 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; expectedVersion: number; scope: Exclude<SubconsciousScopeSelection, 'org'> };
+        const value = input as {
+          recordId: string;
+          expectedVersion: number;
+          scope: Exclude<SubconsciousScopeSelection, 'org'>;
+        };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);

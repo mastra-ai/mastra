@@ -342,7 +342,9 @@ describe(`Knowledge v2 Wave 1 linked-workspace proof (${adapter})`, () => {
     const runtime = createRuntime(storage);
     const reconciled = await runtime.knowledge.reconcile();
     const resourceScopeId = reconciled.scopes['resource:shipyard']!;
-    const node = await runtime.knowledge.createNode({
+    const node = await (
+      await runtime.knowledge.getStorageInternal()
+    ).createNode({
       name: 'Disposable Knowledge',
       scopeIds: [resourceScopeId],
       isScope: false,

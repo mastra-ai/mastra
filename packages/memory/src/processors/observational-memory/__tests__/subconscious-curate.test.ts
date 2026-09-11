@@ -299,6 +299,8 @@ describe('Subconscious observation curator', () => {
       (await store.getScopeAddress('org:acme'))!.scopeNodeId,
       (await store.getScopeAddress('resource:alpha'))!.scopeNodeId,
       (await store.getScopeAddress('resource:alpha:thread:alpha'))!.scopeNodeId,
+      (await store.getScopeAddress('resource:alpha:uncurated'))!.scopeNodeId,
+      (await store.getScopeAddress('resource:alpha:thread:alpha:uncurated'))!.scopeNodeId,
     ]);
   });
 
