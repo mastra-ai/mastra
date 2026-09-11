@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
@@ -11,6 +12,7 @@ import { createReminderAgent } from '../subconscious/remind-agent';
 import {
   REMIND_CONTEXT_STATE_ID,
   RemindContextStateProcessor,
+  effectivePriorEntries,
   latestCheck,
 } from '../subconscious/remind-context-state';
 import { REMIND_MESSAGE_METADATA_KEY } from '../subconscious/remind-protocol';
@@ -445,101 +447,129 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(delta!.contents!.length).toBeLessThan(snapshot.contents!.length);
     });
 
-    // The lane's whole reason to exist is cost, and until this test nothing
-    // asserted it across a sequence: the only size assertion compared one delta
-    // to one snapshot, which cannot see the per-check folding instruction the
-    // lane charges on every request, nor an op that re-sends what it just
-    // called unchanged.
-    it('costs less than re-snapshotting once the fixed instruction is paid off', async () => {
-      const drifts = [
-        'The datastore migration counters rewrite is finished and the blocked flag is cleared.',
-        'The datastore migration counters rewrite shipped and the release notes are drafted.',
-      ];
-      const states = [
-        bigObservations({ first: firstFact, second: secondFact }),
-        bigObservations({ first: drifts[0], second: secondFact }),
-        bigObservations({ first: drifts[1], second: secondFact }),
-      ];
-
-      // What the lane sends today: a snapshot, then deltas folded onto it.
-      const snapshot = await firstSnapshot(states[0]!);
-      const laneEmissions = [snapshot];
-      for (let check = 1; check < states.length; check++) {
-        const processor = new RemindContextStateProcessor({
-          readParentRecord: async () => asRecord(states[check]!),
+    it('preserves evidence without retransmitting it in actual snapshot, delta, and marker prompts', async () => {
+      const changedFact = 'The datastore migration counters rewrite shipped and the release notes are drafted.';
+      async function capture(retransmit: boolean) {
+        let observations = bigObservations({ first: firstFact, second: secondFact });
+        const prompts: string[] = [];
+        const memory = new Memory({ storage: new InMemoryStore() });
+        const parentMemory = {
+          omEngine: Promise.resolve({
+            getRecord: async () => ({ activeObservations: observations, generationCount: 0 }),
+          }),
+        } as unknown as Memory;
+        const model = new MockLanguageModelV2({
+          doGenerate: async options => {
+            prompts.push(JSON.stringify(options.prompt));
+            return {
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+              warnings: [],
+              content: [{ type: 'text' as const, text: '<no-reminder />' }],
+            };
+          },
         });
-        const emission = await processor.computeStateSignal(
-          args({
-            messages: [checkWith(`check-${check + 1}`, candidates)],
-            contextWindow: { hasSnapshot: true },
-            lastSnapshot: base(snapshot),
-            deltasSinceSnapshot: laneEmissions.slice(1).map(prior => ({ metadata: prior.metadata }) as never),
-          } as Partial<ComputeStateSignalArgs>),
-        );
-        expect(emission!.mode).toBe('delta');
-        laneEmissions.push(emission!);
+        const compute = RemindContextStateProcessor.prototype.computeStateSignal;
+        // Same real runtime and instructions; the control resends marker evidence.
+        const spy = retransmit
+          ? vi
+              .spyOn(RemindContextStateProcessor.prototype, 'computeStateSignal')
+              .mockImplementation(async function (this: RemindContextStateProcessor, args) {
+                const signal = await compute.call(this, args);
+                if (signal?.mode === 'delta') {
+                  const ops = (
+                    signal.delta as {
+                      ops: {
+                        op: string;
+                        entry?: { id: string; excerpt: string; marker?: { action: string; eventId: string } };
+                      }[];
+                    }
+                  ).ops;
+                  if (ops.length === 1 && ops[0]!.op === 'node-activity') {
+                    const entry = ops[0]!.entry!;
+                    const marker = entry.marker!;
+                    const check = latestCheck(args.messages)!;
+                    signal.contents = `\nas of check ${check.eventId}: ${entry.id} — the accumulated observations matching it read the same as before, and its knowledge node appeared in the store's activity page.\n${entry.excerpt}\n[knowledge activity] candidate ${entry.id} — its knowledge node appears in the store's most recent activity page as ${marker.action} (activity event ${marker.eventId}). That page is bounded and some record writes are never recorded as events, so the absence of this line for another candidate says nothing about it either way.\n`;
+                  }
+                }
+                return signal;
+              })
+          : undefined;
+        try {
+          const store = await memory.storage.getStore('knowledge');
+          const node = await store!.createNode({
+            name: 'datastore migration counters',
+            kind: 'topic',
+            description: firstFact,
+            scope: ['org:acme', 'resource:resource-1'],
+          });
+          const srcs = [{ id: node.id, text: candidates[0]!.text }, candidates[1]!];
+          const agent = createReminderAgent({
+            model,
+            memory,
+            parentMemory,
+            scope: ['org:acme', 'resource:resource-1'],
+            threadId: 'subconscious:parent:remind',
+            resourceId: 'resource-1',
+            parentThreadId: 'parent',
+            fallbackSendSignal: async () => {
+              throw new Error('Unexpected reminder delivery');
+            },
+          });
+          const run = async (id: string) => {
+            const message = checkWith(id, srcs);
+            Object.assign(message.content.metadata!.signal!, { type: 'user', tagName: 'user' });
+            await agent.generate([message], {
+              memory: { thread: 'subconscious:parent:remind', resource: 'resource-1' },
+              maxSteps: 1,
+            });
+          };
+          await run('check-one');
+          observations = bigObservations({ first: changedFact, second: secondFact });
+          await run('check-two');
+          await store!.updateNode({ id: node.id, version: node.version, description: changedFact, scope: node.scope });
+          await run('check-three');
+          const updated = await store!.getNode(node.id);
+          await store!.updateNode({
+            id: node.id,
+            version: updated!.version,
+            description: 'Another node update',
+            scope: node.scope,
+          });
+          await run('check-four');
+          return prompts;
+        } finally {
+          spy?.mockRestore();
+        }
       }
-
-      // What it replaced: a full snapshot every check.
-      const snapshotOnly = await Promise.all(states.map(state => firstSnapshot(state)));
-
-      // The instruction is a system message that replaces the untagged system
-      // bucket on every request rather than accumulating, so it is a flat
-      // fixed cost, not a per-check one. Emissions are the opposite: state
-      // signals are exempt from transient dedupe and pile up in the transcript.
-      const folded = new RemindContextStateProcessor({
-        readParentRecord: async () => asRecord(states[0]!),
-      }).processInput({ messages: [], systemMessages: [] } as never) as {
-        systemMessages: { content: string }[];
-      };
-      const instruction = String(folded.systemMessages.at(-1)!.content);
-      expect(instruction.length).toBeGreaterThan(0);
-
-      const laneCost = (checks: number) =>
-        laneEmissions.slice(0, checks).reduce((sum, e) => sum + e.contents!.length, 0) + instruction.length;
-      const snapshotCost = (checks: number) =>
-        snapshotOnly.slice(0, checks).reduce((sum, e) => sum + e.contents!.length, 0);
-
-      // Honest about the shape: the lane starts behind by the instruction it
-      // has to pay before a single delta exists to save anything.
-      expect(laneCost(1)).toBeGreaterThan(snapshotCost(1));
-
-      // Every check after the first is cheaper at the margin. This is the
-      // assertion an op that re-sends an excerpt it just called unchanged
-      // would have to answer to.
-      for (let check = 2; check <= states.length; check++) {
-        const laneMarginal = laneCost(check) - laneCost(check - 1);
-        const snapshotMarginal = snapshotCost(check) - snapshotCost(check - 1);
-        expect(laneMarginal).toBeLessThan(snapshotMarginal);
+      const actual = await capture(false);
+      const repeated = await capture(true);
+      expect(actual).toHaveLength(4);
+      expect(repeated).toHaveLength(4);
+      for (const prompt of actual) {
+        expect(prompt.split('Fold each delta onto the latest snapshot')).toHaveLength(2);
+        expect(prompt).toContain('preserving its earlier observation excerpt and matching state');
       }
-
-      // A marker-only check is the exception, and pinning it here is the
-      // point: `node-activity` re-sends the excerpt it just declared
-      // unchanged, so the one op that should be nearly free is the most
-      // expensive delta the lane emits. It cannot simply be trimmed — the
-      // folding instruction says this op *replaces* the candidate's entry, so
-      // dropping the excerpt would silently erase the candidate's evidence
-      // from the folded state. Fixing it is a folding-contract change. Until
-      // then this assertion holds the cost where it is, so a fix reads as an
-      // improvement and a regression reads as a failure.
-      const markerCheck = await new RemindContextStateProcessor({
-        readParentRecord: async () => asRecord(states.at(-1)!),
-        readRecentNodeActivity: async () => [
-          { id: 'evt-cost', action: 'node-updated', recordType: 'node', recordId: 'source-1' },
-        ],
-      } as never).computeStateSignal(
-        args({
-          messages: [checkWith('check-marker', candidates)],
-          contextWindow: { hasSnapshot: true },
-          lastSnapshot: base(snapshot),
-          deltasSinceSnapshot: laneEmissions.slice(1).map(prior => ({ metadata: prior.metadata }) as never),
-        } as Partial<ComputeStateSignalArgs>),
+      expect(actual[0]).toContain(firstFact);
+      expect(actual[1]).toContain(changedFact);
+      for (const index of [2, 3]) {
+        const blocks = [
+          ...actual[index]!.matchAll(/<parent-context-update changes=[\s\S]*?<\/parent-context-update>/g),
+        ];
+        expect(blocks).toHaveLength(index);
+        expect(blocks.at(-1)![0]).toContain('activity event');
+        expect(blocks.at(-1)![0]).not.toContain(changedFact);
+        expect(actual[index]!.split(changedFact)).toHaveLength(2);
+        expect(Buffer.byteLength(actual[index]!)).toBeLessThan(Buffer.byteLength(repeated[index]!));
+      }
+      // These are serialized provider prompts, not provider-reported token usage.
+      console.info(
+        'MARKER_PROMPT_BYTES',
+        JSON.stringify({
+          annotation: actual.map(prompt => Buffer.byteLength(prompt)),
+          retransmissionControl: repeated.map(prompt => Buffer.byteLength(prompt)),
+        }),
       );
-
-      expect((markerCheck as { delta: { ops: { op: string }[] } }).delta.ops).toEqual([
-        expect.objectContaining({ op: 'node-activity' }),
-      ]);
-      expect(markerCheck!.contents!.length).toBeGreaterThan(laneEmissions.at(-1)!.contents!.length);
     });
 
     it('emits nothing at all when a check changes nothing', async () => {
@@ -957,6 +987,10 @@ describe('Subconscious reminder parent-context state lane', () => {
       const instructions = (result as { systemMessages: { content: string }[] }).systemMessages.at(-1)!.content;
       expect(instructions).toContain('parent-context-update');
       expect(instructions).toContain('Fold each delta onto the latest snapshot');
+      expect(instructions).toContain(
+        'new knowledge-node activity only updates its activity marker, preserving its earlier observation excerpt and matching state',
+      );
+      expect(instructions).not.toContain('entered, changed, or carrying new knowledge-node activity replaces');
     });
 
     /**
@@ -983,6 +1017,7 @@ describe('Subconscious reminder parent-context state lane', () => {
           args({ messages: [checkWith('check-one', candidates)] }),
         );
 
+        expect(snapshot!.contents).toContain(firstFact);
         expect(snapshot!.contents).toContain('[knowledge activity] candidate source-1');
         expect(snapshot!.contents).toContain('activity event evt-1');
         expect(snapshot!.contents).not.toContain('[knowledge activity] candidate source-2');
@@ -1000,9 +1035,109 @@ describe('Subconscious reminder parent-context state lane', () => {
           expect.objectContaining({ op: 'node-activity', entry: expect.objectContaining({ id: 'source-1' }) }),
         ]);
         expect(delta!.contents).toContain('activity event evt-1');
-        expect(delta!.contents).toContain('read the same as before');
+        expect(delta!.contents).not.toContain(firstFact);
+        expect(delta!.contents).toContain('observation excerpt and matching state are unchanged');
         expect(delta!.contents).not.toContain('the accumulated observations matching it changed');
         expect(delta!.contents).not.toContain('had no lexical overlap');
+      });
+
+      it.each(['matched', 'no-match'] as const)(
+        'preserves %s evidence through consecutive activity annotations',
+        async match => {
+          const obs = match === 'matched' ? observations() : bigObservations({ second: secondFact });
+          const snapshot = await laneWith([], obs).computeStateSignal(
+            args({ messages: [checkWith('check-one', candidates)] }),
+          );
+          const prior = effectivePriorEntries(secondArgs(snapshot!))!;
+          const original = prior.find(entry => entry.id === 'source-1')!;
+          expect(original.match).toBe(match);
+          const deltas: ReturnType<typeof base>[] = [];
+          for (const eventId of ['evt-1', 'evt-2', 'evt-3']) {
+            const input = { ...secondArgs(snapshot!, `check-${eventId}`), deltasSinceSnapshot: deltas };
+            const signal = await laneWith([event({ id: eventId })], obs).computeStateSignal(input);
+            expect(signal!.contents).not.toContain(original.excerpt);
+            expect(signal!.contents).not.toContain('observations matching it read the same');
+            expect(signal!.contents).toContain(`activity event ${eventId}`);
+            deltas.push(base(signal!));
+            const folded = effectivePriorEntries({ ...input, deltasSinceSnapshot: deltas })!;
+            expect(folded.find(entry => entry.id === 'source-1')).toEqual({
+              ...original,
+              marker: { action: 'node-updated', eventId },
+            });
+            expect(folded.find(entry => entry.id === 'source-2')).toEqual(prior.find(entry => entry.id === 'source-2'));
+          }
+        },
+      );
+
+      it('keeps a no-longer-matched delta unmatched when activity follows it', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+        const obs = bigObservations({ second: secondFact });
+        const drift = await laneWith([], obs).computeStateSignal(secondArgs(snapshot!));
+        expect(drift!.delta).toMatchObject({ ops: [{ op: 'no-longer-matched' }] });
+        const input = { ...secondArgs(snapshot!, 'check-three'), deltasSinceSnapshot: [base(drift!)] };
+        const signal = await laneWith([event()], obs).computeStateSignal(input);
+        expect(signal!.delta).toMatchObject({ ops: [{ op: 'node-activity' }] });
+        expect(signal!.contents).not.toContain('observations matching it read the same');
+        expect(
+          effectivePriorEntries({ ...input, deltasSinceSnapshot: [base(drift!), base(signal!)] })![0],
+        ).toMatchObject({
+          id: 'source-1',
+          match: 'no-match',
+          marker: { eventId: 'evt-1' },
+        });
+      });
+
+      it('reintroduces the full entry after it left the candidate set', async () => {
+        const snapshot = await laneWith([event()]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+        const left = await laneWith([event()]).computeStateSignal(secondArgs(snapshot!, 'check-two', [candidates[1]!]));
+        const returned = await laneWith([event({ id: 'evt-2' })]).computeStateSignal({
+          ...secondArgs(snapshot!, 'check-three'),
+          deltasSinceSnapshot: [base(left!)],
+        });
+        expect(returned!.delta).toMatchObject({ ops: [{ op: 'entered' }] });
+        expect(returned!.contents).toContain(firstFact);
+        expect(returned!.contents).toContain('activity event evt-2');
+      });
+
+      it('restores a full marked snapshot when the prior excerpt is outside the visible window', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+        const signal = await laneWith([event()]).computeStateSignal({
+          ...secondArgs(snapshot!),
+          contextWindow: { hasSnapshot: false },
+        });
+        expect(signal!.mode).toBe('snapshot');
+        expect(signal!.contents).toContain(firstFact);
+        expect(signal!.contents).toContain('activity event evt-1');
+      });
+
+      it('resends changed evidence when its earlier delta is missing but the snapshot remains', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', candidates)] }),
+        );
+        const changed = 'The datastore migration counters rewrite shipped and the release notes are drafted.';
+        const signal = await laneWith(
+          [event()],
+          bigObservations({ first: changed, second: secondFact }),
+        ).computeStateSignal(secondArgs(snapshot!));
+        expect(signal!.delta).toMatchObject({ ops: [{ op: 'changed' }] });
+        expect(signal!.contents).toContain(changed);
+        expect(signal!.contents).toContain('activity event evt-1');
+      });
+
+      it('sends the excerpt for a newly entering marked candidate rather than an orphan annotation', async () => {
+        const snapshot = await laneWith([]).computeStateSignal(
+          args({ messages: [checkWith('check-one', [candidates[1]!])] }),
+        );
+        const signal = await laneWith([event()]).computeStateSignal(secondArgs(snapshot!));
+        expect(signal!.contents).toContain(firstFact);
+        expect(signal!.contents).toContain('activity event evt-1');
+        expect(signal!.delta).toMatchObject({ ops: [{ op: 'entered', entry: { id: 'source-1' } }] });
       });
 
       it('says nothing when a marker falls off the bounded page', async () => {
