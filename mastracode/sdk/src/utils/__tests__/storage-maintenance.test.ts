@@ -391,3 +391,190 @@ describe('reclaimLibSQLDisk', () => {
     verify.close();
   });
 });
+
+describe('reclaimLibSQLDisk vector-index safety (#23439)', () => {
+  let dir: string | undefined;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  /**
+   * Seed with the native `libsql` driver (the one the source uses), exec()
+   * only, finished before close() — a @libsql/client left in WAL would pin the
+   * shm lock in-process and trip the exclusivity probe for the fixture's own
+   * reason rather than the behaviour under test.
+   *
+   * Rows are deleted before closing so the file carries free pages:
+   * `freelist_count` is the load-bearing "was it vacuumed" signal.
+   */
+  function seedVectorDb(dbFile: string) {
+    const db = new Database(dbFile);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT, embedding F32_BLOB(384))');
+    db.exec('CREATE INDEX t_vector_idx ON t (libsql_vector_idx(embedding))');
+    const vec = (seed: number) =>
+      `vector32('[${Array.from({ length: 384 }, (_, i) => ((seed + i) % 97) / 97).join(',')}]')`;
+    for (let i = 0; i < 400; i++) {
+      db.exec(`INSERT INTO t (body, embedding) VALUES ('${'y'.repeat(512)}', ${vec(i)})`);
+    }
+    db.exec('DELETE FROM t WHERE id > 300');
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    db.exec('PRAGMA journal_mode = DELETE');
+    db.close();
+  }
+
+  function seedPlainDb(dbFile: string, opts?: { leaveInWal?: boolean }) {
+    const db = new Database(dbFile);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('CREATE TABLE blobs (id INTEGER PRIMARY KEY, data TEXT)');
+    db.exec('CREATE INDEX blobs_data_idx ON blobs (data)');
+    for (let i = 0; i < 400; i++) db.exec(`INSERT INTO blobs (data) VALUES ('${'x'.repeat(2048)}')`);
+    db.exec('DELETE FROM blobs WHERE id > 50');
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    if (!opts?.leaveInWal) db.exec('PRAGMA journal_mode = DELETE');
+    db.close();
+  }
+
+  function inspect(dbFile: string) {
+    const db = new Database(dbFile);
+    try {
+      const num = (p: string) => Number(Object.values((db.pragma(p) as any[])[0])[0]);
+      const integrity = String(Object.values((db.pragma('integrity_check') as any[])[0])[0]);
+      const rows = Number((db.prepare('SELECT COUNT(*) AS n FROM t').get() as any).n);
+      const topK = db
+        .prepare(`SELECT v.id FROM vector_top_k('t_vector_idx', (SELECT embedding FROM t LIMIT 1), 5) AS v`)
+        .all() as unknown[];
+      return { integrity, rows, topK: topK.length, pageCount: num('page_count'), freelist: num('freelist_count') };
+    } finally {
+      db.close();
+    }
+  }
+
+  it('skips a vector-indexed database instead of vacuuming it', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-'));
+    const dbFile = path.join(dir, 'mastra-vectors.db');
+    seedVectorDb(dbFile);
+    const before = inspect(dbFile);
+    expect(before.freelist).toBeGreaterThan(0);
+
+    const starts: string[] = [];
+    const results = await reclaimLibSQLDisk([dbFile], file => starts.push(file));
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.skipped).toBe('vector-index');
+    expect(results[0]!.bytesAfter).toBe(results[0]!.bytesBefore);
+    // onFileStart logs "vacuuming <file>…" — never emitted for a skipped file.
+    expect(starts).toEqual([]);
+    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
+    expect(existsSync(`${dbFile}.old`)).toBe(false);
+
+    const after = inspect(dbFile);
+    expect(after.integrity).toBe('ok');
+    expect(after.topK).toBeGreaterThan(0);
+    expect(after.rows).toBe(before.rows);
+    // Not byte-identical (the probe flips the journal-mode header bytes), but
+    // a vacuum necessarily rewrites pages and reclaims the freelist.
+    expect(after.pageCount).toBe(before.pageCount);
+    expect(after.freelist).toBe(before.freelist);
+  });
+
+  it('still compacts an ordinary database (detection is not over-broad)', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-plain-'));
+    const dbFile = path.join(dir, 'plain.db');
+    seedPlainDb(dbFile);
+
+    const results = await reclaimLibSQLDisk([dbFile]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.skipped).toBeUndefined();
+    expect(results[0]!.bytesAfter).toBeLessThan(results[0]!.bytesBefore);
+  });
+
+  it('still compacts an ordinary database left in WAL mode', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-wal-'));
+    const dbFile = path.join(dir, 'plain-wal.db');
+    seedPlainDb(dbFile, { leaveInWal: true });
+
+    const results = await reclaimLibSQLDisk([dbFile]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.skipped).toBeUndefined();
+    expect(results[0]!.bytesAfter).toBeLessThan(results[0]!.bytesBefore);
+  });
+
+  it('skips exactly the vector db and compacts exactly the plain one', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-mixed-'));
+    const vectorFile = path.join(dir, 'vectors.db');
+    const plainFile = path.join(dir, 'main.db');
+    seedVectorDb(vectorFile);
+    seedPlainDb(plainFile);
+
+    const results = await reclaimLibSQLDisk([vectorFile, plainFile]);
+
+    expect(results).toHaveLength(2);
+    expect(results.find(r => r.file === vectorFile)!.skipped).toBe('vector-index');
+    const plain = results.find(r => r.file === plainFile)!;
+    expect(plain.skipped).toBeUndefined();
+    expect(plain.bytesAfter).toBeLessThan(plain.bytesBefore);
+  });
+
+  it('fails closed when detection itself throws after a successful probe', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-vec-failclosed-'));
+    const dbFile = path.join(dir, 'plain.db');
+    seedPlainDb(dbFile);
+    const sizeBefore = statSync(dbFile).size;
+
+    // Break only the detection query, on a file that passes the probe.
+    const realPrepare = Database.prototype.prepare;
+    const spy = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (
+      this: any,
+      sql: string,
+      ...rest: unknown[]
+    ) {
+      if (sql.includes('libsql_vector_idx')) throw new Error('simulated detection failure');
+      return (realPrepare as any).call(this, sql, ...rest);
+    } as any);
+
+    const starts: string[] = [];
+    let results;
+    try {
+      results = await reclaimLibSQLDisk([dbFile], file => starts.push(file));
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.skipped).toBe('detection-failed');
+    expect(starts).toEqual([]);
+    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
+    expect(existsSync(`${dbFile}.old`)).toBe(false);
+    expect(statSync(dbFile).size).toBe(sizeBefore);
+  });
+
+  it('reports both skip reasons distinctly in /prune output', async () => {
+    const lines: string[] = [];
+    await runStorageMaintenance({
+      maintenance: {
+        backend: 'libsql',
+        retention: {},
+        prune: vi.fn().mockResolvedValue([]),
+        closeStorage: vi.fn().mockResolvedValue(undefined),
+        reclaimDisk: vi.fn().mockResolvedValue([
+          { file: '/tmp/vectors.db', bytesBefore: 10, bytesAfter: 10, skipped: 'vector-index' },
+          { file: '/tmp/odd.db', bytesBefore: 20, bytesAfter: 20, skipped: 'detection-failed' },
+        ]),
+      },
+      vacuum: true,
+      log: line => lines.push(line),
+    });
+
+    const output = lines.join('\n');
+    expect(output).toContain('/tmp/vectors.db: skipped — it contains a vector index');
+    expect(output).toContain('/tmp/odd.db: skipped — it could not be inspected');
+    expect(output).not.toContain('/tmp/odd.db: skipped — it contains a vector index');
+    expect(output).toContain('No database files were compacted;');
+    expect(lines).not.toContain('Reclaimed 0 B.');
+  });
+});
