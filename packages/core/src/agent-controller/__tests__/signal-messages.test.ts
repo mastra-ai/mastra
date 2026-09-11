@@ -74,6 +74,59 @@ describe('AgentController signal messages', () => {
     );
   });
 
+  it('observes persistence when a signal submitted to an active run is routed after it becomes idle', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    let resolveAccepted!: (value: { action: 'persist' }) => void;
+    const accepted = new Promise<{ action: 'persist' }>(resolve => {
+      resolveAccepted = resolve;
+    });
+    agent.sendSignal.mockReturnValue({
+      accepted,
+      persisted: Promise.resolve(),
+      signal: { id: 'completion-idle', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-active-to-idle-persist',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => activeRunId) as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignal(
+      {
+        id: 'completion-idle',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      {
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+    await vi.waitFor(() => expect(agent.sendSignal).toHaveBeenCalledOnce());
+    activeRunId = null;
+    resolveAccepted({ action: 'persist' });
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(events.filter(event => event.type === 'message_start')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'message_end')).toHaveLength(1);
+  });
+
   it('persists an active notification signal without interrupting an armed approval', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);

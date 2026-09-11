@@ -3489,7 +3489,8 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
-        const settled = ifActive?.behavior === 'persist' || requireDelivery ? await result.accepted : undefined;
+        const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
+        const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
         if (settled?.action === 'persist') {
           await result.persisted;
           const message = signal.toDBMessage({
