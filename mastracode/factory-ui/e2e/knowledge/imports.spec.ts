@@ -93,7 +93,7 @@ test('observes an agentic import from queue through filtered activity', async ({
             { id: 'activity-proof', action: 'create', targetType: 'record', createdAt: completedRun.completedAt },
           ],
           transcript: {
-            threadId: completedRun.transcriptThreadId,
+            threadId: 'thread-run-proof',
             available: true,
             messages: [
               {
