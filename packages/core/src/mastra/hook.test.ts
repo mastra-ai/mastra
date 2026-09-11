@@ -413,12 +413,8 @@ describe('createOnScorerHook', () => {
 
     await hook(hookData);
 
-    expect(mockScorer.run).toHaveBeenCalledWith(
-      expect.objectContaining({ targetSpanId: 'agent-run-span' }),
-    );
-    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
-      expect.objectContaining({ spanId: 'agent-run-span' }),
-    );
+    expect(mockScorer.run).toHaveBeenCalledWith(expect.objectContaining({ targetSpanId: 'agent-run-span' }));
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(expect.objectContaining({ spanId: 'agent-run-span' }));
   });
 
   it('still saves the score when no exportable ancestor exists', async () => {
@@ -455,9 +451,7 @@ describe('createOnScorerHook', () => {
 
     await hook(hookData);
 
-    expect(mockScorer.run).toHaveBeenCalledWith(
-      expect.objectContaining({ targetSpanId: undefined }),
-    );
+    expect(mockScorer.run).toHaveBeenCalledWith(expect.objectContaining({ targetSpanId: undefined }));
     expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 
