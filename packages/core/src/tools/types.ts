@@ -295,7 +295,6 @@ export interface MCPServerToolInvocation {
   serverName: string;
   serverVersion?: string;
   protocolVersion?: string;
-  sessionId?: string;
 }
 
 /**

@@ -348,7 +348,6 @@ describe('MCP Tool Tracing', () => {
           serverName: 'public-mcp-server',
           serverVersion: '1.2.3',
           protocolVersion: '2025-11-25',
-          sessionId: 'session-123',
         },
       },
     );
@@ -367,10 +366,12 @@ describe('MCP Tool Tracing', () => {
           mcpServer: 'public-mcp-server',
           serverVersion: '1.2.3',
           mcpProtocolVersion: '2025-11-25',
-          mcpSessionId: 'session-123',
         },
       }),
     );
+
+    const spanOptions = vi.mocked(mockParentSpan.createChildSpan).mock.calls[0]?.[0];
+    expect(spanOptions?.attributes).not.toHaveProperty('mcpSessionId');
   });
 
   it('should handle mcpMetadata with missing serverVersion', async () => {

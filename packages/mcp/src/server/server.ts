@@ -28,7 +28,13 @@ import {
   toNodeHandler,
 } from '@modelcontextprotocol/node';
 import type { StreamableHTTPServerTransportOptions, NodeMcpRequestHandler } from '@modelcontextprotocol/node';
-import { Server, ProtocolError, ProtocolErrorCode, createMcpHandler } from '@modelcontextprotocol/server';
+import {
+  Server,
+  ProtocolError,
+  ProtocolErrorCode,
+  PROTOCOL_VERSION_META_KEY,
+  createMcpHandler,
+} from '@modelcontextprotocol/server';
 import type {
   McpHttpHandler,
   RequestOptions,
@@ -89,6 +95,21 @@ const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra =>
     sendRequest: ctx.mcpReq.send,
     _meta: ctx.mcpReq._meta,
   };
+};
+
+/**
+ * Gets the MCP revision associated with the current request.
+ *
+ * Modern requests carry the revision in their per-request envelope. Legacy
+ * connections only expose the initialize-negotiated revision through the
+ * server accessor, which the MCP SDK keeps functional for compatibility.
+ */
+const getRequestProtocolVersion = (extra: MCPRequestHandlerExtra, serverInstance: Server): string | undefined => {
+  const envelope = extra.mcpReq.envelope as Record<string, unknown> | undefined;
+  const requestProtocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY];
+  if (typeof requestProtocolVersion === 'string') return requestProtocolVersion;
+
+  return serverInstance.getNegotiatedProtocolVersion();
 };
 
 // RFC 5424 syslog severity ordering used by the MCP logging utility.
@@ -1131,8 +1152,7 @@ export class MCPServer extends MCPServerBase {
             method: 'tools/call',
             serverName: this.name,
             serverVersion: this.version,
-            protocolVersion: serverInstance.getNegotiatedProtocolVersion(),
-            sessionId: extra.sessionId,
+            protocolVersion: getRequestProtocolVersion(extra, serverInstance),
           },
           // Pass MCP-specific context through the mcp property
           mcp: {

@@ -843,7 +843,6 @@ export class CoreToolBuilder extends MastraBase {
                     mcpServer: mcpServerToolInvocation.serverName,
                     serverVersion: mcpServerToolInvocation.serverVersion,
                     mcpProtocolVersion: mcpServerToolInvocation.protocolVersion,
-                    mcpSessionId: mcpServerToolInvocation.sessionId,
                   }
                 : {}),
             },
