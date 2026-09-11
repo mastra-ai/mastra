@@ -44,7 +44,7 @@ export function ChatTranscriptProvider({
   };
   const reset = (nextThreadId?: string, state?: SessionStateSnapshot) => {
     transcriptApi.reset(nextThreadId);
-    dispatchRuntime({ type: 'reset', state });
+    dispatchRuntime({ type: 'reset', threadId: nextThreadId, state });
   };
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {

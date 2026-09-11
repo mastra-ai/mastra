@@ -10,6 +10,15 @@ function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessa
 }
 
 describe('chat runtime status', () => {
+  it('discards snapshot telemetry when resetting without a destination thread', () => {
+    const reset = runtimeReducer(initialChatRuntime, {
+      type: 'reset',
+      state: { tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 } },
+    });
+
+    expect(reset.usage).toBeUndefined();
+  });
+
   it.each(['bufferingMessages', 'bufferingObservations'] as const)(
     'tracks %s from display state, ahead of lifecycle start events',
     bufferingFlag => {

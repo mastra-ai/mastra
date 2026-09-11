@@ -4,7 +4,7 @@ import type { MastraDBMessage, TokenUsage } from '@mastra/core/agent-controller'
 
 import type { OMBudgets } from './om';
 
-export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress' | 'tokenUsage'>;
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
 export type GoalSnapshot = Pick<
   Extract<AgentControllerEvent, { type: 'goal_evaluation' }>['payload'],
@@ -32,11 +32,15 @@ export const initialChatRuntime: ChatRuntimeState = {
   _decodeStartedAt: 0,
 };
 
-type RuntimeAction = { type: 'event'; event: AgentControllerEvent } | { type: 'reset'; state?: SessionStateSnapshot };
+type RuntimeAction =
+  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
 
 export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
   if (action.type === 'reset') {
-    return { ...initialChatRuntime, usage: action.state?.tokenUsage, omProgress: action.state?.omProgress };
+    const matchingSnapshot =
+      action.threadId !== undefined && action.state?.threadId === action.threadId ? action.state : undefined;
+    return { ...initialChatRuntime, usage: matchingSnapshot?.tokenUsage, omProgress: matchingSnapshot?.omProgress };
   }
 
   const event = action.event;

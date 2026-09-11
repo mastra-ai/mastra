@@ -21,6 +21,7 @@ import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
 import { useChatTranscript } from '../useChatTranscript';
 
 const snapshot: SessionStateSnapshot = {
+  threadId: SESSION_ID,
   tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 },
   omProgress: {
     status: 'idle',
@@ -73,7 +74,7 @@ function renderRuntime(resetState?: SessionStateSnapshot) {
   const session = stubPreparingSession();
   server.use(
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`, ({ params }) =>
-      HttpResponse.json({ controllerId: 'code', resourceId: params.resourceId, threadId: SESSION_ID, ...snapshot }),
+      HttpResponse.json({ controllerId: 'code', resourceId: params.resourceId, ...snapshot }),
     ),
   );
   renderWithProviders(
@@ -128,8 +129,13 @@ describe('chat runtime consumers', () => {
     expect(await screen.findByText('Observational memory phase: buffering')).toBeInTheDocument();
   });
 
-  it.each([false, true])('resets transcript and runtime together, restoring a snapshot: %s', async restoreSnapshot => {
-    const session = renderRuntime(restoreSnapshot ? snapshot : undefined);
+  it.each([
+    { scenario: 'no snapshot', resetState: undefined, restoreSnapshot: false },
+    { scenario: 'matching thread', resetState: { ...snapshot, threadId: 'next-thread' }, restoreSnapshot: true },
+    { scenario: 'another thread', resetState: snapshot, restoreSnapshot: false },
+    { scenario: 'missing thread ID', resetState: { ...snapshot, threadId: undefined }, restoreSnapshot: false },
+  ])('resets transcript and runtime together with $scenario', async ({ resetState, restoreSnapshot }) => {
+    const session = renderRuntime(resetState);
     const user = userEvent.setup();
     await screen.findByRole('button', { name: /Memory budgets/ });
     await session.emit(goalEvent);
