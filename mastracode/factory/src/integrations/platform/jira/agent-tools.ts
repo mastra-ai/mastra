@@ -41,7 +41,7 @@ function createJiraGetIssueTool(jira: PlatformJiraIntegration) {
       try {
         const detail = await jira.intake.getIssue({
           connection: PLATFORM_CONNECTION,
-          issueId: issue.trim(),
+          issueId: issue,
         });
         if (!detail) {
           return { error: `Jira issue "${issue}" was not found on this site.` };
