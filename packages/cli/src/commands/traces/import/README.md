@@ -26,6 +26,25 @@ upload retries, resume, verification, reporting, and cleanup.
 The shared importer must not import provider-specific types. Adding another
 provider should require a new adapter, not another upload pipeline.
 
-This first architecture ticket defines only this contract. Provider readers,
-mapping, preparation, upload, verification, and the customer-facing command are
-implemented by later tickets.
+## Local preparation and resume
+
+Preparation is an upload-free pass over the provider output. It writes two
+private files under `~/.mastra/imports/<target-project>/<import-id>/`:
+
+- `manifest.json` stores source identity, the fixed import window, counts, and
+  acknowledged progress.
+- `traces.jsonl` stores one complete normalized trace per line.
+
+Upload batches are created in memory from whole JSONL records, so a trace is
+never split across requests. After Platform acknowledges a batch, the manifest
+advances by that batch's trace count. Resume skips those acknowledged records
+and starts at the first pending trace. A batch whose response was lost may be
+sent again; provider adapters therefore generate stable destination IDs.
+
+Partial preparation is discarded and downloaded again. The implementation does
+not keep source pages, shards, batch files, checksums, or fsync bookkeeping.
+Prepared trace data is removed only when the later orchestration layer marks the
+overall import successful.
+
+Platform upload, read-back verification, reports, and the customer-facing
+command are implemented by later tickets.
