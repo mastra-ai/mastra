@@ -3729,10 +3729,12 @@ ${formattedMessages}
     let lifecycleError: unknown;
     let observationStarted = false;
     let generationBefore = -1;
+    let recordInsideLock!: ObservationalMemoryRecord;
 
     try {
       await this.withLock(lockKey, async () => {
         const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+        recordInsideLock = freshRecord;
         generationBefore = freshRecord.generationCount;
 
         const unobservedMessages = messages
@@ -3795,8 +3797,11 @@ ${formattedMessages}
 
     if (lifecycleError !== undefined) throw lifecycleError;
 
-    // Fetch the latest record after lock release
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    // Fetch the latest record after lock release. It was already created inside
+    // the lock, so a missing record here means the thread was deleted while this
+    // cycle was running — fall back to the record the cycle actually used rather
+    // than recreating a row for a thread that no longer exists.
+    const record = (await this.getRecord(threadId, resourceId)) ?? recordInsideLock;
     const reflected = record.generationCount > generationBefore && generationBefore >= 0;
 
     return { observed, reflected, record };

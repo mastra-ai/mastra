@@ -330,6 +330,13 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
 
+// Upper bound on how long `deleteThread` waits for in-flight observational-memory
+// cycles on that thread. Well under the engine's 30s default, which is sized for
+// server endpoints rather than a user-facing delete. Exceeding it degrades to
+// deleting anyway; the liveness checks in the observation strategies' `persist`
+// still keep a late cycle from writing to a thread that no longer exists.
+const OM_DELETE_DRAIN_TIMEOUT_MS = 10_000;
+
 // Max number of distinct contents whose embeddings are kept in the in-process
 // cache. Bounds memory so a long-running Memory instance can't accumulate every
 // message/query it has ever embedded (each entry holds chunk text + vectors).
@@ -938,6 +945,16 @@ export class Memory extends MastraMemory {
   }
 
   private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
+    // Join in-flight observational-memory cycles for this thread first so their
+    // vector writes land before `deleteThreadVectors` runs instead of after it —
+    // a write that arrives after the cleanup is never removed and stays reachable
+    // through resource-scoped recall. Only join an engine that already exists,
+    // never instantiate one just to drain it (same rule as `settled()`).
+    const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
+    if (engine && resourceId) {
+      await engine.waitForBuffering(threadId, resourceId, OM_DELETE_DRAIN_TIMEOUT_MS);
+    }
+
     await memoryStore.deleteThread({ threadId });
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);

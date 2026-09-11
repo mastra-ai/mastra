@@ -11,8 +11,9 @@ import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { BufferingCoordinator } from './processors/observational-memory/buffering-coordinator';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 import { Memory } from './index';
 
@@ -3172,6 +3173,109 @@ describe('Memory', () => {
           filter: { message_id: { $in: messageIds.slice(100, 150) } },
         });
       });
+    });
+  });
+
+  describe('deleteThread observational-memory coordination', () => {
+    const threadId = 'drain-thread';
+    const resourceId = 'drain-resource';
+
+    async function seedThread(memory: Memory) {
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Drain probe',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      // Static state leaks across tests in this package (`isolate: false`).
+      BufferingCoordinator.asyncBufferingOps.clear();
+    });
+
+    it('waits for an in-flight cycle on the thread before deleting it', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: { observationalMemory: { enabled: true, scope: 'thread' } },
+      });
+      expect(await memory.omEngine).toBeTruthy();
+      await seedThread(memory);
+
+      const memoryStore = (await storage.getStore('memory'))!;
+      const originalDelete = memoryStore.deleteThread.bind(memoryStore);
+      const order: string[] = [];
+      vi.spyOn(memoryStore, 'deleteThread').mockImplementation(async input => {
+        order.push('store-delete');
+        return originalDelete(input);
+      });
+
+      // An in-flight buffered observation cycle for this thread, gated so the
+      // interleaving is deterministic rather than timing-dependent.
+      let releaseCycle!: () => void;
+      const cycleGate = new Promise<void>(resolve => {
+        releaseCycle = resolve;
+      });
+      BufferingCoordinator.asyncBufferingOps.set(
+        `obs:thread:${threadId}`,
+        cycleGate.then(() => {
+          order.push('cycle-finished');
+        }),
+      );
+
+      const deletion = memory.deleteThread(threadId);
+      // Let every pending microtask settle so the drain is reached.
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+
+      // Parked on the drain: nothing destructive has happened yet. Without the
+      // drain this is exactly where the delete used to run ahead of the cycle.
+      expect(order).toEqual([]);
+      expect(await memory.getThreadById({ threadId })).toBeTruthy();
+
+      releaseCycle();
+      await deletion;
+
+      expect(order).toEqual(['cycle-finished', 'store-delete']);
+      expect(await memory.getThreadById({ threadId })).toBeNull();
+    });
+
+    it('bounds the drain with a timeout tighter than the engine default', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const waitForBuffering = vi.fn(async () => {});
+      // @ts-expect-error - injecting a fake engine to observe drain coordination
+      memory._omEngineInstance = { waitForBuffering };
+      await seedThread(memory);
+
+      await memory.deleteThread(threadId);
+
+      expect(waitForBuffering).toHaveBeenCalledTimes(1);
+      const [calledThreadId, calledResourceId, timeoutMs] = waitForBuffering.mock.calls[0]!;
+      expect(calledThreadId).toBe(threadId);
+      expect(calledResourceId).toBe(resourceId);
+      // The engine default is 30s, sized for server endpoints. A user-facing delete
+      // must not be able to stall that long behind one stuck cycle.
+      expect(typeof timeoutMs).toBe('number');
+      expect(timeoutMs).toBeLessThan(30_000);
+    });
+
+    it('does not instantiate an observational-memory engine just to drain it', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      await seedThread(memory);
+
+      const initEngine = vi.spyOn(Memory.prototype as never, '_initOMEngine' as never);
+      await memory.deleteThread(threadId);
+
+      expect(initEngine).not.toHaveBeenCalled();
+      expect(await memory.getThreadById({ threadId })).toBeNull();
     });
   });
 
