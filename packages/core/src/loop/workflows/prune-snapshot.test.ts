@@ -74,6 +74,40 @@ describe('pruneAgentLoopSnapshot running history', () => {
     expect(context.current.payload.messageListState).toEqual(conversation);
     expect(context.current.payload.accumulatedSteps).toEqual(['old', 'current']);
   });
+
+  it('retainRunningHistory keeps terminal step outputs the evented engine reads back mid-run', () => {
+    // The evented engine replaces in-flight stepResults with the storage-merged
+    // context at every step boundary, so a completed llm-execution's
+    // `output.messageListState` is still live data for the same-iteration
+    // `collect-tool-results` map. Stripping it on a running write crashed
+    // `durable-llm-mapping` on resume (Phase 2 Item 6).
+    const conversation = { messages: [{ role: 'user', content: 'earlier turn' }] };
+    const snapshot = {
+      status: 'running',
+      activePaths: [3, 0],
+      activeStepsPath: { 'durable-tool-call': [3, 0] },
+      context: {
+        input: { initial: true },
+        'durable-llm-execution': {
+          status: 'success',
+          payload: { runId: 'r-1' },
+          output: { messageListState: conversation, accumulatedSteps: ['s1'], text: 'call the tool' },
+        },
+      },
+    } as unknown as WorkflowRunState;
+
+    const stripped = pruneAgentLoopSnapshot({ snapshot });
+    const retained = pruneAgentLoopSnapshot({ snapshot, retainRunningHistory: true });
+
+    // Default-engine behavior unchanged: the non-active terminal output is stripped.
+    expect((stripped.context as Record<string, any>)['durable-llm-execution'].output).not.toHaveProperty(
+      'messageListState',
+    );
+    // Evented mode keeps it — the round-trip reads it back.
+    const kept = (retained.context as Record<string, any>)['durable-llm-execution'].output;
+    expect(kept.messageListState).toEqual(conversation);
+    expect(kept.accumulatedSteps).toEqual(['s1']);
+  });
 });
 
 describe('pruneAgentLoopSnapshot stepResult.request strip', () => {

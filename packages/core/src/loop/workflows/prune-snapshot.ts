@@ -355,13 +355,31 @@ function pruneRunningHistory(context: WorkflowRunState['context'], activeStepIds
  * run snapshot to what resume actually reads: the suspended step's
  * `suspendPayload` (one live `__streamState` copy) plus engine routing state.
  * Copy-on-write — never mutates the snapshot it is given.
+ *
+ * `retainRunningHistory` disables the extra `running`-only strip
+ * (`pruneRunningHistory`, issue #20747). That strip is built on the default
+ * engine's invariant that live execution never reads persisted step results
+ * back — in-memory `stepResults` stay authoritative and storage is
+ * write-only while the run is in flight. The **evented** engine violates that
+ * invariant by design: at every step boundary it replaces the in-flight
+ * `stepResults` with the merged context returned by `updateWorkflowResults`
+ * (cross-worker truth), so a completed step's `output.messageListState` is
+ * still *live* data for later steps in the same iteration that read it via
+ * `getStepResult` (e.g. `collect-tool-results` re-reads `durable-llm-execution`).
+ * Stripping it on a running write feeds a gutted `llmOutput` back into the
+ * chain and `durable-llm-mapping` crashes deserializing `undefined`.
+ * Retention stays bounded on evented: loop records are keyed by step id and
+ * overwritten every iteration, so the snapshot holds at most one conversation
+ * copy per distinct step — the same bytes a suspended snapshot already keeps.
  */
 export function pruneAgentLoopSnapshot({
   snapshot,
   workflowStatus,
+  retainRunningHistory = false,
 }: {
   snapshot: WorkflowRunState;
   workflowStatus?: string;
+  retainRunningHistory?: boolean;
 }): WorkflowRunState {
   const isRunning = (workflowStatus ?? snapshot.status) === 'running';
   const activeStepIds = isRunning ? getActiveStepIds(snapshot) : new Set<string>();
@@ -388,8 +406,10 @@ export function pruneAgentLoopSnapshot({
   }
 
   // `context` is freshly built above, so this is still copy-on-write with
-  // respect to the caller's snapshot.
-  if (isRunning) pruneRunningHistory(context, activeStepIds);
+  // respect to the caller's snapshot. The active-step terminal-payload
+  // preservation above applies regardless of `retainRunningHistory` — only
+  // the historical-copy strip is engine-dependent.
+  if (isRunning && !retainRunningHistory) pruneRunningHistory(context, activeStepIds);
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'

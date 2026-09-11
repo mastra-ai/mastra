@@ -10,6 +10,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -429,10 +431,24 @@ describe('DurableAgent streaming execution', () => {
           tools: { echo: echoTool },
         });
 
+        const wrapped =
+          name === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+        if (name === 'evented') {
+          // The evented engine executes via mastra.pubsub + storage-backed
+          // workers, so unlike the default engine it cannot run without a
+          // Mastra host (see evented-split-transport.test.ts for the same
+          // harness shape).
+          void new Mastra({
+            agents: { [agentId]: wrapped as any },
+            logger: false,
+            storage: new InMemoryStore(),
+          });
+        }
+
         return {
           name,
           prompts,
-          agent: name === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub }),
+          agent: wrapped,
         };
       };
 

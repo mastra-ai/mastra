@@ -158,6 +158,21 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     return this.#options?.engine === 'evented' ? createEventedWorkflow : createWorkflow;
   }
 
+  /**
+   * Engine-aware snapshot pruning. The evented engine replaces its in-flight
+   * `stepResults` with the storage-merged context at every step boundary, so
+   * persisted step outputs are still *live* data for later same-iteration
+   * steps (`collect-tool-results` re-reads `durable-llm-execution`'s output).
+   * The `running`-only history strip (#20747) assumes storage is write-only
+   * during execution — true on the default engine, false on evented — so
+   * evented retains running history. See `pruneAgentLoopSnapshot` for the
+   * full rationale and why retention stays bounded.
+   */
+  protected pruneSnapshotHook(): typeof pruneAgentLoopSnapshot {
+    if (this.#options?.engine !== 'evented') return pruneAgentLoopSnapshot;
+    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory: true });
+  }
+
   // ── Runtime hooks ──────────────────────────────────────────────────────
 
   /**
@@ -349,8 +364,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             );
           },
           // Agent-loop snapshots are pure resume artifacts — strip everything a
-          // resume never reads before persisting.
-          pruneSnapshot: pruneAgentLoopSnapshot,
+          // resume never reads before persisting. Engine-aware: evented
+          // retains running history (see pruneSnapshotHook).
+          pruneSnapshot: this.pruneSnapshotHook(),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
@@ -725,8 +741,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             );
           },
           // Agent-loop snapshots are pure resume artifacts — strip everything a
-          // resume never reads before persisting.
-          pruneSnapshot: pruneAgentLoopSnapshot,
+          // resume never reads before persisting. Engine-aware: evented
+          // retains running history (see pruneSnapshotHook).
+          pruneSnapshot: this.pruneSnapshotHook(),
           validateInputs: false,
           // Engine step events off for the same reason as the iteration
           // workflow (#21529) — see singleIterationWorkflow.
