@@ -46,7 +46,7 @@
       border-bottom: 2px solid transparent;
     }
 
-    [data-variant='line'] [data-slot='tab'][data-closable] {
+    [data-variant='line'] [data-slot='tab'][data-active][data-closable] {
       padding-right: 42px;
     }
 
@@ -61,7 +61,7 @@
       border-radius: 9999px;
     }
 
-    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-closable] {
+    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-active][data-closable] {
       padding-right: 34px;
     }
 
@@ -108,7 +108,7 @@
       padding: 6px 16px;
     }
 
-    [data-slot='tab'][data-closable] {
+    [data-slot='tab'][data-active][data-closable] {
       padding-right: 38px;
     }
 

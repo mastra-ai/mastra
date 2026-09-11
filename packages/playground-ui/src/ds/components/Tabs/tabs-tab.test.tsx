@@ -319,12 +319,12 @@ describe('Tab', () => {
   });
 
   describe('when a tab can be closed', () => {
-    it('closes without also selecting the tab', () => {
+    it('closes without also invoking the tab click', () => {
       const onClose = vi.fn();
       const onClick = vi.fn();
 
       render(
-        <Tabs defaultTab="first">
+        <Tabs defaultTab="second">
           <TabList>
             <Tab value="first">First</Tab>
             <Tab value="second" onClose={onClose} onClick={onClick}>
@@ -341,8 +341,6 @@ describe('Tab', () => {
       const tabList = tab.closest('[role="tablist"]');
       expect(tabList?.contains(closeButton)).toBe(false);
       expect(closeButton.closest('[data-slot="tabs-list-scroll"]')).toBe(tabList?.parentElement);
-      expect(closeButton.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(false);
-      act(() => tab.focus());
       expect(closeButton.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(true);
       expect(closeButton.tabIndex).toBe(0);
       closeButton.focus();
@@ -351,7 +349,32 @@ describe('Tab', () => {
 
       expect(onClose).toHaveBeenCalledTimes(1);
       expect(onClick).not.toHaveBeenCalled();
-      expect(screen.getByRole('tab', { name: /First/ }).getAttribute('aria-selected')).toBe('true');
+      expect(tab.getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('shows the close affordance only for the selected tab', () => {
+      render(
+        <Tabs defaultTab="first">
+          <TabList>
+            <Tab value="first" onClose={() => {}}>
+              First
+            </Tab>
+            <Tab value="second" onClose={() => {}}>
+              Second
+            </Tab>
+          </TabList>
+        </Tabs>,
+      );
+
+      const firstClose = screen.getByRole('button', { name: 'Close First' });
+      const secondClose = screen.getByRole('button', { name: 'Close Second' });
+      expect(firstClose.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(true);
+      expect(secondClose.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(false);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Second' }));
+
+      expect(firstClose.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(false);
+      expect(secondClose.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(true);
     });
 
     it('keeps keyboard activation when a close affordance is present', () => {

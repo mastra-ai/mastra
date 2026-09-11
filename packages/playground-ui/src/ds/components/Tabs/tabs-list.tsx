@@ -58,7 +58,6 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
   const closeRefs = useRef(new Map<string, HTMLDivElement>());
-  const [activeCloseValue, setActiveCloseValue] = useState<string | null>(null);
   const [available, setAvailable] = useState<number | null>(null);
   const [measurements, setMeasurements] = useState<TabMeasurement[]>([]);
   const register = useCallback((tab: TabMeasurement) => {
@@ -139,21 +138,6 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
           ref={scrollRef}
           data-slot="tabs-list-scroll"
           className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}
-          onPointerMove={event => {
-            if (!(event.target instanceof Element)) return;
-            const item = event.target.closest<HTMLElement>('[data-tab-value]');
-            setActiveCloseValue(item?.dataset.tabValue ?? null);
-          }}
-          onPointerLeave={() => setActiveCloseValue(null)}
-          onFocusCapture={event => {
-            if (!(event.target instanceof Element)) return;
-            const item = event.target.closest<HTMLElement>('[data-tab-value]');
-            setActiveCloseValue(item?.dataset.tabValue ?? null);
-          }}
-          onBlurCapture={event => {
-            const nextTarget = event.relatedTarget;
-            if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setActiveCloseValue(null);
-          }}
         >
           <BaseTabs.List
             data-slot="tabs-list"
@@ -195,15 +179,14 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
                   else closeRefs.current.delete(tab.value);
                 }}
                 data-slot="tab-close-item"
-                data-tab-value={tab.value}
-                data-visible={activeCloseValue === tab.value || undefined}
+                data-visible={tabs?.value === tab.value || undefined}
               >
                 <Tooltip>
                   <TooltipTrigger
                     render={
                       <button
                         type="button"
-                        tabIndex={activeCloseValue === tab.value ? 0 : -1}
+                        tabIndex={tabs?.value === tab.value ? 0 : -1}
                         data-slot="tab-close"
                         onClick={tab.onClose}
                         className={cn('rounded p-0.5 hover:bg-surface4 hover:text-accent2', transitions.colors)}

@@ -60,7 +60,6 @@ export const Tab = ({
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
-      data-tab-value={value}
       data-closable={onClose ? '' : undefined}
       className={cn(
         'text-ui-md font-normal text-neutral3',
