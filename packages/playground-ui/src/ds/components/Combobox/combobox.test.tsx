@@ -8,7 +8,7 @@ import { Combobox } from './combobox';
 
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
   }
 });
 
@@ -21,6 +21,12 @@ const options = [
   { label: 'Anthropic', value: 'anthropic' },
   { label: 'Google', value: 'google' },
 ];
+
+function getFirstHTMLElement(element: Element): HTMLElement {
+  const firstElement = element.firstElementChild;
+  if (!(firstElement instanceof HTMLElement)) throw new Error('Expected an HTML element');
+  return firstElement;
+}
 
 function renderCombobox(props?: {
   onValueChange?: (value: string) => void;
@@ -308,13 +314,13 @@ describe('Combobox', () => {
   it('says what went wrong under the field, and nothing when nothing did', () => {
     const withError = render(<Combobox options={options} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox options={options} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('takes the medium size unless the caller asks otherwise', () => {
@@ -354,7 +360,7 @@ describe('Combobox', () => {
 
   it('greys out the invitation only while nothing is chosen', () => {
     const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
-    const label = () => screen.getByRole('combobox').firstElementChild as HTMLElement;
+    const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
     expect(label().classList.contains('text-neutral3')).toBe(true);
 
     rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
@@ -389,13 +395,13 @@ describe('Combobox', () => {
   it('says what went wrong under a multi-select field too', () => {
     const withError = render(<Combobox multiple options={options} value={[]} error="Required" />);
     expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = (withError.container.firstElementChild as HTMLElement).childElementCount;
+    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
     const withoutError = render(<Combobox multiple options={options} value={[]} />);
 
-    expect((withoutError.container.firstElementChild as HTMLElement).childElementCount).toBe(withErrorCount - 1);
+    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
   });
 
   it('picks a single value with nobody listening', async () => {
