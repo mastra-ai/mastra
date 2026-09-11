@@ -75,8 +75,8 @@ const InteractiveExample = () => {
       </TooltipProvider>
 
       <div className="bg-surface2 mt-4 rounded-lg p-3">
-        <p className="text-neutral3 mb-2 text-xs">Current state:</p>
-        <pre className="text-neutral6 text-xs whitespace-pre-wrap">{JSON.stringify(items, null, 2)}</pre>
+        <p className="text-neutral3 mb-2 text-ui-sm">Current state:</p>
+        <pre className="text-neutral6 text-ui-sm whitespace-pre-wrap">{JSON.stringify(items, null, 2)}</pre>
       </div>
     </div>
   );

@@ -171,7 +171,7 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 flex w-full items-center gap-2 py-2 text-sm font-medium">
+      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 flex w-full items-center gap-2 py-2 text-ui-md font-medium">
         <ChevronRight className="h-4 w-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
@@ -195,7 +195,7 @@ export function SchemaConfigSection({
 
         {/* Source selector */}
         <div className="space-y-2">
-          <label className="text-neutral4 text-sm font-medium">Import From</label>
+          <label className="text-neutral4 text-ui-md font-medium">Import From</label>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
               <SelectTrigger size="sm" className="w-40">
@@ -237,7 +237,7 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-neutral3 text-xs">Loading schema...</span>
+              <span className="text-neutral3 text-ui-sm">Loading schema...</span>
             )}
 
             {/* Scorer target type picker */}
@@ -260,7 +260,7 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-neutral3 text-xs">
+            <p className="text-neutral3 text-ui-sm">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}

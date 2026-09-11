@@ -125,7 +125,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-ui-sm bg-surface4! whitespace-pre-wrap wrap-break-word',
                             className,
                             previousDisplayStatus === 'success' && nextStep && 'bg-accent1Dark!',
                             previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Dark!',
@@ -161,7 +161,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             >
                               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                                 <pre
-                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
+                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-ui-md dark:bg-zinc-800`}
                                   style={{
                                     ...style,
                                     backgroundColor: '#121212',

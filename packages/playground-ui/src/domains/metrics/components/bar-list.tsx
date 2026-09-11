@@ -24,11 +24,11 @@ export function BarListContent({
           {legend?.map(l => (
             <div key={l.label} className="flex items-center gap-1.5">
               <div className="size-2 rounded-full" style={{ backgroundColor: l.color }} />
-              <span className="text-icon2 text-xs">{l.label}</span>
+              <span className="text-icon2 text-ui-sm">{l.label}</span>
             </div>
           ))}
         </div>
-        {valueLabel && <span className="text-icon2 shrink-0 text-xs">{valueLabel}</span>}
+        {valueLabel && <span className="text-icon2 shrink-0 text-ui-sm">{valueLabel}</span>}
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -40,11 +40,11 @@ export function BarListContent({
                   className="absolute inset-y-0 left-0 rounded"
                   style={{ width: `${pct}%`, backgroundColor: color }}
                 />
-                <span className="absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-white">
+                <span className="absolute inset-y-0 left-2 flex items-center text-ui-sm whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 shrink-0 font-mono text-xs tabular-nums">{fmt(d.value)}</span>
+              <span className="text-icon6 shrink-0 font-mono text-ui-sm tabular-nums">{fmt(d.value)}</span>
             </div>
           );
         })}
@@ -62,14 +62,14 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
         <div className="flex flex-1 items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="size-2 rounded-full" style={{ backgroundColor: CHART_COLORS.blue }} />
-            <span className="text-icon2 text-xs">Completed</span>
+            <span className="text-icon2 text-ui-sm">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="size-2 rounded-full" style={{ backgroundColor: CHART_COLORS.red }} />
-            <span className="text-icon2 text-xs">Errors</span>
+            <span className="text-icon2 text-ui-sm">Errors</span>
           </div>
         </div>
-        <span className="text-icon2 shrink-0 text-xs">Total (Success)</span>
+        <span className="text-icon2 shrink-0 text-ui-sm">Total (Success)</span>
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -112,11 +112,11 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                     {d.errors.toLocaleString()} errors
                   </TooltipContent>
                 </Tooltip>
-                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-xs whitespace-nowrap text-white">
+                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-ui-sm whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 shrink-0 font-mono text-xs tabular-nums">
+              <span className="text-icon6 shrink-0 font-mono text-ui-sm tabular-nums">
                 {total.toLocaleString()} ({successPct}%)
               </span>
             </div>

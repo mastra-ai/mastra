@@ -514,11 +514,11 @@ export function DatasetReview({
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="mb-1 block text-xs">Provider</Label>
+                <Label className="mb-1 block text-ui-sm">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="mb-1 block text-xs">Model</Label>
+                <Label className="mb-1 block text-ui-sm">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -526,13 +526,13 @@ export function DatasetReview({
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <div>
-              <Label className="text-xs">Instructions (optional)</Label>
+              <Label className="text-ui-sm">Instructions (optional)</Label>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="mt-1 text-xs"
+                className="mt-1 text-ui-sm"
               />
             </div>
           </div>

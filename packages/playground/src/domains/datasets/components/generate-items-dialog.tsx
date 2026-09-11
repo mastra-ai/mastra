@@ -318,7 +318,7 @@ export function GenerateReviewDialog({
                           <Txt variant="ui-xs" className="text-neutral3 font-medium">
                             Input
                           </Txt>
-                          <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+                          <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-ui-sm wrap-break-word whitespace-pre-wrap">
                             {JSON.stringify(item.input, null, 2)}
                           </pre>
                         </div>
@@ -327,7 +327,7 @@ export function GenerateReviewDialog({
                             <Txt variant="ui-xs" className="text-neutral3 font-medium">
                               Ground Truth
                             </Txt>
-                            <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+                            <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-ui-sm wrap-break-word whitespace-pre-wrap">
                               {JSON.stringify(item.groundTruth, null, 2)}
                             </pre>
                           </div>

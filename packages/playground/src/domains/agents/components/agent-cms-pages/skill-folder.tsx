@@ -127,7 +127,7 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="text-neutral3 flex h-full items-center justify-center text-xs">
+          <div className="text-neutral3 flex h-full items-center justify-center text-ui-sm">
             Select a file to edit its content
           </div>
         )}

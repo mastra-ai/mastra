@@ -69,7 +69,7 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
-                          className="bg-surface5 text-neutral4 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                          className="bg-surface5 text-neutral4 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-ui-xs font-medium"
                           aria-label={isCopy ? 'Copied skill' : 'Imported skill'}
                           data-testid="skill-builder-origin-badge"
                         >

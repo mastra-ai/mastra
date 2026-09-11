@@ -81,10 +81,10 @@ export function SkillsTable({
       {hasUndiscoveredAgentSkills && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-          <div className="text-sm">
+          <div className="text-ui-md">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
             <p className="text-neutral4 mt-1">
-              You have skills in <code className="bg-surface4 rounded px-1 py-0.5 text-xs">.agents/skills</code> that
+              You have skills in <code className="bg-surface4 rounded px-1 py-0.5 text-ui-sm">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
           </div>
@@ -175,8 +175,8 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
         <div className="bg-surface4 mb-4 rounded-full p-4">
           <CircleSlashIcon className="text-neutral3 h-8 w-8" />
         </div>
-        <h2 className="text-neutral6 mb-2 text-lg font-medium">Skills Not Configured</h2>
-        <p className="text-neutral4 mb-6 text-sm">
+        <h2 className="text-neutral6 mb-2 text-header-sm font-medium">Skills Not Configured</h2>
+        <p className="text-neutral4 mb-6 text-ui-md">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

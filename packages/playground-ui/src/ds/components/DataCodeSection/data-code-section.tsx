@@ -111,7 +111,7 @@ function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: '0.75rem',
+      fontSize: 'var(--text-ui-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: '#939393',
@@ -126,7 +126,7 @@ function buildLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: '0.75rem',
+      fontSize: 'var(--text-ui-sm)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',

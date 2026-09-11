@@ -43,7 +43,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-ui-md text-neutral4 mt-2 leading-7', {
+            className={cn('mb-4 text-ui-md text-neutral4 mt-2', {
               'bg-surface4 rounded-lg ': isLoading,
             })}
           >

@@ -56,7 +56,7 @@ function AgentTab({
         {label}
       </Txt>
       {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center text-xs leading-[18px] font-medium text-white">
+        <span className="bg-accent1 ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center text-ui-sm leading-[18px] font-medium text-white">
           {badge}
         </span>
       )}

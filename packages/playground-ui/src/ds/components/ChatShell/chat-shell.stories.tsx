@@ -26,7 +26,7 @@ const Composer = () => (
 );
 
 const Turn = ({ children }: { children: React.ReactNode }) => (
-  <div className="text-icon5 text-ui-md py-3 leading-relaxed">{children}</div>
+  <div className="text-icon5 text-ui-md py-3">{children}</div>
 );
 
 const Shell = ({ children }: { children: React.ReactNode }) => (

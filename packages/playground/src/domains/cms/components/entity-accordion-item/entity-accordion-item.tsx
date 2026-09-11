@@ -46,7 +46,7 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="sm">{icon}</Icon>
-            <span className="text-neutral6 text-xs font-medium">{name}</span>
+            <span className="text-neutral6 text-ui-sm font-medium">{name}</span>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,7 +60,7 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-xs"
+          className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-ui-sm"
           size="sm"
           disabled={isReadOnly}
         />

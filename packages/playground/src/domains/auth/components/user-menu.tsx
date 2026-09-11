@@ -91,7 +91,7 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md transition-colors ${
                     isActive ? 'bg-surface2' : 'hover:bg-surface2'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >

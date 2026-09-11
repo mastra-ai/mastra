@@ -118,12 +118,12 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const description = login.description ? (
     <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
       <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-      <p className="text-neutral3 text-sm">{login.description}</p>
+      <p className="text-neutral3 text-ui-md">{login.description}</p>
     </div>
   ) : null;
 
   const errorBanner = errorMessage ? (
-    <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
+    <div className="rounded-md bg-red-500/10 p-3 text-ui-md text-red-400">{errorMessage}</div>
   ) : null;
 
   return (
@@ -136,7 +136,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
         <form onSubmit={handleCredentialsSubmit} className="space-y-4">
           {!isSignIn && (
             <div className="space-y-2">
-              <label htmlFor="name" className="text-neutral4 block text-sm">
+              <label htmlFor="name" className="text-neutral4 block text-ui-md">
                 Name
               </label>
               <Input
@@ -152,7 +152,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           )}
 
           <div className="space-y-2">
-            <label htmlFor="email" className="text-neutral4 block text-sm">
+            <label htmlFor="email" className="text-neutral4 block text-ui-md">
               Email
             </label>
             <Input
@@ -168,7 +168,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="text-neutral4 block text-sm">
+            <label htmlFor="password" className="text-neutral4 block text-ui-md">
               Password
             </label>
             <Input
@@ -183,14 +183,14 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             />
           </div>
 
-          {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error.message}</div>}
+          {error && <div className="rounded-md bg-red-500/10 p-3 text-ui-md text-red-400">{error.message}</div>}
 
           <Button type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 
           {signUpEnabled && (
-            <div className="text-center text-sm">
+            <div className="text-center text-ui-md">
               <span className="text-neutral3">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
@@ -207,7 +207,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           <div className="absolute inset-0 flex items-center">
             <div className="border-border1 w-full border-t" />
           </div>
-          <div className="relative flex justify-center text-sm">
+          <div className="relative flex justify-center text-ui-md">
             <span className="bg-surface1 text-neutral3 px-2">or continue with</span>
           </div>
         </div>

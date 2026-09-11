@@ -277,7 +277,7 @@ export const MemorySearch = ({
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="space-y-1 text-xs opacity-50">
+                      <div className="space-y-1 text-ui-sm opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>
@@ -293,7 +293,7 @@ export const MemorySearch = ({
                         <div className="mb-1 flex items-center gap-2">
                           <span
                             className={cn(
-                              'text-xs font-medium px-2 py-0.5 rounded',
+                              'text-ui-sm font-medium px-2 py-0.5 rounded',
                               result.role === 'user'
                                 ? 'bg-blue-500/20 text-blue-400'
                                 : 'bg-green-500/20 text-green-400',
@@ -330,7 +330,7 @@ export const MemorySearch = ({
 
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="space-y-1 text-xs opacity-50">
+                      <div className="space-y-1 text-ui-sm opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <span className="font-medium">{msg.role}:</span>

@@ -35,7 +35,7 @@ export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
         <div className="flex min-w-0 flex-1 flex-col max-lg:hidden">
           <AgentEntityHeader agentId={agentId} />
           {agent?.description && (
-            <p className="text-neutral4 -mt-2 max-w-prose pr-3 pb-1 pl-12 text-sm">{agent.description}</p>
+            <p className="text-neutral4 -mt-2 max-w-prose pr-3 pb-1 pl-12 text-ui-md">{agent.description}</p>
           )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2 py-2">

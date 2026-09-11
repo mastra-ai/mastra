@@ -18,7 +18,7 @@ const getStateLabel = (signal: SignalData) => {
 };
 
 const Pill = ({ children }: { children: string }) => (
-  <span className="border-border1 text-neutral4 inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs leading-none">
+  <span className="border-border1 text-neutral4 inline-flex items-center rounded-full border px-1.5 py-0.5 text-ui-sm leading-none">
     {children}
   </span>
 );

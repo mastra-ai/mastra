@@ -67,7 +67,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
   }
 
   return (

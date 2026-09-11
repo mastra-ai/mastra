@@ -60,7 +60,7 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-neutral6 text-xl font-semibold">Authentication Required</h2>
+            <h2 className="text-neutral6 text-header-sm font-semibold">Authentication Required</h2>
             <p className="text-neutral3 max-w-sm">
               This page requires authentication, but no login method is configured. Please contact your administrator.
             </p>
@@ -84,19 +84,19 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-neutral6 text-xl font-semibold">Sign in to continue</h2>
+          <h2 className="text-neutral6 text-header-sm font-semibold">Sign in to continue</h2>
           <p className="text-neutral3 max-w-sm">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
           <div className="border-border1 bg-surface2 flex items-start gap-2.5 rounded-md border p-3 text-left">
             <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-neutral3 max-w-sm text-sm">{capabilities.login.description}</p>
+            <p className="text-neutral3 max-w-sm text-ui-md">{capabilities.login.description}</p>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <div className="text-sm">
+            <div className="text-ui-md">
               <span className="text-neutral3">{"Don't have an account? "}</span>
               <button type="button" onClick={handleSignUp} className="text-neutral6 hover:underline">
                 Sign up

@@ -106,7 +106,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                           </span>
                         )}
                         <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                          <span className="flex w-full min-w-0 items-center gap-2 text-xs">
+                          <span className="flex w-full min-w-0 items-center gap-2 text-ui-sm">
                             <span className="text-neutral5 min-w-0 flex-1 truncate font-medium" title={run.runId}>
                               {run.runId}
                             </span>
@@ -117,7 +117,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                             )}
                           </span>
                           {runInput && (
-                            <span className="text-neutral3 block w-full min-w-0 truncate text-xs">{runInput}</span>
+                            <span className="text-neutral3 block w-full min-w-0 truncate text-ui-sm">{runInput}</span>
                           )}
                         </span>
                       </span>

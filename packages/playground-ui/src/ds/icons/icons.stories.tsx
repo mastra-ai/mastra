@@ -109,7 +109,7 @@ const IconGrid = ({ size = 'default' }: { size?: 'sm' | 'default' | 'lg' }) => (
         <Icon size={size} className="text-neutral5">
           <IconComponent />
         </Icon>
-        <span className="text-neutral3 text-center text-xs">{name.replace('Icon', '')}</span>
+        <span className="text-neutral3 text-center text-ui-sm">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>
@@ -146,19 +146,19 @@ export const IconSizes: Story = {
         <Icon size="sm" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Small</span>
+        <span className="text-neutral3 text-ui-sm">Small</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="default" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Default</span>
+        <span className="text-neutral3 text-ui-sm">Default</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="lg" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Large</span>
+        <span className="text-neutral3 text-ui-sm">Large</span>
       </div>
     </div>
   ),
@@ -196,19 +196,19 @@ export const AgentIcons: Story = {
         <Icon size="lg" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Agent</span>
+        <span className="text-neutral3 text-ui-sm">Agent</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <AgentCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">AgentCoin</span>
+        <span className="text-neutral3 text-ui-sm">AgentCoin</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <AgentNetworkCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">AgentNetworkCoin</span>
+        <span className="text-neutral3 text-ui-sm">AgentNetworkCoin</span>
       </div>
     </div>
   ),
@@ -221,13 +221,13 @@ export const WorkflowIcons: Story = {
         <Icon size="lg" className="text-neutral5">
           <WorkflowIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Workflow</span>
+        <span className="text-neutral3 text-ui-sm">Workflow</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <WorkflowCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">WorkflowCoin</span>
+        <span className="text-neutral3 text-ui-sm">WorkflowCoin</span>
       </div>
     </div>
   ),
@@ -240,13 +240,13 @@ export const ToolIcons: Story = {
         <Icon size="lg" className="text-neutral5">
           <ToolsIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Tools</span>
+        <span className="text-neutral3 text-ui-sm">Tools</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <ToolCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">ToolCoin</span>
+        <span className="text-neutral3 text-ui-sm">ToolCoin</span>
       </div>
     </div>
   ),
@@ -259,25 +259,25 @@ export const BrandIcons: Story = {
         <Icon size="lg" className="text-neutral5">
           <GithubIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Github</span>
+        <span className="text-neutral3 text-ui-sm">Github</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <GithubCoinIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">GithubCoin</span>
+        <span className="text-neutral3 text-ui-sm">GithubCoin</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <GoogleIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">Google</span>
+        <span className="text-neutral3 text-ui-sm">Google</span>
       </div>
       <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <OpenAIIcon />
         </Icon>
-        <span className="text-neutral3 text-xs">OpenAI</span>
+        <span className="text-neutral3 text-ui-sm">OpenAI</span>
       </div>
     </div>
   ),

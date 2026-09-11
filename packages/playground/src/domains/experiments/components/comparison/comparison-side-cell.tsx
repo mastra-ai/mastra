@@ -46,7 +46,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-neutral3 py-8 text-center text-sm">Not present in this experiment</p>;
+    return <p className="text-neutral3 py-8 text-center text-ui-md">Not present in this experiment</p>;
   }
 
   const outputStr = formatValue(data.output);
@@ -57,7 +57,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <Tooltip>
           <TooltipTrigger
             render={
-              <p className="text-neutral3 flex items-center justify-end gap-1.5 text-sm [&>svg]:size-3.5">
+              <p className="text-neutral3 flex items-center justify-end gap-1.5 text-ui-md [&>svg]:size-3.5">
                 <ClockIcon />
                 {duration}
               </p>
@@ -97,7 +97,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.comment && (
         <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-neutral3 text-sm">{data.comment}</p>
+          <p className="text-neutral3 text-ui-md">{data.comment}</p>
         </ComparisonSection>
       )}
 
@@ -105,7 +105,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4 text-sm">
+              <div key={key} className="flex items-start justify-between gap-4 text-ui-md">
                 <dt className="text-neutral3">{key}</dt>
                 <dd className="text-neutral5 font-mono break-all">{formatValue(value)}</dd>
               </div>

@@ -26,7 +26,7 @@ export function ExamplesPager({
       >
         Previous
       </Button>
-      <span className="text-neutral3 font-mono text-xs tabular-nums">
+      <span className="text-neutral3 font-mono text-ui-sm tabular-nums">
         Page {page} of {totalPages}
       </span>
       <Button

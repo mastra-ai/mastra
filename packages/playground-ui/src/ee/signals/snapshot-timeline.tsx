@@ -62,7 +62,7 @@ export function TimelineTrack({
           <span
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="text-neutral3 absolute top-7 -translate-x-1/2 font-mono text-[10px] tabular-nums"
+            className="text-neutral3 absolute top-7 -translate-x-1/2 font-mono text-ui-xs tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
@@ -131,7 +131,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="text-neutral4 font-mono text-xs tabular-nums" data-testid="snapshot-summary">
+        <p className="text-neutral4 font-mono text-ui-sm tabular-nums" data-testid="snapshot-summary">
           {summary}
         </p>
       </div>

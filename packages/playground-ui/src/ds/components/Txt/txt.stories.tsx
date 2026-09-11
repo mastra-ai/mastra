@@ -108,6 +108,40 @@ export const AllVariants: Story = {
   ),
 };
 
+/**
+ * Reference hierarchy used across Studio. Pick the variant by role, not by
+ * eyeballing size: page title → header-md, onboarding hero → header-xl,
+ * section → header-sm, panel subtitle → ui-md medium, body → ui-md,
+ * secondary → ui-sm, meta/badges → ui-xs. Never use ui-xs/ui-sm for headings.
+ */
+export const Hierarchy: Story = {
+  render: () => (
+    <div className="flex max-w-xl flex-col gap-4">
+      <Txt as="h1" variant="header-xl" className="text-neutral6 font-semibold">
+        Hero title (header-xl) — onboarding only
+      </Txt>
+      <Txt as="h1" variant="header-md" className="text-neutral6 font-medium">
+        Page title (header-md)
+      </Txt>
+      <Txt as="h2" variant="header-sm" className="text-neutral6 font-medium">
+        Section title (header-sm)
+      </Txt>
+      <Txt as="h3" variant="ui-md" className="text-neutral5 font-medium">
+        Panel subtitle (ui-md, medium)
+      </Txt>
+      <Txt as="p" variant="ui-md" className="text-neutral4">
+        Body copy (ui-md). The paired line-height comes with the token; do not add leading-* utilities.
+      </Txt>
+      <Txt as="p" variant="ui-sm" className="text-neutral3">
+        Secondary text (ui-sm) for helper copy and descriptions.
+      </Txt>
+      <Txt as="span" variant="ui-xs" className="text-neutral3 uppercase tracking-wide">
+        Meta / badge (ui-xs)
+      </Txt>
+    </div>
+  ),
+};
+
 export const MonospaceVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-2">

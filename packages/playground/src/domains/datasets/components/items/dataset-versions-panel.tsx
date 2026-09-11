@@ -134,7 +134,7 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <span className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                      <span className="flex min-w-0 flex-1 items-center gap-2 text-ui-sm">
                         <span className="text-neutral5 shrink-0 font-medium">v.{item.version}</span>
                         {createdAtDate && (
                           <span className="text-neutral3 min-w-0 flex-1 truncate">
