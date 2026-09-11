@@ -163,6 +163,28 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect(mastra.getMCPServerById('shared', 'missing')).toBeUndefined();
   });
 
+  it('keeps the business registry in sync when tools are added or removed at runtime', () => {
+    class DynamicServer extends NativeServer {
+      add(tools: Parameters<NativeServer['addTools']>[0]) {
+        this.addTools(tools);
+      }
+      remove(keys: string[]) {
+        return this.removeTools(keys);
+      }
+    }
+    const server = new DynamicServer({ name: 'Dynamic', version: '2', tools: {} });
+    const mastra = new Mastra({ mcpServers: { server } });
+    const ordinary = createTool({ id: 'business', description: 'Ordinary', execute: async () => 1 });
+    const native = nativeTool();
+    server.add({ ordinary, native });
+    expect(server.tools()).toEqual({ ordinary, native });
+    expect(mastra.getToolById('business')).toBe(ordinary);
+    expect(mastra.listTools()).not.toHaveProperty('native');
+    expect(server.remove(['ordinary', 'native', 'missing'])).toEqual(['ordinary', 'native']);
+    expect(server.tools()).toEqual({});
+    expect(mastra.listTools()).not.toHaveProperty('business');
+  });
+
   it('passes normal auth, cancellation and observability to ordinary tools without legacy MCP context', async () => {
     const ctx = context();
     ctx.requestContext.set('tenant', 'north');

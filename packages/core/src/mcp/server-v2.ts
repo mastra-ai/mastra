@@ -96,6 +96,31 @@ export abstract class MCPServerBaseV2 extends MastraBase {
     }
   }
 
+  /** Adds tools to the catalogue at runtime, keeping the Mastra business registry in sync. */
+  protected addTools(tools: MCPServerToolsV2): void {
+    for (const [key, tool] of Object.entries(tools)) {
+      if (this.catalogue[key]) this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
+      this.catalogue[key] = tool;
+      if (this.mastra && !isMCPToolV2(tool)) this.mastra.addTool(tool, tool.id ?? key);
+    }
+  }
+
+  /** Removes tools from the catalogue by key and returns the keys actually removed. */
+  protected removeTools(keys: string[]): string[] {
+    const removed: string[] = [];
+    for (const key of keys) {
+      const tool = this.catalogue[key];
+      if (!tool) {
+        this.logger.warn(`Cannot remove tool '${key}': tool not found.`);
+        continue;
+      }
+      delete this.catalogue[key];
+      if (this.mastra && !isMCPToolV2(tool)) this.mastra.removeTool(tool.id ?? key);
+      removed.push(key);
+    }
+    return removed;
+  }
+
   async invokeTool(
     toolId: string,
     input: unknown,

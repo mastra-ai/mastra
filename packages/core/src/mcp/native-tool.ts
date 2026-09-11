@@ -11,6 +11,7 @@ import type { ObservabilityContext } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { ToolAnnotations } from '../tools/types';
 import { validateRequestContext, validateToolInput, validateToolOutput } from '../tools/validation';
 
 const MCP_NATIVE_TOOL = Symbol.for('mastra.mcp.native-tool.v2');
@@ -52,6 +53,8 @@ export interface MCPToolV2<TInput = unknown, TOutput = unknown> {
   readonly description: string;
   readonly inputSchema: StandardSchemaWithJSON<TInput>;
   readonly outputSchema: StandardSchemaWithJSON<TOutput>;
+  readonly annotations?: ToolAnnotations;
+  readonly _meta?: Record<string, unknown>;
   invoke(input: TInput, context: MCPToolExecutionContextV2): Promise<MCPToolOutcomeV2<TOutput>>;
 }
 
@@ -97,6 +100,15 @@ const inputRequiredSchema = z
     result => result.requestState !== undefined || Object.keys(result.inputRequests ?? {}).length > 0,
     'Input-required control must contain input requests or request state',
   );
+/**
+ * Validates an `input_required` control result before it is serialized. Only
+ * elicitation requests (form or URL mode) are accepted as embedded requests.
+ */
+export function parseMCPInputRequiredV2(value: MCPInputRequiredResultV2): MCPInputRequiredResultV2 {
+  inputRequiredSchema.parse(value);
+  return value;
+}
+
 const outcomeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('completed'), value: z.unknown() }),
   z.strictObject({ kind: z.literal('input_required'), result: inputRequiredSchema }),
@@ -124,6 +136,10 @@ export interface MCPToolActionV2<TInput, TOutput> {
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   requestContextSchema?: PublicSchema;
+  /** MCP tool annotations advertised on `tools/list`. */
+  annotations?: ToolAnnotations;
+  /** Arbitrary `_meta` advertised on `tools/list` (for example MCP Apps UI metadata). */
+  _meta?: Record<string, unknown>;
   execute(
     input: NoInfer<TInput>,
     context: MCPToolExecutionContextV2,
@@ -140,6 +156,8 @@ export function createMCPTool<TInput, TOutput>(options: MCPToolActionV2<TInput, 
     description: options.description,
     inputSchema,
     outputSchema,
+    annotations: options.annotations,
+    _meta: options._meta,
     async invoke(input, context) {
       contextSchema.parse(context);
       context.request.signal.throwIfAborted();
