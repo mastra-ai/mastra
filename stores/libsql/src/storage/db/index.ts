@@ -667,10 +667,12 @@ export class LibSQLDB extends MastraBase {
     tableName,
     schema,
     compositePrimaryKey,
+    executor = this.client,
   }: {
     tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
+    executor?: Pick<Client, 'execute'>;
   }): Promise<void> {
     try {
       const parsedTableName = parseSqlIdentifier(tableName, 'table name');
@@ -714,7 +716,7 @@ export class LibSQLDB extends MastraBase {
 
       const sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (\n  ${allDefinitions}\n)`;
 
-      await this.client.execute(sql);
+      await executor.execute(sql);
       this.logger.debug(`LibSQLDB: Created table ${tableName}`);
 
       // Run migrations for Spans table to add any new columns
