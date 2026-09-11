@@ -103,10 +103,14 @@ export class EventedAgent<
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
+      // Note: unlike the default engine, evented `createRun` accepts no
+      // `pubsub` — the engine always publishes on `mastra.pubsub` so any
+      // worker in a fleet can execute a step. The agent's stream still sees
+      // those events because its CachingPubSub follows `mastra.pubsub` as its
+      // source (wired at registration; see #ensurePubsubInitialized).
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        pubsub: this.pubsubInternal,
       });
       // Fire and forget - don't await the run, so stream() returns immediately.
       // Pass the caller's requestContext (so config selectors pick the same observability

@@ -1196,4 +1196,191 @@ describe('CachingPubSub', () => {
       expect(ackedByConsumer).toEqual([1, 1]);
     });
   });
+
+  describe('source bus following', () => {
+    const topic = 'agent.stream.run-1';
+    const flush = () => new Promise(resolve => setTimeout(resolve, 20));
+
+    /**
+     * Mimics the `mastra.pubsub` proxy: same underlying transport, different
+     * object identity, methods bound to the target. Aliasing detection must
+     * see through it via `__rawBus()`.
+     */
+    function proxyOver(raw: PubSub): PubSub {
+      return new Proxy(raw, {
+        get(target, prop) {
+          const val = Reflect.get(target, prop, target);
+          return typeof val === 'function' ? val.bind(target) : val;
+        },
+      }) as PubSub;
+    }
+
+    it('delivers and caches source-published events when source is a different transport', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      // Publish directly on the source bus — the follower must bridge it.
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
+
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+    });
+
+    it('replays source-published events to late subscribers', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      // A first subscriber keeps the follower alive while events flow.
+      await caching.subscribe(topic, () => {});
+      await sourceBus.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await sourceBus.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await flush();
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await sourceBus.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(replayed).toEqual(['first', 'second', 'third']);
+    });
+
+    it('does not double-deliver when source and inner share the transport', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await shared.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      // Exactly one live delivery (the original), but the event is cached.
+      expect(received).toHaveLength(1);
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+      // Cached copy preserves the live id — subscribeFromOffset dedups the
+      // unindexed live copy against the indexed cached copy by id.
+      expect(history[0].id).toBe(received[0].id);
+    });
+
+    it('replay+live has no duplicates on an aliased bus', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      await caching.subscribe(topic, () => {});
+      await shared.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await shared.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await flush();
+
+      const replayed: string[] = [];
+      await caching.subscribeWithReplay(topic, event => {
+        replayed.push(event.type);
+      });
+      await shared.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(replayed).toEqual(['first', 'second', 'third']);
+    });
+
+    it('ignores its own indexed publishes on an aliased bus (no double cache)', async () => {
+      const shared = new EventEmitterPubSub();
+      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await caching.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      const history = await caching.getHistory(topic);
+      expect(history).toHaveLength(1);
+    });
+
+    it('respects the shouldCache policy for followed events', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, {
+        source: sourceBus,
+        shouldCache: () => false,
+      });
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      // Still forwarded live across the split transports, but never cached.
+      expect(received).toHaveLength(1);
+      expect(received[0].index).toBeUndefined();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('stops following when the last local subscriber unsubscribes', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      const cb = vi.fn();
+      await caching.subscribe(topic, cb);
+      await caching.unsubscribe(topic, cb);
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(cb).not.toHaveBeenCalled();
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('clearTopic tears down the follower', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
+
+      await caching.subscribe(topic, () => {});
+      await sourceBus.publish(topic, { type: 'before', runId: 'run-1', data: {} });
+      await flush();
+      expect(await caching.getHistory(topic)).toHaveLength(1);
+
+      await caching.clearTopic(topic);
+      await sourceBus.publish(topic, { type: 'after', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(await caching.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('__setSource wires a source after construction', async () => {
+      const sourceBus = new EventEmitterPubSub();
+      const caching = new CachingPubSub(new EventEmitterPubSub(), cache);
+      caching.__setSource(sourceBus);
+
+      const received: Event[] = [];
+      await caching.subscribe(topic, event => {
+        received.push(event);
+      });
+
+      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
+      await flush();
+
+      expect(received).toHaveLength(1);
+      expect(await caching.getHistory(topic)).toHaveLength(1);
+    });
+  });
 });

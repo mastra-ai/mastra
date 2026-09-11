@@ -1191,6 +1191,7 @@ export class DurableAgent<
       // the existing instance instead of double-wrapping.
       this.#cachingPubsub = this.#innerPubsub;
       this.#resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? null;
+      if (this.#mastra) this.#innerPubsub.__setSource(this.#mastra.pubsub);
     } else {
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
@@ -1201,8 +1202,19 @@ export class DurableAgent<
       // declared here instead. Without it, per-run `workflow.events.v2.*` watch
       // events (cumulative step results, often megabytes) are RPUSHed into a
       // shared store that no other instance can ever read from (issue #20646).
+      //
+      // `source: mastra.pubsub` makes the cache follow the Mastra-level bus.
+      // The evented engine publishes agent-stream events there (from whichever
+      // worker executes a step) instead of through this agent's pubsub, so
+      // without the source wiring those events are never cached and — when the
+      // agent has a custom pubsub on a different transport — never reach the
+      // stream's subscribers at all: streams would resolve with null
+      // finish/suspend data (Phase 2 Item 5). When agent and Mastra share the
+      // underlying transport, the follower only caches (fixing replay) and
+      // never double-delivers.
       this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache, {
         shouldCache: topic => !isRunLocalTopic(topic),
+        source: this.#mastra?.pubsub,
       });
     }
   }
@@ -3742,6 +3754,16 @@ export class DurableAgent<
     // This must happen before CachingPubSub initialization.
     if (!this.#hasCustomPubsub && !this.#cachingPubsub) {
       this.#innerPubsub = mastra.pubsub;
+    }
+
+    // If the CachingPubSub was already built (lazy init ran before
+    // registration), it was constructed without a source — wire it now so the
+    // cache follows the bus the evented engine publishes on. Intentionally
+    // done for custom-pubsub agents too: the custom pubsub stays the local
+    // transport, but the cache must still observe `mastra.pubsub` or
+    // engine-published stream events never reach it.
+    if (this.#cachingPubsub instanceof CachingPubSub) {
+      this.#cachingPubsub.__setSource(mastra.pubsub);
     }
   }
 }
