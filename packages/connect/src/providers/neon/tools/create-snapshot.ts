@@ -4,22 +4,46 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const deleteDatabaseInputSchema = z.object({
-  project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
-  branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
-  database_name: z.string().describe('The database name'),
-});
+export const createSnapshotInputSchema = z
+  .object({
+    project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
+    branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
+    lsn: z
+      .string()
+      .describe(
+        'The target Log Sequence Number (LSN) to take the snapshot from.\nMust fall within the restore window. Cannot be used with `timestamp`\n',
+      )
+      .optional(),
+    timestamp: z
+      .string()
+      .describe(
+        'The target timestamp for the snapshot. Must fall within the restore window. RFC 3339 format. Cannot be used with `lsn`.\n',
+      )
+      .optional(),
+    name: z.string().describe('A name for the snapshot.').optional(),
+    expires_at: z
+      .string()
+      .describe('The time at which the snapshot will be automatically deleted. RFC 3339 format.\n')
+      .optional(),
+  })
+  .refine(input => input.lsn === undefined || input.timestamp === undefined, {
+    message: 'Use either lsn or timestamp, not both',
+  });
 
 const ProviderResponseSchema = z
   .object({
-    database: z
+    snapshot: z
       .object({
-        id: z.number().int(),
-        branch_id: z.string(),
+        id: z.string(),
         name: z.string(),
-        owner_name: z.string(),
+        lsn: z.string().optional(),
+        timestamp: z.string().optional(),
+        source_branch_id: z.string().optional(),
         created_at: z.string(),
-        updated_at: z.string(),
+        expires_at: z.string().optional(),
+        manual: z.boolean().optional(),
+        full_size: z.number().int().optional(),
+        diff_size: z.number().int().optional(),
       })
       .passthrough(),
     operations: z.array(
@@ -89,27 +113,29 @@ const ProviderResponseSchema = z
   })
   .passthrough();
 
-export const deleteDatabaseOutputSchema = z.union([
-  ProviderResponseSchema,
-  z.object({ deleted: z.literal(true), already_absent: z.literal(true) }),
-]);
+export const createSnapshotOutputSchema = ProviderResponseSchema;
 
-export function deleteDatabaseTool(proxy: PlatformProxy) {
+export function createSnapshotTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_delete_database',
+    id: 'neon_create_snapshot',
     description:
-      'Delete database. Deletes the specified database from the branch.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n',
-    inputSchema: deleteDatabaseInputSchema,
-    outputSchema: deleteDatabaseOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteDatabaseOutputSchema>> => {
+      'Create snapshot. Creates a snapshot from the specified branch.\nThis operation may initiate an asynchronous process.\n',
+    inputSchema: createSnapshotInputSchema,
+    outputSchema: createSnapshotOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof createSnapshotOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
+      const params: Record<string, string | number> = {};
+      if (input['lsn'] !== undefined) params['lsn'] = input['lsn'];
+      if (input['timestamp'] !== undefined) params['timestamp'] = input['timestamp'];
+      if (input['name'] !== undefined) params['name'] = input['name'];
+      if (input['expires_at'] !== undefined) params['expires_at'] = input['expires_at'];
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/databases/${encodeURIComponent(input['database_name'])}`,
-        retries: 3,
+        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/snapshot`,
+        retries: 0,
+        params,
       };
-      const response = await platformProxy.delete(config);
-      if (response.status === 204) return { deleted: true, already_absent: true };
+      const response = await platformProxy.post(config);
       const data = ProviderResponseSchema.parse(response.data);
       return data;
     },

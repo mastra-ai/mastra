@@ -4,10 +4,49 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const setDefaultBranchInputSchema = z.object({
-  project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
-  branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
-});
+export const restoreBranchInputSchema = z
+  .object({
+    project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
+    branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
+    body: z.object({
+      source_branch_id: z
+        .string()
+        .regex(new RegExp('^[a-z0-9-]{1,60}$'))
+        .describe(
+          "The `branch_id` of the restore source branch.\nIf `source_timestamp` and `source_lsn` are omitted, the branch will be restored to head.\nIf `source_branch_id` is equal to the branch's id, `source_timestamp` or `source_lsn` is required.\n",
+        ),
+      source_lsn: z
+        .string()
+        .describe(
+          'A Postgres LSN (for example, `0/1A2B3C4`) on the source branch to restore from.\nMutually exclusive with `source_timestamp`. Omit both to restore to head.\n',
+        )
+        .optional(),
+      source_timestamp: z
+        .string()
+        .datetime({ offset: true })
+        .describe(
+          'A point in time on the source branch to restore from, in RFC 3339 format. When omitted alongside `source_lsn`, the branch is restored to the latest available state of the source branch.\n',
+        )
+        .optional(),
+      preserve_under_name: z
+        .string()
+        .describe(
+          'Name under which to save the current branch state before restoring. Required when the branch has children or when `source_branch_id` equals the branch being restored; in those cases all existing child branches are moved to the newly created branch. If omitted and not required, the previous state is not preserved.\n',
+        )
+        .optional(),
+    }),
+  })
+  .refine(input => input.body.source_lsn === undefined || input.body.source_timestamp === undefined, {
+    message: 'Use either source_lsn or source_timestamp, not both',
+    path: ['body'],
+  })
+  .refine(
+    input =>
+      input.body.source_branch_id !== input.branch_id ||
+      ((input.body.source_lsn !== undefined || input.body.source_timestamp !== undefined) &&
+        Boolean(input.body.preserve_under_name)),
+    { message: 'Restoring a branch from itself requires a historical point and preserve_under_name', path: ['body'] },
+  );
 
 const ProviderResponseSchema = z
   .object({
@@ -116,21 +155,22 @@ const ProviderResponseSchema = z
   })
   .passthrough();
 
-export const setDefaultBranchOutputSchema = ProviderResponseSchema;
+export const restoreBranchOutputSchema = ProviderResponseSchema;
 
-export function setDefaultBranchTool(proxy: PlatformProxy) {
+export function restoreBranchTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_set_default_branch',
+    id: 'neon_restore_branch',
     description:
-      "Set branch as default. Sets the specified branch as the project's default branch.\nThe default designation is automatically removed from the previous default branch.\nFor more information, see [Manage branches](https://neon.com/docs/manage/branches/).\n",
-    inputSchema: setDefaultBranchInputSchema,
-    outputSchema: setDefaultBranchOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof setDefaultBranchOutputSchema>> => {
+      "Restore branch to a historical state. Restores a branch to an earlier state in its own or another branch's history\nby specifying an LSN or timestamp.\nCreates a new branch from the historical state.\n",
+    inputSchema: restoreBranchInputSchema,
+    outputSchema: restoreBranchOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof restoreBranchOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/set_as_default`,
+        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/restore`,
         retries: 0,
+        data: input.body,
       };
       const response = await platformProxy.post(config);
       const data = ProviderResponseSchema.parse(response.data);

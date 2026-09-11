@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 3e5c6ed7617f — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 0c4bb35bc7b4 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
@@ -7,9 +7,12 @@ import { createBranchTool } from './tools/create-branch.js';
 import { createDatabaseTool } from './tools/create-database.js';
 import { createEndpointTool } from './tools/create-endpoint.js';
 import { createProjectTool } from './tools/create-project.js';
+import { createSnapshotTool } from './tools/create-snapshot.js';
 import { deleteBranchTool } from './tools/delete-branch.js';
 import { deleteDatabaseTool } from './tools/delete-database.js';
 import { deleteEndpointTool } from './tools/delete-endpoint.js';
+import { deleteSnapshotTool } from './tools/delete-snapshot.js';
+import { finalizeRestoreBranchTool } from './tools/finalize-restore-branch.js';
 import { getAuthDetailsTool } from './tools/get-auth-details.js';
 import { getBranchSchemaTool } from './tools/get-branch-schema.js';
 import { getBranchTool } from './tools/get-branch.js';
@@ -17,6 +20,7 @@ import { getDatabaseTool } from './tools/get-database.js';
 import { getEndpointTool } from './tools/get-endpoint.js';
 import { getOperationTool } from './tools/get-operation.js';
 import { getProjectTool } from './tools/get-project.js';
+import { getSnapshotScheduleTool } from './tools/get-snapshot-schedule.js';
 import { listBranchEndpointsTool } from './tools/list-branch-endpoints.js';
 import { listBranchesTool } from './tools/list-branches.js';
 import { listDatabasesTool } from './tools/list-databases.js';
@@ -26,14 +30,19 @@ import { listOrganizationsTool } from './tools/list-organizations.js';
 import { listProjectsTool } from './tools/list-projects.js';
 import { listRegionsTool } from './tools/list-regions.js';
 import { listSharedProjectsTool } from './tools/list-shared-projects.js';
+import { listSnapshotsTool } from './tools/list-snapshots.js';
 import { restartEndpointTool } from './tools/restart-endpoint.js';
+import { restoreBranchTool } from './tools/restore-branch.js';
+import { restoreSnapshotTool } from './tools/restore-snapshot.js';
 import { setDefaultBranchTool } from './tools/set-default-branch.js';
+import { setSnapshotScheduleTool } from './tools/set-snapshot-schedule.js';
 import { startEndpointTool } from './tools/start-endpoint.js';
 import { suspendEndpointTool } from './tools/suspend-endpoint.js';
 import { updateBranchTool } from './tools/update-branch.js';
 import { updateDatabaseTool } from './tools/update-database.js';
 import { updateEndpointTool } from './tools/update-endpoint.js';
 import { updateProjectTool } from './tools/update-project.js';
+import { updateSnapshotTool } from './tools/update-snapshot.js';
 
 export function createNeonTools(options?: ProviderToolsOptions) {
   const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
@@ -43,9 +52,12 @@ export function createNeonTools(options?: ProviderToolsOptions) {
     neon_create_database: createDatabaseTool(platformProxy),
     neon_create_endpoint: createEndpointTool(platformProxy),
     neon_create_project: createProjectTool(platformProxy),
+    neon_create_snapshot: createSnapshotTool(platformProxy),
     neon_delete_branch: deleteBranchTool(platformProxy),
     neon_delete_database: deleteDatabaseTool(platformProxy),
     neon_delete_endpoint: deleteEndpointTool(platformProxy),
+    neon_delete_snapshot: deleteSnapshotTool(platformProxy),
+    neon_finalize_restore_branch: finalizeRestoreBranchTool(platformProxy),
     neon_get_auth_details: getAuthDetailsTool(platformProxy),
     neon_get_branch_schema: getBranchSchemaTool(platformProxy),
     neon_get_branch: getBranchTool(platformProxy),
@@ -53,6 +65,7 @@ export function createNeonTools(options?: ProviderToolsOptions) {
     neon_get_endpoint: getEndpointTool(platformProxy),
     neon_get_operation: getOperationTool(platformProxy),
     neon_get_project: getProjectTool(platformProxy),
+    neon_get_snapshot_schedule: getSnapshotScheduleTool(platformProxy),
     neon_list_branch_endpoints: listBranchEndpointsTool(platformProxy),
     neon_list_branches: listBranchesTool(platformProxy),
     neon_list_databases: listDatabasesTool(platformProxy),
@@ -62,14 +75,19 @@ export function createNeonTools(options?: ProviderToolsOptions) {
     neon_list_projects: listProjectsTool(platformProxy),
     neon_list_regions: listRegionsTool(platformProxy),
     neon_list_shared_projects: listSharedProjectsTool(platformProxy),
+    neon_list_snapshots: listSnapshotsTool(platformProxy),
     neon_restart_endpoint: restartEndpointTool(platformProxy),
+    neon_restore_branch: restoreBranchTool(platformProxy),
+    neon_restore_snapshot: restoreSnapshotTool(platformProxy),
     neon_set_default_branch: setDefaultBranchTool(platformProxy),
+    neon_set_snapshot_schedule: setSnapshotScheduleTool(platformProxy),
     neon_start_endpoint: startEndpointTool(platformProxy),
     neon_suspend_endpoint: suspendEndpointTool(platformProxy),
     neon_update_branch: updateBranchTool(platformProxy),
     neon_update_database: updateDatabaseTool(platformProxy),
     neon_update_endpoint: updateEndpointTool(platformProxy),
     neon_update_project: updateProjectTool(platformProxy),
+    neon_update_snapshot: updateSnapshotTool(platformProxy),
   };
   return applyAllowTools(tools, options?.allowTools);
 }

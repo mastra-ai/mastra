@@ -4,24 +4,13 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const deleteDatabaseInputSchema = z.object({
+export const deleteSnapshotInputSchema = z.object({
   project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
-  branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
-  database_name: z.string().describe('The database name'),
+  snapshot_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The snapshot ID'),
 });
 
 const ProviderResponseSchema = z
   .object({
-    database: z
-      .object({
-        id: z.number().int(),
-        branch_id: z.string(),
-        name: z.string(),
-        owner_name: z.string(),
-        created_at: z.string(),
-        updated_at: z.string(),
-      })
-      .passthrough(),
     operations: z.array(
       z
         .object({
@@ -89,27 +78,22 @@ const ProviderResponseSchema = z
   })
   .passthrough();
 
-export const deleteDatabaseOutputSchema = z.union([
-  ProviderResponseSchema,
-  z.object({ deleted: z.literal(true), already_absent: z.literal(true) }),
-]);
+export const deleteSnapshotOutputSchema = ProviderResponseSchema;
 
-export function deleteDatabaseTool(proxy: PlatformProxy) {
+export function deleteSnapshotTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_delete_database',
-    description:
-      'Delete database. Deletes the specified database from the branch.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n',
-    inputSchema: deleteDatabaseInputSchema,
-    outputSchema: deleteDatabaseOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteDatabaseOutputSchema>> => {
+    id: 'neon_delete_snapshot',
+    description: 'Delete snapshot. Deletes the specified snapshot.\n',
+    inputSchema: deleteSnapshotInputSchema,
+    outputSchema: deleteSnapshotOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteSnapshotOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/databases/${encodeURIComponent(input['database_name'])}`,
+        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/snapshots/${encodeURIComponent(input['snapshot_id'])}`,
         retries: 3,
       };
       const response = await platformProxy.delete(config);
-      if (response.status === 204) return { deleted: true, already_absent: true };
       const data = ProviderResponseSchema.parse(response.data);
       return data;
     },

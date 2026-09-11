@@ -4,24 +4,18 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const deleteDatabaseInputSchema = z.object({
+export const finalizeRestoreBranchInputSchema = z.object({
   project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
   branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The branch ID'),
-  database_name: z.string().describe('The database name'),
+  body: z
+    .object({
+      name: z.string().describe('Name for the replaced branch. If omitted, a unique name is generated.').optional(),
+    })
+    .optional(),
 });
 
 const ProviderResponseSchema = z
   .object({
-    database: z
-      .object({
-        id: z.number().int(),
-        branch_id: z.string(),
-        name: z.string(),
-        owner_name: z.string(),
-        created_at: z.string(),
-        updated_at: z.string(),
-      })
-      .passthrough(),
     operations: z.array(
       z
         .object({
@@ -89,27 +83,24 @@ const ProviderResponseSchema = z
   })
   .passthrough();
 
-export const deleteDatabaseOutputSchema = z.union([
-  ProviderResponseSchema,
-  z.object({ deleted: z.literal(true), already_absent: z.literal(true) }),
-]);
+export const finalizeRestoreBranchOutputSchema = ProviderResponseSchema;
 
-export function deleteDatabaseTool(proxy: PlatformProxy) {
+export function finalizeRestoreBranchTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_delete_database',
+    id: 'neon_finalize_restore_branch',
     description:
-      'Delete database. Deletes the specified database from the branch.\nFor related information, see [Manage databases](https://neon.com/docs/manage/databases/).\n',
-    inputSchema: deleteDatabaseInputSchema,
-    outputSchema: deleteDatabaseOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteDatabaseOutputSchema>> => {
+      "Finalize branch restore from snapshot. Finalize the restore operation for a branch created from a snapshot.\nThis operation updates the branch so it functions as the original branch it replaced.\nThis includes:\n  - Reassigning any computes from the original branch to the restored branch (this will restart the computes)\n  - Renaming the restored branch to the original branch's name\n  - Renaming the original branch so it no longer uses the original name\n\nThis operation only applies to branches created using the `restoreSnapshot` endpoint with `finalize_restore: false`.\n",
+    inputSchema: finalizeRestoreBranchInputSchema,
+    outputSchema: finalizeRestoreBranchOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof finalizeRestoreBranchOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/databases/${encodeURIComponent(input['database_name'])}`,
-        retries: 3,
+        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}/finalize_restore`,
+        retries: 0,
+        data: input.body,
       };
-      const response = await platformProxy.delete(config);
-      if (response.status === 204) return { deleted: true, already_absent: true };
+      const response = await platformProxy.post(config);
       const data = ProviderResponseSchema.parse(response.data);
       return data;
     },

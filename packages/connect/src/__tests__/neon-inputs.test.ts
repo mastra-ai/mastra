@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { compareBranchSchemaInputSchema } from '../providers/neon/tools/compare-branch-schema.js';
 import { createEndpointInputSchema } from '../providers/neon/tools/create-endpoint.js';
 import { getBranchSchemaInputSchema } from '../providers/neon/tools/get-branch-schema.js';
+import { restoreBranchInputSchema } from '../providers/neon/tools/restore-branch.js';
+import { setSnapshotScheduleInputSchema } from '../providers/neon/tools/set-snapshot-schedule.js';
 
 describe('generated Neon input constraints', () => {
   it('preserves historical selector exclusions through generation', () => {
@@ -29,4 +31,16 @@ it('preserves compute sizing constraints through generation', () => {
       },
     }).success,
   ).toBe(false);
+});
+
+it('preserves recovery preconditions through generation', () => {
+  const base = { project_id: 'project', branch_id: 'branch' };
+  expect(restoreBranchInputSchema.safeParse({ ...base, body: { source_branch_id: 'branch' } }).success).toBe(false);
+  expect(
+    restoreBranchInputSchema.safeParse({
+      ...base,
+      body: { source_branch_id: 'branch', source_lsn: '0/123', preserve_under_name: 'before' },
+    }).success,
+  ).toBe(true);
+  expect(setSnapshotScheduleInputSchema.safeParse({ ...base, body: { schedule: [] } }).success).toBe(false);
 });
