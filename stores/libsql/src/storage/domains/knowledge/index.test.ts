@@ -194,6 +194,31 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
+  it('preserves a commit response error after the transaction has closed', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-commit-response-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const primaryError = new Error('commit response failed');
+      const transaction = client.transaction.bind(client);
+      const transactionSpy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
+        const tx = await transaction(mode);
+        const commit = tx.commit.bind(tx);
+        vi.spyOn(tx, 'commit').mockImplementation(async () => {
+          await commit();
+          throw primaryError;
+        });
+        return tx;
+      });
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBe(primaryError);
+      transactionSpy.mockRestore();
+      expect(await new KnowledgeLibSQL({ client }).inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('rejects a complete Knowledge table set with a missing v2 column', async () => {
     const client = createClient({ url: ':memory:' });
     try {
