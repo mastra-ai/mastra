@@ -1,22 +1,22 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
+import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
-import type { DatasetTargetType } from './target-type-options';
-import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from './target-type-options';
 
 export interface EditDatasetFormProps {
   dataset: {
     id: string;
     name: string;
     description?: string;
-    targetType?: string | null;
     inputSchema?: Record<string, unknown> | null;
     groundTruthSchema?: Record<string, unknown> | null;
     requestContextSchema?: Record<string, unknown> | null;
+    scorerIds?: string[] | null;
   };
   onSuccess: () => void;
   onCancel: () => void;
@@ -28,27 +28,27 @@ type SchemaValue = Record<string, unknown> | null;
 type EditDatasetFormState = {
   name: string;
   description: string;
-  targetType: DatasetTargetType | '';
   inputSchema: SchemaValue;
   groundTruthSchema: SchemaValue;
   requestContextSchema: SchemaValue;
+  scorerIds: string[];
   validationError: string | null;
 };
 
 type EditDatasetFormAction =
   | { type: 'setStringField'; field: 'name' | 'description'; value: string }
-  | { type: 'setTargetType'; value: DatasetTargetType | '' }
   | { type: 'setSchemas'; inputSchema: SchemaValue; groundTruthSchema: SchemaValue; requestContextSchema: SchemaValue }
+  | { type: 'setScorerIds'; scorerIds: string[] }
   | { type: 'setValidationError'; validationError: string | null };
 
 function getInitialFormState(dataset: Dataset): EditDatasetFormState {
   return {
     name: dataset.name,
     description: dataset.description ?? '',
-    targetType: isDatasetTargetType(dataset.targetType) ? dataset.targetType : '',
     inputSchema: dataset.inputSchema ?? null,
     groundTruthSchema: dataset.groundTruthSchema ?? null,
     requestContextSchema: dataset.requestContextSchema ?? null,
+    scorerIds: dataset.scorerIds ?? [],
     validationError: null,
   };
 }
@@ -57,8 +57,6 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
   switch (action.type) {
     case 'setStringField':
       return { ...state, [action.field]: action.value };
-    case 'setTargetType':
-      return { ...state, targetType: action.value };
     case 'setSchemas':
       return {
         ...state,
@@ -67,6 +65,8 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
         requestContextSchema: action.requestContextSchema,
         validationError: null,
       };
+    case 'setScorerIds':
+      return { ...state, scorerIds: action.scorerIds };
     case 'setValidationError':
       return { ...state, validationError: action.validationError };
     default:
@@ -105,10 +105,10 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         datasetId: dataset.id,
         name: formState.name.trim(),
         description: formState.description.trim() || undefined,
-        targetType: formState.targetType || undefined,
         inputSchema: formState.inputSchema,
         groundTruthSchema: formState.groundTruthSchema,
         requestContextSchema: formState.requestContextSchema,
+        scorerIds: formState.scorerIds.length > 0 ? formState.scorerIds : null,
       });
 
       toast.success('Dataset updated successfully');
@@ -150,15 +150,12 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         placeholder="Enter dataset description (optional)"
       />
 
-      <SelectFieldBlock
-        label="Target type"
-        name="edit-dataset-target-type"
-        placeholder="Select a target type (optional)"
-        options={[...DATASET_TARGET_TYPE_OPTIONS]}
-        value={formState.targetType}
-        onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
-        helpText="What this dataset evaluates. Drives the Target column and the Target filter."
+      <ScorerSelector
+        selectedScorers={formState.scorerIds}
+        setSelectedScorers={scorerIds => dispatch({ type: 'setScorerIds', scorerIds })}
         disabled={updateDataset.isPending}
+        label={DEFAULT_SCORERS_LABEL}
+        helperText={DEFAULT_SCORERS_HELPER_TEXT}
       />
 
       <SchemaConfigSection

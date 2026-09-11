@@ -11,16 +11,32 @@ describe('supportsBedrockPromptCaching', () => {
     'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
     'global.anthropic.claude-sonnet-5',
     'us.anthropic.claude-opus-4-8',
+    'anthropic.claude-opus-5',
+    'us.anthropic.claude-opus-5',
+    'eu.anthropic.claude-opus-5',
+    'au.anthropic.claude-opus-5',
+    'jp.anthropic.claude-opus-5',
+    'global.anthropic.claude-opus-5',
+    'anthropic.claude-mythos-5',
+    'anthropic.claude-mythos-5-1',
+    'anthropic.claude-mythos-preview',
+    'us.anthropic.claude-opus-6',
+    'anthropic.claude-fable-5-1',
   ])('enables caching for %s', modelId => {
     expect(supportsBedrockPromptCaching(modelId)).toBe(true);
   });
 
-  it.each(['anthropic.claude-3-haiku-20240307-v1:0', 'amazon.nova-lite-v1:0', 'meta.llama3-70b-instruct-v1:0'])(
-    'leaves unsupported model %s unchanged',
-    modelId => {
-      expect(supportsBedrockPromptCaching(modelId)).toBe(false);
-    },
-  );
+  it.each([
+    'anthropic.claude-3-haiku-20240307-v1:0',
+    'anthropic.claude-3-5-sonnet-20240620-v1:0',
+    'anthropic.claude-3-opus-20240229-v1:0',
+    'anthropic.claude-3-sonnet-20240229-v1:0',
+    'openai.gpt-5.6-sol',
+    'amazon.nova-lite-v1:0',
+    'meta.llama3-70b-instruct-v1:0',
+  ])('leaves unsupported model %s unchanged', modelId => {
+    expect(supportsBedrockPromptCaching(modelId)).toBe(false);
+  });
 });
 
 describe('addBedrockCachePoints', () => {

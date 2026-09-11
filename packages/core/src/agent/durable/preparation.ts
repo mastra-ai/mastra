@@ -652,7 +652,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
-      returnScorerData: (execOptions as any)?.returnScorerData,
+      returnScorerData: execOptions?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
@@ -767,6 +767,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           schema: toStandardSchema(execOptions.structuredOutput.schema),
         }
       : undefined,
+    // Call-time returnScorerData flag. Also serialized into the workflow
+    // input; parked here too so warm resume()/observe() can rebuild
+    // scoringData without re-reading the snapshot.
+    returnScorerData: execOptions?.returnScorerData,
     cleanup: () => {},
   };
 

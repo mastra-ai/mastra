@@ -82,9 +82,7 @@ export default function Experiments() {
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
   const compareDisabledReason =
-    selectedIds.length === 2 && selectedDatasetIds.size !== 1
-      ? 'experiments must belong to the same dataset'
-      : undefined;
+    selectedIds.length === 2 && selectedDatasetIds.size !== 1 ? 'not the same dataset' : undefined;
 
   const executeCompare = () => {
     if (selectedIds.length !== 2 || compareDisabledReason) return;
@@ -154,7 +152,7 @@ export default function Experiments() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <ExperimentsToolbar
           search={search}

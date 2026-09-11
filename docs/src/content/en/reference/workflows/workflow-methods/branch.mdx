@@ -29,6 +29,33 @@ workflow.branch([
       'An array of tuples, each containing a condition function and a step to execute if the condition is true',
     isOptional: false,
   },
+  {
+    name: 'options',
+    type: 'StepFlowEntryOptions',
+    description:
+      'Optional identity and display metadata for this graph entry. Preserved through serialization and storage; has no effect on execution.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id that editors and tools can use to address this entry across edits',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of this control-flow operation',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
+        isOptional: true,
+      },
+    ],
+  },
 ]}
 />
 

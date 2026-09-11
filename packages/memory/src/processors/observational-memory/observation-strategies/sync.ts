@@ -114,7 +114,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
       priorExtractedValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
+      trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
     });
     const hookedValues = await applyExtractorHooks({
@@ -277,7 +279,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         operationType: 'observation',
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
-        error: error instanceof Error ? error.message : String(error),
+        error,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

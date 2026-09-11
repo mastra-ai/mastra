@@ -1,4 +1,8 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
+
+import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -197,5 +201,112 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
       messageId: 'msg-1',
       state: { s: 1 },
     });
+  });
+});
+
+/**
+ * `map-final-output` runs the finish side effects through `engine.step.run`. These tests
+ * only care about how the spans are ended, so the fake engine returns the step's result
+ * without invoking the callback. Mocking the module instead would leak across files,
+ * because this package runs vitest with `--no-isolate`.
+ */
+const skipFinishSideEffects = async () => ({ messageListState: undefined, outputText: undefined });
+
+describe('createInngestDurableAgenticWorkflow final span ends', () => {
+  it('ends the model span with usage on attributes and the agent span with text only', async () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-final-span-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      entry => entry.type === 'mapping' && entry.id === 'map-final-output',
+    );
+    expect(entry).toBeDefined();
+
+    const ended: AnyExportedSpan[] = [];
+    const observability = new Observability({
+      configs: {
+        default: {
+          serviceName: 'inngest-final-span-test',
+          exporters: [
+            {
+              name: 'capture',
+              async exportTracingEvent(event: TracingEvent) {
+                if (event.type === TracingEventType.SPAN_ENDED) ended.push(event.exportedSpan);
+              },
+              async shutdown() {},
+            } satisfies ObservabilityExporter,
+          ],
+        },
+      },
+    });
+    const instance = observability.getSelectedInstance({})!;
+    expect(instance).toBeDefined();
+
+    // Real spans, exported the way InngestAgent.stream() hands them to the workflow.
+    const agentSpan = instance.startSpan({ type: SpanType.AGENT_RUN, name: "agent run: 'a'" });
+    const modelSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_GENERATION, name: "llm: 'm'" });
+    const usage = { inputTokens: 3, outputTokens: 5, totalTokens: 8 };
+    const accumulatedSteps = [{ text: 'final answer' }];
+
+    await entry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        accumulatedSteps,
+        accumulatedUsage: usage,
+        lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        modelSpanData: modelSpan.exportSpan(),
+        agentSpanData: agentSpan.exportSpan(),
+        state: {},
+      },
+      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      engine: { step: { run: skipFinishSideEffects } },
+      mastra: { observability, getLogger: () => undefined },
+    });
+
+    const endedModel = ended.find(span => span.type === SpanType.MODEL_GENERATION);
+    const endedAgent = ended.find(span => span.type === SpanType.AGENT_RUN);
+    expect(endedModel).toBeDefined();
+    expect(endedAgent).toBeDefined();
+
+    // Usage belongs on the attributes, normalized to UsageStats the way every other
+    // model span records it, rather than raw in the output.
+    expect(endedModel!.output).toEqual({ text: 'final answer' });
+    expect(endedModel!.attributes).toMatchObject({
+      finishReason: 'stop',
+      usage: { inputTokens: 3, outputTokens: 5, inputDetails: { text: 3 }, outputDetails: { text: 5 } },
+    });
+    expect(endedModel!.output).not.toHaveProperty('usage');
+
+    // The agent span records the text only; usage and steps stay on the workflow result.
+    expect(endedAgent!.output).toEqual({ text: 'final answer' });
+    expect(endedAgent!.output).not.toHaveProperty('usage');
+    expect(endedAgent!.output).not.toHaveProperty('steps');
+  });
+
+  it('keeps usage and steps on the workflow result', async () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-final-output-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      entry => entry.type === 'mapping' && entry.id === 'map-final-output',
+    );
+
+    const usage = { inputTokens: 3, outputTokens: 5, totalTokens: 8 };
+    const accumulatedSteps = [{ text: 'final answer' }];
+
+    const result = await entry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        accumulatedSteps,
+        accumulatedUsage: usage,
+        lastStepResult: { reason: 'stop', isContinued: false, warnings: [] },
+        state: {},
+      },
+      getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
+      engine: { step: { run: skipFinishSideEffects } },
+      mastra: { getLogger: () => undefined },
+    });
+
+    expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
   });
 });

@@ -32,8 +32,7 @@ function isGithubRepo(value: unknown): value is GithubRepo {
     typeof candidate.id === 'number' &&
     typeof candidate.fullName === 'string' &&
     typeof candidate.defaultBranch === 'string' &&
-    typeof candidate.installationStorageId === 'string' &&
-    typeof candidate.repositoryStorageId === 'string'
+    typeof candidate.installationStorageId === 'string'
   );
 }
 

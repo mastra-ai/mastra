@@ -4,6 +4,7 @@ import { useParams, useLocation } from 'react-router';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar-controls';
+import { ThreadTracesToggle } from '@/domains/agents/components/thread-traces-toggle';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -30,17 +31,19 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const defaultModel = agent?.modelId ?? '';
   const requestContextSchema = agent?.requestContextSchema;
 
-  const activeTab: AgentPageTab | 'none' = location.pathname.includes('/editor')
-    ? 'versions'
-    : location.pathname.includes('/evaluate')
-      ? 'evaluate'
-      : location.pathname.includes('/review')
-        ? 'review'
-        : location.pathname.includes('/traces')
-          ? 'traces'
-          : location.pathname.includes('/overview')
-            ? 'overview'
-            : 'none';
+  const activeTab: AgentPageTab | 'none' = location.pathname.includes('/threads')
+    ? 'chat'
+    : location.pathname.includes('/editor')
+      ? 'versions'
+      : location.pathname.includes('/evaluate')
+        ? 'evaluate'
+        : location.pathname.includes('/review')
+          ? 'review'
+          : location.pathname.includes('/traces')
+            ? 'traces'
+            : location.pathname.includes('/overview')
+              ? 'overview'
+              : 'none';
 
   const showTopBarRunOptions =
     (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
@@ -53,7 +56,11 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         showPlayground={showPlayground}
         showObservability={showObservability}
         rightSlot={
-          showTopBarRunOptions ? <AgentTopBarRunOptions requestContextSchema={requestContextSchema} /> : undefined
+          activeTab === 'chat' ? (
+            <ThreadTracesToggle />
+          ) : showTopBarRunOptions ? (
+            <AgentTopBarRunOptions requestContextSchema={requestContextSchema} />
+          ) : undefined
         }
       />
       {children}

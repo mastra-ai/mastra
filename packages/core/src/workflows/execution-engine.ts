@@ -192,7 +192,7 @@ export abstract class ExecutionEngine extends MastraBase {
       try {
         await Promise.resolve(
           onError({
-            status: result.status as 'failed' | 'tripwire',
+            status: result.status,
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,

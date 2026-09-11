@@ -15,6 +15,39 @@ const baseProps: SpanDataPanelViewProps = {
 
 afterEach(cleanup);
 
+describe('SpanDataPanelView — header summary', () => {
+  it('shows started, ended and duration in the header, not in the details list', () => {
+    render(<SpanDataPanelView {...baseProps} />);
+
+    expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
+    expect(screen.getByLabelText(/^Ended at/)).toBeTruthy();
+    // Same `X.XXX s` format as the timeline timing column.
+    expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
+    expect(screen.queryByText('Started')).toBeNull();
+    expect(screen.queryByText('Ended')).toBeNull();
+    expect(screen.queryByText('Duration')).toBeNull();
+  });
+
+  it('drops Name, Type, Trace Id, Thread Id and Resource Id from the details list', () => {
+    render(
+      <SpanDataPanelView {...baseProps} span={{ ...spanFixture, threadId: 'thread-1', resourceId: 'resource-1' }} />,
+    );
+
+    for (const label of ['Name', 'Type', 'Trace Id', 'Thread Id', 'Resource Id']) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+  });
+
+  it('shows the run id truncated to 8 characters in the header', () => {
+    render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-abcdefghijklmnop' }} />);
+
+    const runId = screen.getByLabelText('Run Id run-abcdefghijklmnop');
+    expect(runId.textContent).toContain('run-abcd');
+    expect(runId.textContent).not.toContain('run-abcdefghijklmnop');
+    expect(screen.queryByText('Run Id')).toBeNull();
+  });
+});
+
 describe('SpanDataPanelView — tabs', () => {
   it('renders the tab list with the pill-ghost variant, like the agent page tabs', () => {
     const { container } = render(<SpanDataPanelView {...baseProps} feedbackTabSlot={() => <div>feedback</div>} />);

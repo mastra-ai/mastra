@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mesa",
-  "version": "0.2.1-alpha.1",
+  "version": "0.2.1",
   "description": "Mesa filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

@@ -25,7 +25,8 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-This README is the package guide. `MySQLStore` provides Mastra's storage domains through a MySQL connection pool, including agents, messages, workflows, observability, scores, datasets, prompt blocks, MCP records, and workspaces.
+- [MySQL integration guide](https://mastra.ai/integrations/databases/mysql)
+- [Storage reference](https://mastra.ai/reference/storage/overview)
 
 ## Changelog
 

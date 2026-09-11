@@ -1,42 +1,34 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 const LONG_DESCRIPTION = 60;
 
-/**
- * Primary line: the experiment name, or a readable `Experiment #<short id>` when
- * unnamed. Secondary line: the description, or a version/scorer summary so an
- * unnamed run is still identifiable at a glance. Caller supplies the cell.
- */
+/** Single truncated line with the experiment display name. Caller supplies the cell. */
 export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperiment }) {
-  const shortId = getShortId(experiment.id) ?? experiment.id;
-  const primary = experiment.name || `Experiment #${shortId}`;
-  const secondary = experiment.description || buildRunSummary(experiment);
+  return <span className="text-neutral4 block min-w-0 truncate text-left">{getExperimentDisplayName(experiment)}</span>;
+}
 
-  const label = (
-    <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
-      <span className="text-neutral4 block truncate">{primary}</span>
-      {secondary && <span className="text-ui-sm text-neutral2 block truncate">{secondary}</span>}
-    </span>
-  );
+/**
+ * Single truncated line with the description; long descriptions get a tooltip
+ * with the full text. Caller supplies the cell.
+ */
+export function ExperimentDescriptionLabel({ experiment }: { experiment: DatasetExperiment }) {
+  const description = experiment.description;
+  if (!description) {
+    return <span className="text-neutral2">—</span>;
+  }
 
-  if (!experiment.description || experiment.description.length <= LONG_DESCRIPTION) {
+  const label = <span className="text-neutral3 block min-w-0 truncate text-left">{description}</span>;
+
+  if (description.length <= LONG_DESCRIPTION) {
     return label;
   }
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>{label}</TooltipTrigger>
-      <TooltipContent>{experiment.description}</TooltipContent>
+      <TooltipContent>{description}</TooltipContent>
     </Tooltip>
   );
-}
-
-function buildRunSummary(experiment: DatasetExperiment): string | null {
-  const parts: string[] = [];
-  if (experiment.datasetVersion != null) parts.push(`v${experiment.datasetVersion}`);
-  const scorerCount = experiment.scorerIds?.length ?? 0;
-  if (scorerCount > 0) parts.push(`${scorerCount} scorer${scorerCount > 1 ? 's' : ''}`);
-  return parts.length ? parts.join(' · ') : null;
 }

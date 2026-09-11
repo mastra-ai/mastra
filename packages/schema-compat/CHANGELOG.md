@@ -1,5 +1,25 @@
 # @mastra/schema-compat
 
+## 1.3.9
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
+## 1.3.9-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
+## 1.3.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
 ## 1.3.8-alpha.1
 
 ### Patch Changes

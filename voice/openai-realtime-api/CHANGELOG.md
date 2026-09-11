@@ -1,5 +1,68 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.11-alpha.0
+
+### Patch Changes
+
+- Fixed public realtime speech boundary events and complete input transcription payload delivery. Subscribe to the native event names to receive speech timestamps and transcription usage when provided, without changing existing `writing` events. ([#23432](https://github.com/mastra-ai/mastra/pull/23432))
+
+  ```typescript
+  voice.on('input_audio_buffer.speech_started', event => {
+    console.log(event.item_id, event.audio_start_ms);
+  });
+  voice.on('input_audio_buffer.speech_stopped', event => {
+    console.log(event.item_id, event.audio_end_ms);
+  });
+  voice.on('conversation.item.input_audio_transcription.completed', event => {
+    console.log(event.transcript, event.usage);
+  });
+  ```
+
+## 0.13.10
+
+### Patch Changes
+
+- Moved connection-failure and handshake-timeout guidance into the voice connection reference and linked it from the README. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 0.13.10-alpha.0
+
+### Patch Changes
+
+- Moved connection-failure and handshake-timeout guidance into the voice connection reference and linked it from the README. ([#23488](https://github.com/mastra-ai/mastra/pull/23488))
+
+## 0.13.9
+
+### Patch Changes
+
+- Fixed realtime connections hanging when session creation fails. Connections now reject on handshake errors, early socket closure, or a 15-second timeout configurable with connectTimeoutMs. ([#23143](https://github.com/mastra-ai/mastra/pull/23143))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.13.9-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 0.13.9-alpha.0
+
+### Patch Changes
+
+- Fixed realtime connections hanging when session creation fails. Connections now reject on handshake errors, early socket closure, or a 15-second timeout configurable with connectTimeoutMs. ([#23143](https://github.com/mastra-ai/mastra/pull/23143))
+
+## 0.13.8
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+- Updated dependencies [[`e983f74`](https://github.com/mastra-ai/mastra/commit/e983f749873189f767f509eb33d1a3596c0f1c74), [`28ce924`](https://github.com/mastra-ai/mastra/commit/28ce924276eeca492e6a360e5482ed20c2785ef6)]:
+  - @mastra/schema-compat@1.3.8
+
 ## 0.13.8-alpha.1
 
 ### Patch Changes

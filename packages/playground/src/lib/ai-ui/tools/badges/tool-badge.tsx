@@ -1,15 +1,18 @@
 import {
   presentTool,
   stringifyToolValue,
+  stripSerializedAnsi,
+  ToolCallEdit,
   ToolCallMono,
   ToolCallPresentedHeader,
+  toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
+import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
+import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { BadgeWrapper } from './badge-wrapper';
-import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
-import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -51,7 +54,9 @@ export const ToolBadge = ({
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon, label, detail } = presentTool(toolName, argsObject);
-  const resultPretty = result !== undefined && result !== null ? stringifyToolValue(result) : undefined;
+  const edit = toolEdit(toolName, argsObject);
+  const resultPretty =
+    result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -82,7 +87,8 @@ export const ToolBadge = ({
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
-      {!withoutArgs && (
+      {edit && <ToolCallEdit edit={edit} />}
+      {!withoutArgs && !edit && (
         <ToolCallMono copyText={argsPretty} data-testid="tool-args" className="text-icon5">
           {argsPretty}
         </ToolCallMono>

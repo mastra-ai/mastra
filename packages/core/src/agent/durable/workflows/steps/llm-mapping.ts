@@ -84,12 +84,20 @@ export function createDurableLLMMappingStep() {
         state: SerializableDurableState;
       };
 
-      // 1. Deserialize message list
-      const messageList = new MessageList({
-        threadId: state.threadId,
-        resourceId: state.resourceId,
-      });
-      messageList.deserialize(llmOutput.messageListState);
+      // 1. Deserialize message list.
+      // Reuse the run's existing MessageList when the in-process registry has
+      // one (same pattern as resolve-runtime and finalize-run) so external
+      // consumers holding a reference to it — e.g. the stream adapter's
+      // MastraModelOutput, which reads it for scoringData — keep seeing state
+      // updates. A fresh instance here would orphan those references.
+      const registryEntry = globalRunRegistry.get(_runId);
+      const messageList = (
+        registryEntry?.messageList ??
+        new MessageList({
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+        })
+      ).deserialize(llmOutput.messageListState);
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
@@ -99,7 +107,6 @@ export function createDurableLLMMappingStep() {
 
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
-      const registryEntry = globalRunRegistry.get(_runId);
       const registryTools = registryEntry?.tools;
 
       // Rebuild the MODEL_STEP span early so MAPPING child spans can nest under it
@@ -112,7 +119,7 @@ export function createDurableLLMMappingStep() {
         | undefined;
       if (llmOutput.stepSpanData) {
         try {
-          const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -145,9 +152,7 @@ export function createDurableLLMMappingStep() {
           // Start from the existing providerMetadata so it's preserved even when
           // toModelOutput is absent or fails — otherwise provider-executed tools
           // or tools without a mapper lose their metadata.
-          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
-            | Record<string, unknown>
-            | undefined;
+          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata;
           if (
             !toolResult.error &&
             toolResult.result != null &&
@@ -191,7 +196,7 @@ export function createDurableLLMMappingStep() {
               } catch (err) {
                 mappingSpan?.error({ error: err as Error, endSpan: true });
                 // toModelOutput errors are non-fatal — the tool result is still usable
-                (mastra as Mastra | undefined)
+                mastra
                   ?.getLogger?.()
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
               }
@@ -315,9 +320,7 @@ export function createDurableLLMMappingStep() {
           });
         } catch (error) {
           // Span bookkeeping must never break the merge step.
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
         }
       }
 
@@ -367,9 +370,7 @@ export function createDurableLLMMappingStep() {
           };
           await emitChunkEvent(pubsub, _runId, enrichedChunk);
         } catch (error) {
-          (mastra as Mastra | undefined)
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
       }
 

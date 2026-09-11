@@ -140,7 +140,7 @@ import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
-import { createStep, isProcessor } from '../workflows/workflow';
+import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -181,6 +181,7 @@ import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, cl
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -208,6 +209,7 @@ import type {
   AgentSignal,
   AgentStateSignalInput,
   AgentSubscribeToThreadOptions,
+  AgentThreadIdentityOptions,
   AgentThreadSubscription,
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
@@ -1434,9 +1436,9 @@ export class Agent<
 
     const parentSpan = tracingContext?.currentSpan ?? resolveCurrentSpan();
     const skillsSpan = parentSpan?.createChildSpan({
-      type: SpanType.SKILL_RESOLUTION,
-      name: 'resolve-skills',
-      attributes: { agentId: this.id },
+      type: SpanType.SKILL_ACTION,
+      name: 'skill:resolve',
+      attributes: { operation: 'resolve' as const, agentId: this.id },
     });
 
     const resolution = executeWithContext({
@@ -1809,6 +1811,7 @@ export class Agent<
     workflow.__setLogger(this.logger);
 
     const stateSignalProcessors: Processor[] = [];
+    const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -1820,8 +1823,11 @@ export class Agent<
         // Set processorIndex on the processor for span attributes
         const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
-        // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const processorStep = createStepFromProcessor(processor);
+        step = processorStep;
+        if (processor.processOutputStream) {
+          streamSteps.push(processorStep);
+        }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
@@ -1835,6 +1841,21 @@ export class Agent<
     }
 
     const committedWorkflow = workflow.commit() as T;
+    if (isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__processOutputStream = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
+      );
+      if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
+        committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
+          let result = inputData;
+          for (const step of streamSteps) {
+            if (result.part == null) break;
+            result = await step.execute({ inputData: result, ...context });
+          }
+          return result;
+        };
+      }
+    }
     // Register the parent Mastra instance on this internal processor workflow so that its
     // createRun() -> getWorkflowRunById() can read configured storage instead of logging
     // "Cannot get workflow run. Mastra storage is not initialized" on every run (then falling
@@ -1877,6 +1898,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
@@ -1886,7 +1910,7 @@ export class Agent<
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
     // Memory processors run last to persist the final form.
-    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...effectiveMemoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1915,6 +1939,9 @@ export class Agent<
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const effectiveMemoryProcessors = this.#inheritedMemory(requestContext)
+      ? memoryProcessors.filter(processor => processor.id !== 'observational-memory')
+      : memoryProcessors;
 
     // Get workspace instructions processors (with deduplication)
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
@@ -1935,7 +1962,7 @@ export class Agent<
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
     return [
-      ...memoryProcessors,
+      ...effectiveMemoryProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
@@ -3844,6 +3871,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -3854,6 +3882,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -3889,7 +3918,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -3921,6 +3950,7 @@ export class Agent<
     mastraProxy,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -3930,6 +3960,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -3967,7 +3998,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -4004,6 +4035,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     suppressEagerSkillTools,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4014,6 +4046,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     suppressEagerSkillTools: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -4055,7 +4088,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
           backgroundConfig: (toolObj as any).background,
@@ -4087,6 +4120,7 @@ export class Agent<
     requestContext,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4095,6 +4129,7 @@ export class Agent<
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -4129,7 +4164,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
@@ -4166,6 +4201,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     tools,
+    getModel,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
@@ -4183,6 +4219,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
@@ -4207,7 +4244,7 @@ export class Agent<
 
       const workspace = await this.getWorkspace({ requestContext });
       const memory = await this.getMemory({ requestContext });
-      const model = await this.getModel({ requestContext });
+      const model = await getModel();
 
       for (const [toolName, tool] of Object.entries(loadedTools)) {
         if (isMastraTool(tool) || isProviderTool(tool)) {
@@ -4422,6 +4459,8 @@ export class Agent<
             ? createMastraProxy({ mastra: this.#mastra, logger: this.logger })
             : undefined;
           const convertedTools: Record<string, CoreTool> = {};
+          const resolvedModel =
+            Object.keys(result.tools).length > 0 ? await this.getModel({ requestContext }) : undefined;
 
           for (const [name, tool] of Object.entries(result.tools)) {
             if (isMastraTool(tool) || isProviderTool(tool)) {
@@ -4439,7 +4478,7 @@ export class Agent<
                   agentId: this.id,
                   requestContext,
                   ...observabilityContext,
-                  model: await this.getModel({ requestContext }),
+                  model: resolvedModel,
                   outputWriter,
                   tracingPolicy: this.#options?.tracingPolicy,
                   requireApproval: (tool as any).requireApproval,
@@ -4585,6 +4624,8 @@ export class Agent<
       // can detect the disabled state from config and return empty history.
       // When lastMessages is a number, pass it as perPage to limit results.
       ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      // The agent only consumes `messages` from recall; skip the COUNT(*) work.
+      includeTotal: false,
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
@@ -4605,6 +4646,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     model: activeModel,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4616,6 +4658,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4626,7 +4669,7 @@ export class Agent<
     const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
-    const model = activeModel ?? (assignedToolEntries.length > 0 ? await this.getModel({ requestContext }) : undefined);
+    const model = activeModel ?? (assignedToolEntries.length > 0 ? await getModel() : undefined);
 
     const assignedCoreToolEntries = await Promise.all(
       assignedToolEntries.map(async ([k, tool]) => {
@@ -4686,6 +4729,7 @@ export class Agent<
     outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4697,6 +4741,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4725,7 +4770,7 @@ export class Agent<
             agentId: this.id,
             requestContext,
             ...observabilityContext,
-            model: await this.getModel({ requestContext }),
+            model: await getModel(),
             outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
@@ -4761,6 +4806,7 @@ export class Agent<
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     model: activeModel,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4772,6 +4818,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4781,7 +4828,7 @@ export class Agent<
     if (clientToolsForInput.length > 0) {
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
-        const model = activeModel ?? (await this.getModel({ requestContext }));
+        const model = activeModel ?? (await getModel());
         let toolToConvert: ToolToConvert;
         if (isWebSearchTool(tool)) {
           toolToConvert = createWebSearchProviderTool(normalizeWebSearchProvider(model));
@@ -4839,6 +4886,10 @@ export class Agent<
   private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(message => {
+        if (message.id === 'om-continuation') {
+          return null;
+        }
+
         if (message.role === 'assistant') {
           const content = message.content;
           const parts = Array.isArray(content) ? content : content?.parts;
@@ -4889,6 +4940,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -4899,6 +4951,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -5794,6 +5847,7 @@ export class Agent<
             } catch (err) {
               let bailed = false;
               let completeHookError: Error | undefined;
+              let failureResultText: string | undefined;
               // Call onDelegationComplete with error if hook is provided.
               // Skipped when the success path already invoked it — including
               // when that invocation is what threw us into this catch.
@@ -5819,6 +5873,10 @@ export class Agent<
                   };
 
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  if (typeof completeResult?.resultText === 'string') {
+                    failureResultText = completeResult.resultText;
+                  }
 
                   if (bailed) {
                     requestContext.set('__mastra_delegationBailed', true);
@@ -5882,7 +5940,7 @@ export class Agent<
                     resourceId: resourceId || '',
                     ...(completeHookError ? { hookError: completeHookError.message } : {}),
                   },
-                  text: `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
+                  text: failureResultText ?? `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
                 },
                 err,
               );
@@ -5910,7 +5968,7 @@ export class Agent<
           agentName: this.name,
           agentId: this.id,
           requestContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
           backgroundConfig: subAgentBackgroundConfig,
@@ -5942,6 +6000,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    getModel,
     ...rest
   }: {
     runId?: string;
@@ -5951,6 +6010,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -6185,7 +6245,7 @@ export class Agent<
           agentName: this.name,
           agentId: this.id,
           requestContext,
-          model: await this.getModel({ requestContext }),
+          model: await getModel(),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
           agentBackgroundConfig: this.#backgroundTasks,
@@ -6315,6 +6375,13 @@ export class Agent<
       mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
     }
 
+    // Resolve the effective model lazily, at most once per convertTools call, so every
+    // tool source shares a single snapshot instead of re-running the (possibly dynamic)
+    // resolver per tool. Sources without tools never resolve it, and a per-call `model`
+    // override (e.g. generate({ model })) wins over the configured model for all sources.
+    let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
+    const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
+
     const assignedTools = await this.listAssignedTools({
       runId,
       resourceId,
@@ -6326,6 +6393,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       model,
+      getModel: getResolvedModel,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -6338,6 +6406,7 @@ export class Agent<
       memoryConfig,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -6351,6 +6420,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -6364,6 +6434,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       model,
+      getModel: getResolvedModel,
     });
 
     // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
@@ -6396,6 +6467,7 @@ export class Agent<
       autoResumeSuspendedTools,
       delegation,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -6407,6 +6479,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const workspaceTools = await this.listWorkspaceTools({
@@ -6418,6 +6491,7 @@ export class Agent<
       mastraProxy,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
@@ -6434,6 +6508,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
+      getModel: getResolvedModel,
     });
 
     const browserTools = await this.listBrowserTools({
@@ -6444,6 +6519,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const requestResolvedTools = {
@@ -6470,6 +6546,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      getModel: getResolvedModel,
     });
 
     const allTools = {
@@ -7047,38 +7124,6 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
-  #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
-    if (!suspendedToolInfo?.toolName && !suspendedToolInfo?.toolCallId) {
-      return resumeData;
-    }
-
-    const resumeInput: Record<string, unknown> =
-      resumeData && typeof resumeData === 'object' && !Array.isArray(resumeData)
-        ? { ...(resumeData as Record<string, unknown>) }
-        : { resumeData };
-
-    const hasConflictingToolName =
-      suspendedToolInfo.toolName &&
-      resumeInput.toolName !== undefined &&
-      resumeInput.toolName !== suspendedToolInfo.toolName;
-    const hasConflictingToolCallId =
-      suspendedToolInfo.toolCallId &&
-      resumeInput.toolCallId !== undefined &&
-      resumeInput.toolCallId !== suspendedToolInfo.toolCallId;
-    const spanInput: Record<string, unknown> =
-      hasConflictingToolName || hasConflictingToolCallId ? { resumeData: resumeInput } : { ...resumeInput };
-
-    if (suspendedToolInfo.toolName) {
-      spanInput.toolName = suspendedToolInfo.toolName;
-    }
-
-    if (suspendedToolInfo.toolCallId) {
-      spanInput.toolCallId = suspendedToolInfo.toolCallId;
-    }
-
-    return spanInput;
-  }
-
   #getAgentExecutionResourceId({
     requestContext,
     memory,
@@ -7434,9 +7479,7 @@ export class Agent<
         ? persistedTracingContext.spanId
         : undefined;
 
-    const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
-      : options.messages;
+    const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
 
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
@@ -7587,9 +7630,53 @@ export class Agent<
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    const run = await executionWorkflow.createRun();
-    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
-    return result;
+    try {
+      const run = await executionWorkflow.createRun();
+      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+      // A step failure surfaces as a resolved 'failed' result, not a rejection.
+      // The stream terminal handlers never ran, so close the span tree here.
+      if (result.status !== 'success' && agentSpan && !agentSpan.endTime) {
+        if (result.status === 'failed') {
+          // The workflow serializes step errors, so result.error may be a
+          // plain { message, stack } object rather than an Error instance;
+          // MastraError extracts a usable message from any cause shape.
+          const raw = result.error as unknown;
+          const error =
+            raw instanceof Error
+              ? raw
+              : new MastraError(
+                  {
+                    id: 'AGENT_PREPARE_STREAM_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.SYSTEM,
+                    details: { runId },
+                  },
+                  raw,
+                );
+          agentSpan.error({ error, endTree: true });
+        } else {
+          agentSpan.end({ endTree: true });
+        }
+      }
+      return result;
+    } catch (error) {
+      // Rejections are not guaranteed to be Error instances; MastraError
+      // extracts a usable message from any cause shape.
+      const spanError =
+        error instanceof Error
+          ? error
+          : new MastraError(
+              {
+                id: 'AGENT_PREPARE_STREAM_REJECTED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                details: { runId },
+              },
+              error,
+            );
+      agentSpan?.error({ error: spanError, endTree: true });
+      throw error;
+    }
   }
 
   /**
@@ -8175,7 +8262,7 @@ export class Agent<
     );
   }
 
-  getActiveThreadRunId(options: AgentSubscribeToThreadOptions): string | undefined {
+  getActiveThreadRunId(options: AgentThreadIdentityOptions): string | undefined {
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }
 
@@ -8196,6 +8283,10 @@ export class Agent<
    * Results are scoped to runs started by this agent: snapshots persist the owning
    * agent's id, and runs whose snapshots carry a different id are skipped. Filter by
    * `threadId`/`resourceId` to scope results to a conversation.
+   *
+   * Storage pagination is offset-based, so concurrent changes or rows with tied sort
+   * values can make a multi-page discovery reflect the storage adapter's ordering
+   * rather than a transactional snapshot.
    *
    * @example
    * ```typescript
@@ -8243,72 +8334,80 @@ export class Agent<
     }
 
     // resourceId is a storage column, so push it down to narrow the query;
-    // threadId lives inside the snapshot state, so fetch matching rows and
-    // filter/paginate here to keep `total` accurate. The in-process resource
-    // check below stays as the correctness backstop: adapters silently skip
-    // the filter when the column is missing, and rows persisted before the
+    // threadId lives inside the snapshot state, so filter here. The in-process
+    // resource check below stays as the correctness backstop: adapters silently
+    // skip the filter when the column is missing, and rows persisted before the
     // column was populated carry the resource only in the snapshot. Durable
     // agents persist their agentic loop under a separate workflow name, so
     // query both — otherwise suspended durable runs are never discoverable.
-    const runs: Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'] = [];
-    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
-      const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
-        workflowName,
-        status: 'suspended',
-        resourceId,
-        fromDate,
-        toDate,
-      });
-      runs.push(...workflowRuns);
-    }
-
+    const storagePageSize = 100;
+    const isPaginated = perPage !== undefined && page !== undefined;
+    const firstRequestedMatch = isPaginated ? page * perPage : 0;
+    const pastLastRequestedMatch = isPaginated ? firstRequestedMatch + perPage : Number.POSITIVE_INFINITY;
     const matchedRuns: AgentRun[] = [];
-    for (const run of runs) {
-      let snapshot = run.snapshot;
-      if (typeof snapshot === 'string') {
-        try {
-          snapshot = JSON.parse(snapshot) as WorkflowRunState;
-        } catch {
-          continue;
+    let total = 0;
+
+    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+      for (let storagePage = 0; ; storagePage++) {
+        const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
+          workflowName,
+          status: 'suspended',
+          resourceId,
+          fromDate,
+          toDate,
+          perPage: storagePageSize,
+          page: storagePage,
+        });
+
+        for (const run of workflowRuns) {
+          let snapshot = run.snapshot;
+          if (typeof snapshot === 'string') {
+            try {
+              snapshot = JSON.parse(snapshot) as WorkflowRunState;
+            } catch {
+              continue;
+            }
+          }
+          if (snapshot?.status !== 'suspended') continue;
+
+          // Snapshots persist the owning agent's id, so runs started by other
+          // agents sharing the same agentic-loop snapshot storage are skipped.
+          // Default-deny: a snapshot whose owning agent id is missing or does not
+          // match is not surfaced, so runs cannot leak across agents.
+          const runAgentId = this.#getSnapshotAgentId(snapshot);
+          if (runAgentId !== this.id) continue;
+
+          // thread/resource info travels in the suspended stream state; the run row's
+          // resourceId column is used as the primary source when present.
+          const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
+          const runThreadId = memoryInfo?.threadId;
+          const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+          if (threadId && runThreadId !== threadId) continue;
+          if (resourceId && runResourceId !== resourceId) continue;
+
+          // Storage pagination bounds candidate snapshots. Filtered output
+          // pagination still needs to scan every batch to return an exact total.
+          const matchingIndex = total++;
+          if (matchingIndex < firstRequestedMatch || matchingIndex >= pastLastRequestedMatch) continue;
+
+          matchedRuns.push({
+            runId: run.runId,
+            status: 'suspended',
+            threadId: runThreadId,
+            resourceId: runResourceId,
+            suspendedAt: run.updatedAt,
+            toolCalls: this.#getSuspendedToolCalls(snapshot),
+          });
         }
+
+        if (workflowRuns.length < storagePageSize) break;
       }
-      if (snapshot?.status !== 'suspended') continue;
-
-      // Snapshots persist the owning agent's id, so runs started by other
-      // agents sharing the same agentic-loop snapshot storage are skipped.
-      // Default-deny: a snapshot whose owning agent id is missing or does not
-      // match is not surfaced, so runs cannot leak across agents.
-      const runAgentId = this.#getSnapshotAgentId(snapshot);
-      if (runAgentId !== this.id) continue;
-
-      // thread/resource info travels in the suspended stream state; the run row's
-      // resourceId column is used as the primary source when present.
-      const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
-      const runThreadId = memoryInfo?.threadId;
-      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
-      if (threadId && runThreadId !== threadId) continue;
-      if (resourceId && runResourceId !== resourceId) continue;
-
-      matchedRuns.push({
-        runId: run.runId,
-        status: 'suspended',
-        threadId: runThreadId,
-        resourceId: runResourceId,
-        suspendedAt: run.updatedAt,
-        toolCalls: this.#getSuspendedToolCalls(snapshot),
-      });
     }
 
-    const total = matchedRuns.length;
-    const paginatedRuns =
-      perPage !== undefined && page !== undefined
-        ? matchedRuns.slice(page * perPage, (page + 1) * perPage)
-        : matchedRuns;
-
-    return { runs: paginatedRuns, total };
+    return { runs: matchedRuns, total };
   }
 
-  abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
+  abortThreadStream(options: AgentThreadIdentityOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 

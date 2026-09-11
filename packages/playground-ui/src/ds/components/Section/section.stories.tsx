@@ -4,22 +4,67 @@ import { Button } from '../Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Switch } from '../Switch';
 import { Section } from './section';
+import type { SectionVariant } from './section';
 
-const meta: Meta<typeof Section> = {
+type SectionPlaygroundProps = {
+  variant: SectionVariant;
+  inset: boolean;
+};
+
+function SectionPlayground({ variant, inset }: SectionPlaygroundProps) {
+  return (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
+        <Section.HeaderText>
+          <Section.Heading>General</Section.Heading>
+          <Section.Description>Choose how this section aligns with its content.</Section.Description>
+        </Section.HeaderText>
+      </Section.Header>
+      <Section.Content>
+        <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">
+          <Switch aria-label="Auto-approve tools" />
+        </Section.Row>
+        <Section.Divider />
+        <Section.Row label="Smart editing" description="Use AST-aware edits when available.">
+          <Switch aria-label="Smart editing" defaultChecked />
+        </Section.Row>
+      </Section.Content>
+    </Section>
+  );
+}
+
+const meta = {
   title: 'Layout/Section',
-  component: Section,
+  component: SectionPlayground,
   parameters: {
     layout: 'centered',
   },
-};
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['default', 'flat', 'factory'],
+    },
+    inset: { control: 'boolean' },
+  },
+} satisfies Meta<typeof SectionPlayground>;
 
 export default meta;
-type Story = StoryObj<typeof Section>;
+type Story = StoryObj<typeof meta>;
+
+export const Playground: Story = {};
 
 export const Default: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
@@ -30,9 +75,13 @@ export const Default: Story = {
 };
 
 export const WithAction: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
           <Plus className="size-4" />
@@ -47,9 +96,13 @@ export const WithAction: Story = {
 };
 
 export const ConfigurationSection: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Configuration</Section.Heading>
         <Button variant="outline" size="md">
           Edit
@@ -74,9 +127,13 @@ export const ConfigurationSection: Story = {
 };
 
 export const Flat: Story = {
-  render: () => (
-    <Section variant="flat" className="w-full max-w-150">
-      <Section.Header>
+  args: {
+    variant: 'flat',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
         <Section.HeaderText>
           <Section.Heading>Security</Section.Heading>
           <Section.Description>Manage sign-in requirements for your account.</Section.Description>
@@ -110,9 +167,13 @@ export const Flat: Story = {
 };
 
 export const Factory: Story = {
-  render: () => (
-    <Section variant="factory" className="w-full max-w-150">
-      <Section.Header>
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
         <Section.HeaderText>
           <Section.Heading>Behavior</Section.Heading>
           <Section.Description>Choose how agents handle tools and completion alerts.</Section.Description>
@@ -150,9 +211,13 @@ export const Factory: Story = {
 };
 
 export const PermissionAndDestructiveRows: Story = {
-  render: () => (
-    <Section variant="factory" className="w-full max-w-150">
-      <Section.Header>
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
         <Section.HeaderText>
           <Section.Heading>Organization access</Section.Heading>
           <Section.Description>Review inherited permissions and organization actions.</Section.Description>
@@ -178,10 +243,13 @@ export const PermissionAndDestructiveRows: Story = {
 };
 
 export const MultipleSections: Story = {
-  render: () => (
+  argTypes: {
+    variant: { table: { disable: true } },
+  },
+  render: ({ inset }) => (
     <div className="w-[calc(100vw-2rem)] max-w-150 space-y-8">
       <Section variant="factory">
-        <Section.Header>
+        <Section.Header inset={inset}>
           <Section.HeaderText>
             <Section.Heading>Behavior</Section.Heading>
             <Section.Description>Choose how agents handle tools and completion alerts.</Section.Description>
@@ -216,7 +284,7 @@ export const MultipleSections: Story = {
       </Section>
 
       <Section variant="flat">
-        <Section.Header>
+        <Section.Header inset={inset}>
           <Section.HeaderText>
             <Section.Heading>Security</Section.Heading>
             <Section.Description>Manage sign-in requirements for your account.</Section.Description>

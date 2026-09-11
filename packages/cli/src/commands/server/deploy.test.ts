@@ -51,17 +51,31 @@ vi.mock('@clack/prompts', () => ({
   outro: vi.fn(),
 }));
 
+let archiveInstance:
+  | {
+      on: ReturnType<typeof vi.fn>;
+      pipe: ReturnType<typeof vi.fn>;
+      glob: ReturnType<typeof vi.fn>;
+      file: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+      finalize: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
+
 vi.mock('archiver', () => ({
   ZipArchive: vi.fn(function () {
-    return {
+    const archive = {
       on: vi.fn(),
       pipe: vi.fn(),
       glob: vi.fn(),
       file: vi.fn(),
+      append: vi.fn(),
       finalize: vi.fn(async () => {
         closeHandler?.();
       }),
     };
+    archiveInstance = archive;
+    return archive;
   }),
 }));
 
@@ -86,6 +100,10 @@ vi.mock('./platform-api.js', () => ({
     instanceUrl: 'https://example.com',
     error: null,
   }),
+}));
+
+vi.mock('../../utils/detect-project-type.js', () => ({
+  detectProjectType: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../utils/run-build.js', () => ({
@@ -628,6 +646,48 @@ describe('serverDeployAction', () => {
     );
   });
 
+  it('--project <name> with --yes creates a Factory project and flags the deploy for Factory builds', async () => {
+    vi.resetModules();
+
+    const { detectProjectType } = await import('../../utils/detect-project-type.js');
+    vi.mocked(detectProjectType).mockResolvedValue('factory');
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([]);
+    vi.mocked(platform.createServerProject).mockResolvedValue({
+      id: 'proj-factory-id',
+      name: 'goo',
+      slug: 'goo',
+      organizationId: 'org-1',
+    } as never);
+
+    const { readdir, readFile } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+    await expect(serverDeployAction(undefined, { project: 'goo', yes: true })).resolves.toBeUndefined();
+
+    expect(platform.createServerProject).toHaveBeenCalledWith('test-token', 'org-1', 'goo', { factoryEnabled: true });
+    expect(platform.uploadServerDeploy).toHaveBeenCalledWith(
+      'test-token',
+      'org-1',
+      'proj-factory-id',
+      expect.anything(),
+      expect.objectContaining({ factoryEnabled: true }),
+    );
+
+    vi.mocked(detectProjectType).mockResolvedValue(undefined);
+  });
+
   it('auto-accept with multiple projects and no name match throws a helpful error', async () => {
     vi.resetModules();
 
@@ -673,5 +733,37 @@ describe('serverDeployAction', () => {
 
     await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
     expect(fetchOrgs).not.toHaveBeenCalled();
+  });
+});
+
+// ─── legacy workers-manifest strip ──────────────────────────────────────
+// Server deploys must never ship a worker manifest — only the unified
+// `mastra deploy` flow may trigger worker-service provisioning. The strip
+// decision lives in `utils/workers-manifest-guard.ts` (tested there); these
+// tests cover the archive-side override mechanics.
+
+describe('worker manifest archive override', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: '.mastra/output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: '.mastra/output/workers.json' });
+  });
+
+  it('leaves the archive untouched when no override is given', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith('**', expect.objectContaining({ ignore: ['node_modules/**'] }), {
+      prefix: '.mastra/output',
+    });
+    expect(archiveInstance?.append).not.toHaveBeenCalled();
   });
 });

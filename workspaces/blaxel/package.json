@@ -1,6 +1,6 @@
 {
   "name": "@mastra/blaxel",
-  "version": "0.9.0-alpha.1",
+  "version": "0.9.0",
   "description": "Blaxel cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

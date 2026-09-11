@@ -20,15 +20,18 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type { ObservabilityContext, Span } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
-import type { RequestContext } from '../request-context';
+import { executeWithContext } from '../observability/utils';
+import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
+import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -109,13 +112,22 @@ export class ProcessorState<OUTPUT = undefined> {
   private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
-  public span?: Span<SpanType.PROCESSOR_RUN>;
+  public span?: Span<ProcessorSpanType>;
 
   constructor(
     options?: {
       processorName?: string;
       processorIndex?: number;
       createSpan?: boolean;
+      /**
+       * The processor this state belongs to, so a span created here honours
+       * its span declaration. `processOutputStream` is the one processor
+       * method whose span is created from this constructor rather than from
+       * one of the runner's own call sites, so without this a processor that
+       * declares a span type would keep it everywhere except its streaming
+       * phase.
+       */
+      processor?: Pick<Processor, 'id' | 'spanType' | 'spanName' | 'spanAttributes'>;
     } & Partial<ObservabilityContext>,
   ) {
     // Only create span if explicitly requested (legacy processors)
@@ -124,14 +136,19 @@ export class ProcessorState<OUTPUT = undefined> {
       return;
     }
 
+    const processor = options.processor;
     const currentSpan = options.tracingContext?.currentSpan;
     const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
     this.span = parentSpan?.createChildSpan({
-      type: SpanType.PROCESSOR_RUN,
-      name: `output stream processor: ${options.processorName}`,
+      type: processor?.spanType ?? SpanType.PROCESSOR_RUN,
+      name: processor
+        ? resolveProcessorSpanName(processor, 'output', `output stream processor: ${options.processorName}`)
+        : `output stream processor: ${options.processorName}`,
       entityType: EntityType.OUTPUT_PROCESSOR,
+      entityId: processor?.id,
       entityName: options.processorName,
       attributes: {
+        ...(processor ? resolveProcessorSpanAttributes(processor, 'output') : {}),
         processorExecutor: 'legacy',
         processorIndex: options.processorIndex ?? 0,
       },
@@ -360,6 +377,7 @@ export class ProcessorRunner {
     abortSignal,
     retryCount,
     rotateResponseMessageId,
+    observabilityContext,
   }: {
     processor: Processor;
     messageList: MessageList;
@@ -369,6 +387,7 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter;
     abort: (reason?: string, options?: TripWireOptions) => never;
     processorState: ProcessorState;
+    observabilityContext?: Partial<ObservabilityContext>;
     memory?: MastraMemory;
     resourceId?: string;
     threadId?: string;
@@ -425,6 +444,10 @@ export class ProcessorRunner {
       tracking,
     });
     const result = (await computeStateSignal({
+      // The args type extends ProcessorContext, so `tracingContext` has always
+      // been part of the contract — it was simply never passed, leaving it
+      // permanently undefined for every implementer.
+      ...createObservabilityContext({ currentSpan: observabilityContext?.tracingContext?.currentSpan }),
       messages: messageList.get.all.db(),
       messageList,
       stepNumber,
@@ -477,6 +500,22 @@ export class ProcessorRunner {
       beforeAddSignal: beforeAddStateSignal,
       writeSignal: signal => writer?.custom(signal.toDataPart()),
     });
+
+    // Record the emission as an event: a signal is a point-in-time fact about
+    // what entered the model's context, and the work of computing it is already
+    // timed by the enclosing processor span. Reached only when a signal was
+    // produced, so a step where the lane computed no change stays silent.
+    observabilityContext?.tracingContext?.currentSpan?.createEventSpan<SpanType.AGENT_SIGNAL>({
+      type: SpanType.AGENT_SIGNAL,
+      name: `signal: ${result.id ?? stateId}`,
+      attributes: {
+        stateId: result.id ?? stateId,
+        mode: result.mode,
+        tagName: result.tagName,
+        processorId: processor.id,
+      },
+      output: { attributes: result.attributes, hasDelta: Boolean(result.delta) },
+    });
   }
 
   private async runWorkflowComputeStateSignals({
@@ -492,6 +531,7 @@ export class ProcessorRunner {
     abortSignal,
     retryCount,
     rotateResponseMessageId,
+    observabilityContext,
   }: {
     workflow: ProcessorWorkflow;
     messageList: MessageList;
@@ -499,6 +539,7 @@ export class ProcessorRunner {
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
+    observabilityContext?: Partial<ObservabilityContext>;
     memory?: MastraMemory;
     resourceId?: string;
     threadId?: string;
@@ -520,6 +561,7 @@ export class ProcessorRunner {
         writer,
         abort,
         processorState: this.getProcessorState(processor.id),
+        observabilityContext,
         memory,
         resourceId,
         threadId,
@@ -542,7 +584,7 @@ export class ProcessorRunner {
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
-    // The stream phase runs the whole workflow once per streamed chunk, with the full
+    // Explicit workflows run once per streamed chunk, with the full
     // accumulated `streamParts` as input. Persisting a snapshot (and tracing a public
     // span) for every one of those transient runs makes a stream of n chunks cost O(n²)
     // in storage writes and serialized payload (#19605). Internal processor workflows
@@ -550,6 +592,29 @@ export class ProcessorRunner {
     // user-supplied processor workflow keeps the persisting defaults, so the opt-out is
     // applied per run here — leaving the same workflow's standalone runs untouched.
     const isPerChunkPhase = input.phase === 'outputStream';
+
+    const inputData = {
+      ...input,
+      processorStates: this.processorStates,
+      abortSignal,
+      agent: this.agent,
+    };
+    const outputWriter: OutputWriter | undefined = writer
+      ? (chunk, options) => writer.custom(chunk, options)
+      : undefined;
+    if (isPerChunkPhase && workflow.__executeOutputStream) {
+      const execute = workflow.__executeOutputStream;
+      return executeWithContext({
+        span: observabilityContext?.tracingContext?.currentSpan,
+        fn: () =>
+          execute({
+            inputData,
+            ...observabilityContext,
+            requestContext: requestContext ?? new RequestContext(),
+            outputWriter,
+          }),
+      });
+    }
 
     // Create a run and start the workflow
     const run = await workflow.createRun(
@@ -561,19 +626,10 @@ export class ProcessorRunner {
         : undefined,
     );
     const result = await run.start({
-      // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
-      // but not part of the official ProcessorStepOutput schema
-      inputData: {
-        ...input,
-        // Pass the processorStates map so workflow processor steps can access their state
-        processorStates: this.processorStates,
-        // Pass abortSignal so processors can cancel in-flight work
-        abortSignal,
-        agent: this.agent,
-      } as ProcessorStepOutput,
+      inputData,
       ...observabilityContext,
       requestContext,
-      outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
+      outputWriter,
     });
 
     // Check for tripwire status - this means a processor in the workflow called abort()
@@ -693,12 +749,13 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'output', `output processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'output'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -842,6 +899,11 @@ export class ProcessorRunner {
           // Track input chunk (before processor transformation)
           state.addInputPart(processedPart);
 
+          if (processorOrWorkflow.__processOutputStream === false) {
+            state.addOutputPart(processedPart);
+            continue;
+          }
+
           try {
             const result = await this.executeWorkflowAsProcessor(
               processorOrWorkflow,
@@ -890,6 +952,7 @@ export class ProcessorRunner {
                 ...observabilityContext,
                 processorIndex: index,
                 createSpan: true,
+                processor,
               });
               processorStates.set(processor.id, state);
             }
@@ -1212,12 +1275,13 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'input', `input processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'input'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -1467,6 +1531,7 @@ export class ProcessorRunner {
           steps,
           requestContext,
           writer,
+          observabilityContext,
           memory: args.memory,
           resourceId: args.resourceId,
           threadId: args.threadId,
@@ -1520,12 +1585,13 @@ export class ProcessorRunner {
       // Use the current span (the step span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `input step processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'inputStep', `input step processor: ${processor.id}`),
         entityType: EntityType.INPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'inputStep'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -1642,6 +1708,9 @@ export class ProcessorRunner {
           writer,
           abort,
           processorState,
+          // Parent the signal event on this processor's own span so the emission
+          // sits inside the processor that produced it.
+          observabilityContext: createObservabilityContext({ currentSpan: processorSpan }),
           memory: args.memory,
           resourceId: args.resourceId,
           threadId: args.threadId,
@@ -1730,12 +1799,13 @@ export class ProcessorRunner {
       // Use the current span (the step/model span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `llm request processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'llmRequest', `llm request processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'llmRequest'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -1854,12 +1924,13 @@ export class ProcessorRunner {
       // Use the current span (the step/model span) as the parent for processor spans
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const processorSpan = currentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `llm response processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'llmResponse', `llm response processor: ${processor.id}`),
         entityType: EntityType.INPUT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'llmResponse'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -2036,12 +2107,13 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `output step processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'outputStep', `output step processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'outputStep'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -2254,12 +2326,13 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `tool result processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'toolResult', `tool result processor: ${processor.id}`),
         entityType: EntityType.TOOL_RESULT_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },
@@ -2415,12 +2488,13 @@ export class ProcessorRunner {
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: SpanType.PROCESSOR_RUN,
-        name: `request error processor: ${processor.id}`,
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'requestError', `request error processor: ${processor.id}`),
         entityType: EntityType.OUTPUT_STEP_PROCESSOR,
         entityId: processor.id,
         entityName: processor.name,
         attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'requestError'),
           processorExecutor: 'legacy',
           processorIndex: index,
         },

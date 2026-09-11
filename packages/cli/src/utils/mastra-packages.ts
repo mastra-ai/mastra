@@ -5,6 +5,7 @@ import { getPackageInfo } from 'local-pkg';
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 }
 
 export interface MastraPackageInfo {
@@ -31,6 +32,7 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
     const allDependencies = {
       ...(packageJson.dependencies ?? {}),
       ...(packageJson.devDependencies ?? {}),
+      ...(packageJson.optionalDependencies ?? {}),
     };
 
     const mastraDeps = Object.entries(allDependencies).filter(

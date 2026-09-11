@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
@@ -233,10 +234,55 @@ function isSystemReminderMessage(message: MastraDBMessage): boolean {
   return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
 }
 
+// Keep this union and the recall helpers in sync with core without requiring newer peer exports.
+type RecallSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+
+function isRecallSignalType(type: unknown): type is RecallSignalType {
+  return (
+    type === 'user' ||
+    type === 'state' ||
+    type === 'reactive' ||
+    type === 'notification' ||
+    type === 'user-message' ||
+    type === 'system-reminder'
+  );
+}
+
+function getRecallSignalType(message: MastraDBMessage): RecallSignalType | undefined {
+  if (!isRecord(message.content)) return undefined;
+
+  for (const part of message.content.parts) {
+    if (
+      (part.type === 'data-signal' || part.type === 'data-user-message') &&
+      isRecord(part.data) &&
+      isRecallSignalType(part.data.type)
+    ) {
+      return part.data.type;
+    }
+  }
+
+  const metadata = message.content.metadata;
+  if (message.role === 'signal' && isRecord(metadata) && isRecord(metadata.signal)) {
+    if (isRecallSignalType(metadata.signal.type)) return metadata.signal.type;
+  }
+
+  return isSystemReminderMessage(message) ? 'system-reminder' : undefined;
+}
+
 function filterSystemReminderMessages(
   messages: MastraDBMessage[],
   includeSystemReminders?: boolean,
+  hideSignals?: boolean | RecallSignalType[],
 ): MastraDBMessage[] {
+  if (hideSignals === false) return messages;
+  if (hideSignals !== undefined) {
+    return messages.filter(message => {
+      const type = getRecallSignalType(message);
+      return type === undefined || (hideSignals !== true && !hideSignals.includes(type));
+    });
+  }
+
+  // TODO: In the next breaking release, align the history default with streams (exclude none).
   if (includeSystemReminders) {
     return messages;
   }
@@ -568,7 +614,10 @@ export class Memory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | RecallSignalType[];
       threadId: string;
       observabilityContext?: Partial<ObservabilityContext>;
     },
@@ -589,7 +638,9 @@ export class Memory extends MastraMemory {
       threadConfig,
       vectorSearchString,
       includeSystemReminders,
+      hideSignals,
       filter,
+      includeTotal,
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
@@ -735,6 +786,7 @@ export class Memory extends MastraMemory {
         page,
         orderBy: effectiveOrderBy,
         filter,
+        ...(includeTotal !== undefined ? { includeTotal } : {}),
         ...(filteredVectorResults?.length
           ? {
               include: filteredVectorResults.map(r => ({
@@ -758,7 +810,7 @@ export class Memory extends MastraMemory {
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
       // Always return mastra-db format (V2)
-      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders);
+      const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
 
       const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
       const recallResult = { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
@@ -1814,6 +1866,7 @@ ${workingMemory}`;
             resourceId,
             orderBy: { field: 'createdAt', direction: 'ASC' },
             perPage: false,
+            includeTotal: false,
             filter: dateFilter,
           });
           return result.messages;
@@ -1827,6 +1880,7 @@ ${workingMemory}`;
             threadId,
             orderBy: { field: 'createdAt', direction: 'ASC' },
             perPage: false,
+            includeTotal: false,
             filter: dateFilter,
           });
           return result.messages;
@@ -1846,6 +1900,8 @@ ${workingMemory}`;
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+          // Only `messages` is consumed here; skip the COUNT(*) work.
+          includeTotal: false,
         });
         messages = result.messages.reverse(); // DESC → chronological order
       }
@@ -2281,9 +2337,21 @@ Notes:
     }
 
     const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
+    // Stable UUIDv8 IDs make retries safe even when a write succeeds but its acknowledgement is lost.
+    // UUID formatting also supports vector stores that reject arbitrary string IDs.
+    const ids = embedResult.chunks.map((_, chunkIndex) => {
+      const hash = createHash('sha256')
+        .update(JSON.stringify([resourceId, threadId, groupId, chunkIndex]))
+        .digest();
+      hash[6] = (hash[6]! & 0x0f) | 0x80;
+      hash[8] = (hash[8]! & 0x3f) | 0x80;
+      const hex = hash.toString('hex', 0, 16);
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    });
 
     await this.vector.upsert({
       indexName,
+      ids,
       vectors: embedResult.embeddings,
       metadata: embedResult.chunks.map(chunk => ({
         group_id: groupId,
@@ -2422,6 +2490,7 @@ Notes:
         resourceId,
         perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
         page,
+        includeTotal: false,
       });
       if (batch.length === 0) break;
 

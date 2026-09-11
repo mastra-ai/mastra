@@ -267,6 +267,19 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
+  tags: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      // Blank values (`?tags=`) mean "no filter", not "match the empty tag".
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(tag => tag !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return results that have all of these tags'),
+});
+
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   experimentSetId: z.string().optional(),
   comparisonId: z.string().optional(),
@@ -339,6 +352,14 @@ export const updateItemBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
 });
+
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
 
 export const triggerExperimentBodySchema = z.object({
   start: z
@@ -474,12 +495,12 @@ export const datasetItemResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  source: datasetItemSourceSchema,
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  source: datasetItemSourceSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -707,10 +728,11 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),

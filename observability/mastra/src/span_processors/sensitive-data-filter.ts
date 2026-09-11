@@ -5,13 +5,15 @@ export type RedactionStyle = 'full' | 'partial' | 'indexed';
 
 /**
  * Per-trace state for indexed redaction: maps SHA-256 digests of values to
- * their assigned tokens and tracks the next index per token label.
+ * their assigned tokens, tracks the next index per token label, and remembers
+ * every issued token so re-processing an already redacted span is a no-op.
  * Keying on fixed-length digests keeps state size bounded and avoids
  * retaining raw sensitive values in memory.
  */
 interface IndexedRedactionState {
   tokensByValue: Map<string, string>;
   counters: Map<string, number>;
+  issuedTokens: Set<string>;
 }
 
 /**
@@ -111,7 +113,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
 
   /**
    * Process a span by filtering sensitive data across its key fields.
-   * Fields processed: attributes, metadata, input, output, errorInfo.
+   * Fields processed: attributes, metadata, input, output, errorInfo, requestContext.
    *
    * @param span - The input span to filter
    * @returns A new span with sensitive values redacted
@@ -123,6 +125,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     span.input = this.tryFilter(span.input, indexedState);
     span.output = this.tryFilter(span.output, indexedState);
     span.errorInfo = this.tryFilter(span.errorInfo, indexedState);
+    span.requestContext = this.tryFilter(span.requestContext, indexedState);
     return span;
   }
 
@@ -136,7 +139,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (state) {
       this.traceStates.delete(traceId);
     } else {
-      state = { tokensByValue: new Map(), counters: new Map() };
+      state = { tokensByValue: new Map(), counters: new Map(), issuedTokens: new Set() };
     }
     this.traceStates.set(traceId, state);
     while (this.traceStates.size > MAX_TRACKED_TRACES) {
@@ -156,9 +159,8 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (obj === null || typeof obj !== 'object') {
       // Handle string values - check if they contain JSON that needs redacting
       if (typeof obj === 'string') {
-        // Quick check - JSON objects/arrays start with { or [
         const trimmed = obj.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        if (this.isJsonCandidate(trimmed)) {
           return this.redactJsonString(obj, indexedState);
         }
       }
@@ -196,6 +198,32 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     return filtered;
+  }
+
+  private isJsonCandidate(value: string): boolean {
+    const opening = value[0];
+    if (opening !== '{' && opening !== '[') return false;
+
+    let index = 1;
+    while (value[index] === ' ' || value[index] === '\t' || value[index] === '\r' || value[index] === '\n') {
+      index++;
+    }
+    const first = value[index];
+    if (first === undefined) return false;
+    if (opening === '{') return first === '"' || first === '}';
+
+    // Reject impossible prefixes (including serialization markers), not malformed JSON.
+    return (
+      first === ']' ||
+      first === '{' ||
+      first === '[' ||
+      first === '"' ||
+      first === '-' ||
+      (first >= '0' && first <= '9') ||
+      first === 't' ||
+      first === 'f' ||
+      first === 'n'
+    );
   }
 
   private tryFilter(value: any, indexedState?: IndexedRedactionState): any {
@@ -274,6 +302,9 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
 
     if (this.redactionStyle === 'indexed' && indexedState) {
+      if (typeof value === 'string' && indexedState.issuedTokens.has(value)) {
+        return value;
+      }
       const valueKey = createHash('sha256').update(String(value)).digest('hex');
       const existing = indexedState.tokensByValue.get(valueKey);
       if (existing) {
@@ -287,6 +318,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       indexedState.counters.set(label, count);
       const token = `[${label}_${count}]`;
       indexedState.tokensByValue.set(valueKey, token);
+      indexedState.issuedTokens.add(token);
       return token;
     }
 

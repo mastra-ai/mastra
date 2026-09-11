@@ -7,7 +7,7 @@ description: "Browse Vivgrid model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/vivgrid.svg" alt="Vivgrid logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vivgrid
 
-Access 22 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
+Access 27 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
 
 Learn more in the [Vivgrid documentation](https://docs.vivgrid.com/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "vivgrid/deepseek-v3.2"
+  model: "vivgrid/claude-fable-5"
 });
 
 // Generate a response
@@ -45,6 +45,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "vivgrid/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
+    "model": "vivgrid/claude-fable-5-1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
   {
     "model": "vivgrid/deepseek-v3.2",
     "imageInput": false,
@@ -82,6 +106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.87
   },
   {
+    "model": "vivgrid/deepseek-v4-pro-0813",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 1.35,
+    "outputCost": 3
+  },
+  {
     "model": "vivgrid/gemini-3.1-flash-lite-preview",
     "imageInput": true,
     "audioInput": true,
@@ -114,6 +150,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
+    "inputCost": 0.75,
+    "outputCost": 3.75
+  },
+  {
+    "model": "vivgrid/gemini-3.8-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 128000,
     "inputCost": 0.75,
     "outputCost": 3.75
   },
@@ -298,6 +346,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "vivgrid/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "vivgrid/kimi-k3",
     "imageInput": true,
     "audioInput": false,
@@ -324,7 +384,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.vivgrid.com/v1",
-    id: "vivgrid/deepseek-v3.2",
+    id: "vivgrid/claude-fable-5",
     apiKey: process.env.VIVGRID_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -343,18 +403,8 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "vivgrid/kimi-k3"
-      : "vivgrid/deepseek-v3.2";
+      : "vivgrid/claude-fable-5";
   }
 });
-```
-
-
-
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/openai) for more details.
-
-```bash npm2yarn
-npm install @ai-sdk/openai
 ```
 

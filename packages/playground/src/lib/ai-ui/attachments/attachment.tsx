@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -15,11 +16,7 @@ import type { ComposerAttachment } from './composer-attachments';
 const ComposerTxtAttachment = ({ file }: { file: File }) => {
   const { isLoading, text } = useLoadBrowserFile(file);
 
-  return (
-    <div className="flex h-full w-full items-center justify-center">
-      {isLoading ? <Spinner /> : <TxtEntry data={text} />}
-    </div>
-  );
+  return isLoading ? <Spinner /> : <TxtEntry data={text} name={file.name} />;
 };
 
 const ComposerPdfAttachment = ({ attachment }: { attachment: ComposerAttachment }) => {
@@ -73,6 +70,31 @@ const ImageAttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachme
 const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment }) => {
   const { remove } = useComposerAttachments();
 
+  if (attachment.kind === 'text') {
+    return (
+      <ButtonsGroup spacing="close" className="shrink-0">
+        {attachment.isUrl ? (
+          <FileChipEntry
+            contentType={attachment.contentType}
+            name={attachment.name}
+            url={isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
+          />
+        ) : (
+          <ComposerTxtAttachment file={attachment.file} />
+        )}
+        <Button
+          variant="outline"
+          size="icon-sm"
+          type="button"
+          tooltip="Remove file"
+          onClick={() => remove(attachment.id)}
+        >
+          <X />
+        </Button>
+      </ButtonsGroup>
+    );
+  }
+
   return (
     <div className="relative">
       <TooltipProvider>
@@ -83,14 +105,12 @@ const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment })
                 <ImageAttachmentThumbnail attachment={attachment} />
               ) : attachment.kind === 'pdf' ? (
                 <ComposerPdfAttachment attachment={attachment} />
-              ) : attachment.kind === 'video' ? (
+              ) : (
                 <FileChipEntry
                   name={attachment.name}
                   url={attachment.isUrl && isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
                   contentType={attachment.contentType}
                 />
-              ) : (
-                <ComposerTxtAttachment file={attachment.file} />
               )}
             </div>
           </TooltipTrigger>
@@ -120,14 +140,10 @@ export const ComposerAttachments = () => {
   if (attachments.length === 0) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-full px-2" data-attachments-row>
-      <div className="mx-auto w-full max-w-3xl overflow-x-auto">
-        <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
-          {attachments.map(att => (
-            <AttachmentThumbnail key={att.id} attachment={att} />
-          ))}
-        </div>
-      </div>
+    <div className="flex flex-row items-center gap-4 overflow-x-auto px-3 pt-3 pb-1" data-testid="composer-attachments">
+      {attachments.map(att => (
+        <AttachmentThumbnail key={att.id} attachment={att} />
+      ))}
     </div>
   );
 };

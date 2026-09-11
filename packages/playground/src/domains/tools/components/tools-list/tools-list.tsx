@@ -34,7 +34,7 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
   }
 
   return (
-    <EntityList columns="auto 1fr auto" variant="striped" scrollRef={containerRef}>
+    <EntityList columns="auto 1fr auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

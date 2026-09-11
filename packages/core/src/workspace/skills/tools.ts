@@ -14,7 +14,7 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../line-utils';
-import { startWorkspaceSpan } from '../tools/tracing';
+import { startSkillSpan } from '../tools/tracing';
 import type { Skill, SkillsContext, WorkspaceSkills } from './types';
 
 // =============================================================================
@@ -103,10 +103,10 @@ function createSkillTool(skills: WorkspaceSkills) {
         .describe('The name or path of the skill to activate. Use the path when multiple skills share the same name.'),
     }),
     execute: async ({ name }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'activate',
         input: { name },
+        attributes: { skillName: name },
       });
 
       try {
@@ -144,8 +144,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
     }),
     execute: async ({ query, skillNames, topK }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'search',
         input: { query, skillNames, topK },
         attributes: {},
@@ -201,11 +200,10 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
     execute: async ({ skillName, path, startLine, endLine }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'read',
         input: { skillName, path, startLine, endLine },
-        attributes: {},
+        attributes: { skillName },
       });
 
       try {

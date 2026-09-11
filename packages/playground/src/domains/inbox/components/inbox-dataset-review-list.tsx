@@ -1,14 +1,21 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Inbox } from 'lucide-react';
+import { CircleSlashIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
+import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import type { InboxDatasetReviewItem } from '@/domains/review/hooks/use-inbox-review-items';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 
-const COLUMNS = 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto';
+const INBOX_LIST_COLUMNS = [
+  { name: 'itemId', label: 'Item ID', size: 'auto' },
+  { name: 'status', label: 'Status', size: 'auto' },
+  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'tags', label: 'Tags', size: 'auto' },
+];
+const SKELETON_COLUMNS = INBOX_LIST_COLUMNS.map(c => c.size).join(' ');
 
 export interface InboxDatasetReviewListProps {
   items: InboxDatasetReviewItem[];
@@ -28,10 +35,8 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
       )
     : items;
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length });
-
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={SKELETON_COLUMNS} />;
   }
 
   if (error) {
@@ -41,7 +46,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
   if (items.length === 0) {
     return (
       <EmptyState
-        iconSlot={<Inbox className="text-neutral3 h-8 w-8" />}
+        iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
         titleSlot="Nothing to review"
         descriptionSlot="Experiment results that need review will show up here."
       />
@@ -60,46 +65,17 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
       </div>
 
       <div className="min-h-0 overflow-hidden">
-        <DataList columns={COLUMNS} variant="striped" fit="container" scrollRef={containerRef}>
-          <DataList.Top>
-            <DataList.TopCell>Item</DataList.TopCell>
-            <DataList.TopCell>Experiment</DataList.TopCell>
-            <DataList.TopCell>Dataset</DataList.TopCell>
-            <DataList.TopCell>Trace</DataList.TopCell>
-            <DataList.TopCell>&nbsp;</DataList.TopCell>
-          </DataList.Top>
-
-          {filtered.length === 0 ? (
-            <DataList.NoMatch message="No dataset items match your search" />
-          ) : (
-            filtered.map((item, index) => {
-              // Reviews live on the experiment page; `?review=` features this result on its Reviews tab.
-              const reviewHref = `/experiments/${encodeURIComponent(item.experimentId)}?review=${encodeURIComponent(item.id)}`;
-              return (
-                <DataList.RowWrapper key={item.id}>
-                  <DataList.RowButton colEnd={-2} onClick={() => navigate(reviewHref)} {...getRowProps(index)}>
-                    <DataList.TextCell font="mono">{item.itemId}</DataList.TextCell>
-                    <DataList.TextCell font="mono">{item.experimentId}</DataList.TextCell>
-                    <DataList.TextCell font="mono">{item.datasetId}</DataList.TextCell>
-                    <DataList.TextCell font="mono">{item.traceId ?? '—'}</DataList.TextCell>
-                  </DataList.RowButton>
-                  <DataList.ActionsCell className="pl-2">
-                    {item.traceId ? (
-                      <Button
-                        as={Link}
-                        to={`/traces?traceId=${encodeURIComponent(item.traceId)}`}
-                        variant="ghost"
-                        size="sm"
-                      >
-                        Open trace
-                      </Button>
-                    ) : null}
-                  </DataList.ActionsCell>
-                </DataList.RowWrapper>
-              );
-            })
-          )}
-        </DataList>
+        <ExperimentResultsList
+          results={filtered}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={resultId => {
+            const item = filtered.find(i => i.id === resultId);
+            if (item) void navigate(experimentReviewQueueLink(item.experimentId, item.id));
+          }}
+          columns={INBOX_LIST_COLUMNS}
+          emptyMessage="No dataset items match your search"
+        />
       </div>
     </div>
   );

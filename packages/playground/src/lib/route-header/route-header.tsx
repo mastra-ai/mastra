@@ -29,7 +29,7 @@ export function RouteHeader() {
   const lastIdx = crumbs.length - 1;
 
   return (
-    <Header border={false} className="h-10 min-h-10 gap-2 overflow-hidden px-2">
+    <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
       {crumbs.length > 0 && (
         <Breadcrumb label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
           {crumbs.map((def, i) => {
@@ -45,7 +45,7 @@ export function RouteHeader() {
                 className={isCurrent ? 'max-w-[28rem]' : 'max-w-[18rem]'}
               >
                 {IconComponent && (
-                  <Icon className={isCurrent ? 'flex w-6 justify-center' : undefined}>
+                  <Icon className="flex w-6 justify-center">
                     <IconComponent />
                   </Icon>
                 )}

@@ -1,17 +1,17 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
+import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
 import type { DatasetTargetType } from './target-type-options';
-import { DATASET_TARGET_TYPE_OPTIONS } from './target-type-options';
 
 export interface CreateDatasetFormProps {
   onSuccess: (datasetId: string) => void;
   onCancel: () => void;
-  /** If provided, auto-attaches the dataset to this target on create */
   targetType?: DatasetTargetType;
   targetIds?: string[];
 }
@@ -22,15 +22,9 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
   const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(null);
+  const [scorerIds, setScorerIds] = useState<string[]>([]);
   const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
-  // Only relevant for the generic (non-scoped) create. When the form is opened from an agent/
-  // workflow context, `targetType` is supplied via props and this picker is hidden.
-  const [selectedTargetType, setSelectedTargetType] = useState<DatasetTargetType | ''>('');
   const { createDataset } = useDatasetMutations();
-
-  // Props win when the form is pre-scoped to a target; otherwise use the user's pick (if any).
-  const isPreScoped = Boolean(targetType);
-  const effectiveTargetType = targetType ?? (selectedTargetType || undefined);
 
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
@@ -51,15 +45,16 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     }
 
     try {
-      const result = (await createDataset.mutateAsync({
+      const result = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
         groundTruthSchema,
         requestContextSchema,
-        targetType: effectiveTargetType,
+        targetType,
         targetIds,
-      })) as { id: string };
+        scorerIds: scorerIds.length > 0 ? scorerIds : undefined,
+      });
 
       toast.success('Dataset created successfully');
 
@@ -89,18 +84,13 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         placeholder="Enter dataset description (optional)"
       />
 
-      {!isPreScoped && (
-        <SelectFieldBlock
-          label="Target type"
-          name="dataset-target-type"
-          placeholder="Select a target type (optional)"
-          options={[...DATASET_TARGET_TYPE_OPTIONS]}
-          value={selectedTargetType}
-          onValueChange={value => setSelectedTargetType(value as DatasetTargetType)}
-          helpText="What this dataset evaluates. Drives the Target column and the Target filter."
-          disabled={createDataset.isPending}
-        />
-      )}
+      <ScorerSelector
+        selectedScorers={scorerIds}
+        setSelectedScorers={setScorerIds}
+        disabled={createDataset.isPending}
+        label={DEFAULT_SCORERS_LABEL}
+        helperText={DEFAULT_SCORERS_HELPER_TEXT}
+      />
 
       {targetType && !showCustomSchema ? (
         <button

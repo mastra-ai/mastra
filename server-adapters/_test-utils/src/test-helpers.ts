@@ -622,6 +622,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   if (storage) {
     const observability = await storage.getStore('observability');
     if (observability) {
+      vi.spyOn(observability, 'getFeatures').mockReturnValue([...observability.getFeatures(), 'trace-query']);
+      vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
       await observability.createSpan({
         span: {
           spanId: 'test-span',

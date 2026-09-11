@@ -634,6 +634,109 @@ describe('ExperimentsInMemory', () => {
       expect(result.results).toHaveLength(0);
       expect(result.pagination.total).toBe(0);
     });
+
+    describe('tags filter', () => {
+      async function seedTaggedResults() {
+        const experiment = await storage.createExperiment({
+          datasetId: 'ds-1',
+          datasetVersion: 1,
+          targetType: 'agent',
+          targetId: 'a1',
+          totalItems: 4,
+        });
+        const base = {
+          experimentId: experiment.id,
+          itemDatasetVersion: 1,
+          input: 'x',
+          output: 'y',
+          groundTruth: null,
+          error: null,
+          completedAt: new Date(),
+          retryCount: 0,
+        };
+        const t0 = Date.now();
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'only-a',
+          tags: ['a'],
+          status: 'reviewed',
+          startedAt: new Date(t0),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'a-and-b',
+          tags: ['a', 'b'],
+          status: 'needs-review',
+          startedAt: new Date(t0 + 1),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'only-b',
+          tags: ['b'],
+          startedAt: new Date(t0 + 2),
+        });
+        await storage.addExperimentResult({
+          ...base,
+          itemId: 'untagged',
+          tags: null,
+          startedAt: new Date(t0 + 3),
+        });
+        return experiment;
+      }
+
+      it('returns only results containing all requested tags', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a', 'b'],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['a-and-b']);
+        expect(result.pagination.total).toBe(1);
+      });
+
+      it('matches results that have extra tags beyond the requested one', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a'],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+        expect(result.pagination.total).toBe(2);
+      });
+
+      it('applies no tag filter for an empty array', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: [],
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results).toHaveLength(4);
+        expect(result.pagination.total).toBe(4);
+      });
+
+      it('combines with the status filter', async () => {
+        const experiment = await seedTaggedResults();
+
+        const result = await storage.listExperimentResults({
+          experimentId: experiment.id,
+          tags: ['a'],
+          status: 'reviewed',
+          pagination: { page: 0, perPage: 10 },
+        });
+
+        expect(result.results.map(r => r.itemId)).toEqual(['only-a']);
+        expect(result.pagination.total).toBe(1);
+      });
+    });
   });
 
   describe('deleteExperimentResults', () => {

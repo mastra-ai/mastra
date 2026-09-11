@@ -6,6 +6,7 @@ import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/compone
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
@@ -23,7 +24,6 @@ import { AgentMetadataSection } from './agent-metadata-section';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useScorers } from '@/domains/scores';
 import { WORKSPACE_TOOLS_PREFIX } from '@/domains/workspace/constants';
-import { LoadingBadge } from '@/lib/ai-ui/tools/badges/loading-badge';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentMetadataProps {
@@ -90,7 +90,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
   return (
     <div className="flex flex-col gap-4" data-testid="agent-metadata">
       {agent.modelList && (
-        <Card elevation="elevated" className="bg-surface3">
+        <Card className="bg-surface3">
           <CardHeader>
             <CardTitle>Models</CardTitle>
           </CardHeader>
@@ -104,7 +104,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </Card>
       )}
 
-      <Card elevation="elevated" className="bg-surface3">
+      <Card className="bg-surface3">
         <CardHeader className="flex-row items-baseline gap-2 space-y-0">
           <CardTitle>Capabilities</CardTitle>
           <CardDescription>Everything this agent can call at runtime</CardDescription>
@@ -197,7 +197,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         </CardContent>
       </Card>
 
-      <Card elevation="elevated" className="bg-surface3">
+      <Card className="bg-surface3">
         <CardHeader>
           <CardTitle>System Prompt</CardTitle>
         </CardHeader>

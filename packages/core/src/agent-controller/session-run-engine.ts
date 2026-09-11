@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import type { SpanChunk } from '../agent/message-list/message-part-spans';
+import { isSpanChunk, MessagePartSpans } from '../agent/message-list/message-part-spans';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -40,10 +42,7 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
-  | StreamPayloadChunk<'text-end'>
-  | StreamPayloadChunk<'reasoning-end'>
   | StreamPayloadChunk<'reasoning-signature'>
-  | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
   | StreamPayloadChunk<'reasoning-file'>
@@ -68,10 +67,7 @@ type StreamIgnoredChunk =
   | StreamObjectChunk<'object-result'>;
 type StreamChunk =
   | StreamIgnoredChunk
-  | StreamPayloadChunk<'text-start'>
-  | StreamPayloadChunk<'text-delta'>
-  | StreamPayloadChunk<'reasoning-start'>
-  | StreamPayloadChunk<'reasoning-delta'>
+  | SpanChunk
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -226,11 +222,12 @@ type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
   isSuspended: boolean;
-  textContentById: Map<string, { index: number; text: string }>;
-  thinkingContentById: Map<string, { index: number; text: string }>;
+  spans: MessagePartSpans;
+  messageIdObserved: boolean;
   toolPartById: Map<string, number>;
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
+  completedToolPrelude: boolean;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -299,6 +296,10 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
+  private isCurrentMessageObserved(state: StreamState): boolean {
+    return this.hasCurrentMessageContent(state) || state.messageIdObserved;
+  }
+
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
     message.content.metadata ??= {};
     const metadata = message.content.metadata;
@@ -315,24 +316,26 @@ export class SessionRunEngine {
   }
 
   private finishCurrentMessageAndRotate(state: StreamState): void {
-    if (!this.hasCurrentMessageContent(state)) return;
+    if (!this.isCurrentMessageObserved(state)) return;
     this.setStopReason(state.currentMessage, 'complete');
     this.#session.emit({ type: 'message_end', message: state.currentMessage });
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
-    state.textContentById.clear();
-    state.thinkingContentById.clear();
+    state.spans.clear();
+    state.messageIdObserved = false;
     state.toolPartById.clear();
+    state.completedToolPrelude = false;
   }
 
   createStreamState(): StreamState {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
       isSuspended: false,
-      textContentById: new Map<string, { index: number; text: string }>(),
-      thinkingContentById: new Map<string, { index: number; text: string }>(),
+      spans: new MessagePartSpans({ providerMetadata: false }),
+      messageIdObserved: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
+      completedToolPrelude: false,
     };
   }
 
@@ -493,6 +496,17 @@ export class SessionRunEngine {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
 
+    if (isSpanChunk(chunk)) {
+      const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
+      const opensTheAnswer = chunk.type === 'text-start' || (folded?.created && folded.part.type === 'text');
+      if (opensTheAnswer && !state.messageIdObserved) {
+        state.messageIdObserved = true;
+        this.#session.emit({ type: 'message_start', message: state.currentMessage });
+      }
+      if (folded) this.#session.emit({ type: 'message_update', message: state.currentMessage });
+      return undefined;
+    }
+
     switch (chunk.type) {
       case 'step-start': {
         // Adopt the loop's response message id so the streamed turn and its
@@ -503,75 +517,22 @@ export class SessionRunEngine {
         // An emitted id never changes, and an id binds to one message only.
         const messageId = getString(getPayload(chunk).messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
-        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
+        // A resumed tool can finish before the first model step starts. Seal
+        // that tool-only prelude without changing its already observable id.
+        if (
+          state.offeredResponseIds.size > 0 ||
+          (state.completedToolPrelude &&
+            state.currentMessage.content.parts.every(
+              part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+            ))
+        ) {
+          this.finishCurrentMessageAndRotate(state);
+        }
+        state.completedToolPrelude = false;
         state.offeredResponseIds.add(messageId);
-        if (!this.hasCurrentMessageContent(state)) {
+        if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
-        break;
-      }
-
-      case 'text-start': {
-        // A late start for an id already seeded by an orphan delta must not
-        // create a duplicate part or reset the accumulated text.
-        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const textIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'text', text: '' });
-        state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        break;
-      }
-
-      case 'text-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let textState = state.textContentById.get(id);
-        if (!textState) {
-          // Deltas can arrive without a seeded part — e.g. after a step-start
-          // rotation cleared the map mid-text. Seed a part instead of silently
-          // dropping the text, otherwise the folded message loses content.
-          const textIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'text', text: '' });
-          textState = { index: textIndex, text: '' };
-          state.textContentById.set(id, textState);
-          this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        }
-        textState.text += getString(getPayload(chunk).text) ?? '';
-        const textContent = state.currentMessage.content.parts[textState.index];
-        if (textContent && textContent.type === 'text') {
-          textContent.text = textState.text;
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-start': {
-        // Mirror text-start: a late start for an already-seeded id is a no-op.
-        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const thinkingIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-        state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let thinkingState = state.thinkingContentById.get(id);
-        if (!thinkingState) {
-          // Same tolerance as text-delta: seed the part rather than silently
-          // dropping reasoning whose start chunk never seeded the id.
-          const thinkingIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-          thinkingState = { index: thinkingIndex, text: '' };
-          state.thinkingContentById.set(id, thinkingState);
-        }
-        thinkingState.text += getString(getPayload(chunk).text) ?? '';
-        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-        if (thinkingContent && thinkingContent.type === 'reasoning') {
-          thinkingContent.reasoning = thinkingState.text;
-          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -812,6 +773,12 @@ export class SessionRunEngine {
       }
 
       case 'step-finish': {
+        state.completedToolPrelude =
+          state.offeredResponseIds.size === 0 &&
+          this.hasCurrentMessageContent(state) &&
+          state.currentMessage.content.parts.every(
+            part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+          );
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
         if (usageRecord) {
@@ -1218,7 +1185,7 @@ export class SessionRunEngine {
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
-    if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
+    if (this.isCurrentMessageObserved(state) || !state.lastFinishedMessage) {
       this.#session.emit({ type: 'message_end', message: state.currentMessage });
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
     }

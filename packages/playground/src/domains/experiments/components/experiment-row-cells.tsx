@@ -2,7 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
 import { formatExperimentDate, STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
-import { ExperimentNameLabel } from './experiment-name-label';
+import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 
@@ -28,6 +28,9 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
     <>
       <EntityList.Cell>
         <ExperimentNameLabel experiment={exp} />
+      </EntityList.Cell>
+      <EntityList.Cell>
+        <ExperimentDescriptionLabel experiment={exp} />
       </EntityList.Cell>
       {datasetName !== undefined && <EntityList.TextCell>{datasetName}</EntityList.TextCell>}
       <EntityList.Cell>

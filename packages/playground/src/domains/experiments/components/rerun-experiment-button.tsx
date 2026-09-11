@@ -53,6 +53,8 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
           initialTargetType={initialTargetType}
           initialTargetId={experiment.targetId}
           initialScorerIds={scorerIds}
+          initialName={experiment.name ?? undefined}
+          initialDescription={experiment.description ?? undefined}
           onSuccess={experimentId => void navigate(paths.experimentLink(experimentId))}
         />
       )}

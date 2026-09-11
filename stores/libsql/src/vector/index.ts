@@ -17,6 +17,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -81,13 +82,14 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     const isLocalDb = (url.startsWith('file:') || this.isMemoryDb) && !syncUrl;
     const cwd = process.cwd();
 
-    this.turso = createClient({
+    const client = createClient({
       url,
       syncUrl,
       authToken,
       syncInterval,
       ...(isLocalDb ? { timeout: 5000 } : {}),
     });
+    this.turso = isSingleConnectionDatabase({ url, syncUrl }) ? gateSingleConnectionClient(client) : client;
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
     if (!Number.isInteger(vectorTopKOverFetchMultiplier) || vectorTopKOverFetchMultiplier < 1) {

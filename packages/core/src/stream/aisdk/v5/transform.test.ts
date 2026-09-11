@@ -458,6 +458,33 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(errorSpy).not.toHaveBeenCalled();
       errorSpy.mockRestore();
     });
+
+    it('does not log the raw input when JSON cannot be repaired', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const marker = 'SENSITIVE_REPORT_CONTENT';
+      const input = `{"content":"${marker}" garbage ]]`;
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        input,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toBeUndefined();
+      }
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(marker);
+      expect(errorSpy.mock.calls[0]?.[1]).toEqual({
+        toolCallId: 'call-7',
+        toolName: 'large_payload_tool',
+        inputLength: input.length,
+      });
+      errorSpy.mockRestore();
+    });
   });
 
   describe('sanitizeToolCallInput', () => {

@@ -18,6 +18,8 @@ export interface DatasetItemsProps {
   leftSlot?: React.ReactNode;
   /** Page-level actions rendered at the end of the toolbar row. */
   rightSlot?: React.ReactNode;
+  /** Page-level content rendered on its own row, between the toolbar and the list. */
+  belowToolbarSlot?: React.ReactNode;
   isLoading: boolean;
   onItemClick: (itemId: string) => void;
   /** Id of the item currently open in the URL-driven item panel, if any. */
@@ -57,6 +59,7 @@ export function DatasetItems({
   items,
   leftSlot,
   rightSlot,
+  belowToolbarSlot,
   isLoading,
   onItemClick,
   featuredItemId,
@@ -153,6 +156,8 @@ export function DatasetItems({
         activeDatasetVersion={activeDatasetVersion}
         onReturnToLatestVersion={() => handleVersionChange(null)}
       />
+
+      {belowToolbarSlot}
 
       <DatasetItemsList
         items={items}

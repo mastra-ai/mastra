@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
@@ -16,6 +17,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { isSignalChunkExcluded } from '../signal-exclusions';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -401,6 +403,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         ProcessorState<OUTPUT>
       >;
 
+      // `options` never changes for the lifetime of this stream, so the
+      // resolved context is the same for every chunk. Deriving it eagerly
+      // per chunk clones the span metadata for logger + metrics contexts
+      // on every part, even when no stream processor consumes it.
+      let observabilityContext: ObservabilityContext | undefined;
+      const getObservabilityContext = () => (observabilityContext ??= resolveObservabilityContext(options));
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
@@ -440,6 +449,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
+                    processor: structuredOutputProcessor,
                   });
                   structuredOutputProcessorState.customState = { controller };
                   processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
@@ -472,7 +482,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -505,7 +515,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // processing.
               const reprocessed = await processorRunner.drainReprocessParts(
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -1460,6 +1470,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
+    const stream = this.__getUnfilteredFullStream();
+    const hideSignals = this.#options.hideSignals;
+    if (!hideSignals || (Array.isArray(hideSignals) && hideSignals.length === 0)) return stream;
+    return stream.pipeThrough(
+      new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+        transform(chunk, controller) {
+          if (!isSignalChunkExcluded(chunk, hideSignals)) controller.enqueue(chunk);
+        },
+      }),
+    );
+  }
+
+  /** @internal Shared fanout must retain signal chunks, with the existing transforms applied. */
+  __getUnfilteredFullStream() {
     const configuredTransforms = this.#options.experimentalTransform;
     if (!configuredTransforms) {
       return this.#createEventedStream();

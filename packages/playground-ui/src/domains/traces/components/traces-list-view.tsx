@@ -128,7 +128,7 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={columns} variant="striped" fit="container" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
         <TracesDataList.TopCell>Created</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
