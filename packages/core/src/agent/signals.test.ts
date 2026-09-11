@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalDataPart, CreatedAgentSignal } from './signals';
 import {
   createSignal,
   dataPartToSignal,
@@ -9,6 +9,32 @@ import {
   signalToMastraDBMessage,
   signalToMessage,
 } from './signals';
+
+describe('signal data part compatibility', () => {
+  it.each([new URL('https://example.com/file.pdf'), new Uint8Array([1, 2, 3])])(
+    'accepts file inputs and emits serialized file data',
+    data => {
+      const part: AgentSignalDataPart = {
+        type: 'data-signal',
+        transient: true,
+        data: {
+          id: 'file-signal',
+          type: 'user',
+          createdAt: new Date(0).toISOString(),
+          contents: [{ type: 'file', data, mediaType: 'application/pdf' }],
+        },
+      };
+      const output = signalToDataPartFormat(dataPartToSignal(part));
+      if (Array.isArray(output.data.contents)) {
+        const file = output.data.contents[0]!;
+        if (file.type === 'file') {
+          expectTypeOf(file.data).toEqualTypeOf<string>();
+          expect(file.data).toBe(data instanceof URL ? data.toString() : 'AQID');
+        } else throw new Error('Expected file part');
+      } else throw new Error('Expected file contents');
+    },
+  );
+});
 
 describe('transient signals (transient: true)', () => {
   it('marks the DB message with content.metadata.signal.transient when transient is true', () => {

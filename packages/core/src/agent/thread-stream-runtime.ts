@@ -17,7 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, AgentSignalDataPart, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import type {
   AgentSignal,
@@ -245,7 +245,7 @@ export type AgentPendingSignalEntry = {
    */
   runId?: string;
   agentId?: string;
-  signal: AgentSignalDataPart['data'];
+  signal: ReturnType<CreatedAgentSignal['toDataPart']>['data'];
 };
 
 export type AgentThreadStrictRegistrationOptions = {

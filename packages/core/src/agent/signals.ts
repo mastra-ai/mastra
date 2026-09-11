@@ -100,13 +100,13 @@ export type AgentSignalInput =
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type AgentSignalDataPart = {
+export type AgentSignalDataPart<TContents extends AgentSignalContents = AgentSignalContents> = {
   type: 'data-user-message' | 'data-signal';
   data: {
     id: string;
     type: AgentSignalCategory;
     tagName?: AgentSignalTagName;
-    contents: string | SignalPart[];
+    contents: TContents;
     createdAt: string;
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
@@ -124,7 +124,7 @@ type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'a
   acceptedAt?: Date;
   toDBMessage: (options?: { threadId?: string; resourceId?: string }) => MastraDBMessage;
   toLLMMessage: () => UserModelMessage;
-  toDataPart: () => AgentSignalDataPart;
+  toDataPart: () => AgentSignalDataPart<string | SignalPart[]>;
 };
 
 /**
@@ -499,7 +499,10 @@ function signalToLLMMessage(
   };
 }
 
-function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
+function signalToDataPart(
+  signal: ReturnType<typeof normalizeSignal>,
+  parts: SignalPart[],
+): AgentSignalDataPart<string | SignalPart[]> {
   return {
     type: signal.type === 'user' ? 'data-user-message' : 'data-signal',
     data: {
@@ -638,7 +641,9 @@ export function signalToMastraDBMessage(
   return createSignal(signal).toDBMessage(options);
 }
 
-export function signalToDataPartFormat(signal: AgentSignalInput | CreatedAgentSignal): AgentSignalDataPart {
+export function signalToDataPartFormat(
+  signal: AgentSignalInput | CreatedAgentSignal,
+): AgentSignalDataPart<string | SignalPart[]> {
   return createSignal(signal).toDataPart();
 }
 
