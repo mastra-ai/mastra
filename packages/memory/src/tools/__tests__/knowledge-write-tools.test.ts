@@ -57,11 +57,11 @@ describe('Subconscious knowledge write tools', () => {
     });
     await expect(
       tools.knowledge_rescope!.execute?.(
-        { recordId: record.id, expectedVersion: record.version, scope: 'org' },
+        { recordId: record.id, expectedVersion: record.version, scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('version conflict');
-    expect(mutation).toHaveBeenCalledWith({ id: record.id, version: record.version, scopeIds: [scopeIds[0]] });
+    expect(mutation).toHaveBeenCalledWith({ id: record.id, version: record.version, scopeIds: [scopeIds[1]] });
     expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
     expect(await store.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
     mutation.mockRestore();
@@ -152,7 +152,11 @@ describe('Subconscious knowledge write tools', () => {
   });
 
   it('preserves existing content and all visible side effects when replacement creation fails', async () => {
-    const { store, source, tools } = await fixture(['10000000-0000-4000-8000-000000000099', ...scopeIds.slice(1)]);
+    const { store, source, tools } = await fixture([
+      scopeIds[0]!,
+      '10000000-0000-4000-8000-000000000099',
+      scopeIds[2]!,
+    ]);
     await store.createRecord({
       node: source,
       text: 'Original [[Project Atlas]]',
@@ -168,7 +172,7 @@ describe('Subconscious knowledge write tools', () => {
     const before = await snapshot();
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: source.name, content: 'Replacement', expectedVersion: source.version, scope: 'org' },
+        { name: source.name, content: 'Replacement', expectedVersion: source.version, scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('Knowledge scope not found');
@@ -242,8 +246,8 @@ describe('Subconscious knowledge write tools', () => {
     for (const tool of ['knowledge_create', 'knowledge_append'] as const) {
       const base =
         tool === 'knowledge_create' ? { name: 'Escalate', kind: 'project', text: 'x' } : { node: source.id, text: 'x' };
-      const valid = (await tools[tool]!.execute?.({ ...base, scope: 'org' }, {} as any)) as any;
-      expect(await store.getRecordScopeIds((valid.record ?? valid).id)).toEqual([scopeIds[0]]);
+      const valid = (await tools[tool]!.execute?.({ ...base, scope: 'resource' }, {} as any)) as any;
+      expect(await store.getRecordScopeIds((valid.record ?? valid).id)).toEqual([scopeIds[1]]);
       const bogus = (await tools[tool]!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
       expect(bogus?.error).toBe(true);
     }
@@ -279,11 +283,13 @@ describe('Subconscious knowledge write tools', () => {
     const append = vi.spyOn(store, 'createRecord');
     const remove = vi.spyOn(store, 'deleteRecord');
 
+    // Out-of-scope targets fail closed as "not found" — existence of foreign
+    // nodes must not leak through the curator tool boundary.
     await expect(tools.knowledge_append!.execute?.({ node: foreign.id, text: 'poisoned' }, {} as any)).rejects.toThrow(
-      'outside the curator',
+      'Knowledge node not found',
     );
     await expect(tools.knowledge_remove!.execute?.({ recordId: foreignRecord.id }, {} as any)).rejects.toThrow(
-      'outside the curator',
+      'KnowledgeRecord not found',
     );
     expect(append).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
