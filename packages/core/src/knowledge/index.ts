@@ -445,6 +445,7 @@ export class Knowledge extends MastraBase {
 
 export * from '../storage/domains/knowledge';
 export * from './imports';
+export { materializeKnowledgeScopePlan } from './reconcile';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

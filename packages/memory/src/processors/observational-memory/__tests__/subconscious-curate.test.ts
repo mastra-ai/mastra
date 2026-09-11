@@ -206,7 +206,7 @@ describe('Subconscious observation curator', () => {
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('requires a configured Knowledge instance') }),
+          data: expect.objectContaining({ error: expect.stringContaining('Knowledge is disabled') }),
         }),
       ),
     );
