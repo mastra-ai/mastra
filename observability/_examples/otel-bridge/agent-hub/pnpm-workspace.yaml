@@ -2,6 +2,9 @@
 packages:
   - .
 
+minimumReleaseAgeExclude:
+  - fastify@5.12.4
+
 overrides:
   '@mastra/core': link:../../../../packages/core
   '@mastra/libsql': link:../../../../stores/libsql

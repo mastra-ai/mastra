@@ -211,6 +211,10 @@ minimumReleaseAgeExclude:
   - better-auth@1.6.23
   # Renovate security update: valibot@1.4.2
   - valibot@1.4.2
+  # SEC-170/171: Fastify 5.12.4 (fast-uri fix) and @blaxel/core@0.3.20 — adopted
+  # before the 1-day minimumReleaseAge window; pinned to exact versions.
+  - fastify@5.12.4
+  - '@blaxel/core@0.3.20'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
