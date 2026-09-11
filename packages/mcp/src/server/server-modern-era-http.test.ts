@@ -1,4 +1,4 @@
-import http from 'node:http';
+import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import {
   Client,
@@ -8,627 +8,411 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client';
 import type { AuthInfo } from '@modelcontextprotocol/server';
-import getPort from 'get-port';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { z } from 'zod/v3';
-import { InternalMastraMCPClient } from '../client/client';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { connectModern, rawRequest, serveHTTP, textOf } from './__tests__/harness';
+import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
+import type { MCPServerHTTPOptions, MCPServerHTTPRequestOptions } from './types';
 
-vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
-const listenOnFreePort = async (server: http.Server): Promise<number> => {
-  const port = await getPort();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, () => resolve());
-  });
-  return port;
-};
+const authInfo: AuthInfo = { token: 'test-token', clientId: 'test-client', scopes: ['tools:call'] };
 
 const makeTools = () => ({
   echoTool: createTool({
     id: 'echoTool',
     description: 'Echoes the input back',
     inputSchema: z.object({ text: z.string() }),
-    execute: async inputData => `echo: ${inputData.text}`,
+    execute: async ({ text }) => `echo: ${text}`,
   }),
-  loggingTool: createTool({
-    id: 'loggingTool',
-    description: 'Emits a log message during execution',
-    inputSchema: z.object({}),
-    execute: async (_inputData, options) => {
-      await options?.mcp?.log?.('info', 'log from loggingTool');
-      return 'logged';
-    },
+  structuredTool: createTool({
+    id: 'structuredTool',
+    description: 'Returns structured output',
+    inputSchema: z.object({ n: z.number() }),
+    outputSchema: z.object({ doubled: z.number() }),
+    execute: async ({ n }) => ({ doubled: n * 2 }),
   }),
   authTool: createTool({
     id: 'authTool',
-    description: 'Returns the authenticated client ID',
+    description: 'Returns the authenticated client id and mapped user',
     inputSchema: z.object({}),
-    execute: async (_inputData, options) => options?.mcp?.extra?.authInfo?.clientId ?? 'missing',
+    execute: async (_input, context) => {
+      const auth = context.requestContext?.get('authInfo') as AuthInfo | undefined;
+      const user = context.requestContext?.get('user') as { id: string } | undefined;
+      return `${auth?.clientId ?? 'anonymous'}/${user?.id ?? 'none'}`;
+    },
+  }),
+  loggingTool: createMCPTool({
+    id: 'loggingTool',
+    description: 'Emits info and error logs, then reports whether it ran',
+    inputSchema: z.object({ tag: z.string().default('log') }),
+    outputSchema: z.string(),
+    execute: async ({ tag }, { request }) => {
+      await request.log('info', { message: `info ${tag}` });
+      await request.log('error', { message: `error ${tag}` });
+      return { kind: 'completed', value: `logged ${tag}` };
+    },
+  }),
+  progressTool: createMCPTool({
+    id: 'progressTool',
+    description: 'Reports progress',
+    inputSchema: z.object({}),
+    outputSchema: z.string(),
+    execute: async (_input, { request }) => {
+      await request.progress(1, 2, 'half');
+      await request.progress(2, 2, 'done');
+      return { kind: 'completed', value: 'progressed' };
+    },
   }),
 });
 
-const authInfo: AuthInfo = {
-  token: 'modern-era-test-token',
-  clientId: 'modern-era-test-client',
-  scopes: ['tools:call'],
-};
-
-type StartHTTPTransportOptions = NonNullable<Parameters<MCPServer['startHTTP']>[0]['options']>;
-
-const requestServerWithOptions = async ({
-  options,
-  headers,
-  modernEra = true,
-}: {
-  options: StartHTTPTransportOptions;
-  headers?: Record<string, string>;
-  modernEra?: boolean;
-}): Promise<{ statusCode: number; body: string; startError?: unknown }> => {
-  const server = new MCPServer({
-    name: 'HTTP Option Test Server',
-    version: '1.0.0',
-    ...(modernEra ? { protocolVersion: '2026-07-28' as const } : {}),
-    tools: makeTools(),
-  });
-  let startError: unknown;
-  const httpServer = http.createServer(async (req, res) => {
-    try {
-      await server.startHTTP({
-        url: new URL(req.url || '', 'http://localhost'),
-        httpPath: '/mcp',
-        req,
-        res,
-        options,
-      });
-    } catch (error) {
-      startError = error;
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Failed to start MCP request');
-    }
-  });
-  const port = await listenOnFreePort(httpServer);
-
-  try {
-    const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-      const request = http.request(
-        {
-          hostname: 'localhost',
-          port,
-          path: '/mcp',
-          headers,
-        },
-        response => {
-          const chunks: Buffer[] = [];
-          response.on('data', chunk => chunks.push(Buffer.from(chunk)));
-          response.on('end', () => {
-            resolve({ statusCode: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') });
-          });
-        },
-      );
-      request.on('error', reject);
-      request.end();
-    });
-    return { ...response, startError };
-  } finally {
-    await server.close();
-    await new Promise<void>(resolve => httpServer.close(() => resolve()));
-  }
-};
-
-describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
+describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
   let server: MCPServer;
-  let httpServer: http.Server;
-  let baseUrl: URL;
+  let served: ServedHTTP;
 
   beforeAll(async () => {
     server = new MCPServer({
       name: 'Modern Test Server',
       version: '1.0.0',
-      protocolVersion: '2026-07-28',
       cacheHints: { 'tools/list': { ttlMs: 60_000, cacheScope: 'private' } },
       tools: makeTools(),
+      mapAuthInfoToUser: ({ authInfo }) => ({ id: `user-of-${authInfo.clientId}` }),
       resources: {
         listResources: async () => [{ uri: 'test://resource', name: 'Test resource' }],
         getResourceContent: async () => ({ text: 'resource content' }),
       },
+      prompts: { listPrompts: async () => [{ name: 'greet' }] },
     });
-    httpServer = http.createServer(async (req, res) => {
-      (req as typeof req & { auth: AuthInfo }).auth = authInfo;
-      await server.startHTTP({
-        url: new URL(req.url || '', 'http://localhost'),
-        httpPath: '/mcp',
-        req,
-        res,
-        options: {
-          serverless: true,
-          serverlessStreaming: true,
-          sessionIdGenerator: undefined,
-        },
-      });
-    });
-    const port = await listenOnFreePort(httpServer);
-    baseUrl = new URL(`http://localhost:${port}/mcp`);
+    served = await serveHTTP(server, { auth: authInfo });
   });
 
   afterAll(async () => {
-    await server?.close();
-    await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    await served.close();
   });
 
-  it('accepts stateless transport declarations and serves a client pinned to 2026-07-28', async () => {
-    const client = new Client(
-      { name: 'pinned-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+  it('serves discovery, listing and calls to a pinned client without any session', async () => {
+    const client = await connectModern(served.url);
     try {
+      expect(client.getDiscoverResult()?.supportedVersions).toEqual(['2026-07-28']);
       const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toContain('echoTool');
+      expect(tools.tools.map(t => t.name).sort()).toEqual([
+        'authTool',
+        'echoTool',
+        'loggingTool',
+        'progressTool',
+        'structuredTool',
+      ]);
+      expect(tools.ttlMs).toBe(60_000);
+      expect(tools.cacheScope).toBe('private');
 
-      const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
-      expect((result as any).content[0].text).toBe('echo: hi');
+      expect(textOf(await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } }))).toBe('echo: hi');
+      const structured = await client.callTool({ name: 'structuredTool', arguments: { n: 2 } });
+      expect(structured.structuredContent).toEqual({ doubled: 4 });
+      expect(textOf(structured)).toBe(JSON.stringify({ doubled: 4 }));
     } finally {
       await client.close();
     }
+
+    const response = await rawRequest(served.url, { method: 'server/discover' });
+    expect(response.status).toBe(200);
+    expect(response.headers.has('mcp-session-id')).toBe(false);
   });
 
-  it('forwards Node request auth to modern-era tool execution', async () => {
-    const client = new Client(
-      { name: 'auth-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+  it('advertises only supported capabilities', async () => {
+    const client = await connectModern(served.url);
     try {
-      const result = await client.callTool({ name: 'authTool', arguments: {} });
-      expect((result as { content: Array<{ text?: string }> }).content[0]?.text).toBe(authInfo.clientId);
+      const capabilities = client.getServerCapabilities()!;
+      expect(capabilities.tools).toEqual({ listChanged: true });
+      expect(capabilities.resources).toEqual({ subscribe: true, listChanged: true });
+      expect(capabilities.prompts).toEqual({ listChanged: true });
+      // Static declaration required by the 2026-07-28 logging utility.
+      expect(capabilities.logging).toEqual({});
+      expect(capabilities).not.toHaveProperty('roots');
+      expect(capabilities).not.toHaveProperty('sampling');
+      expect(capabilities).not.toHaveProperty('tasks');
+      expect(capabilities).not.toHaveProperty('completions');
     } finally {
       await client.close();
     }
   });
 
-  it('advertises configured cacheHints (ttlMs) on tools/list for modern clients', async () => {
-    const client = new Client(
-      { name: 'cache-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+  it('returns validation failures as tool errors the model can correct', async () => {
+    const client = await connectModern(served.url);
     try {
-      const tools = await client.listTools();
-      expect((tools as any).ttlMs).toBe(60_000);
-      expect((tools as any).cacheScope).toBe('private');
+      const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain('text');
+      const unknown = await client.callTool({ name: 'nope', arguments: {} });
+      expect(unknown.isError).toBe(true);
+      expect(textOf(unknown)).toBe('Unknown tool: nope');
     } finally {
       await client.close();
     }
   });
 
-  it('serves a legacy (default-mode) client from the same endpoint via the stateless fallback', async () => {
-    const client = new Client({ name: 'legacy-client', version: '1.0.0' }, {});
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
+  it('derives auth and the mapped user from the transport on every request', async () => {
+    const client = await connectModern(served.url);
     try {
-      const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toContain('echoTool');
-
-      const result = await client.callTool({ name: 'echoTool', arguments: { text: 'legacy' } });
-      expect((result as any).content[0].text).toBe('echo: legacy');
+      expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe(
+        'test-client/user-of-test-client',
+      );
     } finally {
       await client.close();
     }
+    const anonymous = new MCPServer({ name: 'Anonymous', version: '1.0.0', tools: makeTools() });
+    const anonymousServed = await serveHTTP(anonymous);
+    try {
+      const client = await connectModern(anonymousServed.url);
+      try {
+        expect(textOf(await client.callTool({ name: 'authTool', arguments: {} }))).toBe('anonymous/none');
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await anonymousServed.close();
+    }
   });
 
-  it('negotiates the modern era with a Mastra client configured with protocolVersion auto', async () => {
-    const client = new InternalMastraMCPClient({
-      name: 'auto-client',
-      server: {
-        url: baseUrl,
-        protocolVersion: 'auto',
-      },
+  it('publishes catalogue changes through subscriptions/listen', async () => {
+    const client = await connectModern(served.url);
+    const toolChanges: Array<() => void> = [];
+    client.setNotificationHandler('notifications/tools/list_changed', async () => toolChanges.shift()?.());
+    const nextToolChange = () => new Promise<void>(resolve => toolChanges.push(resolve));
+    const tools = nextToolChange();
+    const prompts = new Promise<void>(resolve => {
+      client.setNotificationHandler('notifications/prompts/list_changed', async () => resolve());
     });
-    await client.connect();
-    try {
-      const tools = await client.tools();
-      expect(Object.keys(tools)).toContain('echoTool');
-      const sdkClient = (client as unknown as { client: Client }).client;
-      expect(sdkClient.getDiscoverResult()).toBeDefined();
-    } finally {
-      await client.disconnect();
-    }
-  });
-
-  it('delivers toolsChanged via subscriptions/listen on the modern leg', async () => {
-    const client = new Client(
-      { name: 'listen-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    const changed = new Promise<void>(resolve => {
-      client.setNotificationHandler('notifications/tools/list_changed', async () => resolve());
-    });
-    const subscription = await client.listen({ toolsListChanged: true });
-    try {
-      expect(subscription.honoredFilter.toolsListChanged).toBe(true);
-      await server.toolActions.add({
-        dynamicTool: createTool({
-          id: 'dynamicTool',
-          description: 'Added at runtime',
-          inputSchema: z.object({}),
-          execute: async () => 'dynamic',
-        }),
-      });
-      await expect(changed).resolves.toBeUndefined();
-    } finally {
-      await subscription.close();
-      await client.close();
-    }
-  });
-
-  it('delivers URI-filtered resource updates via subscriptions/listen on the modern leg', async () => {
-    const client = new Client(
-      { name: 'resource-listen-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    const uri = 'test://resource';
     const updated = new Promise<string>(resolve => {
-      client.setNotificationHandler('notifications/resources/updated', async notification => {
-        resolve(notification.params.uri);
-      });
+      client.setNotificationHandler('notifications/resources/updated', async n => resolve(n.params.uri));
     });
-    const subscription = await client.listen({ resourceSubscriptions: [uri] });
+    const subscription = await client.listen({
+      toolsListChanged: true,
+      promptsListChanged: true,
+      resourceSubscriptions: ['test://resource'],
+    });
     try {
-      await server.resources.notifyUpdated({ uri });
-      await expect(updated).resolves.toBe(uri);
+      expect(subscription.honoredFilter).toMatchObject({ toolsListChanged: true, promptsListChanged: true });
+      await server.toolActions.add({
+        dynamicTool: createTool({ id: 'dynamicTool', description: 'Added at runtime', execute: async () => 'dynamic' }),
+      });
+      await server.prompts.notifyListChanged();
+      await server.resources.notifyUpdated({ uri: 'test://resource' });
+      await server.resources.notifyUpdated({ uri: 'test://other' });
+      await expect(tools).resolves.toBeUndefined();
+      await expect(prompts).resolves.toBeUndefined();
+      await expect(updated).resolves.toBe('test://resource');
+      expect((await client.listTools()).tools.map(t => t.name)).toContain('dynamicTool');
+      const removed = nextToolChange();
+      await server.toolActions.remove(['dynamicTool']);
+      await removed;
+      expect((await client.listTools()).tools.map(t => t.name)).not.toContain('dynamicTool');
     } finally {
       await subscription.close();
       await client.close();
     }
   });
 
-  it('delivers opted-in tool logs through the per-request modern-era log context', async () => {
-    const client = new Client(
-      { name: 'log-client', version: '1.0.0' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-    );
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    const logged = new Promise<unknown>(resolve => {
-      client.setNotificationHandler('notifications/message', async notification => {
-        resolve(notification.params.data);
+  describe('per-request logging', () => {
+    const collect = (client: Client) => {
+      const messages: Array<{ level: string; data: unknown }> = [];
+      client.setNotificationHandler('notifications/message', async n => {
+        messages.push({ level: n.params.level, data: n.params.data });
       });
+      return messages;
+    };
+
+    it('delivers logs at or above the level the request opted into', async () => {
+      const client = await connectModern(served.url);
+      const messages = collect(client);
+      try {
+        const info = await client.callTool({
+          name: 'loggingTool',
+          arguments: { tag: 'a' },
+          _meta: { [LOG_LEVEL_META_KEY]: 'info' },
+        });
+        expect(info.structuredContent).toBe('logged a');
+        expect(messages).toEqual([
+          { level: 'info', data: { message: 'info a' } },
+          { level: 'error', data: { message: 'error a' } },
+        ]);
+
+        messages.length = 0;
+        await client.callTool({
+          name: 'loggingTool',
+          arguments: { tag: 'b' },
+          _meta: { [LOG_LEVEL_META_KEY]: 'warning' },
+        });
+        expect(messages).toEqual([{ level: 'error', data: { message: 'error b' } }]);
+      } finally {
+        await client.close();
+      }
     });
+
+    it('delivers nothing without an opt-in and never leaks a previous opt-in to later requests', async () => {
+      const client = await connectModern(served.url);
+      const messages = collect(client);
+      try {
+        await client.callTool({
+          name: 'loggingTool',
+          arguments: { tag: 'opted' },
+          _meta: { [LOG_LEVEL_META_KEY]: 'debug' },
+        });
+        expect(messages).toHaveLength(2);
+        messages.length = 0;
+        expect((await client.callTool({ name: 'loggingTool', arguments: { tag: 'silent' } })).structuredContent).toBe(
+          'logged silent',
+        );
+        expect(messages).toEqual([]);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('isolates concurrent requests on the same server', async () => {
+      const opted = await connectModern(served.url);
+      const silent = await connectModern(served.url);
+      const optedMessages = collect(opted);
+      const silentMessages = collect(silent);
+      try {
+        await Promise.all([
+          opted.callTool({ name: 'loggingTool', arguments: { tag: 'x' }, _meta: { [LOG_LEVEL_META_KEY]: 'info' } }),
+          silent.callTool({ name: 'loggingTool', arguments: { tag: 'y' } }),
+        ]);
+        expect(optedMessages.map(m => m.data)).toEqual([{ message: 'info x' }, { message: 'error x' }]);
+        expect(silentMessages).toEqual([]);
+      } finally {
+        await opted.close();
+        await silent.close();
+      }
+    });
+
+    it('does not serve the deprecated session-level logging/setLevel', async () => {
+      const response = await rawRequest(served.url, { method: 'logging/setLevel', params: { level: 'debug' } });
+      expect(response.json().error.code).toBe(-32601);
+      const client = await connectModern(served.url);
+      try {
+        await expect(client.setLoggingLevel('debug')).rejects.toThrow();
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
+  it('reports progress on the request stream when the caller supplies a token', async () => {
+    const client = await connectModern(served.url);
+    const progress: Array<{ progress: number; total?: number; message?: string }> = [];
     try {
-      const result = await client.callTool({
-        name: 'loggingTool',
-        arguments: {},
-        _meta: { [LOG_LEVEL_META_KEY]: 'info' },
-      });
-      const toolResult = result as { isError?: boolean; content: Array<{ text?: string }> };
-      expect(toolResult.isError).toBeFalsy();
-      expect(toolResult.content[0]?.text).toBe('logged');
-      await expect(logged).resolves.toEqual({ message: 'log from loggingTool' });
+      const result = await client.callTool(
+        { name: 'progressTool', arguments: {} },
+        { onprogress: p => progress.push({ progress: p.progress, total: p.total, message: p.message }) },
+      );
+      expect(result.structuredContent).toBe('progressed');
+      expect(progress).toEqual([
+        { progress: 1, total: 2, message: 'half' },
+        { progress: 2, total: 2, message: 'done' },
+      ]);
+      progress.length = 0;
+      await client.callTool({ name: 'progressTool', arguments: {} });
+      expect(progress).toEqual([]);
     } finally {
       await client.close();
     }
   });
 
-  it('delivers opted-in tool logs to a legacy client through the stateless fallback', async () => {
-    const client = new Client({ name: 'legacy-log-client', version: '1.0.0' });
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    const logged = new Promise<unknown>(resolve => {
-      client.setNotificationHandler('notifications/message', async notification => {
-        resolve(notification.params.data);
-      });
+  describe('legacy protocol surface is rejected, not downgraded', () => {
+    it('rejects clients that negotiate a legacy revision', async () => {
+      for (const options of [{}, { versionNegotiation: { mode: 'legacy' as const } }]) {
+        const client = new Client({ name: 'legacy-client', version: '1.0.0' }, options);
+        const error = await client.connect(new StreamableHTTPClientTransport(served.url)).then(
+          () => undefined,
+          e => e,
+        );
+        expect(error).toBeInstanceOf(SdkError);
+        // The SDK surfaces the server's unsupported-version rejection either as a
+        // failed negotiation or as the rejected legacy POST itself.
+        expect([SdkErrorCode.EraNegotiationFailed, SdkErrorCode.ClientHttpNotImplemented]).toContain(
+          (error as SdkError).code,
+        );
+        expect(client.getServerCapabilities()).toBeUndefined();
+        await client.close().catch(() => {});
+      }
     });
-    try {
-      await client.setLoggingLevel('info');
-      const result = await client.callTool({ name: 'loggingTool', arguments: {} });
-      const toolResult = result as { isError?: boolean; content: Array<{ text?: string }> };
-      expect(toolResult.isError).toBeFalsy();
-      expect(toolResult.content[0]?.text).toBe('logged');
-      await expect(logged).resolves.toEqual({ message: 'log from loggingTool' });
-    } finally {
-      await client.close();
-    }
+
+    it('rejects initialize and ping and serves no session lifecycle', async () => {
+      const initialize = await rawRequest(served.url, {
+        envelope: false,
+        method: 'initialize',
+        params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'old', version: '1' } },
+      });
+      expect(initialize.status).toBeGreaterThanOrEqual(400);
+      expect(initialize.headers.has('mcp-session-id')).toBe(false);
+      expect(initialize.text).not.toContain('"result"');
+
+      const ping = await rawRequest(served.url, { method: 'ping' });
+      expect(ping.text).not.toContain('"result"');
+
+      for (const httpMethod of ['GET', 'DELETE']) {
+        const response = await rawRequest(served.url, { httpMethod, envelope: false });
+        expect(response.status).toBeGreaterThanOrEqual(400);
+      }
+    });
+
+    it('does not serve legacy resource subscriptions or server-initiated request replies', async () => {
+      for (const method of ['resources/subscribe', 'resources/unsubscribe']) {
+        const response = await rawRequest(served.url, { method, params: { uri: 'test://resource' } });
+        expect(response.json().error.code).toBe(-32601);
+      }
+      const legacyClient = new Client({ name: 'legacy-client', version: '1.0.0' });
+      await expect(legacyClient.connect(new StreamableHTTPClientTransport(served.url))).rejects.toBeInstanceOf(
+        SdkError,
+      );
+    });
+
+    it('exposes no legacy transport entry points or options', () => {
+      expect(server).not.toHaveProperty('startSSE');
+      expect(server).not.toHaveProperty('startHonoSSE');
+      expect(server).not.toHaveProperty('handleServerlessRequest');
+      expect(server).not.toHaveProperty('elicitation');
+      expect(server).not.toHaveProperty('sendLoggingMessage');
+      expect(server).not.toHaveProperty('getServer');
+      expectTypeOf<keyof MCPServerHTTPRequestOptions>().toEqualTypeOf<
+        'enableDnsRebindingProtection' | 'allowedHosts' | 'allowedOrigins'
+      >();
+      expectTypeOf<keyof MCPServerHTTPOptions>().toEqualTypeOf<'url' | 'httpPath' | 'req' | 'res' | 'options'>();
+    });
   });
 
-  it('rejects session and handler-lifetime options instead of ignoring them', async () => {
-    const cases: Array<[string, StartHTTPTransportOptions]> = [
-      ['sessionIdGenerator', { sessionIdGenerator: () => 'session-id' }],
-      ['onsessioninitialized', { onsessioninitialized: () => {} }],
-      ['onsessionclosed', { onsessionclosed: () => {} }],
-      [
-        'eventStore',
-        {
-          eventStore: {
-            storeEvent: async () => 'event-id',
-            replayEventsAfter: async () => 'stream-id',
-          },
-        },
-      ],
-      ['enableJsonResponse', { enableJsonResponse: true }],
-      ['retryInterval', { retryInterval: 1_000 }],
-      ['keepAliveMs', { keepAliveMs: 1_000 }],
-      ['supportedProtocolVersions', { supportedProtocolVersions: ['2026-07-28'] }],
-      ['serverless', { serverless: false }],
-      ['serverlessStreaming', { serverlessStreaming: false }],
-    ];
-
-    for (const [name, options] of cases) {
-      const result = await requestServerWithOptions({ options });
-      expect(result.statusCode).toBe(500);
-      expect(result.startError).toBeInstanceOf(Error);
-      expect((result.startError as Error).message).toContain(`startHTTP options \"${name}\" are incompatible`);
-      expect(result.body).toBe('Failed to start MCP request');
-    }
-  });
-
-  it('preserves DNS rebinding protection on the modern HTTP path', async () => {
-    const blockedHost = await requestServerWithOptions({
+  it('applies DNS rebinding protection and path matching before dispatch', async () => {
+    const guarded = new MCPServer({ name: 'Guarded', version: '1.0.0', tools: makeTools() });
+    const guardedServed = await serveHTTP(guarded, {
       options: {
         enableDnsRebindingProtection: true,
         allowedHosts: ['allowed.example'],
-      },
-      headers: { Host: 'blocked.example' },
-    });
-    expect(blockedHost.statusCode).toBe(403);
-    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
-
-    const blockedOrigin = await requestServerWithOptions({
-      options: {
-        enableDnsRebindingProtection: true,
-        allowedOrigins: ['https://allowed.example'],
-      },
-      headers: { Origin: 'https://blocked.example' },
-    });
-    expect(blockedOrigin.statusCode).toBe(403);
-    expect(blockedOrigin.body).toContain('Invalid Origin: blocked.example');
-
-    const allowedHostAndOrigin = await requestServerWithOptions({
-      options: {
-        enableDnsRebindingProtection: true,
-        allowedHosts: ['allowed.example'],
-        allowedOrigins: ['https://allowed.example'],
-      },
-      headers: { Host: 'allowed.example', Origin: 'https://allowed.example' },
-    });
-    expect(allowedHostAndOrigin.statusCode).not.toBe(403);
-    expect(allowedHostAndOrigin.startError).toBeUndefined();
-
-    const missingOrigin = await requestServerWithOptions({
-      options: {
-        enableDnsRebindingProtection: true,
         allowedOrigins: ['https://allowed.example'],
       },
     });
-    expect(missingOrigin.statusCode).not.toBe(403);
-    expect(missingOrigin.startError).toBeUndefined();
-  });
-});
-
-describe('MCPServer without protocolVersion (legacy default)', () => {
-  let server: MCPServer;
-  let httpServer: http.Server;
-  let baseUrl: URL;
-
-  beforeAll(async () => {
-    server = new MCPServer({
-      name: 'Legacy Test Server',
-      version: '1.0.0',
-      tools: makeTools(),
-    });
-    httpServer = http.createServer(async (req, res) => {
-      await server.startHTTP({
-        url: new URL(req.url || '', 'http://localhost'),
-        httpPath: '/mcp',
-        req,
-        res,
+    try {
+      const blockedHost = await rawRequest(guardedServed.url, {
+        method: 'server/discover',
+        headers: { Host: 'blocked.example' },
       });
-    });
-    const port = await listenOnFreePort(httpServer);
-    baseUrl = new URL(`http://localhost:${port}/mcp`);
-  });
-
-  afterAll(async () => {
-    await server?.close();
-    await new Promise<void>(resolve => httpServer.close(() => resolve()));
-  });
-
-  it('keeps serving legacy sessionful clients unchanged', async () => {
-    const client = new Client({ name: 'legacy-client', version: '1.0.0' }, {});
-    const transport = new StreamableHTTPClientTransport(baseUrl);
-    await client.connect(transport);
-    try {
-      // Sessionful behavior: the server assigned a session ID during initialize.
-      expect(transport.sessionId).toBeDefined();
-      const tools = await client.listTools();
-      expect(tools.tools.map(t => t.name)).toContain('echoTool');
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('applies DNS rebinding protection before legacy transport dispatch', async () => {
-    const blockedHost = await requestServerWithOptions({
-      modernEra: false,
-      options: {
-        serverless: true,
-        enableDnsRebindingProtection: true,
-        allowedHosts: ['allowed.example'],
-      },
-      headers: { Host: 'blocked.example' },
-    });
-
-    expect(blockedHost.statusCode).toBe(403);
-    expect(blockedHost.body).toContain('Invalid Host: blocked.example');
-  });
-
-  it('fails loudly when a client pinned to 2026-07-28 connects to a legacy-only server', async () => {
-    const client = new InternalMastraMCPClient({
-      name: 'pinned-client',
-      server: {
-        url: baseUrl,
-        protocolVersion: '2026-07-28',
-      },
-    });
-    const error = await client.connect().then(
-      () => undefined,
-      error => error,
-    );
-    expect(error).toBeInstanceOf(SdkError);
-    expect((error as SdkError).code).toBe(SdkErrorCode.EraNegotiationFailed);
-    await client.disconnect().catch(() => {});
-  });
-});
-
-describe('MCPServer elicitation on the 2026-07-28 leg (multi-round-trip)', () => {
-  let server: MCPServer;
-  let httpServer: http.Server;
-  let baseUrl: URL;
-  const executions = { ask: 0, twoStep: 0 };
-
-  beforeAll(async () => {
-    server = new MCPServer({
-      name: 'MRTR Elicitation Server',
-      version: '1.0.0',
-      protocolVersion: '2026-07-28',
-      tools: {
-        askTool: createTool({
-          id: 'askTool',
-          description: 'Asks the user for their favorite color',
-          inputSchema: z.object({}),
-          execute: async (_inputData, options) => {
-            executions.ask += 1;
-            const result = await options!.mcp!.elicitation.sendRequest({
-              message: 'What is your favorite color?',
-              requestedSchema: {
-                type: 'object',
-                properties: { color: { type: 'string' } },
-                required: ['color'],
-              },
-            });
-            if (result.action !== 'accept') return 'declined';
-            return `color: ${(result.content as { color: string }).color}`;
-          },
-        }),
-        twoStepTool: createTool({
-          id: 'twoStepTool',
-          description: 'Asks the user two sequential questions',
-          inputSchema: z.object({}),
-          execute: async (_inputData, options) => {
-            executions.twoStep += 1;
-            const sendRequest = options!.mcp!.elicitation.sendRequest;
-            const first = await sendRequest({
-              message: 'first',
-              requestedSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
-            });
-            const second = await sendRequest({
-              message: 'second',
-              requestedSchema: { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'] },
-            });
-            const a = (first.content as { answer: string }).answer;
-            const b = (second.content as { answer: string }).answer;
-            return `${a}+${b}`;
-          },
-        }),
-      },
-    });
-    httpServer = http.createServer(async (req, res) => {
-      await server.startHTTP({
-        url: new URL(req.url || '', 'http://localhost'),
-        httpPath: '/mcp',
-        req,
-        res,
+      expect(blockedHost.status).toBe(403);
+      expect(blockedHost.text).toContain('Invalid Host: blocked.example');
+      const blockedOrigin = await rawRequest(guardedServed.url, {
+        method: 'server/discover',
+        headers: { Host: 'allowed.example', Origin: 'https://blocked.example' },
       });
-    });
-    const port = await listenOnFreePort(httpServer);
-    baseUrl = new URL(`http://localhost:${port}/mcp`);
-  });
-
-  afterAll(async () => {
-    await server?.close();
-    await new Promise<void>(resolve => httpServer.close(() => resolve()));
-  });
-
-  const makeModernElicitingClient = (answers: Record<string, string>) => {
-    const client = new Client(
-      { name: 'elicit-client', version: '1.0.0' },
-      {
-        capabilities: { elicitation: { form: {} } },
-        versionNegotiation: { mode: { pin: '2026-07-28' } },
-      },
-    );
-    client.setRequestHandler('elicitation/create', async request => {
-      const key = request.params.message;
-      const answer = answers[key];
-      if (answer === undefined) return { action: 'decline' as const };
-      const field = 'color' in ((request.params as any).requestedSchema?.properties ?? {}) ? 'color' : 'answer';
-      return { action: 'accept' as const, content: { [field]: answer } };
-    });
-    return client;
-  };
-
-  it('completes a tool that elicits: the client answers and retries transparently', async () => {
-    executions.ask = 0;
-    const client = makeModernElicitingClient({ 'What is your favorite color?': 'blue' });
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    try {
-      const result = await client.callTool({ name: 'askTool', arguments: {} });
-      expect((result as any).isError).toBeFalsy();
-      expect((result as any).content[0].text).toBe('color: blue');
-      // Round 1 interrupts, round 2 replays with the answer.
-      expect(executions.ask).toBe(2);
+      expect(blockedOrigin.status).toBe(403);
+      const allowed = await rawRequest(guardedServed.url, {
+        method: 'server/discover',
+        headers: { Host: 'allowed.example', Origin: 'https://allowed.example' },
+      });
+      expect(allowed.status).toBe(200);
+      const wrongPath = await fetch(new URL('/other', guardedServed.url), { method: 'POST' });
+      expect(wrongPath.status).toBe(404);
     } finally {
-      await client.close();
-    }
-  });
-
-  it('supports sequential elicitations across rounds via requestState accumulation', async () => {
-    executions.twoStep = 0;
-    const client = makeModernElicitingClient({ first: 'one', second: 'two' });
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    try {
-      const result = await client.callTool({ name: 'twoStepTool', arguments: {} });
-      expect((result as any).isError).toBeFalsy();
-      expect((result as any).content[0].text).toBe('one+two');
-      // Three rounds: interrupt on first, interrupt on second (first answered
-      // from requestState), then complete.
-      expect(executions.twoStep).toBe(3);
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('surfaces a declined elicitation to the tool', async () => {
-    executions.ask = 0;
-    const client = makeModernElicitingClient({});
-    await client.connect(new StreamableHTTPClientTransport(baseUrl));
-    try {
-      const result = await client.callTool({ name: 'askTool', arguments: {} });
-      expect((result as any).content[0].text).toBe('declined');
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('works through the Mastra client with a pinned protocolVersion and an elicitation handler', async () => {
-    const client = new InternalMastraMCPClient({
-      name: 'mastra-elicit-client',
-      server: {
-        url: baseUrl,
-        protocolVersion: '2026-07-28',
-      },
-    });
-    client.elicitation.onRequest(async request => {
-      expect(request.message).toBe('What is your favorite color?');
-      return { action: 'accept', content: { color: 'green' } };
-    });
-    await client.connect();
-    try {
-      const tools = await client.tools();
-      const result = await tools.askTool.execute!({}, {} as any);
-      expect(JSON.stringify(result)).toContain('color: green');
-    } finally {
-      await client.disconnect();
+      await guardedServed.close();
     }
   });
 });
