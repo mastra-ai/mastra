@@ -146,15 +146,21 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
    * `audit.emit()` derives no org from the request and drops the event; writing
    * through `record()` with the explicit org + system actor keeps traceability
    * in every deployment mode.
+   *
+   * The `idempotencyKey` (`<action>:<requestId>`) makes the audit write itself
+   * idempotent: replaying the same request re-enters this path, but the trail
+   * keeps a single event per requestId instead of one duplicate per retry.
    */
   async #writeAudit(
     c: Context,
     scope: AutomationRunScope,
     action: AuditAction,
+    requestId: string,
     targets: AuditTarget[],
     metadata: Record<string, unknown>,
   ): Promise<void> {
     await this.deps.audit.record({
+      idempotencyKey: `${action}:${requestId}`,
       orgId: scope.orgId,
       actorId: 'factory-external-orchestrator',
       actorType: 'system',
@@ -254,7 +260,7 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
           // `replayed` would report durable success for work that was never
           // enqueued. Reject the collision instead of silently swallowing it.
           if (commit.status === 'replayed' && !replayMatchesRequest(result, item.id, decision)) {
-            await this.#writeAudit(context, resolved, 'factory.run.rejected', targets, {
+            await this.#writeAudit(context, resolved, 'factory.run.rejected', request.requestId, targets, {
               ...auditMetadata,
               resultStatus: 'rejected',
               code: 'request_id_conflict',
@@ -270,14 +276,14 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
           }
 
           if (resultStatus === 'accepted') {
-            await this.#writeAudit(context, resolved, 'factory.run.queued', targets, auditMetadata);
+            await this.#writeAudit(context, resolved, 'factory.run.queued', request.requestId, targets, auditMetadata);
             return c.json(
               { status: commit.status === 'replayed' ? 'replayed' : 'committed', requestId: request.requestId },
               commit.status === 'replayed' ? 200 : 202,
             );
           }
 
-          await this.#writeAudit(context, resolved, 'factory.run.rejected', targets, auditMetadata);
+          await this.#writeAudit(context, resolved, 'factory.run.rejected', request.requestId, targets, auditMetadata);
           return c.json(
             { status: 'rejected', ...(code ? { code } : {}), requestId: request.requestId },
             code === 'stale' ? 409 : 422,

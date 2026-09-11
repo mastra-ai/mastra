@@ -138,6 +138,10 @@ describe('automation-runs ingress', () => {
     expect(second.status).toBe(200);
     expect(await second.json()).toMatchObject({ status: 'replayed', requestId: REQUEST_ID });
     expect(await listDecisions()).toHaveLength(1);
+
+    // The replay must not append a second audit event for the same request.
+    const events = await listAudit('org1');
+    expect(events.events.filter(e => e.action === 'factory.run.queued')).toHaveLength(1);
   });
 
   it('rejects a stale expected revision without creating a runnable decision', async () => {
