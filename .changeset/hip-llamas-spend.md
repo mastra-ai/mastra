@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Regenerated API route metadata for the new pending-signal list and bulk removal routes.
+Added pending-signal listing and bulk removal to API tooling.
