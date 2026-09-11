@@ -6,10 +6,14 @@ Added platform-managed Jira intake for Factory deployments. Set `MASTRA_JIRA_CON
 
 Factory automatically enables the platform integration when those environment variables are available. An explicitly configured `JiraIntegration` continues to take precedence, so self-hosted Jira credentials and Platform-managed connections use the same Jira client behavior without conflicting.
 
-```ts
-import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
+```bash
+MASTRA_JIRA_CONNECTION_ID=jira-connection-id
+MASTRA_PLATFORM_ACCESS_TOKEN=platform-access-token
+```
 
-const jira = new PlatformJiraIntegration({
-  connectionId: 'jira-connection-id',
-});
+```ts
+import { MastraFactory } from '@mastra/factory';
+
+// Platform Jira is registered automatically when the environment variables are set.
+export const factory = new MastraFactory({ storage });
 ```
