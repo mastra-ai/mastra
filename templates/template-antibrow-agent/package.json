@@ -1,0 +1,33 @@
+{
+  "name": "template-antibrow-agent",
+  "version": "1.0.0",
+  "description": "A web agent that browses through a persistent AntiBrow profile: cookies, storage, an engine-level fingerprint and a per-profile proxy survive between runs, so pages behind a login open already signed in. Includes navigate, read, click and fill tools with an idle-closing session manager.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "anti-detect-browser": "^2.29.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "dotenv": "^17.3.1",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
