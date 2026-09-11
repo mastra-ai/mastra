@@ -259,6 +259,9 @@ export async function* readPendingTraceBatches(
 /** Remove prepared trace data only after every trace has been acknowledged. */
 export async function completeTraceImport(directory: string): Promise<TraceImportManifest> {
   const manifest = await readTraceImportManifest(directory);
+  if (manifest.phase === 'preparing') {
+    throw new Error('Cannot complete an import before trace preparation finishes.');
+  }
   if (
     manifest.acknowledgedTraces !== manifest.counts.preparedTraces ||
     manifest.acknowledgedSpans !== manifest.counts.preparedSpans

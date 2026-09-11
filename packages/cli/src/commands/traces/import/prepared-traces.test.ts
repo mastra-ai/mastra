@@ -217,6 +217,13 @@ describe('prepared traces', () => {
     expect((await readTraceImportManifest(state.directory)).phase).toBe('complete');
   });
 
+  it('does not complete an import before preparation finishes', async () => {
+    const state = await initialize();
+
+    await expect(completeTraceImport(state.directory)).rejects.toThrow('before trace preparation finishes');
+    expect((await readTraceImportManifest(state.directory)).phase).toBe('preparing');
+  });
+
   it('can complete an empty prepared import', async () => {
     const state = await initialize();
     await prepareTraceImport({ directory: state.directory, provider: provider([]) });
