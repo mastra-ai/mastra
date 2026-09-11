@@ -23,6 +23,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -35,6 +37,8 @@ import type {
   ListFeedbackArgs,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
@@ -227,6 +231,25 @@ import type {
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
 
+/**
+ * Provides typed access to agents, workflows, and other APIs on a running Mastra server.
+ * Point `baseUrl` at your server and configure authentication when required.
+ *
+ * @example
+ * ```typescript
+ * import { MastraClient } from '@mastra/client-js';
+ *
+ * const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/client-js/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Client documentation](https://mastra.ai/reference/client-js/mastra-client)
+ * if packaged docs are unavailable.
+ */
 export class MastraClient extends BaseResource {
   private observability: Observability;
   public readonly conversations: Conversations;
@@ -1170,6 +1193,11 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.observability.deleteScores(params);
+  }
+
   /** Returns an aggregated score value with optional period-over-period comparison. */
   getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return this.observability.getScoreAggregate(params);
@@ -1202,6 +1230,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.observability.deleteFeedback(params);
   }
 
   /** Updates a feedback record's review workflow status. */

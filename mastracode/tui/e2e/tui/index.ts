@@ -1,5 +1,6 @@
 import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentsMdAutoloadScenario } from './agents-md-autoload.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
@@ -191,6 +192,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agents-md-autoload': agentsMdAutoloadScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,

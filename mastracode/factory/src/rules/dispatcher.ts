@@ -12,8 +12,11 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { recordSessionRunStart } from '../session/run-audit.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type {
@@ -70,6 +73,29 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
   return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
 
+/**
+ * Conservative check for observational-memory failures that a retry cannot fix:
+ * a provider rejecting the request outright (HTTP 400 / model unsupported /
+ * authentication). Anything ambiguous (timeouts, 5xx, rate limits, network
+ * blips) is intentionally left retryable to avoid dead-ending a card that would
+ * have recovered on its own.
+ */
+function isPermanentProviderRejection(error: string): boolean {
+  const normalized = error.toLowerCase();
+  return (
+    /\bhttp(?:\/\d(?:\.\d)?)?\s*400\b/.test(normalized) ||
+    /\bstatus(?:\s*code)?\s*[:=]?\s*400\b/.test(normalized) ||
+    /\b400\s*(?:bad request|status)\b/.test(normalized) ||
+    normalized.includes('model not supported') ||
+    normalized.includes('model is not supported') ||
+    normalized.includes('unsupported model') ||
+    normalized.includes('not supported with') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('authentication') ||
+    (normalized.includes('invalid') && normalized.includes('model'))
+  );
+}
+
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
@@ -92,11 +118,17 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  // Latest observational-memory failure seen on this run. The stream aborts the
+  // run when observation/reflection fails, but the abort itself carries no
+  // reason — so without this the true cause (e.g. a provider rejecting the OM
+  // model) is lost and the abort is retried blindly.
+  let omFailure: string | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
     supersededAtEnd = undefined;
+    omFailure = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -107,6 +139,10 @@ function watchRun(
       endReason = event.reason;
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
+      return;
+    }
+    if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
+      if (event.error) omFailure = event.error;
       return;
     }
     if (event.type === 'tool_suspended') {
@@ -135,6 +171,7 @@ function watchRun(
     arm,
     wait,
     supersededAtEnd: () => supersededAtEnd,
+    endReason: () => endReason,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
@@ -159,6 +196,22 @@ function watchRun(
       }
       if (endReason === 'error') throw new Error(`${label} ended in error.`);
       if (endReason === 'aborted') {
+        // An abort that follows an observational-memory failure is not the
+        // usual "process went away" case — the OM stream deliberately aborted
+        // the run because observation/reflection failed. Surface that real
+        // cause instead of the generic message, and when it is a permanent
+        // provider/config rejection (e.g. the OM model is not accepted by the
+        // account) fail terminally so retries stop hammering a run that can
+        // never succeed until the configuration changes.
+        if (omFailure) {
+          if (isPermanentProviderRejection(omFailure)) {
+            throw new FactoryDispatchError(
+              'run_configuration_invalid',
+              `${label} was aborted by an observational-memory failure that will not succeed on retry: ${omFailure}`,
+            );
+          }
+          throw new Error(`${label} was aborted after an observational-memory failure: ${omFailure}`);
+        }
         // Retryable, though an abort reads as deliberate. The stream does not
         // say who aborted, and in practice the dominant cause is the process
         // going away underneath the run — an operator restarting the server —
@@ -249,6 +302,7 @@ export interface FactoryBindingPreparationInput {
 }
 
 export interface FactoryDecisionDispatcherOptions {
+  audit?: AuditRecorder;
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
@@ -261,6 +315,16 @@ export interface FactoryDecisionDispatcherOptions {
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  /**
+   * Re-applies the factory project's current observational-memory settings to a
+   * reused session before it runs. Fresh preparation hydrates these settings,
+   * but a reused binding keeps the models it was created with; without this a
+   * project whose OM models changed keeps observing with the stale ones.
+   */
+  refreshManagedMemorySettings?: (input: {
+    binding: FactoryRunBindingRecord;
+    session: BoundDispatcherSession;
+  }) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
@@ -393,6 +457,7 @@ async function awaitNotification(
 }
 
 export class FactoryDecisionDispatcher {
+  readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #boards: BoardRegistry;
@@ -402,6 +467,10 @@ export class FactoryDecisionDispatcher {
   readonly #autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
+  readonly #refreshManagedMemorySettings?: (input: {
+    binding: FactoryRunBindingRecord;
+    session: BoundDispatcherSession;
+  }) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
@@ -418,6 +487,7 @@ export class FactoryDecisionDispatcher {
   readonly #inFlight = new Set<Promise<void>>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
+    this.#audit = options.audit;
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
     this.#boards = options.boards ?? createBoardRegistry();
@@ -427,6 +497,7 @@ export class FactoryDecisionDispatcher {
     this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
+    this.#refreshManagedMemorySettings = options.refreshManagedMemorySettings;
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
@@ -869,6 +940,14 @@ export class FactoryDecisionDispatcher {
               }
             }
           }
+          await this.#recordRunStart(
+            session,
+            binding,
+            deliveryId,
+            record.approvedBy ?? undefined,
+            run.endReason,
+            item?.title,
+          );
           // A landed `deliver` still runs on the in-flight session, so the run's
           // terminal outcome matters as much as a fresh wake's: a run that ends
           // in error after accepting the prompt has still failed this decision.
@@ -1169,6 +1248,10 @@ export class FactoryDecisionDispatcher {
     const session = await this.#controller.getSessionByResource(binding.resourceId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
+    // A reused session keeps the OM models it was created with; refresh them
+    // from the project's current settings so a managed run never observes with
+    // models the project has since changed away from.
+    await this.#refreshManagedMemorySettings?.({ binding, session });
     return session;
   }
 
@@ -1220,6 +1303,36 @@ export class FactoryDecisionDispatcher {
       clearInterval(timer);
       await renewal;
     }
+  }
+
+  async #recordRunStart(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    kickoffId: string,
+    approvedBy: string | undefined,
+    observedEnd: ReturnType<typeof watchRun>['endReason'],
+    workItemName: string | undefined,
+  ): Promise<void> {
+    if (!this.#audit) return;
+    const humanApproved = isHumanActorId(approvedBy);
+    await recordSessionRunStart(session, {
+      audit: this.#audit,
+      actorType: humanApproved ? 'human' : 'system',
+      observedEnd,
+      run: {
+        kickoffId,
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: humanApproved ? approvedBy : 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        workItemName,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+      },
+    });
   }
 
   async #dispatchPendingStart(record: FactoryPendingStartRecord, now: Date): Promise<void> {
@@ -1300,6 +1413,14 @@ export class FactoryDecisionDispatcher {
                 throw new Error('Factory kickoff was queued onto an ending run and never reached the agent.');
               }
             }
+            await this.#recordRunStart(
+              session,
+              binding,
+              `factory-kickoff:${record.kickoffKey}:${record.attempts}`,
+              startedBy,
+              run.endReason,
+              item?.title,
+            );
             await run.settle();
           } finally {
             run.close();

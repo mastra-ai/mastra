@@ -132,7 +132,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-sm text-neutral3', className)}>No fields available</div>;
+    return <div className={cn('text-ui-md text-neutral3', className)}>No fields available</div>;
   }
 
   return (

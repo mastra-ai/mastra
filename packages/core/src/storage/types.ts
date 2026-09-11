@@ -235,6 +235,14 @@ export type StorageCloneThreadInput = {
   metadata?: Record<string, unknown>;
   /** Options for filtering which messages to include */
   options?: {
+    /**
+     * When true (default), the returned `clonedMessages` array is populated with the
+     * fully hydrated (parsed) message payloads. When false, message rows are copied
+     * inside the database (never returned to the JS heap) and `clonedMessages` is
+     * returned empty; only `messageIdMap` is produced. Set false on paths that discard
+     * payloads (e.g. forked-subagent clones, observational-memory-only remaps).
+     */
+    hydrateMessages?: boolean;
     /** Maximum number of messages to copy (from most recent) */
     messageLimit?: number;
     /** Filter messages by date range or specific IDs */

@@ -23,6 +23,7 @@ import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -32,7 +33,6 @@ import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
   UpdateWorkItemInput,
-  WorkItemPriorState,
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
@@ -241,67 +241,24 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
   }
 
-  /**
-   * Emit the audit events a successful work-item PATCH implies: always
-   * `updated`, plus `stage_moved` when the stages actually changed and one
-   * `run.started` per session role the patch introduced.
-   */
   async #auditWorkItemPatch({
     context,
     item,
-    previous,
     patch,
   }: {
     context: Context;
     item: WorkItemRow;
-    previous: WorkItemPriorState;
     patch: Record<string, unknown>;
   }): Promise<void> {
-    const { audit } = this.deps;
-    const target = { type: 'work_item', id: item.id, name: item.title };
-    await audit.emit({
+    await this.deps.audit.emit({
       context,
       input: {
         action: 'factory.work_item.updated',
         factoryProjectId: item.factoryProjectId,
-        targets: [target],
+        targets: [{ type: 'work_item', id: item.id, name: item.title }],
         metadata: { fields: patchedFields(patch) },
       },
     });
-
-    const stagesChanged =
-      patch.stages !== undefined &&
-      (previous.stages.length !== item.stages.length || previous.stages.some((s, i) => s !== item.stages[i]));
-    if (stagesChanged) {
-      await audit.emit({
-        context,
-        input: {
-          action: 'factory.work_item.stage_moved',
-          factoryProjectId: item.factoryProjectId,
-          targets: [target],
-          metadata: { from: previous.stages, to: item.stages },
-        },
-      });
-    }
-
-    const newRoles = Object.keys(item.sessions).filter(role => !previous.sessionRoles.includes(role));
-    for (const role of newRoles) {
-      const session = item.sessions[role];
-      await audit.emit({
-        context,
-        input: {
-          action: 'factory.run.started',
-          factoryProjectId: item.factoryProjectId,
-          targets: [target],
-          metadata: {
-            role,
-            branch: session?.branch,
-            threadId: session?.threadId,
-            sessionId: session?.sessionId,
-          },
-        },
-      });
-    }
   }
 
   /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
@@ -575,6 +532,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 stage: board.initialPhase,
                 expectedRevision: item.revision,
                 actor: { type: 'human', id: resolved.userId },
+                ...auditRequestOrigin(loose(c)),
                 ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
                 cause: 'work_item_created',
                 initialEntry: true,
@@ -594,13 +552,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 },
               });
             } else {
-              // Source-key reuse: the POST updated an existing card, so audit it
-              // as an update (plus stage/run events) instead of a false creation.
+              // Source-key reuse: the POST updated an existing card, not created one.
               const { stages: _stages, sessions: _sessions, ...boundedPatch } = input;
               await this.#auditWorkItemPatch({
                 context: loose(c),
                 item,
-                previous: result.previous,
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
@@ -640,28 +596,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
             workItemId,
             actor: { type: 'human', id: resolved.userId },
+            ...auditRequestOrigin(loose(c)),
             ingress: {
               ...parsed.ingress,
               identity: `human:${resolved.userId}:${parsed.ingress.identity}`,
-            },
-          });
-          await audit.emit({
-            context: loose(c),
-            input: {
-              action:
-                result.status === 'accepted'
-                  ? 'factory.work_item.stage_moved'
-                  : 'factory.work_item.transition_rejected',
-              factoryProjectId: resolved.factoryProjectId,
-              targets: [{ type: 'work_item', id: workItemId }],
-              metadata: {
-                transitionId: result.transitionId,
-                ingressType: parsed.ingress.type,
-                configVersion: transitionService.configVersion,
-                ...(result.status === 'accepted'
-                  ? { to: result.stage, revision: result.revision }
-                  : { code: result.code, reason: result.reason }),
-              },
             },
           });
           if (result.status === 'accepted') return c.json({ result });
@@ -693,21 +631,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             }
             throw error;
           }
-          await audit.emit({
-            context: loose(c),
-            input: {
-              action: 'factory.run.started',
-              factoryProjectId: resolved.factoryProjectId,
-              targets: [{ type: 'work_item', id: prepared.workItemId }],
-              metadata: {
-                role: input.workItem.role,
-                branch: prepared.branch,
-                threadId: prepared.threadId,
-                sessionId: prepared.sessionId,
-                bindingId: prepared.bindingId,
-              },
-            },
-          });
           return c.json({ prepared }, 202);
         },
       }),
@@ -766,7 +689,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             await this.#auditWorkItemPatch({
               context: loose(c),
               item: updated.item,
-              previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
             return c.json({ workItem: toWireWorkItem(updated.item) });

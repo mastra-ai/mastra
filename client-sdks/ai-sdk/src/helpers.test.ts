@@ -7,6 +7,66 @@ import {
   convertFullStreamChunkToUIMessageStream,
 } from './helpers';
 
+describe('replay-safe text metadata', () => {
+  for (const type of ['text-start', 'text-delta', 'text-end'] as const) {
+    for (const sendReasoning of [undefined, false, true]) {
+      it(`${type} preserves unrelated metadata with sendReasoning=${sendReasoning}`, () => {
+        const providerMetadata = Object.freeze({
+          openai: Object.freeze({ itemId: 'msg_test', logprobs: [0.5] }),
+          other: Object.freeze({ itemId: 'other-id' }),
+        });
+        const part = Object.freeze({ type, id: 'text', text: 'Hello', providerMetadata });
+        expect(convertFullStreamChunkToUIMessageStream({ part, sendReasoning, onError: String })).toEqual({
+          type,
+          id: 'text',
+          ...(type === 'text-delta' ? { delta: 'Hello' } : {}),
+          providerMetadata: {
+            openai: { ...(sendReasoning ? { itemId: 'msg_test' } : {}), logprobs: [0.5] },
+            other: { itemId: 'other-id' },
+          },
+        });
+        expect(part.providerMetadata.openai.itemId).toBe('msg_test');
+      });
+    }
+
+    it(`${type} leaves absent metadata absent`, () => {
+      expect(
+        convertFullStreamChunkToUIMessageStream({
+          part: { type, id: 'text', text: 'Hello' },
+          onError: String,
+        }),
+      ).not.toHaveProperty('providerMetadata');
+    });
+
+    it(`${type} preserves metadata without an OpenAI item ID`, () => {
+      const providerMetadata = { openai: { logprobs: [0.5] }, other: { itemId: 'other-id' } };
+      expect(
+        convertFullStreamChunkToUIMessageStream({
+          part: { type, id: 'text', text: 'Hello', providerMetadata },
+          onError: String,
+        }),
+      ).toHaveProperty('providerMetadata', providerMetadata);
+    });
+  }
+
+  it('does not strip tool item IDs or provider execution metadata', () => {
+    const providerMetadata = { openai: { itemId: 'tool_test' }, mastra: { modelOutput: 'result' } };
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-call',
+          toolCallId: 'call',
+          toolName: 'lookup',
+          input: {},
+          providerExecuted: true,
+          providerMetadata,
+        },
+        onError: String,
+      }),
+    ).toMatchObject({ providerExecuted: true, providerMetadata });
+  });
+});
+
 describe('tool payload transform conversion', () => {
   it('uses display transforms for tool-call input', () => {
     const result = convertMastraChunkToAISDKv5({

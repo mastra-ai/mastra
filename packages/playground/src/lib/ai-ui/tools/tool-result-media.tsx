@@ -1,4 +1,4 @@
-import { InMessageAttachment } from '@/lib/ai-ui/messages/renderers/in-message-attachment';
+import { InMessageAttachment } from '@mastra/playground-ui/domains/chat/messages/renderers/in-message-attachment';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 

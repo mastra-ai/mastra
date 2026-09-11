@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
-import { isMastra, wrapMastra } from './context';
+import { isMastra, unwrapMastraTracingProxy, wrapMastra } from './context';
 import { createObservabilityContext } from './context-factory';
 import type { TracingContext } from './types';
 
@@ -371,6 +371,57 @@ describe('Tracing Context Integration', () => {
       // Should return a proxy (different object) since it has methods to wrap
       expect(wrapped).not.toBe(agentOnlyMastra);
       expect(typeof wrapped.getAgent).toBe('function');
+    });
+  });
+
+  describe('unwrapMastraTracingProxy', () => {
+    it('should resolve a wrapped Mastra back to its target', () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+
+      expect(wrapped).not.toBe(mockMastra);
+      expect(unwrapMastraTracingProxy(wrapped)).toBe(mockMastra);
+    });
+
+    it('should return a non-proxy object unchanged', () => {
+      const plain = { getAgent: vi.fn() };
+
+      expect(unwrapMastraTracingProxy(plain)).toBe(plain);
+      expect(unwrapMastraTracingProxy(mockMastra)).toBe(mockMastra);
+    });
+
+    it('should resolve nested wrapping transitively to the innermost target', () => {
+      // A tool executed inside a traced workflow step receives an already-wrapped
+      // mastra, and tool-builder wraps it again — so nesting happens in practice.
+      const once = wrapMastra(mockMastra as any, tracingContext);
+      const twice = wrapMastra(once as any, tracingContext);
+
+      expect(twice).not.toBe(once);
+      expect(unwrapMastraTracingProxy(twice)).toBe(mockMastra);
+      expect(unwrapMastraTracingProxy(once)).toBe(mockMastra);
+    });
+
+    it('should return the instance unchanged when wrapMastra declined to wrap', () => {
+      // NoOp span: no proxy is created, so nothing is recorded.
+      const noOpWrapped = wrapMastra(mockMastra as any, noOpContext);
+      expect(noOpWrapped).toBe(mockMastra);
+      expect(unwrapMastraTracingProxy(noOpWrapped)).toBe(mockMastra);
+
+      // No current span at all.
+      const unwrapped = wrapMastra(mockMastra as any, {} as TracingContext);
+      expect(unwrapped).toBe(mockMastra);
+      expect(unwrapMastraTracingProxy(unwrapped)).toBe(mockMastra);
+    });
+
+    it('should leave proxy behavior intact after unwrapping', () => {
+      const wrapped = wrapMastra(mockMastra as any, tracingContext);
+
+      expect(unwrapMastraTracingProxy(wrapped)).toBe(mockMastra);
+      // The proxy still forwards and binds methods, and still wraps returned agents.
+      expect(typeof wrapped.getAgent).toBe('function');
+      const agent = wrapped.getAgent('test-agent');
+      expect(agent).not.toBe(mockAgent);
+      expect(typeof agent.generate).toBe('function');
+      expect(wrapped.otherMethod()).toBe('other-result');
     });
   });
 });

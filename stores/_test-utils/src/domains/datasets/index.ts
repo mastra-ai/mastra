@@ -1191,6 +1191,87 @@ export function createDatasetsTests({
         });
       });
 
+      itPurge('keeps item payloads redacted when purge races with updates', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-item-updates' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+
+        const results = await Promise.allSettled([
+          ...Array.from({ length: 10 }, (_, index) =>
+            datasetsStorage.updateItem({
+              id: item.id,
+              datasetId: ds.id,
+              metadata: { update: index },
+            }),
+          ),
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+        ]);
+        expect(results.at(-1)?.status).toBe('fulfilled');
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.length).toBeGreaterThan(0);
+        for (const version of history) {
+          expect(version.input).toBeNull();
+          expect(version.groundTruth).toBeNull();
+          expect(version.expectedTrajectory).toBeNull();
+          expect(version.toolMocks).toBeNull();
+          expect(version.unmockedToolPolicy).toBeNull();
+          expect(version.scorerIds).toBeNull();
+          expect(version.requestContext).toBeNull();
+          expect(version.source).toBeNull();
+          expect(version.metadata).toMatchObject({ __purged: true });
+        }
+      });
+
+      itPurge('keeps tombstone payloads redacted when purge races with delete', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-item-delete' });
+        const item = await datasetsStorage.addItem({
+          datasetId: ds.id,
+          input: { patient: 'Alice' },
+          groundTruth: { diagnosis: 'secret' },
+          expectedTrajectory: [{ role: 'assistant', content: 'private response' }],
+          toolMocks: supportsToolMocks
+            ? [{ toolName: 'lookup', args: { id: 'patient-1' }, output: 'private' }]
+            : undefined,
+          unmockedToolPolicy: 'deny',
+          scorerIds: ['quality'],
+          requestContext: { patientId: 'patient-1' },
+          metadata: { note: 'private' },
+          source: { type: 'trace', referenceId: 'private-trace' },
+        });
+
+        await Promise.all([
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+          datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id }),
+        ]);
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        expect(history.length).toBeGreaterThan(0);
+        for (const version of history) {
+          expect(version.input).toBeNull();
+          expect(version.groundTruth).toBeNull();
+          expect(version.expectedTrajectory).toBeNull();
+          expect(version.toolMocks).toBeNull();
+          expect(version.unmockedToolPolicy).toBeNull();
+          expect(version.scorerIds).toBeNull();
+          expect(version.requestContext).toBeNull();
+          expect(version.source).toBeNull();
+          expect(version.metadata).toMatchObject({ __purged: true });
+        }
+      });
+
       it('deleteItem tombstone inherits tenancy from parent dataset', async () => {
         const ds = await datasetsStorage.createDataset({
           name: 'scd2-delete-tenancy',

@@ -54,6 +54,14 @@ export class FirecrawlBrowser extends AgentBrowser {
     this.sessionOpts = sessionOpts;
   }
 
+  /**
+   * Firecrawl always drives a remote browser over CDP, including per-thread
+   * sessions, so its PID must never be captured (issue #23588).
+   */
+  protected override isRemoteThreadBrowser(): boolean {
+    return true;
+  }
+
   protected override async doLaunch(): Promise<void> {
     const scope = this.threadManager.getScope();
     if (scope === 'thread') {
@@ -103,7 +111,9 @@ export class FirecrawlBrowser extends AgentBrowser {
 
       await this.sharedManager.launch(launchOptions);
       this.threadManager.setSharedManager(this.sharedManager);
-      this.setupCloseListenerForSharedScope(this.sharedManager);
+      // Firecrawl always drives a remote browser over CDP — never capture its
+      // PID (issue #23588); it belongs to Firecrawl's host, not ours.
+      this.setupCloseListenerForSharedScope(this.sharedManager, true);
       this.sharedFirecrawlSessionId = sessionId;
     } catch (launchErr) {
       try {

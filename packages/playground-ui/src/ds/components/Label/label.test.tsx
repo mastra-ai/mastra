@@ -40,7 +40,7 @@ describe('Label', () => {
 
     const label = screen.getByText('Username');
     expect(label.classList.contains('custom-label')).toBe(true);
-    expect(label.classList.contains('text-sm')).toBe(true);
+    expect(label.classList.contains('text-ui-md')).toBe(true);
   });
 
   it('forwards a ref to the underlying <label> element', () => {

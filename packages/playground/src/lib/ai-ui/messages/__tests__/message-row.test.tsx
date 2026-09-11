@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
 import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
@@ -12,7 +13,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../message-row';
 import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

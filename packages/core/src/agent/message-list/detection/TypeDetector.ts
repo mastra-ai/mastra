@@ -123,9 +123,7 @@ export class TypeDetector {
       !TypeDetector.isMastraMessage(msg) &&
       !('parts' in msg) &&
       'content' in msg &&
-      TypeDetector.hasAIV6CoreMessageCharacteristics(
-        msg as CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage | AIV4Message,
-      )
+      TypeDetector.hasAIV6CoreMessageCharacteristics(msg)
     );
   }
 

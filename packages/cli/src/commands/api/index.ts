@@ -378,6 +378,28 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get score details',
     examples: [{ description: 'Get an observability score by ID', command: 'mastra api score get score_123' }],
   });
+  addAction(score, 'delete', 'DELETE /observability/scores', {
+    description: 'Delete scores by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete scores for an organization and resource',
+        command: `mastra api score delete '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}'`,
+      },
+    ],
+  });
+
+  const feedback = api.command('feedback').description('Delete observability feedback');
+  addAction(feedback, 'delete', 'DELETE /observability/feedback', {
+    description: 'Delete feedback by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete feedback for an organization',
+        command: `mastra api feedback delete '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}'`,
+      },
+    ],
+  });
 
   const dataset = api.command('dataset').description('Create, list, and inspect datasets');
   addAction(dataset, 'list', 'GET /datasets', { description: 'List datasets', list: true });

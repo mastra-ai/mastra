@@ -110,6 +110,39 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params)).toContain(5000);
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR 1`;
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).not.toContain(key);
+    expect(compiled.query).not.toContain(value);
+    expect(compiled.query).toContain(
+      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
+    );
+    expect(compiled.query).toContain('ifNull(');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_3: key,
+      trace_query_4: value,
+      trace_query_5: 'actorRole',
+      trace_query_6: 'assistant',
+      trace_query_7: 'tool',
+      trace_query_8: 'parentMessageId',
+      trace_query_9: 101,
+    });
+  });
+
   it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({
@@ -160,6 +193,63 @@ describe('ClickHouse advanced trace query', () => {
     expect(repeated.match(/current_scores AS/g)).toHaveLength(1);
     expect(repeated.match(/FROM current_spans s/g)).toHaveLength(2);
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
+  });
+
+  it('compiles typed feedback relations with one correlated existence check per clause', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR 1" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                    { op: 'exists', path: 'comment' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.query.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.query).toContain('isNotNull(s.traceId)');
+    expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toMatch(/s\.valueNumber < \{trace_query_\d+:Float64\}/);
+    expect(compiled.query).toMatch(/s\.valueString IN \(\{trace_query_\d+:String\}/);
+    expect(compiled.query).toContain('(isNotNull(s.valueString) OR isNotNull(s.valueNumber))');
+    expect(compiled.query).toContain(`FROM (
+      SELECT *
+      FROM mastra_feedback_events FINAL
+      ORDER BY feedbackId, writeVersion DESC, timestamp DESC
+      LIMIT 1 BY feedbackId
+    ) AS current
+    WHERE isNotNull(traceId)
+      AND traceId IN (SELECT traceId FROM root_scope)`);
+    expect(compiled.query).not.toContain("rating' OR 1");
+    expect(Object.values(compiled.query_params)).toContain("rating' OR 1");
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compileClickHouseTraceQuery(plan()).query;
+    const feedbackOnly = compileClickHouseTraceQuery(
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).query;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('mastra_feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
   });
 
   it('uses total nullable semantics for negative predicates', () => {
