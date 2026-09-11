@@ -7,6 +7,7 @@ describe('Neon deletion HTTP contracts', () => {
   it.each([
     ['neon_delete_database', { project_id: 'project', branch_id: 'branch', database_name: 'db' }],
     ['neon_delete_endpoint', { project_id: 'project', endpoint_id: 'endpoint' }],
+    ['neon_delete_role', { project_id: 'project', branch_id: 'branch', role_name: 'reader' }],
   ] as const)('%s accepts HTTP 204 without weakening HTTP 200 validation', async (name, input) => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
     const provider = PROVIDERS.find(p => p.integrationId === 'neon')!;

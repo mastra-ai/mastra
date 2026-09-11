@@ -1591,5 +1591,138 @@
     "response": {
       "branches": []
     }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_roles",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "roles": [
+        {
+          "branch_id": "br-aged-salad-637688",
+          "name": "casey",
+          "protected": false,
+          "created_at": "2022-11-23T17:42:25Z",
+          "updated_at": "2022-11-23T17:42:25Z"
+        },
+        {
+          "branch_id": "br-aged-salad-637688",
+          "name": "thomas",
+          "protected": false,
+          "created_at": "2022-10-22T17:38:21Z",
+          "updated_at": "2022-10-22T17:38:21Z"
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_role",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles/{role_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "role_name": "example"
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-noisy-sunset-458773",
+        "name": "casey",
+        "protected": false,
+        "created_at": "2022-11-23T17:42:25Z",
+        "updated_at": "2022-11-23T17:42:25Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_role",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "role": {
+          "name": "example"
+        }
+      }
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-noisy-sunset-458773",
+        "name": "sally",
+        "password": "Onf1AjayKwe0",
+        "protected": false,
+        "created_at": "2022-12-03T11:58:29Z",
+        "updated_at": "2022-12-03T11:58:29Z"
+      },
+      "operations": [
+        {
+          "id": "2c2be371-d5ac-4db5-8b68-79f05e8bc287",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-noisy-sunset-458773",
+          "endpoint_id": "ep-small-pine-767857",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-03T11:58:29Z",
+          "updated_at": "2022-12-03T11:58:29Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_role",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/roles/{role_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "role_name": "example"
+    },
+    "response": {
+      "role": {
+        "branch_id": "br-raspy-hill-832856",
+        "name": "thomas",
+        "protected": false,
+        "created_at": "2022-12-01T14:36:23Z",
+        "updated_at": "2022-12-01T14:36:23Z"
+      },
+      "operations": [
+        {
+          "id": "db646be3-eace-4910-9f60-8150823c5cb8",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:48:11Z",
+          "updated_at": "2022-12-01T19:48:11Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "ab94cdad-7630-4943-a55e-5a0952d2e598",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:48:11Z",
+          "updated_at": "2022-12-01T19:48:11Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
   }
 ]

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compareBranchSchemaInputSchema } from '../providers/neon/tools/compare-branch-schema.js';
 import { createEndpointInputSchema } from '../providers/neon/tools/create-endpoint.js';
+import { createRoleInputSchema } from '../providers/neon/tools/create-role.js';
 import { getBranchSchemaInputSchema } from '../providers/neon/tools/get-branch-schema.js';
 import { restoreBranchInputSchema } from '../providers/neon/tools/restore-branch.js';
 import { setSnapshotScheduleInputSchema } from '../providers/neon/tools/set-snapshot-schedule.js';
@@ -43,4 +44,12 @@ it('preserves recovery preconditions through generation', () => {
     }).success,
   ).toBe(true);
   expect(setSnapshotScheduleInputSchema.safeParse({ ...base, body: { schedule: [] } }).success).toBe(false);
+});
+
+it('preserves the PostgreSQL role name byte limit through generation', () => {
+  const base = { project_id: 'project', branch_id: 'branch' };
+  expect(createRoleInputSchema.safeParse({ ...base, body: { role: { name: 'é'.repeat(32) } } }).success).toBe(false);
+  expect(createRoleInputSchema.safeParse({ ...base, body: { role: { name: 'reader', no_login: true } } }).success).toBe(
+    true,
+  );
 });
