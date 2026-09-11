@@ -232,6 +232,40 @@ createWorkflowTestSuite({
 const testStorage = new MockStore();
 
 describe('Workflow (Default Engine Specifics)', () => {
+  it('relays nested workflow watch events through the parent run topic', async () => {
+    const step = createStep({
+      id: 'nested-watch-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    });
+    const workflow = createWorkflow({
+      id: 'nested-watch-parent',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      steps: [step],
+    });
+    workflow.then(step).commit();
+
+    const run = await workflow.createRun({ runId: 'nested-watch-parent-run' });
+    const events: unknown[] = [];
+    const unwatch = run.watch(event => events.push(event));
+    await new Promise(resolve => setImmediate(resolve));
+
+    await (run as any).pubsub.publish('nested-watch.nested-watch-parent-run', {
+      type: 'nested-watch',
+      runId: 'nested-watch-child-run',
+      data: {
+        event: { type: 'data-text', data: { text: 'nested chunk' } },
+        workflowId: 'nested-watch-child',
+      },
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    unwatch();
+
+    expect(events).toEqual([{ type: 'data-text', data: { text: 'nested chunk' } }]);
+  });
+
   describe('startAsync', () => {
     it('should start workflow and complete successfully', async () => {
       const step1 = createStep({

@@ -18,6 +18,7 @@ function buildTopicRef(channel: string, topic: string) {
  * Supported formats:
  * - "workflow.events.v2.{runId}" - workflow events
  * - "agent.stream.{runId}" - agent stream events
+ * - "nested-watch.{runId}" - nested workflow watch relay events
  *
  * @returns { runId, topicType } or null if not a recognized format
  */
@@ -26,6 +27,11 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
   const workflowMatch = topic.match(/^workflow\.events\.v2\.(.+)$/);
   if (workflowMatch && workflowMatch[1]) {
     return { runId: workflowMatch[1], topicType: 'workflow' };
+  }
+
+  const nestedWatchMatch = topic.match(/^nested-watch\.(.+)$/);
+  if (nestedWatchMatch && nestedWatchMatch[1]) {
+    return { runId: nestedWatchMatch[1], topicType: 'workflow' };
   }
 
   // Try agent stream format
@@ -48,6 +54,8 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
  *
  * Supported topic formats:
  * - "workflow.events.v2.{runId}" - workflow events
+ *   -> Inngest channel: "workflow:{workflowId}:{runId}", topic: "watch"
+ * - "nested-watch.{runId}" - nested workflow watch relay events
  *   -> Inngest channel: "workflow:{workflowId}:{runId}", topic: "watch"
  * - "agent.stream.{runId}" - agent stream events (for InngestAgent)
  *   -> Inngest channel: "agent:{runId}", topic: "agent-stream"

@@ -2931,6 +2931,7 @@ export class Workflow<
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub });
+    const parentRunId = runId ?? run.runId;
     const nestedAbortCb = () => {
       abort();
     };
@@ -2944,7 +2945,7 @@ export class Workflow<
     const unwatch = useSharedPubsub
       ? () => {}
       : run.watch(event => {
-          void pubsub.publish('nested-watch', {
+          void pubsub.publish(`nested-watch.${parentRunId}`, {
             type: 'nested-watch',
             runId: run.runId,
             data: { event, workflowId: this.id },
@@ -4263,11 +4264,8 @@ export class Run<
    * @internal
    */
   watch(cb: (event: WorkflowStreamEvent) => void | Promise<void>): () => void {
-    // Both callbacks acknowledge every delivery, including events for other
-    // runs. `nested-watch` is a shared topic, so a watcher sees every nested
-    // workflow's events; leaving the ones it filters out unacknowledged grows
-    // the subscription's pending list on a durable transport for as long as
-    // the watcher is attached. The ack is the last thing each callback does so
+    // The parent run ID scopes nested relays to their intended watcher. The ack
+    // is the last thing each callback does so
     // a failure in the consumer or in the nested republish leaves the delivery
     // unacknowledged and redeliverable.
     const wrappedCb = async (event: Event, ack?: () => Promise<void>) => {
@@ -4278,44 +4276,42 @@ export class Run<
     };
 
     const nestedWatchCb = async (event: Event, ack?: () => Promise<void>) => {
-      if (event.runId === this.runId) {
-        const { event: nestedEvent, workflowId } = event.data as {
-          event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
-          workflowId: string;
-        };
+      const { event: nestedEvent, workflowId } = event.data as {
+        event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
+        workflowId: string;
+      };
 
-        // Data chunks from writer.custom() should bubble up directly without modification
-        // These are events with type starting with 'data-' and have a 'data' property
-        if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
-          // Bubble up custom data events directly to preserve their structure
-          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-            type: 'watch',
-            runId: this.runId,
-            data: nestedEvent,
-          });
-        } else {
-          // Regular workflow events get prefixed with nested workflow ID
-          await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-            type: 'watch',
-            runId: this.runId,
-            data: {
-              ...nestedEvent,
-              ...(nestedEvent.payload?.id
-                ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
-                : {}),
-            },
-          });
-        }
+      // Data chunks from writer.custom() should bubble up directly without modification
+      // These are events with type starting with 'data-' and have a 'data' property
+      if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
+        // Bubble up custom data events directly to preserve their structure
+        await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          type: 'watch',
+          runId: this.runId,
+          data: nestedEvent,
+        });
+      } else {
+        // Regular workflow events get prefixed with nested workflow ID
+        await this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+          type: 'watch',
+          runId: this.runId,
+          data: {
+            ...nestedEvent,
+            ...(nestedEvent.payload?.id
+              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+              : {}),
+          },
+        });
       }
       await ack?.();
     };
 
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-    void this.pubsub.subscribe('nested-watch', nestedWatchCb);
+    void this.pubsub.subscribe(`nested-watch.${this.runId}`, nestedWatchCb);
 
     return () => {
       void this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
-      void this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
+      void this.pubsub.unsubscribe(`nested-watch.${this.runId}`, nestedWatchCb);
     };
   }
 

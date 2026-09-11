@@ -48,6 +48,24 @@ describe('Inngest realtime subscriptions', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it('publishes nested workflow watch events on the parent workflow channel', async () => {
+    const { InngestPubSub } = await import('./pubsub');
+    const publish = vi.fn().mockResolvedValue(undefined);
+    const inngest = { realtime: { publish } } as unknown as Inngest;
+    const pubsub = new InngestPubSub(inngest, 'parent-workflow');
+
+    await pubsub.publish('nested-watch.parent-run', {
+      type: 'nested-watch',
+      runId: 'child-run',
+      data: { event: { type: 'data-text', data: { text: 'chunk' } }, workflowId: 'child-workflow' },
+    });
+
+    expect(publish).toHaveBeenCalledWith(
+      { channel: 'workflow:parent-workflow:parent-run', topic: 'watch', config: {} },
+      { event: { type: 'data-text', data: { text: 'chunk' } }, workflowId: 'child-workflow' },
+    );
+  });
+
   it('closes a pending run-output subscription after polling wins', async () => {
     const { init } = await import('./index');
     let resolveSubscription!: (subscription: { close: () => void }) => void;
