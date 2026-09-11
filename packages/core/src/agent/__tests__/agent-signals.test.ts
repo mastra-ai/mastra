@@ -1709,10 +1709,17 @@ describe('Agent signals', () => {
         expect.objectContaining({ action: 'deliver' }),
         expect.objectContaining({ action: 'deliver' }),
       ]);
-      expect((await firstRun).value.text).toBe('concurrent owner response');
+      const deliveredRuns = [
+        await firstRun,
+        await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for concurrent owner run'),
+      ];
+      expect(deliveredRuns.map(run => run.value.text)).toEqual([
+        'concurrent owner response',
+        'concurrent owner response',
+      ]);
       expect(
-        (await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for concurrent owner run')).value.text,
-      ).toBe('concurrent owner response');
+        deliveredRuns.map(run => run.value.parts.find((part: any) => part.type === 'data-user-message')?.data.contents),
+      ).toEqual(expect.arrayContaining(['first concurrent signal', 'second concurrent signal']));
     } finally {
       claim.unsubscribe();
       subscription.unsubscribe();
