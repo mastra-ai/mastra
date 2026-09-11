@@ -505,6 +505,29 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
   });
 
+  it('configures server-owned background tasks with the resolved setting and completion callbacks', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const disabled = await prepareAgentControllerMount();
+    expect(disabled.mastraArgs.backgroundTasks).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        recoverStaleTasksOnStart: false,
+        onTaskComplete: expect.any(Function),
+        onTaskFailed: expect.any(Function),
+        onTaskCancelled: expect.any(Function),
+      }),
+    );
+
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    const enabled = await prepareAgentControllerMount();
+    expect(enabled.mastraArgs.backgroundTasks?.enabled).toBe(true);
+  });
+
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
     const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };

@@ -35,10 +35,10 @@ const delayedProbeTool = {
     fail: z.boolean().optional(),
   }),
   execute: async (input: unknown) => {
-    const values = isObject(input) ? input : {};
+    const values = delayedProbeTool.inputSchema.parse(input);
     await new Promise(resolve => setTimeout(resolve, values.label === 'deferred' ? 20_000 : 100));
-    if (values.fail === true) throw new Error(`BACKGROUND_PROBE_FAILURE:${String(values.label)}`);
-    return { marker: `BACKGROUND_PROBE_RESULT:${String(values.label)}` };
+    if (values.fail === true) throw new Error(`BACKGROUND_PROBE_FAILURE:${values.label}`);
+    return { marker: `BACKGROUND_PROBE_RESULT:${values.label}` };
   },
 };
 

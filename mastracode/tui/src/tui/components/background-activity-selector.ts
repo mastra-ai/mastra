@@ -47,7 +47,7 @@ export class BackgroundActivitySelectorComponent extends Box {
 
     this.list.onSelect = () => {};
     this.list.onSelectionChange = item => {
-      const activity = byId.get(item.value);
+      const activity = this.getActivity(item.value) ?? byId.get(item.value);
       if (activity) updateDetail(activity);
     };
     this.list.onCancel = options.onCancel;

@@ -322,10 +322,14 @@ export class MastraTUI {
   }
 
   private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {
-    this.backgroundNoticeQueue = this.backgroundNoticeQueue.then(() => {
-      completeBackgroundActivity(this.state.backgroundActivities, event);
-      this.refreshBackgroundActivity();
-    });
+    this.backgroundNoticeQueue = this.backgroundNoticeQueue
+      .then(() => {
+        completeBackgroundActivity(this.state.backgroundActivities, event);
+        this.refreshBackgroundActivity();
+      })
+      .catch(error => {
+        showError(this.state, error instanceof Error ? error.message : 'Failed to refresh background activity');
+      });
   }
 
   private exit(exitCode: number): void {

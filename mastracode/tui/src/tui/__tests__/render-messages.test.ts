@@ -217,21 +217,6 @@ function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage
 }
 
 describe('addUserMessage', () => {
-  it('suppresses legacy persisted background completion directives', () => {
-    const state = createState();
-
-    addUserMessage(
-      state,
-      createUserMessage(
-        'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
-        'legacy-background-directive',
-      ),
-    );
-
-    expect(state.chatContainer.children).toHaveLength(0);
-    expect(state.messageComponentsById.has('legacy-background-directive')).toBe(false);
-  });
-
   it('replaces pending active steering only when the subscription echoes the user message', () => {
     const state = createState();
     addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });

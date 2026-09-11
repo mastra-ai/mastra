@@ -81,4 +81,21 @@ describe('BackgroundActivitySelectorComponent', () => {
 
     expect(onAbort).not.toHaveBeenCalled();
   });
+
+  it('renders current activity details when selection changes after completion', () => {
+    const activities = [activity(), activity({ taskId: 'task-2', toolName: 'search_content' })];
+    const currentActivity = activity({ taskId: 'task-2', toolName: 'search_content', status: 'completed' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities,
+      getActivity: taskId => (taskId === 'task-2' ? currentActivity : activities[0]),
+      onCancel: vi.fn(),
+      onAbort: vi.fn(),
+    });
+    component.focused = true;
+
+    component.handleInput('\x1b[B');
+
+    expect(stripAnsi(component.render(100).join('\n'))).toContain('completed · task task-2');
+  });
 });

@@ -207,6 +207,7 @@ export async function dispatchEvent(
       const context = state.backgroundToolContexts.get(event.toolCallId);
       if (taskId && context) {
         acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+        state.backgroundToolContexts.delete(event.toolCallId);
         state.globalBackgroundNotice.setActivities(
           getBackgroundActivitiesForTarget(
             state.backgroundActivities,

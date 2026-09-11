@@ -623,16 +623,8 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
   return false;
 }
 
-function isPersistedBackgroundCompletionDirective(message: MastraDBMessage): boolean {
-  if (message.role !== 'user' && message.role !== 'signal') return false;
-  const text = isSignalMessage(message) ? getUserSignalView(message).message : getMessageText(message);
-  return /^IMPORTANT: The following tool-call IDs (?:completed successfully|failed|were cancelled by the user before completion|are suspended):/.test(
-    text.trim(),
-  );
-}
-
 export function addUserMessage(state: TUIState, message: MastraDBMessage, options?: { label?: string }): void {
-  if (state.messageComponentsById.has(message.id) || isPersistedBackgroundCompletionDirective(message)) {
+  if (state.messageComponentsById.has(message.id)) {
     return;
   }
 
