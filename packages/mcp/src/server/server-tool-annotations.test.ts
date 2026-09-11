@@ -6,7 +6,7 @@ import { createMCPTool } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, serveHTTP } from './__tests__/harness';
+import { connectClient, serveHTTP } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
 
@@ -22,7 +22,7 @@ const annotations = {
 
 describe('MCPServer Tool Annotations (Issue #9859)', () => {
   let served: ServedHTTP;
-  let tools: Awaited<ReturnType<Awaited<ReturnType<typeof connectModern>>['listTools']>>['tools'];
+  let tools: Awaited<ReturnType<Awaited<ReturnType<typeof connectClient>>['listTools']>>['tools'];
 
   beforeAll(async () => {
     const server = new MCPServer({
@@ -49,7 +49,7 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
       },
     });
     served = await serveHTTP(server);
-    const client = await connectModern(served.url);
+    const client = await connectClient(served.url);
     try {
       tools = (await client.listTools()).tools;
     } finally {

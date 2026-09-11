@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MCPServer } from '../server';
-import { connectModern, serveHTTP, textOf } from './harness';
+import { connectClient, serveHTTP, textOf } from './harness';
 import type { ServedHTTP } from './harness';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
@@ -25,14 +25,14 @@ const dynamicTool = createTool({
 describe('MCPServer dynamic tools + tools/list_changed', () => {
   let server: MCPServer;
   let served: ServedHTTP;
-  let client: Awaited<ReturnType<typeof connectModern>>;
+  let client: Awaited<ReturnType<typeof connectClient>>;
   const changes: Array<() => void> = [];
   const nextChange = () => new Promise<void>(resolve => changes.push(resolve));
 
   beforeAll(async () => {
     server = new MCPServer({ name: 'DynamicToolsTestServer', version: '1.0.0', tools: { initialTool } });
     served = await serveHTTP(server);
-    client = await connectModern(served.url);
+    client = await connectClient(served.url);
     client.setNotificationHandler('notifications/tools/list_changed', async () => changes.shift()?.());
     await client.listen({ toolsListChanged: true });
   });

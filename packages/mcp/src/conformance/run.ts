@@ -78,7 +78,7 @@ function stdioTransport() {
   return transport;
 }
 
-async function assertModernStdio() {
+async function assertStdioDiscovery() {
   const client = new Client(
     { name: 'mastra-conformance-2026-07-28', version: '1.0.0' },
     { versionNegotiation: { mode: { pin: '2026-07-28' } } },
@@ -126,6 +126,6 @@ try {
 } finally {
   await server.close();
 }
-await assertModernStdio();
+await assertStdioDiscovery();
 await assertLegacyStdioRejected();
-console.log('MCP conformance smoke passed: official 2026-07-28 HTTP scenario, modern stdio, legacy stdio rejected');
+console.log('MCP conformance smoke passed: official 2026-07-28 HTTP scenario, stdio discovery, legacy stdio rejected');

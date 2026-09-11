@@ -57,7 +57,7 @@ async function setupTestServer() {
     }),
   );
 
-  // Modern-only handler: every request is self-contained, so several clients can talk to
+  // Every request is self-contained, so several clients can talk to
   // this server, which the cold-worker hydration test depends on.
   const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
   httpServer.on('request', (req, res) => handler(req, res));

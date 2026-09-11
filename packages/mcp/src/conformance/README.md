@@ -2,7 +2,7 @@
 
 This directory launches the real `MCPServer` entry points. HTTP requests are routed through `startHTTP()` by an outer Node server; stdio runs `startStdio()` in a child process. Both paths are closed through `MCPServer.close()`.
 
-Run the official 2026-07-28 HTTP smoke, the modern stdio opening exchange and the legacy-stdio rejection check:
+Run the official 2026-07-28 HTTP smoke, the stdio opening exchange and the legacy-stdio rejection check:
 
 ```sh
 pnpm --filter ./packages/mcp test:conformance
@@ -12,15 +12,15 @@ The command deliberately runs the official `tools-list` scenario rather than the
 
 ## 2026-07-28 coverage matrix
 
-| Requirement                                                                                           | Coverage                                                                                   |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `server/discover`, per-request protocol metadata, required `resultType`, and HTTP method/name headers | Official `tools-list` scenario through `startHTTP()` plus `server-modern-era-http.test.ts` |
-| Self-contained Streamable HTTP with no session or `initialize`                                        | `server-modern-era-http.test.ts` and `client-modern-lifecycle.test.ts`                     |
-| Modern stdio opening exchange; legacy stdio openings rejected                                         | This launcher and `server-modern-era-stdio.test.ts`                                        |
-| `subscriptions/listen` acknowledgement, filtering, replacement, reconnect, and closure                | `server-modern-era-http.test.ts` and `client-modern-lifecycle.test.ts`                     |
-| Removed `resources/subscribe`, roots, sampling, `logging/setLevel` and legacy protocol revisions      | Wire-level rejection assertions in `server-modern-era-http.test.ts`                        |
-| Native `input_required` continuation for tools, resources and prompts                                 | `native-input-required.test.ts` and `client-modern-lifecycle.test.ts`                      |
-| Per-request logging and progress routing                                                              | `server-modern-era-http.test.ts` and client logging/progress tests                         |
-| Cancellation and disconnect cleanup                                                                   | SDK transport behavior plus focused server/client lifecycle tests                          |
+| Requirement                                                                                           | Coverage                                                                        |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `server/discover`, per-request protocol metadata, required `resultType`, and HTTP method/name headers | Official `tools-list` scenario through `startHTTP()` plus `server-http.test.ts` |
+| Self-contained Streamable HTTP with no session or `initialize`                                        | `server-http.test.ts` and `client-lifecycle.test.ts`                            |
+| Stdio opening exchange; legacy stdio openings rejected                                                | This launcher and `server-stdio.test.ts`                                        |
+| `subscriptions/listen` acknowledgement, filtering, replacement, reconnect, and closure                | `server-http.test.ts` and `client-lifecycle.test.ts`                            |
+| Removed `resources/subscribe`, roots, sampling, `logging/setLevel` and legacy protocol revisions      | Wire-level rejection assertions in `server-http.test.ts`                        |
+| Native `input_required` continuation for tools, resources and prompts                                 | `native-input-required.test.ts` and `client-lifecycle.test.ts`                  |
+| Per-request logging and progress routing                                                              | `server-http.test.ts` and client logging/progress tests                         |
+| Cancellation and disconnect cleanup                                                                   | SDK transport behavior plus focused server/client lifecycle tests               |
 
 `@modelcontextprotocol/conformance` is pinned exactly. A version bump must update this matrix and the exercised scenarios deliberately.

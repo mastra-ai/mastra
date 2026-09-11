@@ -1,7 +1,7 @@
 /**
  * Whether a failed MCP call is worth one transport reconnect and retry.
  *
- * Modern (2026-07-28) requests are self-contained, so only transport-level
+ * 2026-07-28 requests are self-contained, so only transport-level
  * failures qualify: a detached SDK client, a gateway answering with an HTTP
  * error while no backend is healthy, or a dropped/refused connection. Tool
  * execution errors and protocol errors are never reconnectable.

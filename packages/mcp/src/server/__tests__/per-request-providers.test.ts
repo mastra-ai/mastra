@@ -1,7 +1,7 @@
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { describe, expect, it, vi } from 'vitest';
 import { MCPServer } from '../server';
-import { connectModern, serveHTTP } from './harness';
+import { connectClient, serveHTTP } from './harness';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -40,8 +40,8 @@ describe('MCPServer dynamic providers are scoped per request', () => {
 
   const withTenants = async (
     run: (clients: {
-      a: Awaited<ReturnType<typeof connectModern>>;
-      b: Awaited<ReturnType<typeof connectModern>>;
+      a: Awaited<ReturnType<typeof connectClient>>;
+      b: Awaited<ReturnType<typeof connectClient>>;
     }) => Promise<void>,
     fixture = createTenantServer(),
   ) => {
@@ -49,8 +49,8 @@ describe('MCPServer dynamic providers are scoped per request', () => {
       auth: req => ({ token: 't', clientId: String(req.headers['x-tenant']), scopes: [] }),
     });
     try {
-      const a = await connectModern(served.url, {}, { 'x-tenant': 'tenant-A' });
-      const b = await connectModern(served.url, {}, { 'x-tenant': 'tenant-B' });
+      const a = await connectClient(served.url, {}, { 'x-tenant': 'tenant-A' });
+      const b = await connectClient(served.url, {}, { 'x-tenant': 'tenant-B' });
       try {
         await run({ a, b });
       } finally {

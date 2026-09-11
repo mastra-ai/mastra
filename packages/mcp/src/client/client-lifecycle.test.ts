@@ -18,7 +18,7 @@ vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 /**
  * End-to-end coverage of the Mastra v2 client against the Mastra v2 server:
  * native input rounds answered by the keyed `inputRequests` handler, per-request
- * logging and the modern-only wire (no initialize/session/SSE fallback/legacy
+ * logging and the 2026-07-28 wire (no initialize/session/SSE fallback/legacy
  * subscriptions).
  */
 
@@ -218,7 +218,7 @@ describe('InternalMastraMCPClient - native input rounds', () => {
   });
 });
 
-describe('InternalMastraMCPClient - modern-only wire', () => {
+describe('InternalMastraMCPClient - 2026-07-28 wire', () => {
   let served: ServedHTTP | undefined;
   let client: InternalMastraMCPClient | undefined;
 

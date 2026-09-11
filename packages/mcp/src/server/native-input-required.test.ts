@@ -6,7 +6,7 @@ import { createRequestStateCodec, inputRequired } from '@modelcontextprotocol/se
 import type { AuthInfo, ElicitResult, InputRequiredResult } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { connectModern, serveHTTP, textOf } from './__tests__/harness';
+import { connectClient, serveHTTP, textOf } from './__tests__/harness';
 import type { ServedHTTP } from './__tests__/harness';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './types';
@@ -222,7 +222,7 @@ describe('native input_required continuation', () => {
   });
 
   it('runs two keyed rounds with named phases, per-round responses and one counted write', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-1' }));
       expect(Object.keys(first.inputRequests!)).toEqual(['address', 'note']);
@@ -282,7 +282,7 @@ describe('native input_required continuation', () => {
       'Delivery note?': accept({ note: 'leave at door' }),
       'Confirm booking?': accept({ ok: true }),
     };
-    const client = await connectModern(served.url, { capabilities: { elicitation: { form: {} } } });
+    const client = await connectClient(served.url, { capabilities: { elicitation: { form: {} } } });
     const seen: string[] = [];
     client.setRequestHandler('elicitation/create', async request => {
       seen.push(request.params.message);
@@ -298,7 +298,7 @@ describe('native input_required continuation', () => {
   });
 
   it('honours declines and cancellations without writing', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-decline' }));
       const declined = await callRound(
@@ -341,7 +341,7 @@ describe('native input_required continuation', () => {
   });
 
   it('rejects malformed, mismatched and missing responses', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-bad' }));
       await expect(
@@ -391,7 +391,7 @@ describe('native input_required continuation', () => {
   });
 
   it('rejects tampered, foreign and expired request state before any handler runs', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const first = asRound(await callRound(client, 'bookDelivery', { opKey: 'op-state' }));
       const rounds = journal.rounds.length;
@@ -442,9 +442,9 @@ describe('native input_required continuation', () => {
   });
 
   it('re-authorizes every round and refuses continuation by a different principal', async () => {
-    const clientA = await connectModern(served.url, manual);
+    const clientA = await connectClient(served.url, manual);
     // The transport identity is derived per request; the header selects the test principal.
-    const clientB = await connectModern(served.url, manual, { 'x-test-client': 'client-b' });
+    const clientB = await connectClient(served.url, manual, { 'x-test-client': 'client-b' });
     try {
       const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-principal' }));
       const stolen = await callRound(
@@ -481,8 +481,8 @@ describe('native input_required continuation', () => {
     const otherJournal = newJournal();
     const other = await serveHTTP(makeServer(otherJournal), { auth: clientAuth('client-a') });
     try {
-      const clientA = await connectModern(served.url, manual);
-      const clientB = await connectModern(other.url, manual);
+      const clientA = await connectClient(served.url, manual);
+      const clientB = await connectClient(other.url, manual);
       try {
         const first = asRound(await callRound(clientA, 'bookDelivery', { opKey: 'op-cross' }));
         const second = asRound(
@@ -518,7 +518,7 @@ describe('native input_required continuation', () => {
   });
 
   it('cancels the handler when the client abandons the request', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const controller = new AbortController();
       const call = client.callTool({ name: 'slowTool', arguments: {} }, { signal: controller.signal });
@@ -532,7 +532,7 @@ describe('native input_required continuation', () => {
   });
 
   it('scopes per-request logging to each round', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     const logs: unknown[] = [];
     client.setNotificationHandler('notifications/message', async n => {
       logs.push(n.params.data);
@@ -561,7 +561,7 @@ describe('native input_required continuation', () => {
   });
 
   it('supports native continuation for resources/read and prompts/get', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       const resourceRound = asRound(await client.readResource({ uri: 'ticket://1' }, { allowInputRequired: true }));
       expect(Object.keys(resourceRound.inputRequests!)).toEqual(['confirm']);
@@ -584,7 +584,7 @@ describe('native input_required continuation', () => {
   });
 
   it('surfaces input_required as a typed failure when a client cannot answer', async () => {
-    const client = await connectModern(served.url, manual);
+    const client = await connectClient(served.url, manual);
     try {
       await expect(client.callTool({ name: 'bookDelivery', arguments: { opKey: 'op-manual' } })).rejects.toThrow(
         /input_required/,
@@ -592,7 +592,7 @@ describe('native input_required continuation', () => {
     } finally {
       await client.close();
     }
-    const noHandler = await connectModern(served.url);
+    const noHandler = await connectClient(served.url);
     try {
       await expect(noHandler.callTool({ name: 'bookDelivery', arguments: { opKey: 'op-nohandler' } })).rejects.toThrow(
         /elicitation\/create/,
