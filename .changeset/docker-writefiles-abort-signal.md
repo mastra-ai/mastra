@@ -7,6 +7,8 @@ Added cancellation support to `DockerSandbox.writeFiles`. Pass an `AbortSignal` 
 **Cancelling a file upload**
 
 ```ts
+import { SandboxAbortError } from '@mastra/core/workspace';
+
 const controller = new AbortController();
 
 // Cancel from elsewhere (e.g. a timeout or user action)
@@ -15,7 +17,7 @@ setTimeout(() => controller.abort(), 1000);
 try {
   await sandbox.writeFiles(files, { abortSignal: controller.signal });
 } catch (error) {
-  if (error.code === 'ABORTED') {
+  if (error instanceof SandboxAbortError) {
     // Upload was cancelled
   }
 }
