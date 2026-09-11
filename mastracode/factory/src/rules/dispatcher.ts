@@ -83,7 +83,9 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
 function isPermanentProviderRejection(error: string): boolean {
   const normalized = error.toLowerCase();
   return (
-    /\b(http\s*)?400\b/.test(normalized) ||
+    /\bhttp(?:\/\d(?:\.\d)?)?\s*400\b/.test(normalized) ||
+    /\bstatus(?:\s*code)?\s*[:=]?\s*400\b/.test(normalized) ||
+    /\b400\s*(?:bad request|status)\b/.test(normalized) ||
     normalized.includes('model not supported') ||
     normalized.includes('model is not supported') ||
     normalized.includes('unsupported model') ||

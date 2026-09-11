@@ -1589,6 +1589,30 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
 
+    it('stays retryable when a bare 400 appears without HTTP status context', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-bare-400'));
+      const { controller } = createSession(undefined, {
+        agentEndReason: 'aborted',
+        omObservationError: 'observation retry failed after 400 attempts',
+      });
+      await bindRole(storage, item.id, 'plan');
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        lastError: expect.stringContaining('observation retry failed after 400 attempts'),
+      });
+    });
+
     it('reapplies managed memory settings when reusing an existing session', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, planSkill('plan-refresh-reuse'));
