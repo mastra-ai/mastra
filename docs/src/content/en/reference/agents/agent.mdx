@@ -280,10 +280,10 @@ Sends a user message to an active run or memory thread. Use this when the active
                   },
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions',
+                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      'Options for a new stream, or request context for persistence. An async factory defers setup until Mastra starts the stream or persists the input; active delivery and discard do not evaluate it. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
                   },
                   {
                     name: 'attributes',
@@ -415,10 +415,10 @@ Sends a signal to an active run or memory thread.
                   },
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions',
+                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      'Options for a new stream, or request context for persistence. An async factory defers setup until Mastra starts the stream or persists the input; active delivery and discard do not evaluate it. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
                   },
                   {
                     name: 'attributes',
@@ -662,10 +662,10 @@ const result = await agent.sendNotificationSignal(
                 parameters: [
                   {
                     name: 'streamOptions',
-                    type: 'AgentExecutionOptions',
+                    type: 'AgentExecutionOptions | (() => Promise<AgentExecutionOptions>)',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when an immediate notification wakes an idle thread.',
+                      'Options for the stream that starts when an immediate notification wakes an idle thread. An async factory defers setup until the stream starts, without running during active delivery.',
                   },
                 ],
               },
