@@ -187,6 +187,16 @@ export type RecordTypes = {
   mastra_knowledge_cursors: Record<string, any>;
   mastra_knowledge_activity: Record<string, any>;
   mastra_knowledge_semantic_outbox: Record<string, any>;
+  mastra_knowledge_node_scopes: Record<string, any>;
+  mastra_knowledge_record_scopes: Record<string, any>;
+  mastra_knowledge_scope_grants: Record<string, any>;
+  mastra_knowledge_access_state: Record<string, any>;
+  mastra_knowledge_scope_addresses: Record<string, any>;
+  mastra_knowledge_node_addresses: Record<string, any>;
+  mastra_knowledge_import_state: Record<string, any>;
+  mastra_knowledge_import_runs: Record<string, any>;
+  mastra_knowledge_proposals: Record<string, any>;
+  mastra_knowledge_schema: Record<string, any>;
 };
 
 export type ListOptions = {
