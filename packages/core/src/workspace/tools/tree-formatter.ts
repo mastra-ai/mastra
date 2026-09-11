@@ -23,6 +23,7 @@
 
 import type { IMastraLogger } from '../../logger';
 import { pMap } from '../../utils/p-map';
+import { DirectoryNotFoundError, NotDirectoryError } from '../errors';
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
 import type { IgnoreFilter } from '../gitignore';
 import { loadGitignore } from '../gitignore';
@@ -187,10 +188,15 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       prefetched = true;
     } catch (error) {
       entriesByPath.clear();
-      options?.logger?.warn(
-        `Native walk failed on "${fs.provider}" filesystem; falling back to per-directory readdir walk for "${path}"`,
-        { error: error instanceof Error ? error.message : String(error) },
-      );
+      // A missing or non-directory root is a caller error that the readdir
+      // fallback re-raises with the same type; only warn about a real
+      // provider failure, since the fallback costs one round trip per directory.
+      if (!(error instanceof DirectoryNotFoundError) && !(error instanceof NotDirectoryError)) {
+        options?.logger?.warn(
+          `Native walk failed on "${fs.provider}" filesystem; falling back to per-directory readdir walk for "${path}"`,
+          { error: error instanceof Error ? error.message : String(error) },
+        );
+      }
     }
   }
 

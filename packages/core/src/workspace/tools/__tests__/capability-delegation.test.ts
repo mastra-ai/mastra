@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
-import { UnsupportedGrepPatternError } from '../../errors';
+import { DirectoryNotFoundError, UnsupportedGrepPatternError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import type { FilesystemGrepOptions, FilesystemGrepResult, WalkEntry, WalkOptions } from '../../filesystem';
 import { Workspace } from '../../workspace';
@@ -174,6 +174,15 @@ describe('filesystem capability delegation', () => {
       expect(logger.warn).toHaveBeenCalledTimes(1);
       expect(logger.warn.mock.calls[0]![0]).toMatch(/Native walk failed .*falling back/);
       expect(logger.warn.mock.calls[0]![1]).toEqual({ error: 'boom' });
+    });
+
+    it('does not warn when walk fails because the root does not exist', async () => {
+      const capFs = new CapabilityFilesystem(tempDir);
+      capFs.walkError = new DirectoryNotFoundError('./does-not-exist');
+      const logger = { warn: vi.fn() };
+
+      await expect(formatAsTree(capFs, './does-not-exist', { logger })).rejects.toThrow();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('still throws for a nonexistent root path', async () => {
