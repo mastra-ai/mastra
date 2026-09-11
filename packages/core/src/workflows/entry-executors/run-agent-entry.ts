@@ -162,6 +162,7 @@ export async function runAgentEntry(
       details: {
         stepId: entry.id,
         finishReason: finishResult?.finishReason ?? 'unknown',
+        totalTokens: finishResult?.usage?.totalTokens ?? 'unknown',
       },
     });
   }
