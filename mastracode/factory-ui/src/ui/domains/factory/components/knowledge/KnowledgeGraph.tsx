@@ -66,7 +66,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       <div
         className={[
           'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
-          RUNG_RING[node.rung],
+          RUNG_RING[node.rung ?? 'org'],
           selected ? 'ring-badge-purple-indicator ring-2' : '',
         ].join(' ')}
         style={{ background: 'var(--badge-purple-strong)' }}
@@ -484,7 +484,9 @@ function KnowledgeGraphInner({
 
   const availableRungs = useMemo(() => {
     const present = new Set<KnowledgeRung>();
-    for (const node of payload.nodes) present.add(node.rung);
+    for (const node of payload.nodes) {
+      if (node.rung) present.add(node.rung);
+    }
     return (['org', 'resource', 'thread'] as const).filter(rung => present.has(rung));
   }, [payload.nodes]);
 
@@ -636,7 +638,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
           <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{RUNG_LABELS[node.rung]}</dd>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.rung ? RUNG_LABELS[node.rung] : 'Scope'}</dd>
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
           <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Links</dt>
