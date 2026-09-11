@@ -13,4 +13,4 @@ const mastraCode = await createMastraCode({
 });
 ```
 
-Use `agent_connections_list` to discover peers, `agent_connect` to save an exact peer endpoint, `agent_signal_send` to send a correlated message, and `agent_disconnect` to remove the saved connection. Sends require a currently advertised thread owner, return an error when delivery isn't acknowledged, and retain a bounded sender-side history so sequential retries can reuse the same `messageId`.
+Use `agent_connections_list` to discover peers, `agent_connect` to save an exact peer endpoint, `agent_signal_send` to send a correlated message, and `agent_disconnect` to remove the saved connection. Sends require a currently advertised thread owner, return an error when delivery isn't acknowledged, and retain a bounded sender-side history so sequential retries can reuse the same `messageId`. A busy claimed owner acknowledges a safely queued wake immediately and delivers it after the active run finishes.

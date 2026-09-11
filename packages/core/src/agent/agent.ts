@@ -190,6 +190,7 @@ import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
+  AgentClaimThreadPeerOptions,
   AgentConfig,
   AgentDurableOption,
   AgentGenerateOptions,
@@ -210,7 +211,9 @@ import type {
   AgentStateSignalInput,
   AgentSubscribeToThreadOptions,
   AgentThreadIdentityOptions,
+  AgentThreadPeerAdvertisement,
   AgentThreadSubscription,
+  DiscoverAgentThreadPeersOptions,
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -8262,7 +8265,7 @@ export class Agent<
     streamOptions?:
       | AgentExecutionOptions<OUTPUT>
       | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
-    peer?: false | import('./types').AgentClaimThreadPeerOptions;
+    peer?: false | AgentClaimThreadPeerOptions;
   }): Promise<{ claimed: boolean; unsubscribe: () => void }> {
     return agentThreadStreamRuntime.claimThreadOwnership(
       this as Agent<any, any, any, any>,
@@ -8274,9 +8277,7 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async discoverThreadPeers(
-    options?: import('./types').DiscoverAgentThreadPeersOptions,
-  ): Promise<import('./types').AgentThreadPeerAdvertisement[]> {
+  async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
     return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub());
   }
 

@@ -1793,7 +1793,8 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('waits to acknowledge a queued remote wake until its run is admitted', async () => {
+  it('acknowledges a queued remote wake while the claimed owner is busy', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
     const senderRuntime = new AgentThreadStreamRuntime();
@@ -1851,30 +1852,23 @@ describe('Agent signals', () => {
       },
       pubsub,
     );
-    let queuedSettled = false;
-    void queuedSignal.accepted.then(
-      () => {
-        queuedSettled = true;
-      },
-      () => {
-        queuedSettled = true;
-      },
-    );
-    await nextTick();
-    expect(queuedSettled).toBe(false);
+    await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+    expect(getStreamCount()).toBe(1);
 
+    // Queued delivery is durable beyond the sender's 5-second acceptance window.
+    now.mockReturnValue(10_000);
     releaseFirst();
     await firstRun;
-    await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
     const queuedRun = await readNextRunWithParts(iterator);
     expect(queuedRun.value.text).toBe('queued owner response');
     expect(getStreamCount()).toBe(2);
 
+    now.mockRestore();
     claim.unsubscribe();
     subscription.unsubscribe();
   });
 
-  it('rejects a queued remote wake that loses the execution lease before admission', async () => {
+  it('acknowledges a queued remote wake before a later lease handoff failure', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
     const senderRuntime = new AgentThreadStreamRuntime();
@@ -1931,30 +1925,24 @@ describe('Agent signals', () => {
       },
       pubsub,
     );
-    let queuedSettled = false;
-    void queuedSignal.accepted.then(
-      () => {
-        queuedSettled = true;
-      },
-      () => {
-        queuedSettled = true;
-      },
-    );
-    await new Promise(resolve => setTimeout(resolve, 25));
-    expect(queuedSettled).toBe(false);
+    await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
     pubsub.denyLeaseTransfer = true;
     pubsub.denyLeaseAcquisition = true;
     releaseFirst();
     await firstRun;
+    await waitForCondition(() =>
+      pubsub.publishedData.some(
+        data => data?.type === 'signal-enqueued' && data.signal?.contents === 'lose the lease before this run starts',
+      ),
+    );
 
-    await expect(queuedSignal.accepted).rejects.toThrow('lost the execution lease');
     expect(getStreamCount()).toBe(1);
 
     claim.unsubscribe();
     subscription.unsubscribe();
   });
 
-  it('settles queued remote wakes when the first claimed-owner lease acquisition loses', async () => {
+  it('acknowledges queued remote wakes before the first claimed-owner lease acquisition settles', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
     const firstSenderRuntime = new AgentThreadStreamRuntime();
@@ -2028,7 +2016,7 @@ describe('Agent signals', () => {
 
     const [firstResult, secondResult] = await Promise.all([firstOutcome, secondOutcome]);
     expect(firstResult).toMatchObject({ error: { message: expect.stringContaining('could not acquire') } });
-    expect(secondResult).toMatchObject({ error: { message: expect.stringContaining('lost the execution lease') } });
+    expect(secondResult).toMatchObject({ value: { action: 'deliver' } });
     expect(ownerAgent.stream).not.toHaveBeenCalled();
 
     claim.unsubscribe();

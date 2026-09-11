@@ -6,13 +6,10 @@ import type { AgentPeerIdentity, AgentPeerView, ConnectedAgentPeer } from './typ
 type NormalizedAgentPeerIdentity = Omit<AgentPeerIdentity, 'id' | 'agentId'> & { id: string; agentId: string };
 
 export const AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY = 'mastracode.agentConnectionPeers';
-export const DEFAULT_AGENT_CONNECTION_OFFLINE_TTL_MS = 30_000;
 
 type PeerDiscoverySource = (context: AgentConnectionContext) => Promise<AgentPeerIdentity[]> | AgentPeerIdentity[];
 
 export interface AgentConnectionRegistryOptions {
-  /** Retained for configuration compatibility. Presence now requires a fresh discovery advertisement. */
-  offlineTtlMs?: number;
   now?: () => number;
   listPeers?: PeerDiscoverySource;
 }

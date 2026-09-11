@@ -102,6 +102,7 @@ export interface AgentSignalSendResult {
   replyTo?: string;
   returnPeerId?: string;
   routingAction?: AgentSignalRoutingAction;
+  replyOutcome?: 'peer-unavailable';
   runId?: string;
   duplicate?: boolean;
   isError?: boolean;

@@ -209,15 +209,25 @@ describe('agent connection tools', () => {
     });
     const unsaved = createContext();
     const saved = createContext([savedPeer()]);
-    const input = { targetId: PEER_ID, summary: 'Review', priority: 'medium', expectsReply: false };
+    const input = {
+      targetId: PEER_ID,
+      summary: 'Review',
+      priority: 'medium',
+      expectsReply: false,
+      replyTo: 'request-1',
+    };
 
     await expect((tools.agent_signal_send as any).execute(input, unsaved.context)).resolves.toMatchObject({
       isError: true,
       content: `Cannot send: peer is not saved: ${PEER_ID}`,
+      replyTo: 'request-1',
+      replyOutcome: 'peer-unavailable',
     });
     await expect((tools.agent_signal_send as any).execute(input, saved.context)).resolves.toMatchObject({
       isError: true,
       content: `Cannot send: saved peer is not currently advertised. Peer: ${PEER_ID}`,
+      replyTo: 'request-1',
+      replyOutcome: 'peer-unavailable',
     });
     expect(sendNotificationSignal).not.toHaveBeenCalled();
   });

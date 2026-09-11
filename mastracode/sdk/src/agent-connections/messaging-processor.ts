@@ -25,6 +25,7 @@ type OutboundReply = {
   targetId: string;
   replyTo?: string;
   routingAction?: AgentSignalRoutingAction;
+  replyOutcome?: 'peer-unavailable';
 };
 
 export class CrossAgentMessagingExpectedReplyProcessor {
@@ -105,7 +106,12 @@ export function findUnansweredExpectedReplies(messages: MastraDBMessage[]): Expe
     }
 
     for (const outboundReply of readOutboundReplies(message)) {
-      if (!outboundReply.replyTo || !isSuccessfullyRouted(outboundReply.routingAction)) continue;
+      if (
+        !outboundReply.replyTo ||
+        (!isSuccessfullyRouted(outboundReply.routingAction) && outboundReply.replyOutcome !== 'peer-unavailable')
+      ) {
+        continue;
+      }
       obligations.delete(expectedReplyKey(outboundReply.targetId, outboundReply.replyTo));
     }
   }
@@ -156,7 +162,6 @@ function readOutboundReplies(message: MastraDBMessage): OutboundReply[] {
     if (!toolInvocation || toolInvocation.toolName !== TOOL_NAME) continue;
 
     const result = readRecord(toolInvocation.result);
-    if (result?.isError === true) continue;
 
     const input =
       readRecord(toolInvocation.rawInput) ?? readRecord(toolInvocation.args) ?? readRecord(toolInvocation.input);
@@ -167,7 +172,8 @@ function readOutboundReplies(message: MastraDBMessage): OutboundReply[] {
     replies.push({
       targetId,
       replyTo: readString(result?.replyTo) ?? readString(input?.replyTo),
-      routingAction: readRoutingAction(result?.routingAction),
+      routingAction: result?.isError === true ? undefined : readRoutingAction(result?.routingAction),
+      replyOutcome: result?.replyOutcome === 'peer-unavailable' ? 'peer-unavailable' : undefined,
     });
   }
   return replies;

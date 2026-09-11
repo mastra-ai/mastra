@@ -48,6 +48,7 @@ function outboundSignalMessage(options: {
   targetId: string;
   replyTo?: string;
   routingAction?: 'wake' | 'deliver' | 'persist' | 'discard' | 'blocked';
+  replyOutcome?: 'peer-unavailable';
   isError?: boolean;
 }) {
   return {
@@ -73,6 +74,7 @@ function outboundSignalMessage(options: {
               target: { id: options.targetId },
               replyTo: options.replyTo,
               routingAction: options.routingAction ?? 'deliver',
+              replyOutcome: options.replyOutcome,
             },
           },
         },
@@ -112,6 +114,20 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
     ]) {
       expect(findUnansweredExpectedReplies([notificationMessage(REQUEST), outbound])).toHaveLength(1);
     }
+  });
+
+  it('stops tracking an obligation after a correlated reply finds the peer unavailable', () => {
+    expect(
+      findUnansweredExpectedReplies([
+        notificationMessage(REQUEST),
+        outboundSignalMessage({
+          targetId: 'code-agent:r:t',
+          replyTo: 'request-1',
+          isError: true,
+          replyOutcome: 'peer-unavailable',
+        }),
+      ]),
+    ).toEqual([]);
   });
 
   it('tracks concurrent requests to the same peer independently', () => {
@@ -163,6 +179,32 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
       retry: true,
       metadata: { peerIds: ['code-agent:r:t'], messageIds: ['request-1'] },
     });
+  });
+
+  it('does not remind on later turns after a correlated reply finds the peer unavailable', async () => {
+    const processor = new CrossAgentMessagingExpectedReplyProcessor();
+    const sendSignal = vi.fn();
+    const abort = vi.fn();
+
+    await processor.processOutputStep({
+      finishReason: 'stop',
+      toolCalls: [],
+      messageList: messageList([
+        notificationMessage(REQUEST),
+        outboundSignalMessage({
+          targetId: 'code-agent:r:t',
+          replyTo: 'request-1',
+          isError: true,
+          replyOutcome: 'peer-unavailable',
+        }),
+      ]),
+      retryCount: 0,
+      sendSignal,
+      abort,
+    } as any);
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(abort).not.toHaveBeenCalled();
   });
 
   it('reminds without retrying after the first watchdog attempt', async () => {

@@ -799,7 +799,7 @@ describe('createMastraCode', () => {
     const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode({ agentConnections: { offlineTtlMs: 1234 }, crossAgentSignals: true });
+    await createMastraCode({ crossAgentSignals: true });
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const codeAgentConfig = agentConstructorMock.mock.calls
@@ -826,7 +826,7 @@ describe('createMastraCode', () => {
     const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode({ agentConnections: { offlineTtlMs: 1234 } });
+    await createMastraCode({});
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const codeAgentConfig = agentConstructorMock.mock.calls

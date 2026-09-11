@@ -107,6 +107,7 @@ const signalResultSchema = z.object({
   replyTo: z.string().optional(),
   returnPeerId: z.string().optional(),
   routingAction: z.enum(['wake', 'deliver', 'persist', 'discard', 'blocked']).optional(),
+  replyOutcome: z.literal('peer-unavailable').optional(),
   runId: z.string().optional(),
   notification: z.unknown().optional(),
   duplicate: z.boolean().optional(),
@@ -328,19 +329,25 @@ The target must already be saved and freshly advertise the same exact thread end
         }
         const saved = await readAgentConnections(agentContext);
         if (!saved.some(peer => peer.id === targetId)) {
-          return { content: `Cannot send: peer is not saved: ${targetId}`, isError: true };
+          return {
+            content: `Cannot send: peer is not saved: ${targetId}`,
+            replyTo,
+            ...(replyTo ? { replyOutcome: 'peer-unavailable' as const } : {}),
+            isError: true,
+          };
         }
-        const runtimeAgent = options.getAgent?.();
-        const connected = await registry.connectedPeers({ ...agentContext, runtimeAgent }, saved);
+        const agent = options.getAgent?.();
+        const connected = await registry.connectedPeers({ ...agentContext, runtimeAgent: agent }, saved);
         const target = connected.find(peer => peer.id === targetId);
         if (!target?.canAttemptSend) {
           return {
             content: `Cannot send: saved peer is not currently advertised. Peer: ${targetId}`,
             ...(target ? { target } : {}),
+            replyTo,
+            ...(replyTo ? { replyOutcome: 'peer-unavailable' as const } : {}),
             isError: true,
           };
         }
-        const agent = options.getAgent?.();
         if (!agent?.sendNotificationSignal) {
           return {
             content: 'Agent signal sending is unavailable because no connected agent runtime is registered.',
