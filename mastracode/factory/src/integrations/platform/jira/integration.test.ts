@@ -137,6 +137,20 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     expect(proxyCalls.every(url => url.includes('a1b_acme'))).toBe(true);
   });
 
+  it('rejects source ids for another connection before making a provider request', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      integration().intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [encodeSourceId('a1b_beta', '2')],
+      }),
+    ).rejects.toMatchObject({ code: 'jira_auth_failed', status: 401 } satisfies Partial<JiraApiError>);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('sanitizes project and label filters before proxying JQL', async () => {
     const fetchMock = stubRoutes([['POST', '/rest/api/3/search/jql', () => json({ issues: [] })]]);
     await integration().intake.listIssues({

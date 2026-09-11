@@ -196,22 +196,14 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           });
         }
 
-        try {
-          const connections = await jira.listConnections();
-          const active = connections.filter(connection => connection.status === 'active');
-          const sites = active.flatMap(connection => (connection.accountLabel ? [connection.accountLabel] : []));
-          return c.json({
-            enabled: true,
-            configured: active.length > 0,
-            site: sites.length === 1 ? sites[0] : null,
-            sites,
-            connections,
-            reason: active.length > 0 ? 'ready' : 'not_connected',
-            diagnostics: diagnostics(),
-          });
-        } catch (err) {
-          return jiraFetchError(loose(c), err);
-        }
+        return c.json({
+          enabled: true,
+          configured: true,
+          site: null,
+          sites: [],
+          reason: 'ready',
+          diagnostics: diagnostics(),
+        });
       },
     }),
   );
