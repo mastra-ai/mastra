@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "addition-workflow",
+      "fixture": "workflow-builder-prompt-addition",
+      "expectedGraphEntry": "add-numbers-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named addition-workflow that accepts two numbers a and b, uses add-numbers, and returns the numeric result in a result field.",
+      "runInput": {
+        "a": 2,
+        "b": 3
+      },
+      "expectedOutput": {
+        "result": 5
+      }
+    },
+    {
+      "id": "customer-ticket-workflow",
+      "fixture": "workflow-builder-prompt-customer-ticket",
+      "expectedGraphEntry": "ticket-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named customer-ticket-workflow that accepts customer email and support summary strings, looks up the customer with lookup-customer, then creates a support ticket with create-support-ticket using the looked-up customerId and the original summary. Return the created ticket result.",
+      "runInput": {
+        "email": "ada@example.com",
+        "summary": "Cannot sign in"
+      },
+      "expectedOutput": {
+        "ticketId": "ticket-456",
+        "status": "open"
+      }
+    },
+    {
+      "id": "parallel-customer-lookup-workflow",
+      "fixture": "workflow-builder-prompt-parallel-customer-lookup",
+      "expectedGraphEntry": "parallel-customer-results",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named parallel-customer-lookup-workflow that accepts two customer email strings, looks both customers up in parallel using lookup-customer, and returns both lookup results in a clear object.",
+      "runInput": {
+        "firstEmail": "ada@example.com",
+        "secondEmail": "grace@example.com"
+      },
+      "expectedOutput": {
+        "firstCustomer": {
+          "customerId": "customer-123",
+          "email": "ada@example.com",
+          "plan": "pro"
+        },
+        "secondCustomer": {
+          "customerId": "customer-123",
+          "email": "grace@example.com",
+          "plan": "pro"
+        }
+      }
+    },
+    {
+      "id": "parallel-support-fanout-workflow",
+      "fixture": "workflow-builder-prompt-parallel-support-fanout",
+      "expectedGraphEntry": "parallel-fanout-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named parallel-support-fanout-workflow that accepts a customer email, a customerId, and a support summary. In parallel, look the customer up with lookup-customer and open a ticket with create-support-ticket, then return both results in a clear object.",
+      "runInput": {
+        "email": "ada@example.com",
+        "customerId": "customer-999",
+        "summary": "Cannot sign in"
+      },
+      "expectedOutput": {
+        "customer": {
+          "customerId": "customer-123",
+          "email": "ada@example.com",
+          "plan": "pro"
+        },
+        "ticket": {
+          "ticketId": "ticket-456",
+          "status": "open"
+        }
+      }
+    },
+    {
+      "id": "support-answer-workflow",
+      "fixture": "workflow-builder-prompt-support-answer",
+      "expectedGraphEntry": "support-answer-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named support-answer-workflow that accepts a prompt string, calls support-agent, and returns the agent actual text in a response field.",
+      "runInput": {
+        "prompt": "How do I reset my password?"
+      },
+      "expectedOutputShape": {
+        "response": "string"
+      }
+    },
+    {
+      "id": "nested-greeting-workflow",
+      "fixture": "workflow-builder-prompt-nested-greeting",
+      "expectedGraphEntry": "nested-greeting-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named nested-greeting-workflow that accepts a name string, invokes greeting-workflow, and returns its message.",
+      "runInput": {
+        "name": "Ada"
+      },
+      "expectedOutput": {
+        "message": "Hello, Ada!"
+      }
+    },
+    {
+      "id": "foreach-customer-lookup-workflow",
+      "fixture": "workflow-builder-prompt-foreach-customer-lookup",
+      "expectedGraphEntry": "lookup-customer-item",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named foreach-customer-lookup-workflow that accepts an array of objects where each item has a required email string, uses a foreach step to run lookup-customer for every item, and returns an array of customer objects with customerId, email, and plan.",
+      "runInput": [
+        {
+          "email": "ada@example.com"
+        }
+      ],
+      "expectedOutput": [
+        {
+          "customerId": "customer-123",
+          "email": "ada@example.com",
+          "plan": "pro"
+        }
+      ]
+    },
+    {
+      "id": "topic-subtopics-blurbs",
+      "fixture": "workflow-builder-prompt-topic-subtopics-blurbs",
+      "expectedGraphEntry": "write-blurb",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named topic-subtopics-blurbs that takes a topic, uses an agent to generate an array of 3 subtopics, then uses a foreach step to write a one-line blurb for each subtopic.",
+      "runInput": {
+        "topic": "renewable energy"
+      },
+      "expectedOutputShape": [
+        {
+          "text": "string"
+        }
+      ]
+    },
+    {
+      "id": "priority-support-router",
+      "fixture": "workflow-builder-prompt-priority-support-router",
+      "expectedGraphEntry": "priority-support-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named priority-support-router that accepts prompt and priority strings. Use a conditional step so urgent priority routes to support-agent with an urgent-support prompt, while any non-urgent priority routes to support-agent with a normal-support prompt. Return the selected agent actual text in a response field.",
+      "runInput": {
+        "prompt": "Production is down",
+        "priority": "urgent"
+      },
+      "expectedOutputShape": {
+        "response": "string"
+      }
+    },
+    {
+      "id": "priority-support-router-normal-route",
+      "fixture": "workflow-builder-prompt-priority-support-router-normal-route",
+      "expectedGraphEntry": "priority-support-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named priority-support-router-normal-route that accepts prompt and priority strings. Use a conditional step so urgent priority routes to support-agent with an urgent-support prompt, while any non-urgent priority routes to support-agent with a normal-support prompt. Return the selected agent actual text in a response field.",
+      "runInput": {
+        "prompt": "Production is down",
+        "priority": "low"
+      },
+      "expectedOutputShape": {
+        "response": "string"
+      }
+    },
+    {
+      "id": "mixed-support-pipeline",
+      "fixture": "workflow-builder-prompt-mixed-support-pipeline",
+      "expectedGraphEntry": "mixed-support-result",
+      "liveGraphPinned": true,
+      "prompt": "Create a workflow named mixed-support-pipeline that accepts customer email and support summary strings, looks up the customer, asks support-agent to prepare an answer using the customer context, creates a support ticket with the looked-up customerId and original summary, and returns both the agent text and created ticket result.",
+      "runInput": {
+        "email": "ada@example.com",
+        "summary": "Cannot sign in"
+      },
+      "expectedOutputShape": {
+        "response": "string",
+        "ticket": {
+          "ticketId": "string",
+          "status": "open"
+        }
+      }
+    },
+    {
+      "id": "strict-support-answer-workflow",
+      "fixture": "workflow-builder-prompt-strict-support-answer",
+      "expectedGraphEntry": "strict-support-answer-result",
+      "liveGraphPinned": false,
+      "prompt": "Create a workflow named strict-support-answer-workflow with an input schema that requires exactly a prompt string and no additional properties, and an output schema that requires exactly a response string and no additional properties. Use support-agent to produce the response.",
+      "runInput": {
+        "prompt": "How do I reset my password?"
+      },
+      "expectedOutputShape": {
+        "response": "string"
+      }
+    },
+    {
+      "id": "strict-support-ticket-workflow",
+      "fixture": "workflow-builder-prompt-strict-support-ticket",
+      "expectedGraphEntry": "strict-support-ticket-result",
+      "liveGraphPinned": false,
+      "prompt": "Create a workflow named strict-support-ticket-workflow with an input schema that requires exactly an email string and a summary string with no additional properties, and an output schema that requires exactly an agentText string and a ticket object containing ticketId and status strings with no additional properties. Use support-agent for the agentText and create-support-ticket for the ticket.",
+      "runInput": {
+        "email": "ada@example.com",
+        "summary": "Cannot sign in"
+      },
+      "expectedOutputShape": {
+        "agentText": "string",
+        "ticket": {
+          "ticketId": "string",
+          "status": "string"
+        }
+      }
+    },
+    {
+      "id": "topic-subtopics-blurbs-single-agent",
+      "fixture": "workflow-builder-prompt-topic-subtopics-blurbs-single-agent",
+      "expectedGraphEntry": "topic-blurbs-result",
+      "liveGraphPinned": false,
+      "prompt": "Create a workflow named topic-subtopics-blurbs-single-agent that takes a topic and generates 3 subtopics, then writes a one-line blurb for each.",
+      "runInput": {
+        "topic": "renewable energy"
+      },
+      "expectedOutputShape": {
+        "topic": "string",
+        "items": [
+          {
+            "subtopic": "string",
+            "blurb": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

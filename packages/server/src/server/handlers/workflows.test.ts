@@ -82,8 +82,8 @@ function createReusableMockWorkflow(name: string) {
     .commit();
 }
 
-function serializeWorkflow(workflow: Workflow) {
-  return getWorkflowInfo(workflow);
+function serializeWorkflow(workflow: Workflow, origin: 'code' | 'stored' | undefined = 'code') {
+  return getWorkflowInfo(workflow, false, origin);
 }
 
 describe('vNext Workflow Handlers', () => {

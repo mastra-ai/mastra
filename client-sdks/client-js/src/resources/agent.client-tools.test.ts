@@ -142,6 +142,55 @@ describe('Agent client-side tools', () => {
     expect(recursiveMessagesJson).toContain(traceparent);
   });
 
+  it('stream: executes tools from the offered set and refreshes visible tools for the continuation', async () => {
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_1', toolName: 'checkpointTool', args: {} },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Ready to finalize' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeCheckpoint = vi.fn(async () => ({ success: true }));
+    const checkpointTool = createTool({
+      id: 'checkpointTool',
+      description: 'Checkpoint the draft',
+      inputSchema: z.object({}),
+      execute: executeCheckpoint,
+    });
+    const finalizeTool = createTool({
+      id: 'finalizeTool',
+      description: 'Finalize the draft',
+      inputSchema: z.object({}),
+      execute: async () => ({ success: true }),
+    });
+    const clientToolsResolver = vi.fn(() => ({ finalizeTool }));
+
+    const resp = await agent.stream('build', {
+      clientTools: { checkpointTool },
+      clientToolsResolver,
+    });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    expect(executeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(clientToolsResolver).toHaveBeenCalledTimes(1);
+    const firstCallBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    expect(Object.keys(firstCallBody.clientTools)).toEqual(['checkpointTool']);
+    expect(Object.keys(secondCallBody.clientTools)).toEqual(['finalizeTool']);
+  });
+
   it('stream: preserves tool-call providerMetadata at the part level in the recursive call', async () => {
     // Regression test for #16220: Gemini's `thoughtSignature` arrives as `providerMetadata` on the
     // tool-call chunk. The server reads `part.providerMetadata`, so nesting it inside

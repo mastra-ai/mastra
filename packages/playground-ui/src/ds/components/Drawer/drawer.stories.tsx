@@ -5,7 +5,6 @@ import { Button } from '../Button';
 import { Input } from '../Input';
 import { Label } from '../Label';
 import {
-  createDrawerHandle,
   Drawer,
   DrawerBackdrop,
   DrawerBody,
@@ -21,6 +20,7 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
+import { createDrawerHandle } from './drawer-handle';
 
 const meta: Meta<typeof Drawer> = {
   title: 'Feedback/Drawer',

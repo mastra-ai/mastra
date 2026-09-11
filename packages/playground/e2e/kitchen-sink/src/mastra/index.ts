@@ -1,31 +1,49 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { computeNextFireAt } from '@mastra/core/workflows';
-import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
 import {
   askUserAgent,
+  blurbAgent,
   builderAgent,
   codeOverrideEditableAgent,
   codeOverrideLockedAgent,
   omAdaptiveAgent,
   omAgent,
+  subtopicBlurbsAgent,
+  subtopicsAgent,
+  supportAgent,
   weatherAgent,
 } from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { initE2EStorage, storage } from './storage';
+import { addNumbers, createSupportTicket, lookupCustomer, urgentSupport } from './tools';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
+import { greetingWorkflow } from './workflows/greeting-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
+import { E2EEditor } from './workflow-builder-editor';
 
 await initE2EStorage();
 
 export const mastra = new Mastra({
-  workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
+  workflows: {
+    complexWorkflow,
+    lessComplexWorkflow,
+    enumWorkflow,
+    scheduledWorkflow,
+    multiScheduledWorkflow,
+    greetingWorkflow,
+  },
+  tools: { lookupCustomer, urgentSupport, addNumbers, createSupportTicket },
   agents: {
     weatherAgent,
+    supportAgent,
+    subtopicsAgent,
+    subtopicBlurbsAgent,
+    blurbAgent,
     omAgent,
     omAdaptiveAgent,
     codeOverrideEditableAgent,
@@ -38,7 +56,7 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
-  editor: new MastraEditor({
+  editor: new E2EEditor({
     source: 'code',
     builder: {
       enabled: true,
@@ -49,6 +67,7 @@ export const mastra = new Mastra({
         },
       },
     },
+    workflowBuilder: { enabled: true },
   }),
   mcpServers: {
     simpleMcpServer,
@@ -74,6 +93,11 @@ export const mastra = new Mastra({
           const workflowStore = await storage.getStore('workflows');
           if (workflowStore) {
             clearTasks.push(workflowStore.dangerouslyClearAll());
+          }
+
+          const workflowDefinitionsStore = await storage.getStore('workflowDefinitions');
+          if (workflowDefinitionsStore) {
+            clearTasks.push(workflowDefinitionsStore.dangerouslyClearAll());
           }
 
           const memoryStore = await storage.getStore('memory');

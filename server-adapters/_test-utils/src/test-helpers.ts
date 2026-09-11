@@ -565,6 +565,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       getConfiguration: () => undefined,
       getModelPolicyWarnings: () => [],
     }),
+    hasEnabledWorkflowBuilderConfig: () => true,
+    resolveWorkflowBuilder: async () => ({
+      enabled: true,
+      getAgent: () => agent,
+      getModelPolicy: () => undefined,
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),

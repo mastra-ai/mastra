@@ -46,3 +46,43 @@ export const simpleMcpTool = createTool({
     };
   },
 });
+
+export const lookupCustomer = createTool({
+  id: 'lookup-customer',
+  description: 'Look up a customer by email for Workflow Builder comparison tests',
+  inputSchema: z.object({ email: z.string() }),
+  outputSchema: z.object({
+    customerId: z.string(),
+    email: z.string(),
+    plan: z.string(),
+  }),
+  execute: async ({ email }) => ({
+    customerId: 'customer-123',
+    email,
+    plan: 'pro',
+  }),
+});
+
+export const urgentSupport = createTool({
+  id: 'urgent-support',
+  description: 'Produce a deterministic response for urgent support workflows',
+  inputSchema: z.object({ prompt: z.string(), priority: z.string() }),
+  outputSchema: z.object({ response: z.string() }),
+  execute: async () => ({ response: 'Production incident response started.' }),
+});
+
+export const addNumbers = createTool({
+  id: 'add-numbers',
+  description: 'Add two numbers for Workflow Builder comparison tests',
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  outputSchema: z.object({ result: z.number() }),
+  execute: async ({ a, b }) => ({ result: a + b }),
+});
+
+export const createSupportTicket = createTool({
+  id: 'create-support-ticket',
+  description: 'Create a support ticket for Workflow Builder comparison tests',
+  inputSchema: z.object({ customerId: z.string(), summary: z.string() }),
+  outputSchema: z.object({ ticketId: z.string(), status: z.string() }),
+  execute: async () => ({ ticketId: 'ticket-456', status: 'open' }),
+});
