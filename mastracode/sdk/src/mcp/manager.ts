@@ -10,7 +10,6 @@ import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import {
-  DEFAULT_OAUTH_REDIRECT_URL,
   loadMcpConfig,
   getProjectMcpPath,
   getGlobalMcpPath,
@@ -56,8 +55,9 @@ export interface McpManager {
   reconnectServer(name: string): Promise<McpServerStatus>;
   /**
    * Run the OAuth authorization-code flow for an HTTP server, then reconnect it.
-   * Servers without an `oauth` config are provisioned with a zero-config default
-   * (dynamic client registration). The authorization URL is surfaced through
+   * The server's `oauth` config must name the client (`clientId` or
+   * `clientMetadataUrl`); without one the returned status carries an error
+   * explaining what to configure. The authorization URL is surfaced through
    * `onAuthorizationUrl` for the caller to open in a browser.
    *
    * Resolves with the resulting {@link McpServerStatus}: a connected status on
@@ -162,15 +162,9 @@ class FileOAuthStorage implements OAuthStorage {
   }
 }
 
-/**
- * Zero-config OAuth defaults for servers with a bare `url` entry. Dynamic
- * client registration provisions the client, so no `clientId` is needed.
- */
-const DEFAULT_OAUTH_CONFIG: McpHttpOAuthConfig = { redirectUrl: DEFAULT_OAUTH_REDIRECT_URL };
-
 function getOAuthStoragePath(projectDir: string, name: string, cfg: McpHttpServerConfig): string {
-  // The fingerprint always uses the resolved redirect URL so a bare `url`
-  // entry keeps the same token file before and after zero-config provisioning.
+  // The fingerprint always uses the resolved redirect URL so an entry keeps
+  // the same token file whether the redirect was configured or defaulted.
   const key = JSON.stringify({
     projectDir,
     name,
@@ -303,14 +297,20 @@ export function createMcpManager(
     });
   }
 
+  /**
+   * `@mastra/mcp` 2.x never registers clients dynamically, so a provider needs
+   * a pre-registered `clientId` or a Client ID Metadata Document URL. Entries
+   * without either get no provider; `authenticateServer` reports what to
+   * configure instead of throwing from the provider constructor.
+   */
+  function oauthClientIdentityError(name: string, oauth: McpHttpOAuthConfig | undefined): string | undefined {
+    if (oauth?.clientId || oauth?.clientMetadataUrl) return undefined;
+    return `Server "${name}" needs an OAuth client identity: set oauth.clientId (pre-registered client) or oauth.clientMetadataUrl (Client ID Metadata Document). Dynamic client registration is not supported.`;
+  }
+
   function createOAuthProvider(name: string, cfg: McpHttpServerConfig) {
-    // Bare `url` entries get no eager provider — auth is provisioned lazily
-    // when the user authenticates — unless a previous session already stored
-    // OAuth state for this server, in which case the provider is needed to
-    // attach the persisted tokens on connect.
-    const oauth =
-      cfg.oauth ?? (existsSync(getOAuthStoragePath(projectDir, name, cfg)) ? DEFAULT_OAUTH_CONFIG : undefined);
-    if (!oauth) return undefined;
+    const oauth = cfg.oauth;
+    if (!oauth || oauthClientIdentityError(name, oauth)) return undefined;
 
     // redirectUrl is optional in the user-supplied config; resolve the stable
     // default (or the `callbackPort` shorthand, for programmatically registered
@@ -333,6 +333,7 @@ export function createMcpManager(
             ...(oauth.clientSecret ? { client_secret: oauth.clientSecret } : {}),
           } satisfies OAuthClientInformation)
         : undefined,
+      clientMetadataUrl: oauth.clientId ? undefined : oauth.clientMetadataUrl,
       storage: new FileOAuthStorage(getOAuthStoragePath(projectDir, name, cfg)),
       onRedirectToAuthorization: url => {
         authUrlHandlers.get(name)?.(url.toString());
@@ -841,18 +842,16 @@ export function createMcpManager(
         };
       }
 
-      // Zero-config provisioning: a bare `url` entry gets a provider with the
-      // default redirect URL the first time the user authenticates. Dynamic
-      // client registration takes care of the client credentials.
-      //
-      // NOTE: `serverDefs[name]` is the same object reference the MCPClient was
-      // constructed with, and connectHttp reads `authProvider` live off it at
-      // connect time, so mutating it here reaches the already-created client.
-      // If MCPClient ever defensively copies its server config, zero-config auth
-      // would need an explicit "set this server's provider" API instead.
-      const def = serverDefs[name];
-      if (def?.url && !def.authProvider) {
-        def.authProvider = createOAuthProvider(name, { ...(cfg as McpHttpServerConfig), oauth: DEFAULT_OAUTH_CONFIG });
+      const identityError = oauthClientIdentityError(name, (cfg as McpHttpServerConfig).oauth);
+      if (identityError) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: 'http',
+          error: identityError,
+        };
       }
 
       // Reject a concurrent second attempt for the same server. authUrlHandlers

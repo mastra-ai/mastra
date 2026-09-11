@@ -74,6 +74,39 @@ Carry state between rounds in `requestState`: the client echoes it byte for byte
 
 Native tools belong to the MCP server only. Passing one to an agent, workflow or `Mastra` `tools` map throws, because a protocol continuation isn't a business result.
 
+### `context.mcp.extra`, `context.mcp.log` and `context.mcp.progress`
+
+Ordinary tools no longer receive a `context.mcp` object. Transport authentication moved to the trusted request context, and cancellation to `context.abortSignal`. The per-request `log` and `progress` helpers, the raw `_meta` metadata and the SDK handler context are protocol facilities, so they're only available to tools created with `createMCPTool`, on `request`.
+
+| 1.x | 2.x |
+| - | - |
+| `context.mcp.extra.authInfo` | `context.requestContext.get('authInfo')` in any tool |
+| `context.mcp.extra.signal` | `context.abortSignal` in `createTool`, `request.signal` in `createMCPTool` |
+| `context.mcp.extra.sessionId` | Removed. Requests have no session |
+| `context.mcp.extra._meta` | `request.metadata` in `createMCPTool` |
+| `context.mcp.log(level, message, data?)` | `request.log(level, data, logger?)` in `createMCPTool` |
+| `context.mcp.progress({ progress, total, message })` | `request.progress(progress, total?, message?)` in `createMCPTool` |
+| `context.mcp.elicitation.sendRequest()` | `input_required` outcome in `createMCPTool` |
+
+```diff
+- execute: async ({ location }, context) => {
+-   const token = context.mcp?.extra?.authInfo?.token
+-   await context.mcp?.log('debug', 'Fetching weather', { location })
+-   const weather = await fetchWeather(location, { token, signal: context.mcp?.extra?.signal })
+-   await context.mcp?.progress({ progress: 1, total: 1 })
+-   return weather
+- }
++ execute: async ({ location }, { request, requestContext }) => {
++   const token = (requestContext.get('authInfo') as { token?: string } | undefined)?.token
++   await request.log('debug', { message: 'Fetching weather', location })
++   const weather = await fetchWeather(location, { token, signal: request.signal })
++   await request.progress(1, 1)
++   return { kind: 'completed', value: weather }
++ }
+```
+
+A tool that only read `authInfo` can stay on `createTool` and read it from `requestContext`. W3C trace headers sent by the client (`traceparent`, `tracestate`, `baggage`) are exposed to every tool under `requestContext.get('traceContext')` as opaque strings, and the client attaches them from a `traceContext` provider in the server definition.
+
 ### Resource and prompt callbacks receive `{ request, requestContext }`
 
 Resource and prompt callbacks used to receive `{ extra }`, a copy of the SDK handler context. They now receive an `MCPServerRequest`: `request` is the request-scoped protocol context (cancellation `signal`, `_meta`, `inputResponses`, `requestState`, `log`) and `requestContext` is the trusted application context that already carries `authInfo` and the user mapped by `mapAuthInfoToUser`. Callbacks may also return an `input_required` continuation.

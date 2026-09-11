@@ -1,7 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { z } from 'zod/v3';
+import { getCallbackUrlCandidates } from '@mastra/mcp';
+import { z } from 'zod';
 import { createGlobalPatchScope } from './global-patches.js';
 import { startMcpOAuthFixtureServer } from './mcp-oauth-fixture.js';
 import type { McE2eInProcessApp, McE2eScenario, McE2eTerminal } from './types.js';
@@ -32,7 +33,7 @@ function extractAuthorizationUrl(terminal: McE2eTerminal): string {
 export const mcpOauthAuthenticateScenario = {
   name: 'mcp-oauth-authenticate',
   description:
-    'Authenticates a bare-url OAuth-protected HTTP MCP server from the /mcp selector, with the harness acting as the browser.',
+    'Authenticates a pre-registered OAuth-protected HTTP MCP server from the /mcp selector, with the harness acting as the browser.',
   testName: 'authenticates an OAuth MCP server from the interactive selector overlay',
   projectFixture: 'long-branch',
   prepare({ projectDir }) {
@@ -42,8 +43,15 @@ export const mcpOauthAuthenticateScenario = {
     const patches = createGlobalPatchScope();
     // Never spawn a real browser from the e2e run — the harness fetches the URL.
     patches.setEnv('MASTRA_MCP_OAUTH_NO_BROWSER', '1');
+    // Exercise the `callbackPort` shorthand end-to-end: the client must
+    // synthesize `http://localhost:<port>/callback`, bind its loopback
+    // callback server on that exact port, and complete the flow through it.
+    // The fixture pre-registers every port the callback server may fall back
+    // to, as a real authorization server would.
+    pinnedCallbackPort = await findFreePort();
     const fixtureServer = await startMcpOAuthFixtureServer({
       name: 'mc-e2e-oauth-mcp',
+      redirectUris: getCallbackUrlCandidates(`http://localhost:${pinnedCallbackPort}/callback`).map(String),
       registerTools: server => {
         server.tool(
           'oauth_probe',
@@ -56,16 +64,15 @@ export const mcpOauthAuthenticateScenario = {
       },
     });
 
-    // Exercise the `callbackPort` shorthand end-to-end: the client must
-    // synthesize `http://localhost:<port>/callback`, bind its loopback
-    // callback server on that exact port, and complete the flow through it.
-    pinnedCallbackPort = await findFreePort();
     writeFileSync(
       join(projectDir, '.mastracode', 'mcp.json'),
       JSON.stringify(
         {
           mcpServers: {
-            oauth_server: { url: fixtureServer.url, oauth: { callbackPort: pinnedCallbackPort } },
+            oauth_server: {
+              url: fixtureServer.url,
+              oauth: { clientId: fixtureServer.clientId, callbackPort: pinnedCallbackPort },
+            },
           },
         },
         null,

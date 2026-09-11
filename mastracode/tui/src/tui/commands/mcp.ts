@@ -57,13 +57,13 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         `        "env": {}\n` +
         `      },\n` +
         `      "remote-api": {\n` +
-        `        "url": "https://mcp.example.com/sse",\n` +
+        `        "url": "https://mcp.example.com/mcp",\n` +
         `        "headers": { "Authorization": "Bearer <token>" }\n` +
         `      }\n` +
         `    }\n` +
         `  }\n\n` +
-        `Servers that require OAuth can be added with just a "url" —\n` +
-        `authenticate them from the /mcp selector.`,
+        `Servers that require OAuth need an "oauth" block with a pre-registered\n` +
+        `"clientId" (or a "clientMetadataUrl"); authenticate them from the /mcp selector.`,
     );
     return;
   }

@@ -126,8 +126,8 @@ export interface OAuthCallbackServer {
  * createOAuthCallbackServer will try when the preferred port is in use.
  *
  * This is the single source of the candidate list: register all of these as
- * redirect_uris during dynamic client registration so a fallback-bound
- * callback URL always matches a registered URI.
+ * redirect_uris with the authorization server (or list them in the Client ID
+ * Metadata Document) so a fallback-bound callback URL always matches.
  */
 export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
   const base = new URL(redirectUrl.toString());

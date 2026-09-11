@@ -244,6 +244,37 @@ describe('validateConfig', () => {
     );
   });
 
+  it('accepts an HTTPS oauth.clientMetadataUrl as the client identity', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { clientMetadataUrl: 'https://mastra.example.com/oauth/client.json' },
+        },
+      },
+    });
+
+    expect(result.skippedServers).toBeUndefined();
+    expect((result.mcpServers!['remote'] as { oauth?: { clientMetadataUrl?: string } }).oauth?.clientMetadataUrl).toBe(
+      'https://mastra.example.com/oauth/client.json',
+    );
+  });
+
+  it.each(['http://mastra.example.com/oauth/client.json', 'not a url'])(
+    'rejects a non-HTTPS oauth.clientMetadataUrl: %s',
+    clientMetadataUrl => {
+      const result = validateConfig({
+        mcpServers: {
+          remote: { url: 'https://mcp.example.com/mcp', oauth: { clientMetadataUrl } },
+        },
+      });
+
+      expect(result.mcpServers).toBeUndefined();
+      expect(result.skippedServers).toHaveLength(1);
+      expect(result.skippedServers![0]!.reason).toMatch(/clientMetadataUrl/);
+    },
+  );
+
   it('rejects oauth config that sets both redirectUrl and callbackPort', () => {
     const result = validateConfig({
       mcpServers: {
