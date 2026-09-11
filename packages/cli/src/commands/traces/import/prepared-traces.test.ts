@@ -7,6 +7,7 @@ import {
   completeTraceImport,
   prepareTraceImport,
   readPendingTraceBatches,
+  serializePreparedTraceBatch,
   tracePayloadBytes,
 } from './prepared-traces.js';
 import type { TraceImportProvider } from './provider.js';
@@ -134,6 +135,7 @@ describe('prepared traces', () => {
     );
 
     expect(batches.map(batch => batch.traces.map(item => item.sourceTraceId))).toEqual([['source-1'], ['source-2']]);
+    expect(Buffer.byteLength(serializePreparedTraceBatch(batches[0]!))).toBe(batches[0]!.payloadBytes);
   });
 
   it('resumes from the first unacknowledged trace and permits a new batch preference', async () => {
