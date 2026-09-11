@@ -51,6 +51,46 @@ describe('CloudflareSandbox', () => {
     });
   });
 
+  it('runs a bare command string through a shell so pipes and chaining work', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand("printf '%s' native-tool-ok");
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', "printf '%s' native-tool-ok"]);
+  });
+
+  it('keeps the env prefix before the shell when running a bare command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge, { env: { BASE: '1' } });
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hi');
+
+    expect(bridge.execs[0]!.argv).toEqual(['env', 'BASE=1', '/bin/bash', '-c', 'echo hi']);
+  });
+
+  it('treats an empty args array as a bare shell command string', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('echo hello && echo world', []);
+
+    expect(bridge.execs[0]!.argv).toEqual(['/bin/bash', '-c', 'echo hello && echo world']);
+  });
+
+  it('keeps explicit argument arrays literal', async () => {
+    const bridge = createFakeBridge({ apiToken: 'secret' });
+    const sandbox = createSandbox(bridge);
+    await sandbox._start();
+
+    await sandbox.executeCommand('printf', ['%s', 'direct-control-ok']);
+
+    expect(bridge.execs[0]!.argv).toEqual(['printf', '%s', 'direct-control-ok']);
+  });
+
   it('per-command cwd overrides the configured workingDirectory', async () => {
     const bridge = createFakeBridge({ apiToken: 'secret' });
     const sandbox = createSandbox(bridge, { workingDirectory: '/workspace/app' });

@@ -34,9 +34,11 @@ describe('modelSupportsAttachments', () => {
       return originalExistsSync(filePath);
     });
 
-    expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
-    expect(modelSupportsAttachments('mastra/openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    // gpt-oss-120b is open-weight and text-only in both the OpenRouter and
+    // OpenAI capability lists, so it stays false through the nested-provider fallback.
+    expect(modelSupportsAttachments('openrouter/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-oss-120b')).toBe(false);
+    expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-oss-120b')).toBe(false);
     expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
     expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
   });

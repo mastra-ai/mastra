@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type {
@@ -146,7 +147,10 @@ export class MockMemory extends MastraMemory {
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
+      /** @deprecated Use hideSignals: [] to include all, or ['reactive', 'system-reminder'] to hide reminders. */
       includeSystemReminders?: boolean;
+      /** true hides all recognized signals, false includes all, or select exact stored types with an array. Overrides includeSystemReminders. */
+      hideSignals?: boolean | AgentSignalType[];
     },
   ): Promise<{
     messages: MastraDBMessage[];
@@ -162,6 +166,7 @@ export class MockMemory extends MastraMemory {
       threadConfig: _threadConfig,
       vectorSearchString: _vectorSearchString,
       includeSystemReminders,
+      hideSignals,
       ...listMessagesArgs
     } = args;
     const result = await memoryStorage.listMessages(listMessagesArgs);
@@ -171,6 +176,7 @@ export class MockMemory extends MastraMemory {
       messages: filterSystemReminderMessages(
         result.messages.filter(message => message.role !== 'system'),
         includeSystemReminders,
+        hideSignals,
       ),
     };
   }
