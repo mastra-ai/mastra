@@ -1,4 +1,18 @@
 import type { AgentBrowserConfig } from '@mastra/agent-browser';
+import type { BrowserDeleteResponse } from 'firecrawl';
+
+/** Details emitted after Firecrawl confirms that a hosted browser session was deleted. */
+export interface FirecrawlBrowserSessionDeletedEvent {
+  /** Firecrawl browser session identifier. */
+  sessionId: string;
+  /** Mastra thread identifier for thread-scoped sessions. */
+  threadId?: string;
+  /** Firecrawl's response, including provider-reported duration and credits when available. */
+  receipt: BrowserDeleteResponse;
+}
+
+/** Callback invoked after Firecrawl confirms that a hosted browser session was deleted. */
+export type FirecrawlBrowserSessionDeletedHook = (event: FirecrawlBrowserSessionDeletedEvent) => void | Promise<void>;
 
 /**
  * Options passed to Firecrawl `POST /v2/browser` (see Firecrawl JS SDK `browser()`).
@@ -38,4 +52,6 @@ export type FirecrawlBrowserConfig = AgentBrowserConfig & {
    * (local Playwright profile path): see {@link FirecrawlBrowserSessionOptions.profile}.
    */
   firecrawl?: FirecrawlBrowserSessionOptions;
+  /** Observe Firecrawl's provider receipt after a hosted browser session is deleted. */
+  onSessionDeleted?: FirecrawlBrowserSessionDeletedHook;
 };
