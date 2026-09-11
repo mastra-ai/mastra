@@ -4,7 +4,12 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import type { KnowledgeNodePayload, KnowledgeGraphPayload, KnowledgeRouteLimits } from './knowledge.js';
+import type {
+  KnowledgeNodePayload,
+  KnowledgeGraphPayload,
+  KnowledgeRouteLimits,
+  KnowledgeScopeTreePayload,
+} from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -129,29 +134,41 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
-  it('keeps scope, subgraph, activity, and detail reads on the requested key without fallback', async () => {
+  it('ignores request-supplied knowledge keys and reads only the host-selected runtime', async () => {
     const first = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const second = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    const resolve = vi.fn(async (key: string) => (key === 'first' ? first : key === 'second' ? second : undefined));
+    const resolve = vi.fn(async (key: string) => (key === 'default' ? first : key === 'second' ? second : undefined));
     const h = await createHarness({ knowledgeResolver: resolve });
     const a = await node(first, 'First runtime', h.projectScope);
     const b = await node(second, 'Second runtime', h.projectScope);
     await record(first, a, 'First evidence', h.projectScope);
     await record(second, b, 'Second evidence', h.projectScope);
-    expect((await graph(h, '?knowledgeKey=first')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
-    expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['Second runtime']);
-    expect((await nodeDetail(h, a.id, '?knowledgeKey=second')).status).toBe(404);
+
+    // The untrusted query parameter never switches runtimes: every read stays
+    // on the host-selected ('default') store, and content in other registered
+    // runtimes is unreachable.
+    expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await graph(h, '?knowledgeKey=missing')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await nodeDetail(h, b.id, '?knowledgeKey=second')).status).toBe(404);
     expect((await activity(h, '?knowledgeKey=second')).status).toBe(200);
+    expect(new Set(resolve.mock.calls.map(([key]) => key))).toEqual(new Set(['default']));
+  });
+
+  it('fails closed on every endpoint when the host-selected key does not resolve', async () => {
+    const h = await createHarness({
+      knowledgeResolver: async () => undefined,
+      defaultKnowledgeKey: 'mastra',
+    });
+    const a = await node(new InMemoryKnowledgeStorage({ db: new InMemoryDB() }), 'Unreachable', h.projectScope);
     for (const endpoint of [
-      'scopes?knowledgeKey=missing',
-      'subgraph?knowledgeKey=missing&scopeLevel=resource',
-      'activity?knowledgeKey=missing&scopeLevel=resource',
-      `nodes/${a.id}?knowledgeKey=missing&scopeLevel=resource`,
+      'scopes',
+      'subgraph?scopeLevel=resource',
+      'activity?scopeLevel=resource',
+      `nodes/${a.id}?scopeLevel=resource`,
     ]) {
       const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/${endpoint}`);
       expect(response.status).toBe(503);
     }
-    expect(resolve.mock.calls.map(([key]) => key)).not.toContain('default');
   });
 
   it('uses the host-selected key when the request omits knowledgeKey', async () => {
@@ -174,9 +191,50 @@ describe('KnowledgeRoutes', () => {
         { level: 'resource', id: h.projectId, available: true },
       ],
       defaultLevel: 'resource',
+      scopeNodes: [],
     });
     expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`)).status).toBe(404);
     expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph`)).status).toBe(404);
+  });
+
+  it('serves the reconciled structural scope tree and its selected members', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
+        { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+        { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
+      ],
+    });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+    const byName = new Map((body.scopeNodes ?? []).map(scopeNode => [scopeNode.name, scopeNode]));
+    expect([...byName.keys()]).toEqual(['features', 'issues', 'mastra', 'memory', 'repo:mastra']);
+    expect(byName.get('features')).toMatchObject({ kind: 'domain', parentIds: [ids['org:acme']] });
+    expect(byName.get('memory')).toMatchObject({ description: 'Memory scope', parentIds: [ids['features']] });
+    expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
+
+    // Structural lens: selecting a scope node reads its members, not the identity window.
+    const subgraph = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids['org:acme']}`,
+    );
+    expect(subgraph.status).toBe(200);
+    const subgraphBody = (await subgraph.json()) as KnowledgeGraphPayload;
+    expect(subgraphBody.edges).toEqual([]);
+    expect(subgraphBody.records).toEqual([]);
+    // Unknown or malformed scope nodes fail closed.
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=not-a-uuid`)).status,
+    ).toBe(404);
+    const unknown = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${crypto.randomUUID()}`,
+    );
+    expect(unknown.status).toBe(200);
+    expect(((await unknown.json()) as KnowledgeGraphPayload).nodes).toEqual([]);
   });
 
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
@@ -611,6 +669,35 @@ describe('KnowledgeRoutes', () => {
     expect(response.body.events.length).toBeGreaterThan(0);
     expect(JSON.stringify(response.body)).not.toContain(created.id);
     expect(JSON.stringify(response.body)).not.toContain('private-thread-id');
-    expect(response.body.events).toContainEqual(expect.objectContaining({ recordType: 'record', scope: [] }));
+    // Events targeting the deleted record are excluded entirely — never
+    // returned with a blanked scope.
+    expect(response.body.events).not.toContainEqual(expect.objectContaining({ scope: [] }));
+  });
+
+  it('authorizes activity targets before window shaping so a hidden backlog cannot displace visible events', async () => {
+    const h = await createHarness();
+    const visible = await node(h.knowledge, 'Visible Service', h.projectScope);
+    await record(h.knowledge, visible, 'Visible evidence', h.projectScope);
+
+    // Flood the newest end of the activity log with events whose targets are
+    // invisible from the project view: records appended in-view, then rescoped
+    // into an unrelated thread. The append EVENT stays in the activity window,
+    // so only authorize-before-limit keeps them from blanking or displacing.
+    const flood = await node(h.knowledge, 'Flood Node', h.projectScope);
+    for (let i = 0; i < 120; i++) {
+      const flooded = await record(h.knowledge, flood, `Flood ${i}`, h.projectScope);
+      await h.knowledge.rescopeKnowledge({ id: flooded.id, scope: h.threadScope('other-thread') });
+    }
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    // Only the visible node/record events remain — hidden-target events are
+    // excluded BEFORE the window fills, so they cannot push visible events out.
+    expect(response.body.events.length).toBeGreaterThan(0);
+    expect(response.body.events.length).toBeLessThanOrEqual(10);
+    expect(JSON.stringify(response.body)).not.toContain('other-thread');
+    for (const event of response.body.events as Array<{ scope: unknown[] }>) {
+      expect(event.scope.length).toBeGreaterThan(0);
+    }
   });
 });
