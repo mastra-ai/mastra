@@ -175,7 +175,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     }
     const inFlightTimeout = options.inFlightTimeoutMs ?? 0;
     if (!Number.isFinite(inFlightTimeout) || inFlightTimeout < 0) {
-      throw new Error(`redis-streams: inFlightTimeoutMs must be a non-negative number (milliseconds), got ${inFlightTimeout}`);
+      throw new Error(
+        `redis-streams: inFlightTimeoutMs must be a non-negative number (milliseconds), got ${inFlightTimeout}`,
+      );
     }
     this.#inFlightTimeoutMs = inFlightTimeout;
   }

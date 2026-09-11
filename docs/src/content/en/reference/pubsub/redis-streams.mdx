@@ -1,6 +1,6 @@
 ---
 title: 'Reference: RedisStreamsPubSub | PubSub'
-description: "RedisStreamsPubSub is a PubSub implementation backed by Redis Streams. It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure."
+description: 'RedisStreamsPubSub is a PubSub implementation backed by Redis Streams. It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure.'
 packages:
   - '@mastra/core'
   - '@mastra/redis-streams'
@@ -29,119 +29,119 @@ Requires Redis 7.0 or later. The reclaim loop relies on `XCLAIM` removing trimme
 Provide a Redis connection URL.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { Mastra } from '@mastra/core';
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
 
 export const mastra = new Mastra({
   pubsub: new RedisStreamsPubSub({
     url: 'redis://localhost:6379',
   }),
-})
+});
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description: 'Redis connection URL. Falls back to `redisOptions.url`.',
-    isOptional: true,
-    defaultValue: 'redis://localhost:6379',
-  },
-  {
-    name: 'keyPrefix',
-    type: 'string',
-    description: 'Prefix for stream keys. Each topic maps to `<keyPrefix>:<topic>`.',
-    isOptional: true,
-    defaultValue: 'mastra:topic',
-  },
-  {
-    name: 'blockMs',
-    type: 'number',
-    description: 'How long, in milliseconds, each read blocks while waiting for new events.',
-    isOptional: true,
-    defaultValue: '1000',
-  },
-  {
-    name: 'redisOptions',
-    type: 'RedisClientOptions',
-    description: 'Options passed to the underlying `redis` client for advanced configuration.',
-    isOptional: true,
-  },
-  {
-    name: 'maxStreamLength',
-    type: 'number',
-    description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
-    isOptional: true,
-    defaultValue: '10000',
-  },
-  {
-    name: 'streamIdleTtlMs',
-    type: 'number',
-    description:
-      'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
-    isOptional: true,
-    defaultValue: '0',
-  },
-  {
-    name: 'reclaimIntervalMs',
-    type: 'number',
-    description:
-      'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
-    isOptional: true,
-    defaultValue: '30000',
-  },
-  {
-    name: 'reclaimIdleMs',
-    type: 'number',
-    description:
-      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
-    isOptional: true,
-    defaultValue: '60000',
-  },
-  {
-    name: 'maxDeliveryAttempts',
-    type: 'number',
-    description:
-      'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
-    isOptional: true,
-    defaultValue: '5',
-  },
-  {
-    name: 'inFlightTimeoutMs',
-    type: 'number',
-    description:
-      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
-    isOptional: true,
-    defaultValue: '0',
-  },
-  {
-    name: 'logger',
-    type: '{ debug?: Function; warn?: Function }',
-    description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
-    isOptional: true,
-  },
-]}
+    {
+      name: 'url',
+      type: 'string',
+      description: 'Redis connection URL. Falls back to `redisOptions.url`.',
+      isOptional: true,
+      defaultValue: 'redis://localhost:6379',
+    },
+    {
+      name: 'keyPrefix',
+      type: 'string',
+      description: 'Prefix for stream keys. Each topic maps to `<keyPrefix>:<topic>`.',
+      isOptional: true,
+      defaultValue: 'mastra:topic',
+    },
+    {
+      name: 'blockMs',
+      type: 'number',
+      description: 'How long, in milliseconds, each read blocks while waiting for new events.',
+      isOptional: true,
+      defaultValue: '1000',
+    },
+    {
+      name: 'redisOptions',
+      type: 'RedisClientOptions',
+      description: 'Options passed to the underlying `redis` client for advanced configuration.',
+      isOptional: true,
+    },
+    {
+      name: 'maxStreamLength',
+      type: 'number',
+      description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
+      isOptional: true,
+      defaultValue: '10000',
+    },
+    {
+      name: 'streamIdleTtlMs',
+      type: 'number',
+      description:
+        'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
+      isOptional: true,
+      defaultValue: '0',
+    },
+    {
+      name: 'reclaimIntervalMs',
+      type: 'number',
+      description:
+        'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
+      isOptional: true,
+      defaultValue: '30000',
+    },
+    {
+      name: 'reclaimIdleMs',
+      type: 'number',
+      description:
+        'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
+      isOptional: true,
+      defaultValue: '60000',
+    },
+    {
+      name: 'maxDeliveryAttempts',
+      type: 'number',
+      description:
+        'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
+      isOptional: true,
+      defaultValue: '5',
+    },
+    {
+      name: 'inFlightTimeoutMs',
+      type: 'number',
+      description:
+        'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+      isOptional: true,
+      defaultValue: '0',
+    },
+    {
+      name: 'logger',
+      type: '{ debug?: Function; warn?: Function }',
+      description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
+      isOptional: true,
+    },
+  ]}
 />
 
 ## Properties
 
 <PropertiesTable
   content={[
-  {
-    name: 'supportedModes',
-    type: 'ReadonlyArray<"pull" | "push">',
-    description: 'Returns `["pull"]`.',
-  },
-  {
-    name: 'supportsOffsets',
-    type: 'boolean',
-    description:
-      'Returns `false`. Redis stream anchors support start positions, but not the numeric indexes used by `subscribeFromOffset()`.',
-  },
-]}
+    {
+      name: 'supportedModes',
+      type: 'ReadonlyArray<"pull" | "push">',
+      description: 'Returns `["pull"]`.',
+    },
+    {
+      name: 'supportsOffsets',
+      type: 'boolean',
+      description:
+        'Returns `false`. Redis stream anchors support start positions, but not the numeric indexes used by `subscribeFromOffset()`.',
+    },
+  ]}
 />
 
 ## Methods
@@ -158,10 +158,10 @@ Set `options.startFrom` to `"latest"` to skip retained entries when Redis create
 await pubsub.subscribe(
   'workflow.events',
   (event, ack, nack) => {
-    console.log(event)
+    console.log(event);
   },
   { group: 'live-workers', startFrom: 'latest' },
-)
+);
 ```
 
 ### `flush()`
@@ -169,7 +169,7 @@ await pubsub.subscribe(
 Waits for in-flight publishes to complete.
 
 ```typescript
-await pubsub.flush()
+await pubsub.flush();
 ```
 
 ### `clearTopic(topic)`
@@ -179,7 +179,7 @@ Deletes a topic's stream and every consumer group on it, freeing the memory a fi
 Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
 
 ```typescript
-await pubsub.clearTopic('workflow.events.run-123')
+await pubsub.clearTopic('workflow.events.run-123');
 ```
 
 ### `close()`
@@ -187,7 +187,7 @@ await pubsub.clearTopic('workflow.events.run-123')
 Closes the Redis connections and stops all subscriptions. Call this during graceful shutdown.
 
 ```typescript
-await pubsub.close()
+await pubsub.close();
 ```
 
 ## Redelivery and reclaim
