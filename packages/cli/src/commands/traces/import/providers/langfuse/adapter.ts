@@ -7,12 +7,11 @@ import type {
   TraceImportTrace,
 } from '../../types.js';
 import type { LangfuseClientDependencies, LangfuseClientOptions } from './client.js';
-import { createLangfuseSpanImportId, createLangfuseTraceImportId } from './ids.js';
+import { createLangfuseSpanImportId, createLangfuseTraceImportId, LANGFUSE_ID_ALGORITHM_VERSION } from './ids.js';
 import { LangfuseObservationsReader, type LangfuseReadWindow, type LangfuseTraceReadOptions } from './reader.js';
 import type { LangfuseObservation, LangfuseSourceTrace } from './types.js';
 
 const MAPPER_VERSION = 'langfuse-api-v2@1';
-const ID_ALGORITHM_VERSION = 'langfuse-sha256-v1';
 
 const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
   AGENT: 'agent_run',
@@ -93,7 +92,7 @@ export class LangfuseTraceImportProvider implements TraceImportProvider {
       baseUrl: this.reader.baseUrl,
       projectId: project.id,
       mapperVersion: MAPPER_VERSION,
-      idAlgorithmVersion: ID_ALGORITHM_VERSION,
+      idAlgorithmVersion: LANGFUSE_ID_ALGORITHM_VERSION,
     };
   }
 

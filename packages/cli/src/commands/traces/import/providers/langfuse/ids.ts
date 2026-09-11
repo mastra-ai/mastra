@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 const PROVIDER_ID = 'langfuse';
 
+export const LANGFUSE_ID_ALGORITHM_VERSION = 'langfuse-sha256-v1';
+
 function stableHexId(parts: string[], length: 16 | 32): string {
   return createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, length);
 }
