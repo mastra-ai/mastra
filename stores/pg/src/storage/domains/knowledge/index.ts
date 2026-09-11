@@ -261,6 +261,7 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     kind: String(row.kind),
     content: row.content == null ? undefined : String(row.content),
     description: row.description == null ? undefined : String(row.description),
+    isScope: row.isScope === true || row.isScope === 1 ? true : undefined,
     scope: parseJson(row.scopeJson ?? row.scope),
     version: Number(row.version),
     mergedInto: row.mergedInto == null ? undefined : String(row.mergedInto),
@@ -858,6 +859,7 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       await this.#replaceNodeScopes(tx, node.id, scope, now);
+      await this.#placeNodeInScopes(tx, node.id, input.scopeAddresses, now);
       await this.#replaceMentions(tx, 'node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
       await this.#activity(tx, 'node-created', 'node', node.id, scope);
       await this.#outbox(tx, 'node', node.id, 'upsert', node.version, scope);
@@ -1470,6 +1472,32 @@ export class KnowledgePG extends KnowledgeStorage {
       await executor.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
         args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Additive structural placement: every address must resolve to a live scope node
+   * (unlike identity membership, an unknown address is a caller error, not a lazy
+   * materialization miss). Runs inside the caller's transaction, so a throw aborts
+   * the whole mutation.
+   */
+  async #placeNodeInScopes(
+    executor: Executor,
+    nodeId: string,
+    addresses: string[] | undefined,
+    addedAt: Date,
+  ): Promise<void> {
+    for (const address of addresses ?? []) {
+      const result = await executor.execute({
+        sql: `SELECT sa.scopeNodeId AS "scopeNodeId" FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" sa JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=sa."scopeNodeId" WHERE sa.address=? AND n."isScope" AND n."deletedAt" IS NULL`,
+        args: [address],
+      });
+      const scopeNodeId = result.rows[0]?.scopeNodeId;
+      if (scopeNodeId == null) throw new KnowledgeNotFoundError('scope', address);
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" ("nodeId","scopeNodeId","addedAt") VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, String(scopeNodeId), addedAt.toISOString()],
       });
     }
   }

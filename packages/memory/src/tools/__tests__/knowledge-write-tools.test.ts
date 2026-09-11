@@ -1,3 +1,4 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
@@ -20,6 +21,37 @@ async function fixture() {
     maxScope: 'resource',
   });
   return { store, source, target, tools };
+}
+
+async function structuralFixture() {
+  const knowledge = new Knowledge({
+    id: 'mastra',
+    storage: new InMemoryStore(),
+    structure: {
+      scopes: [
+        { address: 'org:acme', name: 'acme' },
+        { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+        {
+          address: 'features:memory',
+          name: 'memory',
+          parentAddresses: ['features'],
+          description: 'Memory subsystem knowledge.',
+        },
+        { address: 'org:other', name: 'other' },
+        { address: 'other:things', name: 'things', parentAddresses: ['org:other'] },
+      ],
+    },
+  });
+  const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+  const { scopes: scopeIds } = await knowledge.reconcile();
+  const store = await knowledge.getStorage();
+  const tools = createKnowledgeWriteTools(memory, {
+    scope,
+    sourceThreadId: 'alpha',
+    defaultScope: 'resource',
+    maxScope: 'resource',
+  });
+  return { memory, store, scopeIds, tools };
 }
 
 describe('Subconscious knowledge write tools', () => {
@@ -81,6 +113,49 @@ describe('Subconscious knowledge write tools', () => {
     ).rejects.toThrow('record write failed');
 
     expect(await store.resolveNode({ name: 'Partial Atlas', scope })).toBeTruthy();
+  });
+
+  it('places created nodes into visible structural scopes by address', async () => {
+    const { store, scopeIds, tools } = await structuralFixture();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Memory Extraction',
+        kind: 'subsystem',
+        text: 'The memory subsystem extracts observations mid-conversation.',
+        nodeScope: 'features:memory',
+      },
+      {} as any,
+    )) as any;
+
+    // Identity scope still comes from the default rung; placement is additive membership.
+    expect(result.node.scope).toEqual(['org:acme', 'resource:user-42']);
+    expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).toEqual([
+      expect.objectContaining({ id: result.node.id }),
+    ]);
+  });
+
+  it('rejects structural placement outside the curator frontier', async () => {
+    const { tools } = await structuralFixture();
+
+    // Unreachable structural scope (different org root) and a totally unknown address
+    // are both refused before any storage write.
+    for (const nodeScope of ['other:things', 'bogus']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope }, {} as any),
+      ).rejects.toThrow(`Structural scope is outside the curator's visible scope: ${nodeScope}`);
+    }
+  });
+
+  it('rejects structural placement when no Knowledge instance is registered', async () => {
+    const { tools } = await fixture();
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'No instance', kind: 'x', text: 'x', nodeScope: 'features:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
   });
 
   it('rejects a non-RFC 3339 `when` at schema validation for create and append, before execute', async () => {
