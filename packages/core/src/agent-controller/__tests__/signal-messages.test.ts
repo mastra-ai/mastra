@@ -33,6 +33,10 @@ function createAgentMock(activeRunId: () => string | null) {
   };
 }
 
+function mockThreadOwner(session: any, threadId: string, resourceId = 'resource-1') {
+  vi.spyOn(session.thread, 'getById').mockResolvedValue({ id: threadId, resourceId } as any);
+}
+
 describe('AgentController signal messages', () => {
   it('captures active signal intent before async acceptance can observe an idle subscription', async () => {
     let activeRunId: string | null = 'run-1';
@@ -208,6 +212,7 @@ describe('AgentController signal messages', () => {
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     session.thread.set({ threadId: 'current-thread' });
+    mockThreadOwner(session, 'origin-thread');
     const events: any[] = [];
     session.subscribe(event => {
       events.push(event);
@@ -235,6 +240,34 @@ describe('AgentController signal messages', () => {
     expect(events.filter(event => event.type === 'message_end')).toEqual([]);
   });
 
+  it.each([
+    { name: 'resource', targetResourceId: 'resource-2', threadResourceId: 'resource-2' },
+    { name: 'thread owner', targetResourceId: 'resource-1', threadResourceId: 'resource-2' },
+  ])('rejects an explicit signal targeting a foreign $name', async ({ targetResourceId, threadResourceId }) => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-foreign-explicit-thread',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    mockThreadOwner(session, 'foreign-thread', threadResourceId);
+
+    const result = session.sendSignalToThread(
+      {
+        id: 'completion-foreign',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      { resourceId: targetResourceId, threadId: 'foreign-thread' },
+    );
+
+    await expect(result.accepted).rejects.toThrow('Thread not found: foreign-thread');
+    expect(agent.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('emits a persisted explicit-thread signal into the matching session thread', async () => {
     const agent = createAgentMock(() => null);
     agent.sendSignal.mockReturnValue({
@@ -251,6 +284,7 @@ describe('AgentController signal messages', () => {
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     session.thread.set({ threadId: 'current-thread' });
+    mockThreadOwner(session, 'current-thread');
     const events: any[] = [];
     session.subscribe(event => {
       events.push(event);
@@ -285,6 +319,7 @@ describe('AgentController signal messages', () => {
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     session.thread.set({ threadId: 'current-thread' });
+    mockThreadOwner(session, 'current-thread');
     const events: any[] = [];
     session.subscribe(event => {
       events.push(event);

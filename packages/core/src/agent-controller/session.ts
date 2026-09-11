@@ -3348,6 +3348,12 @@ export class Session<TState = unknown> {
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
     const signal = createSignal(input);
     const accepted = Promise.resolve().then(async () => {
+      const resourceId = this.identity.getResourceId();
+      const thread = target.resourceId === resourceId ? await this.thread.getById({ threadId: target.threadId }) : null;
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new Error(`Thread not found: ${target.threadId}`);
+      }
+
       const result = this.machinery.getAgent().sendSignal(signal, {
         ...target,
         ifActive: { behavior: 'persist' },
