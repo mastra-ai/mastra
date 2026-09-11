@@ -1156,6 +1156,7 @@ describe('PlatformGithubIntegration', () => {
 
   it('defaults the integrations API URL and requires a platform credential', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'integrations.mastra.ai' });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');

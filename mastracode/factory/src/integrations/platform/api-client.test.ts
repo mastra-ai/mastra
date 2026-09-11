@@ -28,6 +28,7 @@ describe('PlatformApiClient', () => {
 
   it('defaults config to integrations.mastra.ai and requires a platform credential', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.mastra.ai' });
