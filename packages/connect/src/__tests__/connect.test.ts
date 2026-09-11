@@ -104,18 +104,7 @@ describe('connect', () => {
     );
   });
 
-  it('warns and skips when there are no connections for a provider', async () => {
-    installProvider();
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
-    const tools = await connect({
-      projectId: 'proj_1',
-      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
-    })();
-    expect(tools).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('No linear connection in this project'));
-  });
-
-  it('only warns about missing providers once across multiple resolutions', async () => {
+  it('silently skips providers without project connections', async () => {
     installProvider();
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
     const tools = connect({
@@ -123,13 +112,10 @@ describe('connect', () => {
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
       ttlMs: 0,
     });
-    await tools();
-    await tools();
-    await tools();
-    const missingWarns = warnSpy.mock.calls.filter((call: unknown[]) =>
-      String(call[0]).includes('will appear automatically'),
-    );
-    expect(missingWarns).toHaveLength(1);
+
+    expect(await tools()).toEqual({});
+    expect(await tools()).toEqual({});
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('skips a directed connection that needs re-auth', async () => {

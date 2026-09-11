@@ -168,6 +168,13 @@ export const credentialSchema = z.discriminatedUnion('type', [
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
 
+export const connectionContextSchema = z.object({
+  connection_config: z.record(z.string(), z.unknown()).nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+});
+
+export type ConnectionContext = z.infer<typeof connectionContextSchema>;
+
 // —— endpoint functions ——
 
 export async function listProjectConnections(client: ResolvedClient, projectId: string): Promise<ProjectConnection[]> {
@@ -187,6 +194,21 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
   return parsed.data.connections;
 }
 
+export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/context`);
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
+  }
+  const parsed = connectionContextSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected context shape for connection ${connectionId}.`,
+    );
+  }
+  return parsed.data;
+}
+
 export async function getCredential(client: ResolvedClient, connectionId: string): Promise<ConnectionCredential> {
   const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/credentials`);
   if (!response.ok) {
@@ -204,12 +226,15 @@ export async function getCredential(client: ResolvedClient, connectionId: string
   return parsed.data;
 }
 
+type ProxyQueryPrimitive = string | number | boolean;
+
 export interface ProxyRequestOptions {
   method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Provider-relative path (no leading slash required; dot segments are rejected client-side, absolute URLs by the platform). */
   path: string;
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, ProxyQueryPrimitive | ProxyQueryPrimitive[] | undefined>;
   headers?: Record<string, string>;
+  baseUrlOverride?: string;
   body?: unknown;
 }
 
@@ -256,12 +281,20 @@ export async function proxyRequest(
   }
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(options.query ?? {})) {
-    if (value !== undefined) search.set(key, String(value));
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, String(item));
+    } else {
+      search.set(key, String(value));
+    }
   }
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
   const headers: Record<string, string> = { ...options.headers };
+  if (options.baseUrlOverride !== undefined) {
+    headers['base-url-override'] = options.baseUrlOverride;
+  }
   const init: RequestInit = { method: options.method, headers };
   if (options.body !== undefined) {
     headers['content-type'] = 'application/json';

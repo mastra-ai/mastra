@@ -11,7 +11,14 @@
  */
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { proxyRequest, resolveClient, type ConnectClientOptions, type ProxyRequestOptions } from '../client.js';
+import {
+  getConnectionContext,
+  proxyRequest,
+  resolveClient,
+  type ConnectClientOptions,
+  type ConnectionContext,
+  type ProxyRequestOptions,
+} from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 /**
@@ -21,7 +28,7 @@ import { MastraConnectError } from '../errors.js';
  */
 export interface PlatformProxyRequest {
   endpoint: string;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: NonNullable<ProxyRequestOptions['query']>;
   headers?: Record<string, string>;
   data?: unknown;
   /**
@@ -32,6 +39,8 @@ export interface PlatformProxyRequest {
    * PATCH the provider may have already applied is never repeated.
    */
   retries?: number;
+  /** Provider base URL selected by the tool from connection config or metadata. */
+  baseUrlOverride?: string;
 }
 
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
@@ -67,6 +76,8 @@ export interface PlatformProxy {
   put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  getConnection(): Promise<ConnectionContext>;
+  getMetadata<T = Record<string, unknown> | null>(): Promise<T>;
   ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
   /**
@@ -88,6 +99,21 @@ interface CreatePlatformProxyOptions {
   requestContext?: RequestContext;
 }
 
+function requireConnectionId(connectionId?: string): string {
+  if (connectionId) return connectionId;
+  throw new MastraConnectError(
+    'missing_connection_id',
+    'Missing connection id: pass connectionId or resolve tools through connect().',
+  );
+}
+
+async function loadConnectionContext({
+  connectionId,
+  client: clientOptions,
+}: CreatePlatformProxyOptions): Promise<ConnectionContext> {
+  return getConnectionContext(resolveClient(clientOptions), requireConnectionId(connectionId));
+}
+
 async function callProxy<T>(
   method: ProxyRequestOptions['method'],
   { connectionId, client: clientOptions }: CreatePlatformProxyOptions,
@@ -96,12 +122,7 @@ async function callProxy<T>(
   // Checked lazily per call, so building toolsets without a connection id
   // never throws. `connect()` always supplies one; direct `create<Provider>Tools`
   // callers must pass `connectionId`.
-  if (!connectionId) {
-    throw new MastraConnectError(
-      'missing_connection_id',
-      'Missing connection id: pass connectionId or resolve tools through connect().',
-    );
-  }
+  const resolvedConnectionId = requireConnectionId(connectionId);
   const client = resolveClient(clientOptions);
   // Non-idempotent writes get exactly one attempt: a POST/PATCH the provider
   // accepted just before a transient failure must not be replayed as a
@@ -110,11 +131,12 @@ async function callProxy<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const data = (await proxyRequest(client, connectionId, {
+      const data = (await proxyRequest(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
+        baseUrlOverride: config.baseUrlOverride,
         body: config.data,
       })) as T;
       // proxyRequest currently returns the parsed JSON body only; templates
@@ -150,12 +172,16 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     (method: ProxyRequestOptions['method']) =>
     <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
       callProxy<T>(method, context, config);
+  let connectionContext: Promise<ConnectionContext> | undefined;
+  const getConnection = () => (connectionContext ??= loadConnectionContext(context));
   return {
     get: bind('GET'),
     post: bind('POST'),
     put: bind('PUT'),
     patch: bind('PATCH'),
     delete: bind('DELETE'),
+    getConnection,
+    getMetadata: async <T = Record<string, unknown> | null>() => (await getConnection()).metadata as T,
     ActionError: ToolActionError,
     log: (...args: unknown[]) => {
       // Templates use log for observability; forward to console.

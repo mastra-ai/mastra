@@ -1,0 +1,51 @@
+{
+  "providerId": "openai",
+  "localId": "openai",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "generatedAt": "2026-09-11T16:12:19.606Z",
+  "toolCount": 26,
+  "skippedActions": [
+    {
+      "action": "create-file",
+      "reason": "exec does not call the provider proxy"
+    },
+    {
+      "action": "create-speech",
+      "reason": "exec uses unsupported proxy options: responseType"
+    },
+    {
+      "action": "create-transcription",
+      "reason": "exec does not call the provider proxy"
+    }
+  ],
+  "files": {
+    "index.ts": "a9ee6d8ef912bd67bea803bc50814b2615746394425a8e798035031ce0cd168e",
+    "tools.ts": "45248a6b7f836160ae496b2fa01403ff701a6a3b8cc3aeb67b95bf66e17e8145",
+    "tools/add-vector-store-file.ts": "ec5aead09ed648ca611f39303c917f67782260ce9475ecb5c56c2510207b9678",
+    "tools/cancel-fine-tuning-job.ts": "f408edd9dcc375a3a4b42a4c0a2042da69da58b4135085ed681ff9bc38eccc7a",
+    "tools/create-batch.ts": "4664898ffb7be0f17adfa6e613f32ae2352e43a9003215fd6c1a3265fea7d0f0",
+    "tools/create-chat-completion.ts": "a67af6f083c679ffc1d22e2e6b9d263acf2c294a40a62958e232f4206b43d651",
+    "tools/create-embedding.ts": "95e883bc4dffca6bcf9798eed767e4acbcf153916d681544f41ff34b7c01f724",
+    "tools/create-image.ts": "2a51c158a194be380545e0febe0f873b5ff7c924c001913b33720603a2bd34e7",
+    "tools/create-moderation.ts": "a1436ebdba671976ae8bd0bbc62d0232f04fc677c2e8773a581fa8b30b3b294c",
+    "tools/create-response.ts": "70918d3853149b64ce49aa159c5eccf710123d53f308e804e455970c254f2be6",
+    "tools/create-vector-store.ts": "fc4c4896906d599b6873755c96d5ac32428b292c3bc967da0eb6aa72e4691484",
+    "tools/delete-response.ts": "72d13400f7f7d2784027fa8fcfa31c3df1d610b457651c5fe8a79a9396b09a52",
+    "tools/delete-vector-store-file.ts": "7621abeb018667f94f862e01cc6f75f4c299ea5a500986ffe5944f357e62b2ad",
+    "tools/delete-vector-store.ts": "e2f2d2880c242eb070a966e3d0c5a1c130641589763702cb39bd4f9345780b3d",
+    "tools/get-batch.ts": "0f67b3b649e94a3889815b72b0ff128d8f5d7c1f4ebcfa6a825382a29fb8f43c",
+    "tools/get-file.ts": "7750c5b2495ca146f56312f979a8795fb913d16822f2fdbeb829c9e97d076e22",
+    "tools/get-model.ts": "6238d54feec2ac0cbe7a1347158eccd55371a116350c237d907a72fce480a299",
+    "tools/get-response.ts": "1b1d635704709bead12e8e99fff40b45756ed4634666c7d6a2411cebf580c022",
+    "tools/get-vector-store-file.ts": "30d937335f7694d904810a773028253af7210586753da596709dc600a7fcd01f",
+    "tools/get-vector-store.ts": "8fb80d3328410d5d9ed7fab88a38394916ba5538e43dda05c8b2911c8951afee",
+    "tools/list-batches.ts": "26cf564d6dae1828fddd06d292577245eec58797d0b9b14b26b87974fe4e4a6f",
+    "tools/list-files.ts": "62e932f7fba87273df17990d31c29ba0cb23d19650a5205671b94b7387c17944",
+    "tools/list-fine-tuning-jobs.ts": "574f17aa20fe2358d40aa998bb6cf4584eb7e621cc24c19cda8e9468be215e2e",
+    "tools/list-models.ts": "2daafb746ccfff20ff1512f76f5cc13aadf54fdc1efcebc40ea6e38628492627",
+    "tools/list-vector-store-files.ts": "d285f89ccec575abde2c33e0fdc92487b4040069d13cdad3c440a8aa9159f12a",
+    "tools/list-vector-stores.ts": "96b944f5bd18e162d96f8c2bbda88ff546e43a276e25dc0c45fe51a14a460203",
+    "tools/search-vector-store.ts": "2aec31b08c305a465a2128d4b6c208f55a401e7399ffbc90aa423acdbdfbdc1d",
+    "tools/update-vector-store.ts": "9a7bd4e363c763d912084b2aa9f9530c3d2908eebb7727536e777a5b4d0cea82"
+  }
+}

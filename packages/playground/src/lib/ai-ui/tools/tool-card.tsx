@@ -19,6 +19,7 @@ import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { SubmitPlanTool } from './submit-plan-tool';
+import { ToolResultMedia } from './tool-result-media';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
@@ -34,6 +35,7 @@ export interface ToolCardProps {
   toolName: string;
   input: any;
   output: any;
+  modelOutput?: unknown;
   toolCallId: string;
   /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
   state?: string;
@@ -60,6 +62,7 @@ export const ToolCardInner = ({
   toolName,
   input,
   output,
+  modelOutput,
   toolCallId,
   state,
   metadata,
@@ -241,6 +244,7 @@ export const ToolCardInner = ({
         toolCalled={toolCalled}
         status={status}
       />
+      <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (
         <McpAppToolResult
           appInfo={mcpAppInfo}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
+import { getConnectionContext, getCredential, listProjectConnections, proxyRequest, resolveClient } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 const TOKEN = 'fake-test-token';
@@ -163,6 +163,31 @@ describe('listProjectConnections', () => {
   });
 });
 
+describe('getConnectionContext', () => {
+  it('returns connection config and metadata without credentials', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connection_config: { projectUrl: 'https://project.supabase.co' },
+        metadata: { region: 'us-east-1' },
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(getConnectionContext(client, 'c_1')).resolves.toEqual({
+      connection_config: { projectUrl: 'https://project.supabase.co' },
+      metadata: { region: 'us-east-1' },
+    });
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/connections/c_1/context');
+  });
+
+  it('throws platform_error on malformed context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ credentials: { apiKey: 'secret' } }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(getConnectionContext(client, 'c_1')).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
 describe('getCredential', () => {
   it('parses an oauth2 credential', async () => {
     const fetchMock = vi
@@ -201,16 +226,18 @@ describe('getCredential', () => {
 });
 
 describe('proxyRequest', () => {
-  it('builds the proxy URL with query params and strips leading slashes', async () => {
+  it('builds the proxy URL with scalar and repeated query params and strips leading slashes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await proxyRequest(client, 'c_1', {
       method: 'GET',
       path: '/issues',
-      query: { page: 2, q: 'bug fix', skip: undefined },
+      query: { page: 2, q: 'bug fix', labels: ['bug', 'help wanted'], empty: [], skip: undefined },
     });
     const [url] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('https://example.test/v2/connections/c_1/proxy/issues?page=2&q=bug+fix');
+    expect(url).toBe(
+      'https://example.test/v2/connections/c_1/proxy/issues?page=2&q=bug+fix&labels=bug&labels=help+wanted',
+    );
   });
 
   it('rejects literal and encoded dot segments before building the URL', async () => {
@@ -232,19 +259,21 @@ describe('proxyRequest', () => {
     expect(url).toBe('https://example.test/v2/connections/c_1/proxy/files/report.v1.2.pdf');
   });
 
-  it('JSON-encodes bodies and forwards custom headers', async () => {
+  it('JSON-encodes bodies and forwards custom headers and the base URL override', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
     await proxyRequest(client, 'c_1', {
       method: 'POST',
       path: 'graphql',
       headers: { 'x-custom': 'v1' },
+      baseUrlOverride: 'https://project.supabase.co',
       body: { query: '{ viewer { id } }' },
     });
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.method).toBe('POST');
     expect(init.headers['content-type']).toBe('application/json');
     expect(init.headers['x-custom']).toBe('v1');
+    expect(init.headers['base-url-override']).toBe('https://project.supabase.co');
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 
