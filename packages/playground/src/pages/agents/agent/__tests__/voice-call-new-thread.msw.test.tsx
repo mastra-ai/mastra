@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentPage from '../thread';
+import { draftAuthDisabled } from './fixtures/drafts';
 import { StudioConfigContext } from '@/domains/configuration';
 import { server } from '@/test/msw-server';
 
@@ -105,6 +106,7 @@ function installHandlers() {
   // The worker "creates" the thread and persists the greeting when the call connects.
   let callStarted = false;
   server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(draftAuthDisabled)),
     http.post(`${BASE_URL}/voice/livekit/connection-details`, () => {
       callStarted = true;
       return HttpResponse.json({

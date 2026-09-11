@@ -136,6 +136,7 @@ export const Thread = ({
   isHistoryLoading,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { draft, updateDraft } = useThreadInput(threadId);
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
@@ -160,7 +161,20 @@ export const Thread = ({
   });
 
   return (
-    <ComposerAttachmentsProvider>
+    <ComposerAttachmentsProvider
+      controlled={
+        draft && updateDraft
+          ? {
+              value: draft.attachments,
+              onChange: value =>
+                updateDraft(previous => ({
+                  ...previous,
+                  attachments: typeof value === 'function' ? value(previous.attachments) : value,
+                })),
+            }
+          : undefined
+      }
+    >
       <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
         <ChatShell.Stage>
           <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
@@ -270,10 +284,19 @@ const AgentComposer = ({
   runOptionsSlot,
   refreshThreadList,
 }: AgentComposerProps) => {
-  const { threadInput: text, setThreadInput } = useThreadInput(threadId);
+  const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preparing = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(
+    () => () => {
+      lifetime.current++;
+    },
+    [],
+  );
+  const [preparationError, setPreparationError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, cancelPending } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
@@ -286,13 +309,33 @@ const AgentComposer = ({
   const sendBlocked = isRunning && !canSendWhileStreaming;
 
   const submit = async () => {
-    if (isEmpty || sendBlocked || !canExecuteAgent) return;
-    const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
-    const message = text;
-    setThreadInput('');
-    clear();
-    setSendPulseKey(k => k + 1);
-    send({ message, attachments: coreUserMessages });
+    if (isEmpty || sendBlocked || !canExecuteAgent || draftStatus?.restoring || preparing.current) return;
+    preparing.current = true;
+    const currentLifetime = lifetime.current;
+    const submittedIds = new Set(attachments.map(attachment => attachment.id));
+    cancelPending();
+    setPreparationError(undefined);
+    try {
+      const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
+      if (lifetime.current !== currentLifetime) return;
+      // Clear only the submitted snapshot; edits made during file conversion belong to the next draft.
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: previous.text === text ? '' : previous.text,
+          attachments: previous.attachments.filter(attachment => !submittedIds.has(attachment.id)),
+        }));
+      else {
+        setThreadInput('');
+        clear();
+      }
+      setSendPulseKey(k => k + 1);
+      send({ message: text, attachments: coreUserMessages });
+    } catch {
+      if (lifetime.current === currentLifetime)
+        setPreparationError('Attachments could not be prepared. Your draft has been kept.');
+    } finally {
+      preparing.current = false;
+    }
   };
 
   return (
@@ -300,6 +343,16 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
+      {(preparationError || draftStatus?.error) && (
+        <p role="alert" className="text-ui-sm">
+          {preparationError || draftStatus?.error}
+        </p>
+      )}
+      {(draftStatus?.restoring || draftStatus?.saving) && (
+        <p role="status" className="text-ui-sm">
+          {draftStatus.restoring ? 'Restoring draft…' : 'Saving draft…'}
+        </p>
+      )}
       <Composer
         className="relative"
         onSubmit={event => {
@@ -332,12 +385,12 @@ const AgentComposer = ({
                   void submit();
                 }
               }}
-              disabled={!canExecuteAgent}
+              disabled={!canExecuteAgent || draftStatus?.restoring}
             />
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
             <ComposerActions>
               <ComposerActionRow
-                canExecute={canExecuteAgent}
+                canExecute={canExecuteAgent && !draftStatus?.restoring}
                 agentId={agentId}
                 runOptionsSlot={runOptionsSlot}
                 showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
