@@ -173,7 +173,20 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         });
 
         if (pendingSuspend) {
-          return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
+          // Agent-as-tool delegations carry the nested sub-agent's runId in
+          // `suspendOptions.runId` (with `isAgentSuspend: true`), never in the
+          // suspend payload. The resume path above restores it from the step's
+          // persisted `suspendData.suspendedToolRunId`, so bridge it into the
+          // engine suspend data here. Keep the user-facing `suspendPayload`
+          // stored above untouched — this only augments the internal snapshot.
+          const opts = pendingSuspend.suspendOptions;
+          const agentRunId = opts?.isAgentSuspend && typeof opts.runId === 'string' ? opts.runId : undefined;
+          const engineData = !agentRunId
+            ? pendingSuspend.data
+            : pendingSuspend.data && typeof pendingSuspend.data === 'object'
+              ? { ...(pendingSuspend.data as Record<string, unknown>), suspendedToolRunId: agentRunId }
+              : { suspendedToolRunId: agentRunId };
+          return suspend(engineData, opts as SuspendOptions);
         }
 
         return { taskId, outcome: 'success' as const, result };
