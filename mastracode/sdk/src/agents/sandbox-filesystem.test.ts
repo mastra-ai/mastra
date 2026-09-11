@@ -323,7 +323,8 @@ describe('SandboxFilesystem.walk', () => {
             `f\t${WORKDIR}/src/index.ts`,
             `d\t${WORKDIR}/src/utils`,
             `f\t${WORKDIR}/src/utils/helpers.ts`,
-            `F\t${WORKDIR}/link.ts`,
+            `F\t${WORKDIR}/link.ts\tsrc/index.ts`,
+            `D\t${WORKDIR}/linkdir\t/elsewhere`,
           ].join('\n'),
           stderr: '',
         };
@@ -338,7 +339,8 @@ describe('SandboxFilesystem.walk', () => {
       { name: 'index.ts', type: 'file', path: 'src/index.ts' },
       { name: 'utils', type: 'directory', path: 'src/utils' },
       { name: 'helpers.ts', type: 'file', path: 'src/utils/helpers.ts' },
-      { name: 'link.ts', type: 'file', isSymlink: true, path: 'link.ts' },
+      { name: 'link.ts', type: 'file', isSymlink: true, symlinkTarget: 'src/index.ts', path: 'link.ts' },
+      { name: 'linkdir', type: 'directory', isSymlink: true, symlinkTarget: '/elsewhere', path: 'linkdir' },
     ]);
     // Exactly one find invocation regardless of tree depth.
     expect(sandbox.calls.filter(c => c.includes('find ')).length).toBe(1);
@@ -360,12 +362,20 @@ describe('SandboxFilesystem.walk', () => {
     expect(hiddenCall).not.toContain('-prune');
   });
 
-  it('throws when the root is not a directory', async () => {
+  it('throws DirectoryNotFoundError when the root is missing', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
       return { exitCode: 20, stdout: '', stderr: '' };
     });
-    await expect(fs.walk('./missing')).rejects.toThrow(/Directory not found/);
+    await expect(fs.walk('./missing')).rejects.toMatchObject({ name: 'DirectoryNotFoundError', code: 'ENOENT' });
+  });
+
+  it('throws NotDirectoryError when the root is a file', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      return { exitCode: 23, stdout: '', stderr: '' };
+    });
+    await expect(fs.walk('./file.txt')).rejects.toMatchObject({ name: 'NotDirectoryError', code: 'ENOTDIR' });
   });
 });
 
@@ -456,6 +466,36 @@ describe('SandboxFilesystem.grep', () => {
     );
   });
 
+  it('keeps partial matches when rg exits 2 because of a per-file error', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) {
+        return {
+          exitCode: 2,
+          stdout: rgEvent('match', `${WORKDIR}/a.ts`, 1, 'foo', 0),
+          stderr: 'rg: secret.txt: Permission denied (os error 13)',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false })).resolves.toEqual([
+      { path: 'a.ts', matches: [{ line: 1, column: 0, text: 'foo' }] },
+    ]);
+  });
+
+  it('signals UnsupportedGrepPatternError when rg exits 2 with no output (bad pattern)', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('rg ')) return { exitCode: 2, stdout: '', stderr: 'regex parse error' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(
+      fs.grep({ pattern: 'foo(?<=x)', path: '.', caseSensitive: true, includeHidden: false }),
+    ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+  });
+
   it('falls back to grep -rnE when rg is missing and recomputes columns', async () => {
     const { fs, sandbox } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
@@ -491,11 +531,23 @@ describe('SandboxFilesystem.grep', () => {
       return { exitCode: 0, stdout: '', stderr: '' };
     });
 
-    for (const pattern of ['\\bfoo\\b', '\\d+', 'foo(?=bar)', 'a+?']) {
+    for (const pattern of ['\\bfoo\\b', '\\d+', 'foo(?=bar)', 'a+?', '[[:digit:]]+', '\\<foo\\>', 'foo[']) {
       await expect(fs.grep({ pattern, path: '.', caseSensitive: true, includeHidden: false })).rejects.toMatchObject({
         code: 'EUNSUPPORTED_PATTERN',
       });
     }
+  });
+
+  it('signals fallback when grep matched a line the JS regex cannot (dialect mismatch)', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+      if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.startsWith('grep ')) return { exitCode: 0, stdout: `${WORKDIR}/a.ts:1:zzz`, stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    await expect(
+      fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false }),
+    ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
   });
 
   it('signals fallback when context is requested without ripgrep', async () => {

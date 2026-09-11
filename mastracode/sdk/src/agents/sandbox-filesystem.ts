@@ -33,9 +33,11 @@ import type {
   WriteOptions,
 } from '@mastra/core/workspace';
 import {
+  DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
   IsDirectoryError,
+  NotDirectoryError,
   UnsupportedGrepPatternError,
 } from '@mastra/core/workspace';
 
@@ -46,6 +48,7 @@ import {
 const EXIT_NOT_FOUND = 20;
 const EXIT_IS_DIRECTORY = 21;
 const EXIT_EXISTS = 22;
+const EXIT_NOT_DIRECTORY = 23;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -508,14 +511,18 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     // Prune hidden entries in-sandbox when not requested, so a huge hidden
     // tree (e.g. `.git`) doesn't inflate the response.
     const hiddenPrune = options?.includeHidden ? '' : `-name '.*' -prune -o `;
+    // Emit "flag\tpath[\ttarget]" — flag is d/f for regular entries, D/F for
+    // symlinks (with the link target as a third field).
     const script =
-      `test -d ${shellQuote(abs)} || exit ${EXIT_NOT_FOUND}\n` +
-      `find ${shellQuote(abs)} -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
-      `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; ` +
-      `elif [ -d "$f" ]; then t=d; else t=f; fi; ` +
-      `printf '%s\\t%s\\n' "$t" "$f"; done`;
+      `root=${shellQuote(abs)}\n` +
+      `[ -e "$root" ] || [ -L "$root" ] || exit ${EXIT_NOT_FOUND}\n` +
+      `[ -d "$root" ] || exit ${EXIT_NOT_DIRECTORY}\n` +
+      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
+      `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; printf '%s\\t%s\\t%s\\n' "$t" "$f" "$(readlink "$f")"; ` +
+      `elif [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`;
     const result = await this.exec(script);
-    if (result.exitCode === EXIT_NOT_FOUND) throw new Error(`Directory not found: ${path}`);
+    if (result.exitCode === EXIT_NOT_FOUND) throw new DirectoryNotFoundError(path);
+    if (result.exitCode === EXIT_NOT_DIRECTORY) throw new NotDirectoryError(path);
     if (result.exitCode !== 0) {
       throw new Error(`walk ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
     }
@@ -525,14 +532,22 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       const tab = line.indexOf('\t');
       if (tab < 0) continue;
       const flag = line.slice(0, tab);
-      const fullPath = line.slice(tab + 1);
+      const isSymlink = flag === 'D' || flag === 'F';
+      let fullPath = line.slice(tab + 1);
+      let symlinkTarget: string | undefined;
+      if (isSymlink) {
+        const tab2 = fullPath.lastIndexOf('\t');
+        if (tab2 >= 0) {
+          symlinkTarget = fullPath.slice(tab2 + 1) || undefined;
+          fullPath = fullPath.slice(0, tab2);
+        }
+      }
       const rel = posixPath.relative(abs, fullPath);
       if (!rel || rel.startsWith('..')) continue;
-      const isSymlink = flag === 'D' || flag === 'F';
       entries.push({
         name: posixPath.basename(rel),
         type: flag === 'd' || flag === 'D' ? 'directory' : 'file',
-        ...(isSymlink ? { isSymlink: true } : {}),
+        ...(isSymlink ? { isSymlink: true, ...(symlinkTarget ? { symlinkTarget } : {}) } : {}),
         path: rel,
       });
     }
@@ -584,12 +599,17 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       .filter(Boolean)
       .join(' ');
     const result = await this.exec(args);
-    // rg exits 1 when there are no matches, 2 on error (e.g. bad pattern).
+    // rg exits 1 when there are no matches, 2 on any error. A bad pattern
+    // produces no output at all, but a per-file error (e.g. an unreadable
+    // file) also yields exit 2 while still emitting matches for every other
+    // file. Keep those partial results; only treat "error with no matches"
+    // as an unsupported pattern so the caller falls back to the host walk.
     if (result.exitCode === 1) return [];
-    if (result.exitCode !== 0) {
+    const results = this.parseRipgrepJson(result.stdout, abs, options);
+    if (result.exitCode !== 0 && results.length === 0) {
       throw new UnsupportedGrepPatternError(options.pattern);
     }
-    return this.parseRipgrepJson(result.stdout, abs, options);
+    return results;
   }
 
   private parseRipgrepJson(stdout: string, abs: string, options: FilesystemGrepOptions): FilesystemGrepResult[] {
@@ -651,11 +671,22 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     return this.applyTotalCap(results, options.maxTotalMatches);
   }
 
-  /** ERE cannot express these PCRE/JS constructs; signal fallback instead of returning wrong results. */
-  private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB]|\(\?|[*+?}]\?/;
+  /**
+   * Patterns whose meaning differs between POSIX ERE and JS RegExp. The grep
+   * runs with ERE but match columns are recomputed with JS, so anything that
+   * only one side understands (PCRE classes, lookarounds, lazy quantifiers,
+   * POSIX bracket classes, GNU word anchors) must fall back to the host walk.
+   */
+  private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB<>]|\(\?|[*+?}]\?|\[:[a-z]+:\]/;
 
   private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
     if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
+      throw new UnsupportedGrepPatternError(options.pattern);
+    }
+    let jsRegex: RegExp;
+    try {
+      jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
+    } catch {
       throw new UnsupportedGrepPatternError(options.pattern);
     }
     // Reconstructing per-match context from `grep -C` text output is not
@@ -680,7 +711,6 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     }
     // grep -n has no column output; recompute with the JS regex host-side so
     // columns are UTF-16 indices, consistent with the fallback implementation.
-    const jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
     const byFile = new Map<string, FilesystemGrepMatch[]>();
     for (const line of result.stdout.split('\n')) {
       if (!line) continue;
@@ -688,7 +718,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       if (!parsed) continue;
       const rel = posixPath.relative(abs, parsed[1]!) || posixPath.basename(parsed[1]!);
       const text = parsed[3]!;
-      const column = jsRegex.exec(text)?.index ?? 0;
+      const column = jsRegex.exec(text)?.index;
+      // grep matched this line but the JS regex did not: the two dialects
+      // disagree on this pattern, so the columns would be wrong. Fall back.
+      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
       let matches = byFile.get(rel);
       if (!matches) {
         matches = [];
