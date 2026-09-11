@@ -167,7 +167,7 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel();
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     expect(screen.getByText('Root agent run')).not.toBeNull();
     expect(screen.getByText('First tool call')).not.toBeNull();
     expect(screen.getByText('Second tool call')).not.toBeNull();
@@ -229,7 +229,7 @@ describe('TraceSpanPanel', () => {
     const onClose = vi.fn();
     const { queryClient } = renderPanel({ onClose });
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     fireEvent.click(screen.getByLabelText('Close Panel'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -239,7 +239,7 @@ describe('TraceSpanPanel', () => {
     installHandlers();
     const { queryClient } = renderPanel();
 
-    expect(await screen.findByText(`# ${TRACE_ID}`)).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Entity block: type label + name linking to the agent page. ("Agent" also
