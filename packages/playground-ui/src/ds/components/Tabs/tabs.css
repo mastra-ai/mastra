@@ -291,7 +291,7 @@
         height: calc(var(--active-tab-height) + var(--tab-join-radius));
         border-radius: var(--tab-inner-radius) var(--tab-inner-radius) 0 0;
         background: var(--surface2);
-        transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+        transition: none;
       }
 
       [data-slot='tabs-indicator']::before,

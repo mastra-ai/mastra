@@ -58,6 +58,8 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
   const closeRefs = useRef(new Map<string, HTMLDivElement>());
+  const tabPositions = useRef(new Map<string, number>());
+  const selectedValue = useRef(tabs?.value);
   const [available, setAvailable] = useState<number | null>(null);
   const [measurements, setMeasurements] = useState<TabMeasurement[]>([]);
   const register = useCallback((tab: TabMeasurement) => {
@@ -121,15 +123,52 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
   const listContext = useMemo(() => ({ hiddenValues, register, unregister }), [hiddenValues, register, unregister]);
   useLayoutEffect(() => {
-    for (const tab of visibleClosableTabs) {
+    const nextPositions = new Map(tabPositions.current);
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    for (const tab of measurements) {
+      if (hiddenValues.has(tab.value)) continue;
+      const left = tab.element.offsetLeft;
+      const previousLeft = tabPositions.current.get(tab.value);
       const close = closeRefs.current.get(tab.value);
-      if (!close) continue;
-      close.style.left = `${tab.element.offsetLeft}px`;
-      close.style.top = `${tab.element.offsetTop}px`;
-      close.style.width = `${tab.element.offsetWidth}px`;
-      close.style.height = `${tab.element.offsetHeight}px`;
+      if (close) {
+        close.style.left = `${left}px`;
+        close.style.top = `${tab.element.offsetTop}px`;
+        close.style.width = `${tab.element.offsetWidth}px`;
+        close.style.height = `${tab.element.offsetHeight}px`;
+      }
+      const delta = previousLeft === undefined ? 0 : previousLeft - left;
+      const shouldAnimate = tab.value !== tabs?.value && Math.abs(delta) <= 32;
+      if (!reduceMotion && shouldAnimate && delta !== 0 && 'animate' in tab.element) {
+        tab.element.animate([{ transform: `translateX(${delta}px)` }, { transform: 'translateX(0)' }], {
+          duration: 180,
+          easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        });
+      }
+      nextPositions.set(tab.value, left);
     }
-  }, [visibleClosableTabs]);
+    for (const value of nextPositions.keys()) {
+      if (!measurements.some(tab => tab.value === value)) nextPositions.delete(value);
+    }
+    tabPositions.current = nextPositions;
+  }, [hiddenValues, measurements, tabs?.value]);
+  useLayoutEffect(() => {
+    const previousValue = selectedValue.current;
+    selectedValue.current = tabs?.value;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    if (!contained || tabs?.frame !== 'inset' || previousValue === tabs?.value || reduceMotion) return;
+    const indicator = scrollRef.current?.querySelector<HTMLElement>('[data-slot="tabs-indicator"]');
+    if (!indicator || !('animate' in indicator)) return;
+    indicator.animate(
+      [
+        { opacity: 0.72, scale: '0.97' },
+        { opacity: 1, scale: '1' },
+      ],
+      {
+        duration: 140,
+        easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      },
+    );
+  }, [contained, tabs?.frame, tabs?.value]);
 
   return (
     <TabListContext.Provider value={listContext}>
