@@ -816,6 +816,7 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
+      const mcpServerToolInvocation = execOptions?.mcpServerToolInvocation;
       const toolSpan = getOrCreateSpan({
         type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
         name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
@@ -835,6 +836,16 @@ export class CoreToolBuilder extends MastraBase {
               toolDescription: options.description,
               toolType: logType || 'tool',
               toolCallId: execOptions?.toolCallId,
+              ...(mcpServerToolInvocation
+                ? {
+                    mcpRole: mcpServerToolInvocation.role,
+                    mcpMethod: mcpServerToolInvocation.method,
+                    mcpServer: mcpServerToolInvocation.serverName,
+                    serverVersion: mcpServerToolInvocation.serverVersion,
+                    mcpProtocolVersion: mcpServerToolInvocation.protocolVersion,
+                    mcpSessionId: mcpServerToolInvocation.sessionId,
+                  }
+                : {}),
             },
         tracingPolicy: options.tracingPolicy,
         tracingContext: tracingContext,

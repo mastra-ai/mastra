@@ -1126,6 +1126,14 @@ export class MCPServer extends MCPServerBase {
           messages: [],
           toolCallId: '',
           requestContext: proxiedContext,
+          mcpServerToolInvocation: {
+            role: 'server',
+            method: 'tools/call',
+            serverName: this.name,
+            serverVersion: this.version,
+            protocolVersion: serverInstance.getNegotiatedProtocolVersion(),
+            sessionId: extra.sessionId,
+          },
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,

@@ -1985,7 +1985,9 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const serverInstance = server.getServer();
+    vi.spyOn(serverInstance, 'getNegotiatedProtocolVersion').mockReturnValue('2025-11-25');
     const directElicitInput = vi.spyOn(serverInstance, 'elicitInput').mockResolvedValue(elicitationResponse);
+    const directToolExecute = vi.spyOn(server.convertedTools.directProbe!, 'execute');
     // @ts-expect-error - accessing internal for testing
     const requestHandlers = serverInstance._requestHandlers;
     const callToolHandler = requestHandlers.get('tools/call');
@@ -2009,6 +2011,19 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolOptions.mcp.extra.sessionId).toBe(mockExtra.sessionId);
     expect(directToolOptions.mcp.extra.requestId).toBe(mockExtra.requestId);
     expect(directElicitInput).toHaveBeenCalledWith(elicitationRequest, undefined);
+    expect(directToolExecute).toHaveBeenCalledWith(
+      { query: 'direct call' },
+      expect.objectContaining({
+        mcpServerToolInvocation: {
+          role: 'server',
+          method: 'tools/call',
+          serverName: 'DirectToolServer',
+          serverVersion: '1.0.0',
+          protocolVersion: '2025-11-25',
+          sessionId: 'auth-test-session',
+        },
+      }),
+    );
 
     let agentToolOptions: any = null;
 
