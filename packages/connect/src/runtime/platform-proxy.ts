@@ -28,7 +28,7 @@ import { MastraConnectError } from '../errors.js';
  */
 export interface PlatformProxyRequest {
   endpoint: string;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: NonNullable<ProxyRequestOptions['query']>;
   headers?: Record<string, string>;
   data?: unknown;
   /**
