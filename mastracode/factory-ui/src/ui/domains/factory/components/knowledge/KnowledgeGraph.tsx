@@ -25,7 +25,7 @@ import '@xyflow/react/dist/style.css';
 import { Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
 import type { NodeFlowNode, KnowledgeFlowEdge, KnowledgeGraphFilters, RecordFlowNode } from './graphModel';
 import {
   countUnrenderedBoundaries,
@@ -43,6 +43,14 @@ import {
 } from './graphModel';
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
+
+const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
+
+const RUNG_RING: Record<KnowledgeRung, string> = {
+  org: 'border-purple-300/70',
+  resource: 'border-purple-500/60',
+  thread: 'border-cyan-400/60',
+};
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
