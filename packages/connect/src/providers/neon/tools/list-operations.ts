@@ -4,51 +4,23 @@ import { z } from 'zod';
 
 import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platform-proxy.js';
 
-export const deleteBranchInputSchema = z.object({
-  project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')),
-  branch_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')),
+export const listOperationsInputSchema = z.object({
+  cursor: z
+    .string()
+    .describe('Specify the cursor value from the previous response to get the next batch of operations')
+    .optional(),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .describe('Specify a value from 1 to 1000 to limit number of operations in the response')
+    .optional(),
+  project_id: z.string().regex(new RegExp('^[a-z0-9-]{1,60}$')).describe('The Neon project ID'),
 });
 
 const ProviderResponseSchema = z
   .object({
-    branch: z
-      .object({
-        id: z.string(),
-        project_id: z.string(),
-        parent_id: z.string().optional(),
-        parent_lsn: z.string().optional(),
-        parent_timestamp: z.string().optional(),
-        name: z.string(),
-        current_state: z.string(),
-        pending_state: z.string().optional(),
-        state_changed_at: z.string(),
-        logical_size: z.number().int().optional(),
-        creation_source: z.string(),
-        primary: z.boolean().optional(),
-        default: z.boolean(),
-        protected: z.boolean(),
-        cpu_used_sec: z.number().int(),
-        compute_time_seconds: z.number().int(),
-        active_time_seconds: z.number().int(),
-        written_data_bytes: z.number().int(),
-        data_transfer_bytes: z.number().int(),
-        created_at: z.string(),
-        updated_at: z.string(),
-        ttl_interval_seconds: z.number().int().optional(),
-        expires_at: z.string().optional(),
-        last_reset_at: z.string().optional(),
-        created_by: z.object({ name: z.string().optional(), image: z.string().optional() }).passthrough().optional(),
-        init_source: z.string().optional(),
-        restore_status: z.string().optional(),
-        restored_from: z.string().optional(),
-        restored_as: z.string().optional(),
-        restricted_actions: z.array(z.object({ name: z.string(), reason: z.string() }).passthrough()).optional(),
-        recovery: z
-          .object({ deleted_at: z.string(), recoverable_until: z.string(), deletion_method: z.enum(['user', 'ttl']) })
-          .passthrough()
-          .optional(),
-      })
-      .passthrough(),
     operations: z.array(
       z
         .object({
@@ -113,27 +85,36 @@ const ProviderResponseSchema = z
         })
         .passthrough(),
     ),
+    pagination: z
+      .object({ cursor: z.string().min(1) })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
-export const deleteBranchOutputSchema = ProviderResponseSchema;
+export const listOperationsOutputSchema = ProviderResponseSchema.extend({ next_cursor: z.string().optional() });
 
-export function deleteBranchTool(proxy: PlatformProxy) {
+export function listOperationsTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'neon_delete_branch',
-    description: 'Delete branch in Neon.',
-    inputSchema: deleteBranchInputSchema,
-    outputSchema: deleteBranchOutputSchema,
-    execute: async (input, { requestContext }): Promise<z.infer<typeof deleteBranchOutputSchema>> => {
+    id: 'neon_list_operations',
+    description:
+      'List operations. Retrieves a list of operations for the specified Neon project.\nThe number of operations returned can be large.\nTo paginate the response, issue an initial request with a `limit` value.\nThen, add the `cursor` value that was returned in the response to the next request.\nOperations older than 6 months may be deleted from our systems.\nIf you need more history than that, you should store your own history.\n Returns one page; pass next_cursor as cursor to continue.',
+    inputSchema: listOperationsInputSchema,
+    outputSchema: listOperationsOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof listOperationsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
+      const params: Record<string, string | number> = {};
+      if (input['cursor'] !== undefined) params['cursor'] = input['cursor'];
+      if (input['limit'] !== undefined) params['limit'] = input['limit'];
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/neondatabase/neon-pkgs/af5a839e5900dc98120af6261b5b29d02c74a8e1/packages/sdk/spec/neon-openapi.json,
-        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/branches/${encodeURIComponent(input['branch_id'])}`,
+        endpoint: `/v2/projects/${encodeURIComponent(input['project_id'])}/operations`,
         retries: 3,
+        params,
       };
-      const response = await platformProxy.delete(config);
+      const response = await platformProxy.get(config);
       const data = ProviderResponseSchema.parse(response.data);
-      return data;
+      return { ...data, next_cursor: data.pagination?.cursor || undefined };
     },
   });
 }

@@ -2,7 +2,7 @@
 '@mastra/connect': minor
 ---
 
-Added 29 Neon, Resend, and incident.io tools backed by platform connections. Attach the provider connections to your project, then configure their tools with `connect`:
+Added 31 Neon, Resend, and incident.io tools backed by platform connections. Attach the provider connections to your project, then configure their tools with `connect`:
 
 ```ts
 import { connect } from '@mastra/connect';

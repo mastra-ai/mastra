@@ -24,7 +24,7 @@ The resolver discovers active project connections. Where multiple connections ma
 
 | Provider    | Tools | Initial scope                                                                                                         |
 | ----------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
-| Neon        | 10    | List/get/create projects; list/get/create/delete branches; list databases; list/get compute endpoints                 |
+| Neon        | 12    | List/get/create projects; list/get/create/delete branches; list databases; list/get compute endpoints                 |
 | Resend      | 8     | Send/get/list/cancel emails; create/get/list/verify domains                                                           |
 | incident.io | 11    | List/get/create incidents; list/get/create/update follow-ups; list/get actions; list severities and incident statuses |
 
@@ -53,3 +53,5 @@ Neon SQL execution, credential retrieval, and composed create-and-connect workfl
 These tools are generated from three upstream contributions: [Neon](https://github.com/NangoHQ/integration-templates/pull/666), [Resend](https://github.com/NangoHQ/integration-templates/pull/667), and [incident.io](https://github.com/NangoHQ/integration-templates/pull/668). Until they land upstream, the maintainer generator pins the combined contribution commit in `rhysbalevicius/integration-templates`. Each new provider manifest records the repository, exact commit, and generated file checksums. Existing providers retain their original provenance.
 
 See [maintainer generation commands](./scripts/README.md) and [third-party notices](./NOTICE.md). Tests use OpenAPI examples and synthetic fixtures; live provider calls require credentials and have not been validated by these fixture tests.
+
+Neon operation completion: `neon_get_operation`, `neon_list_operations`.
