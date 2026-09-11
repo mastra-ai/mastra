@@ -1,35 +1,21 @@
-import type { MCPServerContext } from '@mastra/core/tools';
+import type { MCPRequestContextV2, MCPToolOutcomeV2 } from '@mastra/core/mcp';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
 import type {
+  AuthInfo,
   CacheHint,
-  RequestOptions,
-  ElicitRequest,
-  ElicitResult,
+  InputRequiredResult,
   Prompt,
   PromptMessage,
   Resource,
   ResourceTemplateType,
+  ServerContext,
 } from '@modelcontextprotocol/server';
 
-/**
- * MCP protocol revisions the server can be pinned to.
- *
- * - `'2025-11-25'` — the legacy (2025) protocol era. This is the default and matches
- *   the server's behavior when the option is omitted: sessionful streamable HTTP,
- *   `initialize` handshake, server→client push notifications.
- * - `'2026-07-28'` — the stateless protocol revision. HTTP and serverless requests are
- *   served through the SDK's dual-era handler: modern (per-request envelope) clients are
- *   served natively, and legacy clients are served through the built-in stateless
- *   fallback on the same endpoint. Stdio serves both eras via the `server/discover`
- *   probe. List-changed/resource-updated notifications additionally reach modern
- *   clients via `subscriptions/listen`, tool log emission honors the per-request
- *   `logLevel` opt-in, and configured {@link MCPServerCacheHints} are advertised.
- */
-export type MCPServerProtocolVersion = '2025-11-25' | '2026-07-28';
+/** The only protocol revision `@mastra/mcp` serves. */
+export const MCP_PROTOCOL_VERSION = '2026-07-28' as const;
 
-/**
- * The operations whose results are cacheable on the `2026-07-28` protocol revision.
- */
+/** Operations whose results can advertise cache hints. */
 export type MCPServerCacheableMethod =
   | 'tools/list'
   | 'prompts/list'
@@ -38,168 +24,81 @@ export type MCPServerCacheableMethod =
   | 'resources/read'
   | 'server/discover';
 
-/**
- * Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results of the
- * `2026-07-28` protocol revision, keyed by operation.
- *
- * Only used when `protocolVersion: '2026-07-28'` is set. Absent hints keep the SDK's
- * conservative defaults (`ttlMs: 0`, `cacheScope: 'private'`). Responses to legacy
- * (2025-era) requests are never affected.
- */
+/** Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results, keyed by operation. */
 export type MCPServerCacheHints = Partial<Record<MCPServerCacheableMethod, CacheHint>>;
 
 /**
- * Callback function to retrieve content for a specific resource.
+ * Request-scoped context handed to resource and prompt callbacks.
  *
- * @param params - Parameters for resource content retrieval
- * @param params.uri - URI of the resource to retrieve
- * @param params.extra - Additional request handler context
- * @returns Promise resolving to resource content (single or array)
+ * `request` carries the protocol facilities of the current round (cancellation,
+ * metadata, per-request logging and progress, input responses and echoed state);
+ * `requestContext` carries the trusted application context (`authInfo`, mapped `user`).
  */
-export type MCPServerResourceContentCallback = ({
-  uri,
-  extra,
-}: {
-  uri: string;
-  extra: MCPRequestHandlerExtra;
-}) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+export interface MCPServerRequest {
+  request: MCPRequestContextV2;
+  requestContext: RequestContext;
+}
 
-/**
- * Content for an MCP resource, either text or binary (base64-encoded).
- */
+/** A native continuation returned by a resource or prompt callback. */
+export type MCPInputRequired = Extract<MCPToolOutcomeV2<never>, { kind: 'input_required' }>;
+
+/** Content for an MCP resource, either text or binary (base64-encoded). */
 export type MCPServerResourceContent = { text?: string } | { blob?: string };
 
-/**
- * Configuration for MCP server resource handling.
- *
- * Defines callbacks for listing resources, retrieving content, and optionally listing templates.
- */
+export type MCPServerResourceContentCallback = (
+  params: { uri: string } & MCPServerRequest,
+) => Promise<MCPServerResourceContent | MCPServerResourceContent[] | MCPInputRequired>;
+
+/** Configuration for MCP server resource handling. */
 export type MCPServerResources = {
-  /** Function to list all available resources */
-  listResources: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<Resource[]>;
-  /** Function to get content for a specific resource */
+  listResources: (params: MCPServerRequest) => Promise<Resource[]>;
   getResourceContent: MCPServerResourceContentCallback;
-  /** Optional function to list resource templates */
-  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplateType[]>;
+  resourceTemplates?: (params: MCPServerRequest) => Promise<ResourceTemplateType[]>;
 };
 
-/**
- * Extends the MCP Prompt type with an optional version field.
- *
- * The MCP protocol does not include `version` on prompts, so this field is
- * only used server-side for internal prompt lookup and is not sent over the wire.
- *
- * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
- * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
- */
-export type MastraPrompt = Prompt & {
-  /**
-   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
-   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
-   */
-  version?: string;
-};
+export type MCPServerPromptMessagesCallback = (
+  params: { name: string; args?: Record<string, unknown> } & MCPServerRequest,
+) => Promise<PromptMessage[] | MCPInputRequired>;
 
-/**
- * Callback function to retrieve messages for a specific prompt.
- *
- * @param params - Parameters for prompt message retrieval
- * @param params.name - Name of the prompt
- * @param params.version - Optional version of the prompt
- * @param params.args - Optional arguments for the prompt
- * @param params.extra - Additional request handler context
- * @returns Promise resolving to array of prompt messages
- */
-export type MCPServerPromptMessagesCallback = ({
-  name,
-  version,
-  args,
-  extra,
-}: {
-  name: string;
-  /**
-   * @deprecated The `version` field is not part of the MCP protocol and will be removed in a future release.
-   * Use distinct prompt names instead (e.g., `explain-code-v1`, `explain-code-v2`).
-   */
-  version?: string;
-  args?: any;
-  extra: MCPRequestHandlerExtra;
-}) => Promise<PromptMessage[]>;
-
-/**
- * Configuration for MCP server prompt handling.
- *
- * Defines callbacks for listing prompts and retrieving prompt messages.
- */
+/** Configuration for MCP server prompt handling. */
 export type MCPServerPrompts = {
-  /** Function to list all available prompts */
-  listPrompts: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<MastraPrompt[]>;
-  /** Optional function to get messages for a specific prompt */
+  listPrompts: (params: MCPServerRequest) => Promise<Prompt[]>;
   getPromptMessages?: MCPServerPromptMessagesCallback;
 };
 
 /**
- * Actions for handling elicitation requests (interactive user input collection).
+ * Maps transport authentication into the application user used by Mastra FGA.
+ * Runs on every request and every continuation round; nothing is cached across rounds.
  */
-export type ElicitationActions = {
-  /**
-   * Function to send an elicitation request to the client.
-   *
-   * @param request - The elicitation request parameters
-   * @param options - Optional request options (timeout, signal, etc.)
-   * @returns Promise resolving to the client's elicitation response
-   */
-  sendRequest: (request: ElicitRequest['params'], options?: RequestOptions) => Promise<ElicitResult>;
-};
+export type MCPAuthInfoToUserMapperV2<TUser = unknown> = (args: {
+  authInfo: AuthInfo;
+  requestContext: RequestContext;
+}) => TUser | null | undefined | Promise<TUser | null | undefined>;
 
 /**
- * Extra context passed to MCP request handlers.
+ * Integrity hook for echoed `requestState`. Runs inside the SDK before any handler
+ * sees the request; a rejection answers the round with `-32602`. Build one with
+ * `createRequestStateCodec` from `@modelcontextprotocol/server` and pass its `verify`.
  */
-export type MCPRequestHandlerExtra = MCPServerContext;
+export type MCPRequestStateVerifier = (state: string, ctx: ServerContext) => unknown | Promise<unknown>;
 
-/**
- * Re-exported MCP types for resource handling.
- *
- * - `Resource`: Represents a data resource exposed by the server
- * - `ResourceTemplate`: URI template for dynamic resource generation
- * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
- */
-export type { Resource, ResourceTemplateType as ResourceTemplate, RequestOptions };
+/** Request-security options accepted by `startHTTP`. */
+export interface MCPServerHTTPRequestOptions {
+  enableDnsRebindingProtection?: boolean;
+  allowedHosts?: string[];
+  allowedOrigins?: string[];
+}
 
-/**
- * Configuration for a single MCP App resource.
- *
- * App resources serve interactive HTML UIs via the `ui://` URI scheme
- * as defined by the MCP Apps extension (SEP-1865).
- */
+export type { Resource, ResourceTemplateType as ResourceTemplate, InputRequiredResult };
+
+/** Configuration for a single MCP App resource served under the `ui://` scheme. */
 export interface AppResource {
-  /** Display name for the UI resource */
   name: string;
-  /** Optional description of the UI resource */
   description?: string;
-  /** Inline HTML content for the UI */
   html?: string;
-  /** Path to an HTML file (resolved at startup) */
   htmlPath?: string;
-  /** UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK */
   meta?: McpUiResourceMeta;
 }
 
-/**
- * Map of `ui://` URIs to their app resource configurations.
- *
- * Used as a convenience config on MCPServer to auto-register UI resources
- * that are served via the MCP Apps extension.
- *
- * @example
- * ```typescript
- * const appResources: AppResources = {
- *   'ui://weather/dashboard': {
- *     name: 'Weather Dashboard',
- *     html: '<html>...</html>',
- *     meta: { csp: { connectDomains: ['https://api.weather.com'] } },
- *   },
- * };
- * ```
- */
+/** Map of `ui://` URIs to their app resource configurations. */
 export type AppResources = Record<string, AppResource>;
