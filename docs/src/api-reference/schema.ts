@@ -69,6 +69,7 @@ const declaration = v.strictObject({
   type: v.optional(apiTypeSchema),
   defaultType: v.optional(apiTypeSchema),
   defaultValue: v.optional(v.string()),
+  sourceSignature: v.optional(v.string()),
   children: v.array(identity),
   signatures: v.array(identity),
   parameters: v.array(identity),

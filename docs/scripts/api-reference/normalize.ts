@@ -24,8 +24,10 @@ import type {
 } from '../../src/api-reference/model'
 import { parseContract } from '../../src/api-reference/schema'
 import { canonicalDestinations, ownedPackages, repositoryRoot, serviceClassifications, symbolIdentity } from './config'
+import { createSourceSignatureReader } from './source-signature'
 
 export function normalize(project: ProjectReflection, root: Reflection, rootId: string): ApiContract {
+  const sourceSignature = createSourceSignatureReader()
   const ids = new Map<Reflection, string>()
   const declarations: Record<string, ApiDeclaration> = {}
   const diagnostics: ApiContract['diagnostics'] = []
@@ -303,6 +305,10 @@ export function normalize(project: ProjectReflection, root: Reflection, rootId: 
       if (reflection.defaultValue !== undefined) node.defaultValue = reflection.defaultValue
     }
     if (reflection instanceof SignatureReflection) {
+      if (source) {
+        const signature = sourceSignature(source)
+        if (signature) node.sourceSignature = signature
+      }
       node.parameters = reflection.parameters?.map(visit) ?? []
       node.typeParameters = reflection.typeParameters?.map(visit) ?? []
     }

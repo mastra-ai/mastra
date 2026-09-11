@@ -2,6 +2,8 @@ import 'dotenv/config'
 import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
 import remarkModelTokens from './src/plugins/remark-model-tokens'
+import remarkApiReference from './src/plugins/remark-api-reference'
+import apiReferenceDependencies from './src/plugins/remark-api-reference/dependencies'
 import type { Config } from '@docusaurus/types'
 import type { Options as PresetOptions, ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
@@ -73,6 +75,7 @@ const config: Config = {
     posthogHost: process.env.POSTHOG_HOST,
   },
   plugins: [
+    apiReferenceDependencies,
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
     [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
@@ -115,6 +118,7 @@ const config: Config = {
         sidebarPath: './src/content/en/reference/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
+        beforeDefaultRemarkPlugins: [[remarkApiReference, { revision: process.env.API_REFERENCE_SOURCE_REVISION }]],
         remarkPlugins: [...SHARED_REMARK_PLUGINS],
       },
     ],

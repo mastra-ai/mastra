@@ -83,6 +83,8 @@
     "react-hotkeys-hook": "^5.2.4",
     "rehype-parse": "^9.0.1",
     "rehype-remark": "^10.0.1",
+    "remark-mdx": "3.1.1",
+    "remark-parse": "11.0.0",
     "remark-stringify": "^11.0.0",
     "tinyglobby": "^0.2.15",
     "unified": "^11.0.5",

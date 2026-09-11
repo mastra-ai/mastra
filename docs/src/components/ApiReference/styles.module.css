@@ -1,0 +1,202 @@
+.surface {
+  min-width: 0;
+  margin-block: 1.5rem;
+}
+
+.surface > h2 {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+  font-size: 1.5rem;
+  scroll-margin-top: 6rem;
+}
+
+.entries {
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+}
+
+.entry {
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  scroll-margin-top: 6rem;
+}
+
+.entry + .entry {
+  border-top: 1px solid var(--ifm-toc-border-color);
+}
+
+.entry p,
+.entry ul,
+.entry ol {
+  margin-block: 0.5rem;
+}
+
+.entry > :last-child {
+  margin-bottom: 0;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.375rem;
+}
+
+.surface .header :is(h3, h4, h5, h6) {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  scroll-margin-top: 6rem;
+  overflow-wrap: anywhere;
+}
+
+.header a {
+  color: inherit;
+  text-decoration: none;
+  border: 0;
+}
+
+.header a:hover {
+  text-decoration: underline;
+}
+
+.header :is(h3, h4, h5, h6) code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 1em;
+}
+
+.badge,
+.deprecatedBadge {
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  color: var(--ifm-color-content-secondary);
+  background: var(--ifm-code-background);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.deprecatedBadge {
+  color: var(--ifm-color-warning-darkest);
+  background: var(--ifm-color-warning-contrast-background);
+}
+
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.5rem;
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.8rem;
+}
+
+.type {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.type code {
+  white-space: pre-wrap;
+  font-size: 0.75rem;
+}
+
+.entry pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.entry pre code {
+  white-space: pre-wrap;
+}
+
+.default {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: baseline;
+}
+
+.default p {
+  margin: 0;
+}
+
+.default code {
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.example {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--ifm-toc-border-color);
+  background: var(--ifm-code-background);
+  border-radius: 6px;
+  margin-block: 0.5rem;
+}
+
+.example summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.example[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.example > :last-child {
+  margin-bottom: 0;
+}
+
+.source {
+  margin-inline-start: auto;
+  min-width: 0;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.entry summary:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.overloads {
+  min-width: 0;
+}
+
+.nested {
+  margin-block: 0.5rem;
+}
+
+.nested > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.nested > .entry {
+  padding-inline: 0.5rem;
+  border-inline-start: 1px solid var(--ifm-toc-border-color);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

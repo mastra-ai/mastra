@@ -190516,6 +190516,7 @@
           "boundary": "external"
         }
       },
+      "sourceSignature": "async generate<OUTPUT extends StandardSchemaWithJSON<any, any>, T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>>(messages: MessageListInput, options: AgentExecutionOptionsBase<T> & {\n    structuredOutput: PublicStructuredOutputOptions<T>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}): Promise<FullOutput<T>>;",
       "children": [],
       "signatures": [],
       "parameters": [
@@ -193739,6 +193740,7 @@
           "boundary": "external"
         }
       },
+      "sourceSignature": "async generate<OUTPUT extends {}>(messages: MessageListInput, options: AgentExecutionOptionsBase<OUTPUT> & {\n    structuredOutput: PublicStructuredOutputOptions<OUTPUT>;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}): Promise<FullOutput<OUTPUT>>;",
       "children": [],
       "signatures": [],
       "parameters": [
@@ -196888,6 +196890,7 @@
           "boundary": "external"
         }
       },
+      "sourceSignature": "async generate(messages: MessageListInput, options: AgentExecutionOptionsBase<unknown> & {\n    structuredOutput?: never;\n} & {\n    model?: DynamicArgument<MastraModelConfig>;\n}): Promise<FullOutput<TOutput>>;",
       "children": [],
       "signatures": [],
       "parameters": [
@@ -199981,6 +199984,7 @@
           "boundary": "external"
         }
       },
+      "sourceSignature": "async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;",
       "children": [],
       "signatures": [],
       "parameters": ["@mastra/core/agent!Agent.generate/5/generate/3/2/messages/0"],

@@ -5,6 +5,8 @@ import remarkStringify from 'remark-stringify'
 import type { Element } from 'hast'
 
 import { isCardGridItems, handleCardGridItems, isPropertiesTable, handlePropertiesTable } from '../component-handlers'
+import { processHtml } from '../html-processor'
+import { resolveOptions } from '../options'
 
 // Helper: parse HTML fragment into a hast Element
 function parseHtml(html: string): Element {
@@ -25,6 +27,35 @@ function toMarkdown(nodes: ReturnType<typeof handlePropertiesTable> | ReturnType
 
 // Minimal mock state (these handlers don't use state)
 const mockState = {} as any
+
+describe('source-backed API markup', () => {
+  it('preserves stable anchors, collapsed fields, signatures, defaults, examples, and links', async () => {
+    const html = `<html><head><title>API reference</title></head><body><article>
+      <section data-api-reference="true" data-api-surface="api-surface"><h2>Returns</h2>
+      <article data-api-entry="api-field"><header><h3>result</h3></header>
+      <p>Default: <code>undefined</code></p><p>Deprecated: use <a href="#api-nested">replacement</a>.</p>
+      <pre class="language-typescript"><code>generate(): Promise&lt;Result&gt;</code></pre>
+      <details data-api-nested="true"><summary>Type details</summary>
+      <article data-api-entry="api-nested"><h4>value</h4><p>A nested result.</p></article></details>
+      <details><summary>Example</summary><pre class="language-typescript"><code>await agent.generate('Hello')</code></pre></details>
+      </article></section></article></body></html>`
+    const result = await processHtml(html, '/reference/test', resolveOptions({ siteUrl: 'https://mastra.ai' }))
+    for (const text of [
+      '<a id="api-surface"></a>',
+      '<a id="api-field"></a>',
+      '<a id="api-nested"></a>',
+      'Returns',
+      'Default:',
+      'undefined',
+      'Deprecated:',
+      '#api-nested',
+      'generate(): Promise<Result>',
+      'A nested result.',
+      "await agent.generate('Hello')",
+    ])
+      expect(result.markdown).toContain(text)
+  })
+})
 
 describe('CardGrid items', () => {
   it('detects the explicit card-grid slot', () => {

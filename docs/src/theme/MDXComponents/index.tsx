@@ -14,6 +14,7 @@ import GithubLink from '@site/src/components/GithubLink'
 import NetlifyLogo from '@site/src/components/NetlifyLogo'
 import OperatorsTable from '@site/src/components/OperatorsTable'
 import PropertiesTable from '@site/src/components/PropertiesTable'
+import ApiReference from '@site/src/components/ApiReference'
 import ProviderModelsTable from '@site/src/components/ProviderModelsTable'
 import YouTube from '@site/src/components/YouTube-player'
 import { Inject } from '@site/src/components/inject'
@@ -43,6 +44,7 @@ const MDXComponents: MDXComponentsObject = {
   OperatorsTable,
   ProviderModelsTable,
   PropertiesTable,
+  ApiReference,
   YouTube,
   Inject,
 }

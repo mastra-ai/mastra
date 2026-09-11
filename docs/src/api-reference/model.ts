@@ -66,6 +66,7 @@ export interface ApiDeclaration {
   type?: ApiType
   defaultType?: ApiType
   defaultValue?: string
+  sourceSignature?: string
   children: string[]
   signatures: string[]
   parameters: string[]
