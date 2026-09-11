@@ -63,4 +63,12 @@ describe('PullTransport.stop()', () => {
     expect(Date.now() - startedAt).toBeLessThan(1_000);
     expect(flush).toHaveBeenCalledOnce();
   });
+
+  it('rejects drain timeouts setTimeout would silently clamp', async () => {
+    const pubsub = new EventEmitterPubSub();
+    expect(() => new PullTransport({ pubsub, group: 'test', drainTimeout: -1 })).toThrow(RangeError);
+    expect(() => new PullTransport({ pubsub, group: 'test', drainTimeout: 2_147_483_648 })).toThrow(RangeError);
+    const transport = new PullTransport({ pubsub, group: 'test' });
+    await expect(transport.stop({ drainTimeout: Number.NaN })).rejects.toThrow(RangeError);
+  });
 });

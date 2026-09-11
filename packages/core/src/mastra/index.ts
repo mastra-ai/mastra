@@ -85,6 +85,7 @@ import { readPositiveIntEnv } from '../utils';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
+import { assertDrainTimeout } from '../worker/drain-timeout';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
@@ -6669,10 +6670,7 @@ export class Mastra<
    * pubsub is flushed.
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
-    const drainTimeout = options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
-    if (!Number.isFinite(drainTimeout) || drainTimeout < 0) {
-      throw new RangeError('stopWorkers drainTimeout must be a finite number of milliseconds >= 0');
-    }
+    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'stopWorkers');
     // One deadline for the whole call. Each worker's transport drain and the
     // push-event drain below typically wait on the same stuck step, so giving
     // each phase the full budget would multiply the worst-case stop time.
@@ -7063,10 +7061,7 @@ export class Mastra<
    * window are abandoned with a warning.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
-    const drainTimeout = options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
-    if (!Number.isFinite(drainTimeout) || drainTimeout < 0) {
-      throw new RangeError('shutdown drainTimeout must be a finite number of milliseconds >= 0');
-    }
+    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
 
     // `drainTimeout` is a single deadline shared by every drain in this method
     // (evented runs here, then worker transports and push events inside
@@ -7084,14 +7079,27 @@ export class Mastra<
     // `workflows` subscriptions below are alive, so let them settle first.
     // Durable workflows may also still be persisting their next terminal or
     // suspended snapshot; storage stays open until after this drain either way.
-    const pendingRuns = [...this.#activeEventedRuns, ...getActiveDurableAgentWorkflowExecutions(this)];
-    if (pendingRuns.length > 0) {
+    // Workers stay up during this drain, so a run can still be started while
+    // we wait (an in-flight request handler, a scheduler tick, a step that
+    // starts another run). Re-snapshot until nothing is left or the deadline
+    // passes rather than gating new runs, which would turn those callers into
+    // errors mid-shutdown.
+    // Each promise is awaited at most once: the durable-agent registry can keep
+    // returning a settled execution, which would otherwise spin this loop.
+    const awaited = new Set<Promise<unknown>>();
+    for (;;) {
+      const pendingRuns = [...this.#activeEventedRuns, ...getActiveDurableAgentWorkflowExecutions(this)].filter(
+        run => !awaited.has(run),
+      );
+      if (pendingRuns.length === 0) break;
+      pendingRuns.forEach(run => awaited.add(run));
       const drained = await this.#awaitBounded(
         Promise.allSettled(pendingRuns),
-        drainTimeout,
+        Math.max(0, deadline - Date.now()),
         `${pendingRuns.length} in-flight evented workflow run(s)`,
       );
-      drained?.forEach(result => {
+      if (!drained) break;
+      drained.forEach(result => {
         if (result.status === 'rejected') {
           this.#logger?.error('Evented workflow run failed during shutdown', {
             error: result.reason,

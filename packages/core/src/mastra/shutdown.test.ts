@@ -28,9 +28,9 @@ class PushOnlyPubSub extends EventEmitterPubSub {
  * Two-step evented workflow whose first step blocks until `gate` resolves, so a
  * test can call shutdown() while a step is mid-execution.
  */
-function makeGatedWorkflow(gate: Promise<void>, onStepStarted: () => void) {
+function makeGatedWorkflow(gate: Promise<void>, onStepStarted: () => void, id = 'gated-workflow') {
   const wf = createWorkflow({
-    id: 'gated-workflow',
+    id,
     inputSchema: z.object({}),
     outputSchema: z.object({ done: z.boolean() }),
   });
@@ -238,6 +238,48 @@ describe('Mastra shutdown lifecycle', () => {
     }
   });
 
+  it('drains a run that starts while an earlier run is still draining', async () => {
+    const gate1 = deferred();
+    const gate2 = deferred();
+    const started1 = deferred();
+    const started2 = deferred();
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: {
+        first: makeGatedWorkflow(gate1.promise, () => started1.resolve(), 'first'),
+        second: makeGatedWorkflow(gate2.promise, () => started2.resolve(), 'second'),
+      } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run1 = await mastra.getWorkflow('first').createRun();
+      const result1 = run1.start({ inputData: {} });
+      await started1.promise;
+
+      const shutdown = mastra.shutdown({ drainTimeout: 5_000 });
+
+      // Second run starts after shutdown() took its first snapshot.
+      const run2 = await mastra.getWorkflow('second').createRun();
+      const result2 = run2.start({ inputData: {} });
+      await started2.promise;
+      gate1.resolve();
+      await expect(result1).resolves.toMatchObject({ status: 'success' });
+
+      // Only the second run holds shutdown open now; it must still be drained.
+      await new Promise(r => setTimeout(r, 50));
+      gate2.resolve();
+      await expect(result2).resolves.toMatchObject({ status: 'success' });
+      await shutdown;
+    } finally {
+      gate1.resolve();
+      gate2.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('shares the drain deadline with the push-mode event drain', async () => {
     const gate = deferred();
     const stepStarted = deferred();
@@ -307,6 +349,9 @@ describe('Mastra shutdown lifecycle', () => {
     try {
       await expect(mastra.shutdown({ drainTimeout: -1 })).rejects.toThrow(RangeError);
       await expect(mastra.shutdown({ drainTimeout: Number.NaN })).rejects.toThrow(RangeError);
+      // Node clamps timers above 2^31-1 to 1ms, which would silently skip the drain.
+      await expect(mastra.shutdown({ drainTimeout: 2_147_483_648 })).rejects.toThrow(RangeError);
+      await expect(mastra.stopWorkers({ drainTimeout: -1 })).rejects.toThrow(RangeError);
     } finally {
       await mastra.shutdown();
       mastra.__unregisterHooks();

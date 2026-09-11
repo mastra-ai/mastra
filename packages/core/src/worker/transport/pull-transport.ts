@@ -1,6 +1,7 @@
 import type { PubSub } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import { assertDrainTimeout } from '../drain-timeout';
 import type { EventRouter, WorkerTransport, WorkerTransportStopOptions } from './transport';
 
 const TOPIC_WORKFLOWS = 'workflows';
@@ -36,7 +37,7 @@ export class PullTransport implements WorkerTransport {
     this.#group = group;
     this.#topic = topic ?? TOPIC_WORKFLOWS;
     this.#logger = logger;
-    this.#drainTimeout = drainTimeout ?? DEFAULT_DRAIN_TIMEOUT_MS;
+    this.#drainTimeout = assertDrainTimeout(drainTimeout ?? DEFAULT_DRAIN_TIMEOUT_MS, 'PullTransport');
   }
 
   async start(router: EventRouter): Promise<void> {
@@ -67,13 +68,15 @@ export class PullTransport implements WorkerTransport {
   }
 
   async stop(options?: WorkerTransportStopOptions): Promise<void> {
+    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? this.#drainTimeout, 'PullTransport.stop()');
     // Unsubscribe first so no new events land while we drain; events already
     // handed to the router keep running and may still publish/ack/nack.
     for (const { topic, cb } of this.#callbacks) {
       await this.#pubsub.unsubscribe(topic, cb);
     }
     this.#callbacks = [];
-    await this.#drainInFlight(options?.drainTimeout ?? this.#drainTimeout);
+    await this.#drainInFlight(drainTimeout);
+
     await this.#pubsub.flush();
   }
 
