@@ -1,5 +1,6 @@
 import type * as authStudioModule from '@mastra/auth-studio';
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -258,6 +259,15 @@ describe('MastraFactory.prepare', () => {
   it('allows auth-disabled local mode without secret encryption', async () => {
     const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
     await expect(factory.prepare()).resolves.toBeDefined();
+  });
+
+  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const knowledge = { key: 'mastra', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+
+    expect(config.knowledge).toEqual(knowledge);
   });
 
   it('throws when called twice', async () => {
