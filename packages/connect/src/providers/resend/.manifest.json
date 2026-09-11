@@ -1,0 +1,21 @@
+{
+  "providerId": "resend",
+  "localId": "resend",
+  "templateSha": "cfb727cbc131be66eac752d4e129e761ea7027a3",
+  "templateRepo": "rhysbalevicius/integration-templates",
+  "generatedAt": "2026-09-11T05:02:14.123Z",
+  "toolCount": 8,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "0db4bd6ad81471509377e9387ce15f3503b60cbd477c38cb79d36c5d0ca701b5",
+    "tools.ts": "4e6b241e6059c0efda7ac9081c0cebe409fcbdae512e94b7e0ee8cb77dacb1db",
+    "tools/cancel-email.ts": "f836c10ae72047f107b709ce5d5abeb6fe043ab05f3ae07044a403e1e959e278",
+    "tools/create-domain.ts": "5e9f5cabc0a64e3faf76fb7f94ecc4fb41de216cfe35009ab8bff817db0e3884",
+    "tools/get-domain.ts": "6d73b3cdb53baa1465de093bbb605743d3b915a1ed4721c9018dc3d368a8b018",
+    "tools/get-email.ts": "73642b2d705b544c7431e4db576c2e5ea779846e679ec5c29d7da065002057e0",
+    "tools/list-domains.ts": "dcfcab9d805ed6e0da204e52a807ba8578badab3c4e34cd4d07196737230137b",
+    "tools/list-emails.ts": "52344193a6549a6ec8ec179d67fbbde4c6ad1480dbd47f1b362a73251484f715",
+    "tools/send-email.ts": "c3846c619dcf02d128d2b1d984ca8047eae3a62b46d0f7e0f0b4392b512a07de",
+    "tools/verify-domain.ts": "36ddcd93c53dc09bc5350cd3239b09d2545e7627c2091a58d080222d9d549d3d"
+  }
+}

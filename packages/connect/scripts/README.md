@@ -70,3 +70,16 @@ pnpm --filter @mastra/connect build:lib
 ```
 
 Generated action implementations are adapted from `NangoHQ/integration-templates` (Elastic License 2.0). Keep `packages/connect/NOTICE.md` and each generated source header intact.
+
+## Pending provider contributions
+
+The current template pin uses `rhysbalevicius/integration-templates` at an immutable combined revision while the Neon, Resend, and incident.io contributions are reviewed in NangoHQ/integration-templates PRs [#666](https://github.com/NangoHQ/integration-templates/pull/666), [#667](https://github.com/NangoHQ/integration-templates/pull/667), and [#668](https://github.com/NangoHQ/integration-templates/pull/668). The fork contains the upstream checkout plus the three provider additions. Generation still uses the normal commands:
+
+```sh
+pnpm --filter @mastra/connect sync-templates
+pnpm --filter @mastra/connect add-provider neon --yes
+pnpm --filter @mastra/connect add-provider resend --yes
+pnpm --filter @mastra/connect add-provider incident-io --yes
+```
+
+After all three PRs merge, update both `TEMPLATE_REPO` and `TEMPLATE_SHA` to an upstream revision containing them, sync, regenerate these providers, and review manifest/checksum changes. Sync updates an existing cache's remote when the repository pin changes. Older manifests without `templateRepo` refer to NangoHQ/integration-templates.

@@ -1,0 +1,23 @@
+{
+  "providerId": "neon",
+  "localId": "neon",
+  "templateSha": "cfb727cbc131be66eac752d4e129e761ea7027a3",
+  "templateRepo": "rhysbalevicius/integration-templates",
+  "generatedAt": "2026-09-11T05:02:09.174Z",
+  "toolCount": 10,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "edcc0b1829e9c3fc708273d74376ba77166a50a9f16e4351b70c8bf110a6bae9",
+    "tools.ts": "6f7fdc53db59fce75172ec17185f5f3383e9307f0b748cbfd928acaf7efdd70c",
+    "tools/create-branch.ts": "b14c914a32c776cb4c4f1070b4041827ca98bbc4f440643bc6b6d9dc3d4280fd",
+    "tools/create-project.ts": "de9698e7d837aefd15ae6d8d652faf497f40629212b7c45eccc28231fd502402",
+    "tools/delete-branch.ts": "294fe39fa0ace16377e2b33eb9a6a2fa6f769539ef0a2f6f3fbb5fc31df73731",
+    "tools/get-branch.ts": "ca1ed2442d8546c2953d70e6f95cb9a4699287968355eb4e846267a6951cf260",
+    "tools/get-endpoint.ts": "04f12d8fb7df06bbc50ced9d863436be4318e5737db0c1e97977bdb007b9b40f",
+    "tools/get-project.ts": "4e4f9ef070497eb146a2f57a53a1d1bfb74377101c2f5d8abb836ca10b02e537",
+    "tools/list-branches.ts": "40ddbbc10d5b60d3003d909e6c2b1a98b02f6a1e1bff8265724f52f7ac98b86b",
+    "tools/list-databases.ts": "15a7d235440cf48afee01fb91ca807bfc2edd17384dd0e99087c1552c25590ae",
+    "tools/list-endpoints.ts": "5feeedafb363959b7674bc9a6c36503428fec528bab26b955b12289401a20b93",
+    "tools/list-projects.ts": "795d11de5d053c333eca8ebeebba08ff4f70c31dfd9b6be3b5041542302ae157"
+  }
+}
