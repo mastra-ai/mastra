@@ -64,6 +64,33 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}\n`);
           '
 
+  changeset-check:
+    name: Validate changeset packages
+    runs-on: starsling-ubuntu-24.04-2
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Test changeset package validator
+        run: node --test .github/scripts/check-changeset-packages.test.mjs
+
+      # Check all pending changesets, including on changeset-only PRs.
+      - name: Reject unknown or ignored changeset packages
+        run: node .github/scripts/check-changeset-packages.mjs
+
+      # Without --since, validation does not need Git history or require a new changeset.
+      - name: Validate changeset release plan
+        run: pnpm changeset-cli status
+
   lint:
     name: Lint
     needs: changes
