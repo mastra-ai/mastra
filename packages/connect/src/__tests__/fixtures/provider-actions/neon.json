@@ -581,5 +581,29 @@
     "response": {
       "operations": []
     }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_branch_schema",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/schema",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "db_name": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_compare_branch_schema",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/compare_schema",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "db_name": "example"
+    },
+    "response": {}
   }
 ]

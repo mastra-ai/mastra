@@ -1,10 +1,12 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 7b5b21291772 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 8d1f634fd53e — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
+import { compareBranchSchemaTool } from './tools/compare-branch-schema.js';
 import { createBranchTool } from './tools/create-branch.js';
 import { createProjectTool } from './tools/create-project.js';
 import { deleteBranchTool } from './tools/delete-branch.js';
+import { getBranchSchemaTool } from './tools/get-branch-schema.js';
 import { getBranchTool } from './tools/get-branch.js';
 import { getEndpointTool } from './tools/get-endpoint.js';
 import { getOperationTool } from './tools/get-operation.js';
@@ -18,9 +20,11 @@ import { listProjectsTool } from './tools/list-projects.js';
 export function createNeonTools(options?: ProviderToolsOptions) {
   const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
   const tools = {
+    neon_compare_branch_schema: compareBranchSchemaTool(platformProxy),
     neon_create_branch: createBranchTool(platformProxy),
     neon_create_project: createProjectTool(platformProxy),
     neon_delete_branch: deleteBranchTool(platformProxy),
+    neon_get_branch_schema: getBranchSchemaTool(platformProxy),
     neon_get_branch: getBranchTool(platformProxy),
     neon_get_endpoint: getEndpointTool(platformProxy),
     neon_get_operation: getOperationTool(platformProxy),
