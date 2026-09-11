@@ -125,9 +125,6 @@ describe('status route', () => {
       configured: true,
       site: null,
       sites: [],
-      connections: [
-        { id: 'a1b_acme', integrationId: 'mastra-factory-jira', status: 'active', accountLabel: null },
-      ],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });

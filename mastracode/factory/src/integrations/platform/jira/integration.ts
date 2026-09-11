@@ -79,6 +79,11 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  /**
+   * Deployment-wide Jira connection. Every organization served by this
+   * Factory instance uses this connection, so use a separate deployment for
+   * each Jira tenant.
+   */
   connectionId?: string;
 }
 
@@ -144,10 +149,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   clearCaches(): void {
     this.#orgIdByResourceId.clear();
     this.#siteUrlByConnectionId.clear();
-  }
-
-  async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    return [this.#connection];
   }
 
   async hasActiveConnections(): Promise<boolean> {
