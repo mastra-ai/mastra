@@ -110,8 +110,8 @@ describe('MemoryPG.updateThreadResourceId', () => {
     const client = new RecordingDbClient(null);
     const memory = new MemoryPG({ client });
 
-    await expect(
-      memory.updateThreadResourceId({ threadId: 'missing', resourceId: 'resource-2' }),
-    ).rejects.toThrow(/not found/);
+    await expect(memory.updateThreadResourceId({ threadId: 'missing', resourceId: 'resource-2' })).rejects.toThrow(
+      /not found/,
+    );
   });
 });
