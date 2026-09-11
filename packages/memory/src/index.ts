@@ -37,6 +37,7 @@ import type {
   MemoryStorage,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
@@ -2999,19 +3000,42 @@ Notes:
     args: StorageCloneThreadInput,
     memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCloneThreadOutput> {
+    const result = await this.copyThread(args, memoryConfig);
+
+    // The copy happened inside the store; read the new thread's messages back only
+    // because this method's contract returns them.
+    const memoryStore = await this.getMemoryStore();
+    const { messages } = await memoryStore.listMessages({
+      threadId: result.thread.id,
+      resourceId: result.thread.resourceId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    return { ...result, clonedMessages: messages };
+  }
+
+  /**
+   * Copies a thread with all its messages to a new thread without returning the
+   * message payloads. Working memory, observational memory, and semantic-recall
+   * embeddings are carried over exactly as with `cloneThread`; the only difference
+   * is that message content never has to be held in the Node heap at once.
+   *
+   * Use this instead of `cloneThread` when only the new thread id is needed
+   * (e.g. forking a conversation for a subagent).
+   *
+   * @param args - Clone parameters, same as `cloneThread`
+   * @param memoryConfig - Optional memory configuration override
+   * @returns The newly created thread and the source→new message id map
+   */
+  public override async copyThread(
+    args: StorageCloneThreadInput,
+    memoryConfig?: MemoryConfigInternal,
+  ): Promise<StorageCopyThreadOutput> {
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // The caller may opt out of hydrating message payloads (e.g. forked subagents that
-    // only need the new thread id). Force hydration when semantic recall is active, since
-    // embedding requires the cloned message payloads.
-    const requestedHydrate = args.options?.hydrateMessages ?? true;
-    const effectiveHydrate = requestedHydrate || Boolean(this.vector && this.embedder && config.semanticRecall);
-    const result = await memoryStore.cloneThread(
-      effectiveHydrate === requestedHydrate
-        ? args
-        : { ...args, options: { ...args.options, hydrateMessages: effectiveHydrate } },
-    );
+    const result = await memoryStore.copyThread(args);
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
@@ -3059,12 +3083,37 @@ Notes:
       }
     }
 
-    // Embed cloned messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors
-    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
-      await this.embedClonedMessages(result.clonedMessages, config);
+    // Embed copied messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors.
+    // Pages through the new thread so large threads are embedded without loading every payload at once.
+    if (this.vector && this.embedder && config.semanticRecall) {
+      await this.embedThreadMessagesInPages(memoryStore, result.thread, config);
     }
 
     return result;
+  }
+
+  private static readonly CLONE_EMBED_PAGE_SIZE = 100;
+
+  private async embedThreadMessagesInPages(
+    memoryStore: MemoryStorage,
+    thread: StorageThreadType,
+    config: MemoryConfigInternal,
+  ): Promise<void> {
+    const perPage = Memory.CLONE_EMBED_PAGE_SIZE;
+    for (let page = 0; ; page++) {
+      const { messages, hasMore } = await memoryStore.listMessages({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        page,
+        perPage,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        includeTotal: false,
+      });
+      if (messages.length > 0) {
+        await this.embedClonedMessages(messages, config);
+      }
+      if (!hasMore || messages.length < perPage) break;
+    }
   }
 
   public async updateThreadResourceId({
@@ -3144,7 +3193,7 @@ Notes:
     memoryStore: MemoryStorage,
     sourceThreadId: string,
     sourceResourceId: string,
-    result: StorageCloneThreadOutput,
+    result: StorageCopyThreadOutput,
   ): Promise<void> {
     // Look up OM for thread-scoped first (threadId + resourceId), then resource-scoped (null + resourceId)
     let sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);

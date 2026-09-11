@@ -2203,7 +2203,9 @@ export class AgentController<TState = {}> {
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title }) => {
               const memory = await this.resolveMemory(session);
-              const result = await memory.cloneThread({
+              // The fork only needs the new thread id, so copy without loading
+              // the message payloads into the Node heap.
+              const result = await memory.copyThread({
                 sourceThreadId,
                 resourceId: resourceId ?? session.identity.getResourceId(),
                 title,
@@ -2211,10 +2213,6 @@ export class AgentController<TState = {}> {
                   forkedSubagent: true,
                   parentThreadId: sourceThreadId,
                 },
-                // The fork only needs the new thread id; skip hydrating message payloads
-                // into the Node heap. Memory.cloneThread re-enables hydration when semantic
-                // recall is active so embeddings still work.
-                options: { hydrateMessages: false },
               });
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
