@@ -1515,5 +1515,81 @@
     "response": {
       "operations": []
     }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_query_branch_logs",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/query",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {}
+    },
+    "response": {
+      "logs": [],
+      "is_truncated": false
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branch_log_fields",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/fields",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example"
+    },
+    "response": {
+      "fields": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_list_branch_log_field_values",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/logs/fields/{field_name}/values",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "field_name": "example"
+    },
+    "response": {
+      "values": [],
+      "is_truncated": false
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_project_consumption",
+    "method": "GET",
+    "path": "/v2/consumption_history/v2/projects",
+    "input": {
+      "from": "2026-09-01T00:00:00Z",
+      "to": "2026-09-02T00:00:00Z",
+      "granularity": "hourly",
+      "org_id": "example",
+      "metrics": ["compute_unit_seconds"]
+    },
+    "response": {
+      "projects": []
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_branch_consumption",
+    "method": "GET",
+    "path": "/v2/consumption_history/v2/branches",
+    "input": {
+      "project_ids": ["example"],
+      "from": "2026-09-01T00:00:00Z",
+      "to": "2026-09-02T00:00:00Z",
+      "granularity": "hourly",
+      "org_id": "example",
+      "metrics": ["compute_unit_seconds"]
+    },
+    "response": {
+      "branches": []
+    }
   }
 ]
