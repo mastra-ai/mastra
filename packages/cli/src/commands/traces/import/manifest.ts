@@ -7,6 +7,7 @@ import type { PreparedTraceBatch, TraceImportManifest, TraceImportSourceIdentity
 
 export const TRACE_IMPORT_SCHEMA_VERSION = 1;
 export const TRACE_IMPORT_MANIFEST_FILE = 'manifest.json';
+export const MAX_RECORDED_SOURCE_SPAN_IDS = 50;
 
 const timestampSchema = z.string().datetime({ offset: true });
 const countSchema = z.number().int().nonnegative();
@@ -28,7 +29,7 @@ const skippedTraceSchema = z
     reason: z.string().min(1),
     detail: z.string().optional(),
     traceName: z.string().optional(),
-    sourceSpanIds: z.array(z.string()).max(50).optional(),
+    sourceSpanIds: z.array(z.string()).max(MAX_RECORDED_SOURCE_SPAN_IDS).optional(),
   })
   .strict();
 

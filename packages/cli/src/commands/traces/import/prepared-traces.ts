@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { open, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { readTraceImportManifest, writeTraceImportManifest } from './manifest.js';
+import { MAX_RECORDED_SOURCE_SPAN_IDS, readTraceImportManifest, writeTraceImportManifest } from './manifest.js';
 import type { TraceImportProvider } from './provider.js';
 import type { PreparedTraceBatch, SkippedTrace, TraceImportManifest, TraceImportTrace } from './types.js';
 import { validateTraceImportTrace } from './validation.js';
@@ -55,7 +55,10 @@ function recordSkip(manifest: TraceImportManifest, skipped: SkippedTrace): void 
   manifest.counts.skippedSpans += skipped.spanCount;
   manifest.counts.skipReasons[skipped.reason] = (manifest.counts.skipReasons[skipped.reason] ?? 0) + 1;
   if (manifest.skippedTraceSamples.length < MAX_RECORDED_SKIP_SAMPLES) {
-    manifest.skippedTraceSamples.push(skipped);
+    manifest.skippedTraceSamples.push({
+      ...skipped,
+      sourceSpanIds: skipped.sourceSpanIds?.slice(0, MAX_RECORDED_SOURCE_SPAN_IDS),
+    });
   }
 }
 
