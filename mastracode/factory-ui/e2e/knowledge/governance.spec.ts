@@ -223,7 +223,7 @@ test.describe('Knowledge governance perspectives', () => {
   });
 
   test.afterEach(({}, testInfo) => {
-    proofResults.set(testInfo.titlePath.join(' > '), testInfo.status);
+    proofResults.set(testInfo.titlePath.join(' > '), testInfo.status ?? 'interrupted');
   });
 
   test.afterAll(() => {
