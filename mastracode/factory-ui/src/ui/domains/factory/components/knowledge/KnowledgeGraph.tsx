@@ -72,8 +72,11 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         }}
       >
         {labeled ? (
+          // Node interiors are always dark (hard-coded radial gradient), so the
+          // name must use a fixed light color — theme tokens like text-icon6
+          // go dark-on-dark in light mode.
           <span
-            className="text-icon6 pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words"
+            className="pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words text-purple-100"
             style={{ fontSize: nameSize }}
             title={node.name}
           >
