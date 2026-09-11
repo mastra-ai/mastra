@@ -176,4 +176,37 @@ describe('immediate message after Session.abort() (#23456)', () => {
     expect(events.filter(e => e.type === 'agent_end')).toHaveLength(2);
     expect(session.displayState.get().isRunning).toBe(false);
   });
+
+  it('Given the prior stream still finalizing past the idle-wait timeout, When a message is sent right after abort(), Then a fresh subscribed run still starts and the session returns to idle', async () => {
+    const { session, events, releaseFirst } = await createHarness('slow-teardown');
+
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitForFirstActive(session, events);
+
+    // Model the ">1s teardown" manifestation of #23456: `waitForStreamIdle`
+    // returns on its timeout escape *before* the old run tears down, so its
+    // subscription is still live and matching. Forcing the timeout return here
+    // is deterministic and equivalent to a real consumer whose stream takes
+    // longer than the 1s idle wait to finalize after abort. Without the fix the
+    // re-ensure short-circuits on the live subscription and dispatches onto the
+    // aborting run, losing the second run's events and leaving `isRunning` true.
+    const idleSpy = vi.spyOn(session as any, 'waitForStreamIdle').mockResolvedValue(false);
+
+    session.abort();
+    const sent = session.sendMessage({ content: 'second message' });
+
+    await waitForEventCount(events, 'agent_start', 2, 10_000);
+    await sent.catch(() => {});
+
+    expect(idleSpy).toHaveBeenCalled();
+    expect(events.filter(e => e.type === 'agent_start').length).toBeGreaterThanOrEqual(2);
+    // The forced re-subscription means the second run's lifecycle reaches the
+    // session and the display state returns to idle.
+    await waitForEventCount(events, 'agent_end', 1, 10_000);
+    expect(events.filter(e => e.type === 'agent_end').length).toBeGreaterThanOrEqual(1);
+    expect(session.displayState.get().isRunning).toBe(false);
+
+    // Release the held first stream so the harness tears down cleanly.
+    releaseFirst();
+  });
 });
