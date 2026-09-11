@@ -292,8 +292,9 @@ describe('KnowledgePage', () => {
               id: '33333333-3333-4333-8333-333333333333',
               name: 'memory',
               kind: 'feature',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
-              rung: 'resource' as const,
+              scope: null,
+              rung: null,
+              isScope: true,
               pinned: false,
               recordCount: 0,
               createdAt: '2026-08-13T00:00:00.000Z',
@@ -303,28 +304,29 @@ describe('KnowledgePage', () => {
               id: '44444444-4444-4444-8444-444444444444',
               name: 'observational',
               kind: 'feature',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
-              rung: 'resource' as const,
+              scope: null,
+              rung: null,
+              isScope: true,
               pinned: false,
               recordCount: 0,
               createdAt: '2026-08-13T00:00:00.000Z',
               updatedAt: '2026-08-13T01:00:00.000Z',
             },
-          ],
-          edges: [
             {
-              id: 'wikilink:memory:observational',
-              source: '33333333-3333-4333-8333-333333333333',
-              target: '44444444-4444-4444-8444-444444444444',
-              type: 'wikilink' as const,
-            },
-            {
-              id: 'wikilink:observational:memory',
-              source: '44444444-4444-4444-8444-444444444444',
-              target: '33333333-3333-4333-8333-333333333333',
-              type: 'wikilink' as const,
+              // Content placed into the structural scope by the curator —
+              // identity-scoped, opens the record flyout on click.
+              id: '55555555-5555-4555-8555-555555555555',
+              name: 'Memory Extraction',
+              kind: 'subsystem',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              rung: 'resource' as const,
+              pinned: false,
+              recordCount: 1,
+              createdAt: '2026-08-13T02:00:00.000Z',
+              updatedAt: '2026-08-13T03:00:00.000Z',
             },
           ],
+          edges: [],
           records: [],
         });
       }),
@@ -359,7 +361,13 @@ describe('KnowledgePage', () => {
     // no record flyout opens for structural members.
     fireEvent.click(await screen.findByText('observational'));
     await waitFor(() => expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Handles charging flows/)).not.toBeInTheDocument();
+
+    // Content placed into the structural scope renders alongside child scopes
+    // and opens the record flyout (scoped by the node's own rung) on click.
+    fireEvent.click(await screen.findByText('Memory Extraction'));
+    expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444');
+    expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
   });
 
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {

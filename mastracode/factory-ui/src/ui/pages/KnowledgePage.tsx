@@ -43,6 +43,8 @@ export interface TrailEntry {
   nodeId: string;
   name: string;
   recordId?: string;
+  /** Node rung — lets the flyout open for content members of a structural lens (no identity rung selected). */
+  rung?: KnowledgeRung | null;
 }
 
 function Breadcrumb({
@@ -370,6 +372,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           arrivals={arrivals}
           focusedId={selected?.nodeId ?? null}
           focusedRecordId={selected?.recordId ?? null}
+          // A structural member listing carries no edges — label every member
+          // so the lens reads as a directory, not a field of dots.
+          labelAll={Boolean(selection.scopeNodeId)}
           onFocusChange={id => {
             // A graph click starts a fresh trail; a pane click clears it.
             if (!id) return setTrail([]);
@@ -377,14 +382,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             setTrail([{ nodeId: id, name: node?.name ?? id }]);
           }}
           onNodeClick={node => {
-            // Inside a structural scope, members are child scopes — clicking
-            // one drills down instead of opening the record flyout.
-            if (selection.scopeNodeId) {
+            // Inside a structural scope, scope members drill down; content
+            // members open the record flyout like identity-lens nodes.
+            if (selection.scopeNodeId && node.isScope) {
               setTrail([]);
               selectScope({ scopeNodeId: node.id });
               return;
             }
-            setSelected({ nodeId: node.id, name: node.name });
+            setSelected({ nodeId: node.id, name: node.name, rung: node.rung });
           }}
           onEdgeClick={edge => {
             // Selecting an edge selects AND expands the supporting knowledge record (A7).
@@ -392,11 +397,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
           }}
         />
-        {selected && factoryProjectId && scopeLevel ? (
+        {selected && factoryProjectId && (scopeLevel ?? selected.rung) ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
-            scopeLevel={scopeLevel}
+            // Identity lenses use the selected rung; structural-lens content
+            // members fall back to the node's own rung.
+            scopeLevel={(scopeLevel ?? selected.rung)!}
             threadId={threadId}
             focusRecordId={selected.recordId}
             onSelectRecord={recordId =>

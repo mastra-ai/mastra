@@ -106,6 +106,8 @@ export interface KnowledgeGraphNode {
   scope: KnowledgeScope | null;
   /** Deepest rung of the record's scope: org | resource | thread; null for scope nodes. */
   rung: 'org' | 'resource' | 'thread' | null;
+  /** True for structural scope nodes (member-lens drill targets); absent for content nodes. */
+  isScope?: boolean;
   /**
    * True when a non-deleted pinned record's wikilinks reference ONLY this
    * node (A9: multi-target pins mark their edges instead — the pin is
@@ -520,6 +522,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   ...(node.description ? { description: node.description } : {}),
                   scope: nodeScope,
                   rung: nodeScope ? deepestRung(nodeScope) : null,
+                  ...(node.isScope ? { isScope: true } : {}),
                   pinned: false,
                   recordCount: 0,
                   createdAt: node.createdAt.toISOString(),
