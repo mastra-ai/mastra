@@ -1451,6 +1451,17 @@ describe('DockerSandbox writeFiles', () => {
     expect(mockContainer.putArchive).not.toHaveBeenCalled();
   });
 
+  it('rejects an empty write when the signal is already aborted', async () => {
+    const sandbox = new DockerSandbox();
+    await sandbox._start();
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(sandbox.writeFiles([], { abortSignal: controller.signal })).rejects.toBeInstanceOf(SandboxAbortError);
+    expect(mockContainer.putArchive).not.toHaveBeenCalled();
+  });
+
   it('aborts an in-flight upload and rejects with SandboxAbortError', async () => {
     const sandbox = new DockerSandbox();
     await sandbox._start();

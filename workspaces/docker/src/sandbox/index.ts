@@ -530,10 +530,11 @@ export class DockerSandbox extends MastraSandbox {
    */
   async writeFiles(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void> {
     const container = this.container;
-    if (files.length === 0) return;
 
     const signal = options?.abortSignal;
     if (signal?.aborted) throw new SandboxAbortError('writeFiles');
+
+    if (files.length === 0) return;
 
     const pack = tarPack();
     for (const file of files) {

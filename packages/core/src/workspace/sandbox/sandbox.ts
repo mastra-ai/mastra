@@ -73,8 +73,8 @@ export interface WriteFilesOptions {
    *
    * Observing the signal is provider-dependent. `DockerSandbox` terminates the
    * in-flight upload when the signal aborts; providers that do not observe the
-   * signal run to completion. When the signal is already aborted, `writeFiles`
-   * rejects before any archive creation or upload begins.
+   * signal run to completion. Providers that observe the signal reject an
+   * already-aborted write before archive creation or upload begins.
    *
    * Cancellation rejects with a {@link SandboxAbortError} (code `ABORTED`).
    * Because upload and cancellation race, an upload that completes before the
