@@ -31,7 +31,7 @@ export const goalFreshThreadPersistenceScenario: McE2eScenario = {
 
     // Create a durable blank thread before starting the goal.
     terminal.submit('/new');
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/Ready for new conversation/i, terminal);
 
     terminal.submit(`/goal ${OBJECTIVE}`);
     await runtime.waitForScreenText(/Fresh thread goal e2e acknowledged\./i, terminal, 20_000);

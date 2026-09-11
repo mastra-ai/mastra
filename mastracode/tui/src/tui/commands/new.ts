@@ -15,7 +15,16 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // `/new` is an explicit request for a durable thread, even if the user exits
   // before sending its first message. Mark it so startup cleanup can distinguish
   // it from the disposable blank thread created during controller bootstrap.
-  await state.session.thread.create({ metadata: { [EXPLICIT_NEW_THREAD_SETTING]: true } });
+  try {
+    await state.session.thread.create({ metadata: { [EXPLICIT_NEW_THREAD_SETTING]: true } });
+  } catch (error) {
+    try {
+      await state.session.thread.ensureCurrentSubscription();
+    } catch {
+      // Preserve the thread creation error if restoring the old subscription fails.
+    }
+    throw error;
+  }
   state.pendingNewThread = false;
   setCurrentThreadTitle(state, undefined);
   disposeAssistantRenderState(state);

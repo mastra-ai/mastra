@@ -600,7 +600,9 @@ export class SessionThread {
     const currentMode = session.mode.resolve();
     const modelId = currentStateModel || currentMode.defaultModelId;
 
-    const metadata: Record<string, unknown> = { ...initialMetadata };
+    const metadata: Record<string, unknown> = Object.fromEntries(
+      Object.entries(initialMetadata ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key)),
+    );
     if (modelId) {
       metadata.currentModelId = modelId;
       metadata[`modeModelId_${session.mode.get()}`] = modelId;

@@ -36,6 +36,7 @@ function createMockState() {
       thread: {
         detachFromCurrent: vi.fn(),
         create: vi.fn(async () => ({ id: 'new-thread' })),
+        ensureCurrentSubscription: vi.fn(async () => {}),
       },
       displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
     },
@@ -80,6 +81,19 @@ describe('handleNewCommand', () => {
     expect(state.session.thread.create).toHaveBeenCalledWith({ metadata: { explicitNewThread: true } });
     expect(state.pendingNewThread).toBe(false);
     expect(callOrder).toEqual(['detach', 'create', 'ready']);
+  });
+
+  it('restores the previous thread subscription when durable thread creation fails', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+    const error = new Error('create failed');
+    state.session.thread.create.mockRejectedValue(error);
+
+    await expect(handleNewCommand(ctx)).rejects.toBe(error);
+
+    expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
+    expect(state.session.thread.ensureCurrentSubscription).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
   it('clears UI state and ephemeral thread state', async () => {
