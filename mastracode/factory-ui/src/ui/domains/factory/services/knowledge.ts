@@ -47,6 +47,8 @@ export interface KnowledgeGraphNode {
   /** Null for structural scope-node members (global, not identity-scoped). */
   scope: string[] | null;
   rung: KnowledgeRung | null;
+  /** True for structural scope nodes (member-lens drill targets); absent for content nodes. */
+  isScope?: boolean;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
