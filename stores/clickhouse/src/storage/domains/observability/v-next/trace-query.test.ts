@@ -224,6 +224,15 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(3);
   });
 
+  it('compiles grouped queries as distinct non-null thread IDs', () => {
+    const compiled = compileClickHouseTraceQuery(plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
+
+    expect(compiled.query).toContain('WHERE isNotNull(threadId)');
+    expect(compiled.query).toContain('GROUP BY threadId');
+    expect(compiled.query).toContain('ORDER BY threadId ASC');
+    expect(Object.values(compiled.query_params).at(-1)).toBe(5);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {

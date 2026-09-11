@@ -314,6 +314,8 @@ LIMIT 1`,
         },
         TABLE_SPAN_EVENTS,
       );
+      const groupedReadRows = await executeAndReadRows({ group: { by: ['threadId'] } }, TABLE_TRACE_ROOTS, false);
+
       for (const readRows of [
         spanReadRows,
         scoreReadRows,
@@ -323,6 +325,7 @@ LIMIT 1`,
       ]) {
         expect(readRows).toBeLessThan(fixtureSize);
       }
+      expect(groupedReadRows).toBeLessThan(10);
     } finally {
       await client.close();
     }

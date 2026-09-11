@@ -1983,6 +1983,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "group",
       "orderBy",
       "page",
       "timeRange",
@@ -1991,9 +1992,7 @@ export const API_ROUTE_METADATA = {
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
-      "kind": "object-property",
-      "listProperty": "traces",
-      "paginationProperty": "page"
+      "kind": "single"
     }
   },
   "GET /observability/metrics": {

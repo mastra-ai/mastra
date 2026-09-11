@@ -236,6 +236,15 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(3);
   });
 
+  it('compiles grouped queries as distinct non-null thread IDs', () => {
+    const compiled = compilePostgresTraceQuery('public', plan({ group: { by: ['threadId'] }, page: { limit: 4 } }));
+
+    expect(compiled.text).toContain('WHERE "threadId" IS NOT NULL');
+    expect(compiled.text).toContain('GROUP BY "threadId"');
+    expect(compiled.text).toContain('ORDER BY "threadId" ASC');
+    expect(compiled.values.at(-1)).toBe(5);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {
@@ -297,6 +306,7 @@ describe('Postgres advanced trace query', () => {
 });
 
 function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
+  if (plan.result !== 'traces') throw new Error('Expected a trace plan');
   return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
 }
 

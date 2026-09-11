@@ -124,6 +124,10 @@ const traceQueryRequestObjectSchema = z
   .object({
     timeRange: timeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
+    group: z
+      .object({ by: z.tuple([z.literal('threadId')]) })
+      .strict()
+      .optional(),
     orderBy: z
       .array(
         z
@@ -168,7 +172,13 @@ const responsePageSchema = z.object({ next: z.string().nullable() }).strict();
 export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
-export const traceQueryResponseSchema = traceQueryTraceResponseSchema;
+export const traceQueryGroupResponseSchema = z
+  .object({
+    groups: z.array(z.object({ threadId: z.string() }).strict()),
+    page: responsePageSchema,
+  })
+  .strict();
+export const traceQueryResponseSchema = z.union([traceQueryTraceResponseSchema, traceQueryGroupResponseSchema]);
 
 export type TraceQueryLiteral = string | number | boolean | null;
 export type TraceQueryPathOrLiteral = { path: string } | { literal: TraceQueryLiteral };
@@ -194,6 +204,7 @@ export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
+export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
 export type TraceQueryField =
@@ -261,8 +272,16 @@ export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
   cursor?: { sortValue: string; traceId: string };
 }
 
-export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan;
-export type TraceQueryCursorValues = { result: 'traces'; sortValue: string; traceId: string };
+export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
+  result: 'groups';
+  orderBy: { field: 'threadId'; direction: 'asc' };
+  cursor?: { threadId: string };
+}
+
+export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
+export type TraceQueryCursorValues =
+  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'groups'; threadId: string };
 
 export type TraceQueryIssueCode =
   | 'invalid_request'
@@ -273,7 +292,8 @@ export type TraceQueryIssueCode =
   | 'invalid_metadata_key'
   | 'operator_not_allowed'
   | 'invalid_operands'
-  | 'invalid_literal';
+  | 'invalid_literal'
+  | 'group_order_not_supported';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -478,12 +498,36 @@ export function planTraceQuery(
     });
   }
 
+  if (request.group && request.orderBy) {
+    issues.push({
+      code: 'group_order_not_supported',
+      path: ['orderBy'],
+      message: 'Grouped trace queries use fixed threadId ordering',
+    });
+  }
+
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
   const limit = request.page.limit;
+
+  if (request.group) {
+    const result = 'groups' as const;
+    const orderBy = { field: 'threadId', direction: 'asc' } as const;
+    const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
+    const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
+    return {
+      result,
+      timeRange,
+      where,
+      orderBy,
+      limit,
+      binding,
+      cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
+    };
+  }
 
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
@@ -496,17 +540,18 @@ export function planTraceQuery(
     orderBy,
     limit,
     binding,
-    cursor: cursor ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
+    cursor: cursor?.result === 'traces' ? { sortValue: cursor.sortValue, traceId: cursor.traceId } : undefined,
   };
 }
 
 export function encodeTraceQueryCursor(plan: TrustedTraceQueryPlan, values: TraceQueryCursorValues): string {
+  if (values.result !== plan.result) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
   return Buffer.from(JSON.stringify({ version: 1, binding: plan.binding, values }), 'utf8').toString('base64url');
 }
 
 function decodeTraceQueryCursor(
   cursor: string,
-  expectedResult: 'traces',
+  expectedResult: 'traces' | 'groups',
   expectedBinding: string,
 ): TraceQueryCursorValues {
   let parsed: unknown;
@@ -528,13 +573,16 @@ const cursorEnvelopeSchema = z
   .object({
     version: z.literal(1),
     binding: z.string().length(64),
-    values: z
-      .object({
-        result: z.literal('traces'),
-        sortValue: z.string().datetime({ offset: true }),
-        traceId: z.string().min(1),
-      })
-      .strict(),
+    values: z.discriminatedUnion('result', [
+      z
+        .object({
+          result: z.literal('traces'),
+          sortValue: z.string().datetime({ offset: true }),
+          traceId: z.string().min(1),
+        })
+        .strict(),
+      z.object({ result: z.literal('groups'), threadId: z.string().min(1) }).strict(),
+    ]),
   })
   .strict();
 

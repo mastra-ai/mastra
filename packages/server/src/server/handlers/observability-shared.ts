@@ -109,7 +109,7 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/traces/query',
     summary: 'Query traces',
-    description: 'Returns completed logical traces matching an advanced trace query',
+    description: 'Returns completed logical traces or distinct thread groups matching an advanced trace query',
     requiresPermission: 'observability:read',
   },
 

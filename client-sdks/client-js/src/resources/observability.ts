@@ -234,7 +234,7 @@ export class Observability extends BaseResource {
    * Queries completed logical traces using recursive trace and related-record predicates.
    *
    * @param params - Advanced trace query, including its required time range
-   * @returns Matching lightweight traces and cursor pagination
+   * @returns Matching lightweight traces or distinct thread groups
    */
   queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
