@@ -3795,6 +3795,57 @@ describe('Agent signals', () => {
       }
     });
 
+    it('omits non-cloneable optional fields without losing signals or changing delivery', async () => {
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'later');
+      const agent = new Agent({ id: 'uncloneable-agent', name: 'Snapshot Agent', instructions: 'Test', model });
+      const target = { resourceId, threadId: 'uncloneable-thread' };
+      const subscription = await agent.subscribeToThread(target);
+      const stream = await agent.stream('Hello', { memory: { thread: target.threadId, resource: resourceId } });
+      await waitForActiveRun(subscription);
+      try {
+        const callback = vi.fn();
+        const providerOptions = { test: { enabled: true } };
+        // Model a JavaScript caller supplying options outside the static JSON type.
+        Object.defineProperty(providerOptions.test, 'callback', { value: callback, enumerable: true });
+        const input = {
+          type: 'user' as const,
+          contents: [
+            { type: 'text' as const, text: 'still delivered', providerOptions },
+            { type: 'file' as const, data: 'AQID', mediaType: 'application/pdf', providerOptions },
+          ],
+          attributes: { priority: 'low' },
+          metadata: { nested: { callback } },
+          providerOptions,
+        };
+        const pending = agent.sendSignal(input, target);
+        const idle = agent.queueMessage(input, target);
+        await Promise.all([pending.accepted, idle.accepted]);
+        const listed = agent.listPendingSignals(target);
+        expect(listed.map(entry => entry.scope)).toEqual(['pending', 'idle']);
+        for (const entry of listed) {
+          expect(entry.signal.metadata).toBeUndefined();
+          expect(entry.signal.providerOptions).toBeUndefined();
+          expect(entry.signal.attributes).toEqual({ priority: 'low' });
+          expect(entry.signal.contents).toEqual([
+            { type: 'text', text: 'still delivered', providerOptions: undefined },
+            { type: 'file', data: 'AQID', mediaType: 'application/pdf', providerOptions: undefined },
+          ]);
+        }
+        expect(pending.signal.metadata).toEqual(input.metadata);
+        expect(pending.signal.toDataPart().data.providerOptions).toEqual(providerOptions);
+        expect(idle.signal.toDataPart().data.contents).toEqual(input.contents);
+        expect(callback).not.toHaveBeenCalled();
+        releaseFirst();
+        await expect(stream.text).resolves.toBe('firstlater');
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        await vi.waitFor(() => expect(agent.getActiveThreadRunId(target)).toBeUndefined());
+        expect(agent.listPendingSignals(target)).toEqual([]);
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+      }
+    });
+
     it.each([false, true])(
       'removes queued signals without affecting other agents or threads (remove final: %s)',
       async removeFinal => {

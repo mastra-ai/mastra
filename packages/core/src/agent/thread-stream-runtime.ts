@@ -245,8 +245,35 @@ export type AgentPendingSignalEntry = {
    */
   runId?: string;
   agentId?: string;
+  /** Detached snapshot; optional metadata/provider-options fields that cannot be cloned are omitted. */
   signal: ReturnType<CreatedAgentSignal['toDataPart']>['data'];
 };
+
+function clonePendingSignalField<T>(value: T): T | undefined {
+  try {
+    return structuredClone(value);
+  } catch {
+    // Optional caller data must not make the queue uninspectable or leak mutable references.
+    return undefined;
+  }
+}
+
+function snapshotPendingSignal(signal: CreatedAgentSignal): AgentPendingSignalEntry['signal'] {
+  const data = signal.toDataPart().data;
+  return {
+    ...data,
+    attributes: clonePendingSignalField(data.attributes),
+    metadata: clonePendingSignalField(data.metadata),
+    providerOptions: clonePendingSignalField(data.providerOptions),
+    contents:
+      typeof data.contents === 'string'
+        ? data.contents
+        : data.contents.map(part => ({
+            ...part,
+            providerOptions: clonePendingSignalField(part.providerOptions),
+          })),
+  };
+}
 
 export type AgentThreadStrictRegistrationOptions = {
   strict: true;
@@ -1975,7 +2002,7 @@ export class AgentThreadStreamRuntime {
       scope,
       runId: activeRunId,
       agentId: this.#signalAgentIds.get(signal) ?? activeAgentId,
-      signal: structuredClone(signal.toDataPart().data),
+      signal: snapshotPendingSignal(signal),
     });
     const belongsToAgent = (signal: CreatedAgentSignal) =>
       (this.#signalAgentIds.get(signal) ?? activeAgentId) === options.agentId;
@@ -1990,7 +2017,7 @@ export class AgentThreadStreamRuntime {
             scope: 'idle',
             runId: entry.runId,
             agentId: entry.agent.id,
-            signal: structuredClone(entry.signal.toDataPart().data),
+            signal: snapshotPendingSignal(entry.signal),
           }),
         ),
     ];
