@@ -45,9 +45,9 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-accent1 text-xs">{name}</code>
-        <span className="text-neutral3 text-[11px]">{typeLabel}</span>
-        {prop.description && <span className="text-neutral3 truncate text-[11px] italic">— {prop.description}</span>}
+        <code className="text-accent1 text-ui-sm">{name}</code>
+        <span className="text-neutral3 text-ui-sm">{typeLabel}</span>
+        {prop.description && <span className="text-neutral3 text-ui-sm truncate italic">— {prop.description}</span>}
       </div>
       {hasChildren && (
         <div className="border-border1 ml-1 border-l">
@@ -171,7 +171,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="border-border1 relative overflow-hidden rounded-md border font-mono text-sm">
+      <div className="border-border1 text-ui-md relative overflow-hidden rounded-md border font-mono">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -209,7 +209,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono text-sm">
+            <div key={idx} className="text-ui-md rounded-md border border-green-900/30 bg-green-950/10 p-3 font-mono">
               <Txt variant="ui-xs" className="mb-1 text-green-400">
                 + Added block
               </Txt>
@@ -222,7 +222,10 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (prevBlock && !currBlock) {
           return (
-            <div key={idx} className="relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono text-sm">
+            <div
+              key={idx}
+              className="text-ui-md relative rounded-md border border-red-900/30 bg-red-950/10 p-3 font-mono"
+            >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
@@ -253,7 +256,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="border-border1 relative overflow-hidden rounded-md border font-mono text-sm">
+          <div key={idx} className="border-border1 text-ui-md relative overflow-hidden rounded-md border font-mono">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />

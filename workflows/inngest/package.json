@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.8.11",
+  "version": "1.8.12-alpha.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -69,7 +69,7 @@
     "eslint": "^10.7.0",
     "execa": "^9.6.1",
     "express": "^5.2.1",
-    "fastify": "^5.8.5",
+    "fastify": "^5.12.4",
     "get-port": "7.1.0",
     "hono": "^4.12.8",
     "inngest-cli": "^1.26.0",

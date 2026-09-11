@@ -874,6 +874,11 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
+export type TransferMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads/:threadId/transfer'> & QueryParams<'POST /memory/threads/:threadId/transfer'>
+> &
+  RequestContextOptions;
+
 export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
 export interface GetLogParams {

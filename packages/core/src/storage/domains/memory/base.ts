@@ -188,6 +188,141 @@ export abstract class MemoryStorage extends StorageDomain {
     );
   }
 
+  /**
+   * Reassign a thread and all of its messages to a different resource.
+   *
+   * Unlike a plain `saveThread`, this preserves the thread's `createdAt` and moves the
+   * `resourceId` of every message row so the thread and its history stay consistent under
+   * the new owner. Same-resource calls are a no-op. Callers are responsible for authorizing
+   * the reassignment; this method performs no ownership checks.
+   *
+   * @param args.threadId - The thread to reassign.
+   * @param args.resourceId - The resource that should own the thread after the call.
+   * @returns The updated thread.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread "${threadId}" not found`);
+    }
+
+    if (thread.resourceId === resourceId) {
+      return thread;
+    }
+
+    const updatedThread = await this.saveThread({
+      thread: {
+        ...thread,
+        resourceId,
+        createdAt: thread.createdAt,
+        updatedAt: new Date(),
+      },
+    });
+
+    // The base class has no cross-table transaction primitive, so move the messages after
+    // the thread and compensate on failure. Adapters whose `updateMessages` is not atomic
+    // per-batch can fail mid-way, leaving some rows already moved to the new resource. On any
+    // failure we revert the thread to its original owner AND restore every message we moved
+    // back to its original resource, so the transfer fails closed with no split ownership
+    // (thread ownership is what gates access).
+    let messagesToMove: { id: string; originalResourceId?: string }[] = [];
+    try {
+      const { messages } = await this.listMessages({ threadId, perPage: false });
+      messagesToMove = messages
+        .filter(message => message.resourceId !== resourceId)
+        .map(message => ({ id: message.id, originalResourceId: message.resourceId }));
+      if (messagesToMove.length > 0) {
+        await this.updateMessages({
+          messages: messagesToMove.map(message => ({ id: message.id, resourceId })),
+        });
+      }
+    } catch (error) {
+      // Run both compensations independently so a failure in one does not skip the other,
+      // and track whether compensation fully succeeded. If any part of the rollback fails
+      // we surface an explicit incomplete-compensation error instead of silently logging,
+      // so the caller knows thread and message ownership may be split and can reconcile.
+      const compensationErrors: unknown[] = [];
+
+      try {
+        await this.saveThread({
+          thread: { ...thread, createdAt: thread.createdAt, updatedAt: thread.updatedAt },
+        });
+      } catch (threadRollbackError) {
+        compensationErrors.push(threadRollbackError);
+        this.logger?.error?.(
+          `Failed to revert thread ownership after a failed thread transfer for thread "${threadId}". ` +
+            `The thread may remain under resource "${resourceId}".`,
+          threadRollbackError,
+        );
+      }
+
+      // Restore only the messages that actually landed on the new resource before the failure.
+      // Re-listing lets non-atomic adapters that applied a partial batch be reconciled precisely,
+      // and avoids touching messages that never moved (so a failure that moved nothing does not
+      // produce a false split-ownership report). We retain EVERY original ownership value,
+      // including undefined/empty (legacy or agent-less rows), so an unscoped original can be
+      // detected during rollback.
+      const originalResourceById = new Map(messagesToMove.map(message => [message.id, message.originalResourceId]));
+      try {
+        const { messages: currentMessages } = await this.listMessages({ threadId, perPage: false });
+        const movedMessages = currentMessages.filter(
+          message => originalResourceById.has(message.id) && message.resourceId === resourceId,
+        );
+        // A restorable message has a non-empty original resource we can write back via updateMessages.
+        const messagesToRestore = movedMessages
+          .filter(message => {
+            const originalResourceId = originalResourceById.get(message.id);
+            return typeof originalResourceId === 'string' && originalResourceId.length > 0;
+          })
+          .map(message => ({ id: message.id, resourceId: originalResourceById.get(message.id) as string }));
+        if (messagesToRestore.length > 0) {
+          await this.updateMessages({ messages: messagesToRestore });
+        }
+        // Messages whose original resource was undefined/empty cannot be written back to an unscoped
+        // value through updateMessages, so if any such row actually moved it stays under the
+        // destination resource. Report this rather than dropping it silently.
+        const unrestorableCount = movedMessages.filter(message => {
+          const originalResourceId = originalResourceById.get(message.id);
+          return !(typeof originalResourceId === 'string' && originalResourceId.length > 0);
+        }).length;
+        if (unrestorableCount > 0) {
+          compensationErrors.push(
+            new Error(
+              `${unrestorableCount} message(s) for thread "${threadId}" had no original resource owner and could not be ` +
+                `reverted from resource "${resourceId}".`,
+            ),
+          );
+        }
+      } catch (messageRollbackError) {
+        compensationErrors.push(messageRollbackError);
+        this.logger?.error?.(
+          `Failed to restore message ownership after a failed thread transfer for thread "${threadId}". ` +
+            `Some messages may remain under resource "${resourceId}".`,
+          messageRollbackError,
+        );
+      }
+
+      if (compensationErrors.length > 0) {
+        throw new Error(
+          `Thread transfer for thread "${threadId}" failed and could not be fully rolled back, so thread and ` +
+            `message ownership may be split between the original resource and "${resourceId}". Reconcile the ` +
+            `thread and its messages manually. Original cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+
+      throw error;
+    }
+
+    return updatedThread;
+  }
+
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +

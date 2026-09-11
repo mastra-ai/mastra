@@ -1,6 +1,7 @@
-import { writeBarLine } from '../../utils/clack-bar.js';
+import { createBarLogWriter } from '../../utils/clack-bar.js';
+import type { LogCollector } from '../../utils/deploy-log-format.js';
 import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
-import { withPollingRetries } from '../../utils/polling.js';
+import { abortableDelay, withPollingRetries } from '../../utils/polling.js';
 import {
   authHeaders,
   createApiClient,
@@ -224,11 +225,19 @@ export async function uploadServerDeploy(
   return { id, status };
 }
 
+export interface PollDeployOptions {
+  /** Print every log line instead of the rolling tail shown on a TTY. */
+  showAllLogs?: boolean;
+  /** Receives every raw log entry, so a failure excerpt can be printed later. */
+  collectLogs?: LogCollector;
+}
+
 export async function pollServerDeploy(
   deployId: string,
   token: string,
   orgId: string,
   maxWaitMs = 600000, // 10 minutes — server builds take longer
+  options: PollDeployOptions = {},
 ): Promise<ServerDeployStatus> {
   const start = Date.now();
   let lastStatus = '';
@@ -238,7 +247,7 @@ export async function pollServerDeploy(
 
   // Poll for build + deploy logs in the background
   const logAbort = new AbortController();
-  pollServerLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
+  const logsTask = pollServerLogs(deployId, currentToken, orgId, logAbort.signal, options).catch(() => {});
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -273,7 +282,10 @@ export async function pollServerDeploy(
 
     throw new Error('Deploy timed out');
   } finally {
+    // Stop polling, let the log task fetch the final lines and flush them
+    // so nothing prints after the outcome message.
     logAbort.abort();
+    await logsTask;
   }
 }
 
@@ -434,47 +446,91 @@ export async function restartServerProject(token: string, orgId: string, project
   );
 }
 
+const SERVER_LOG_POLL_INTERVAL_MS = 2000;
+const FINAL_LOG_FETCH_TIMEOUT_MS = 3000;
+/** Consecutive 401s after which log polling gives up; status polling surfaces the auth error. */
+const MAX_LOG_AUTH_FAILURES = 3;
+
 /**
  * Poll the server deploy logs endpoint and print new log lines.
  * Server deploys don't have SSE streaming — we poll the JSON endpoint.
+ * After the signal aborts (deploy reached a terminal state) the logs are
+ * fetched once more so the closing lines are not lost.
+ *
+ * Deploys backed by a platform environment return every line in the
+ * combined `logs` string and leave `buildLogs` / `deployLogs` empty, so the
+ * combined string is used whenever the arrays carry nothing.
  */
-async function pollServerLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
-  await new Promise(r => setTimeout(r, 3000));
+async function pollServerLogs(
+  deployId: string,
+  token: string,
+  orgId: string,
+  signal: AbortSignal,
+  options: PollDeployOptions = {},
+): Promise<void> {
+  await abortableDelay(3000, signal);
 
+  const logWriter = createBarLogWriter({ showAll: options.showAllLogs, collect: options.collectLogs });
   let printedBuild = 0;
   let printedDeploy = 0;
+  let printedCombined = 0;
   let currentToken = token;
   let client = createApiClient(currentToken, orgId);
+  let finalFetchDone = false;
+  let authFailures = 0;
 
-  while (!signal.aborted) {
+  while (!finalFetchDone) {
+    if (signal.aborted) finalFetchDone = true;
     try {
       const { data, response } = await client.GET('/v1/server/deploys/{id}/logs', {
         params: { path: { id: deployId } },
+        // The closing fetch runs after the deploy finished; do not let a slow
+        // response hold up the outcome message.
+        ...(finalFetchDone ? { signal: AbortSignal.timeout(FINAL_LOG_FETCH_TIMEOUT_MS) } : {}),
       });
 
       if (response.status === 401) {
+        // Refresh once per interval, never in a tight loop: a headless token
+        // that stays invalid would otherwise hammer the endpoint until the
+        // deploy finishes. After a few failures leave it to status polling.
+        authFailures += 1;
+        if (authFailures >= MAX_LOG_AUTH_FAILURES) break;
         currentToken = await getToken();
         client = createApiClient(currentToken, orgId);
+        if (!finalFetchDone) await abortableDelay(SERVER_LOG_POLL_INTERVAL_MS, signal);
         continue;
       }
+      authFailures = 0;
 
       if (data) {
-        const newBuild = data.buildLogs.slice(printedBuild);
-        for (const line of newBuild) {
-          await writeBarLine(line);
-        }
+        logWriter.write(...data.buildLogs.slice(printedBuild));
         printedBuild = data.buildLogs.length;
 
-        const newDeploy = data.deployLogs.slice(printedDeploy);
-        for (const line of newDeploy) {
-          await writeBarLine(line);
-        }
+        logWriter.write(...data.deployLogs.slice(printedDeploy));
         printedDeploy = data.deployLogs.length;
+
+        // The generated API types predate the combined `logs` field.
+        const combined = (data as { logs?: string }).logs;
+        if (data.buildLogs.length === 0 && data.deployLogs.length === 0 && combined) {
+          const lines = combined.split('\n');
+          const endsComplete = lines[lines.length - 1] === '';
+          if (endsComplete) lines.pop();
+          // A snapshot can end mid-line. Hold that partial line back until a
+          // later snapshot completes it, otherwise the finished line would be
+          // skipped. The closing fetch prints whatever is left.
+          const printable = endsComplete || finalFetchDone ? lines.length : lines.length - 1;
+          if (printable > printedCombined) {
+            logWriter.write(...lines.slice(printedCombined, printable));
+            printedCombined = printable;
+          }
+        }
       }
     } catch {
       // Ignore errors during log polling — deploy status polling is the source of truth
     }
 
-    await new Promise(r => setTimeout(r, 5000));
+    if (!finalFetchDone) await abortableDelay(SERVER_LOG_POLL_INTERVAL_MS, signal);
   }
+
+  logWriter.flush();
 }

@@ -782,41 +782,53 @@ export class SessionRunEngine {
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
         if (usageRecord) {
-          const promptTokens =
-            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-          const completionTokens =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-          const stepUsage: TokenUsage = {
-            promptTokens,
-            completionTokens,
-            totalTokens,
-          };
-          addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-          addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens5m',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens1h',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
-          );
-          if (usageRecord.raw !== undefined) {
-            stepUsage.raw = usageRecord.raw;
+          // A step whose usage payload carries no usable primary count (missing,
+          // nested-object, or all-undefined shapes) must NOT be coerced into a
+          // {0,0,0} tally: doing so fabricates a false `usage_update` event and
+          // persists a false zero that is indistinguishable from a measured zero.
+          // Only fold/persist/emit when at least one primary count is present.
+          // A genuine measured zero arrives as an explicit numeric 0, which
+          // `getUsageNumber` reports as present.
+          const rawPrompt = getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens');
+          const rawCompletion =
+            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens');
+          const rawTotal = getUsageNumber(usageRecord, 'totalTokens');
+          const hasPrimaryCount = rawPrompt !== undefined || rawCompletion !== undefined || rawTotal !== undefined;
+          if (hasPrimaryCount) {
+            const promptTokens = rawPrompt ?? 0;
+            const completionTokens = rawCompletion ?? 0;
+            const totalTokens = rawTotal ?? promptTokens + completionTokens;
+            const stepUsage: TokenUsage = {
+              promptTokens,
+              completionTokens,
+              totalTokens,
+            };
+            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
+            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens5m',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens1h',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
+            );
+            if (usageRecord.raw !== undefined) {
+              stepUsage.raw = usageRecord.raw;
+            }
+
+            this.#session.addUsage(stepUsage);
+
+            this.#machinery.persistTokenUsage().catch(() => {});
+            this.#session.emit({ type: 'usage_update', usage: stepUsage });
           }
-
-          this.#session.addUsage(stepUsage);
-
-          this.#machinery.persistTokenUsage().catch(() => {});
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
         break;
       }
