@@ -6,20 +6,8 @@ import type { McE2eScenario } from './types.js';
 const OBJECTIVE = 'Keep the fresh thread goal e2e objective alive.';
 
 /**
- * End-to-end coverage for goals started on a thread that does not exist yet:
- * the TUI creates the thread as part of starting the goal, and the goal must
- * still be on that created thread once the app shuts down.
- *
- * This is NOT a discriminating regression test for the persist-flag ordering
- * defect. That defect needs the deferred `thread_created` handler to land
- * between the create and a later save, and this harness does not reproduce
- * that ordering — the scenario was verified green with
- * `src/tui/commands/goal.ts` reverted to its pre-fix version. The deterministic
- * pin for the ordering lives in the unit tests
- * (`src/tui/commands/__tests__/goal.test.ts`), which assert the flag is armed
- * before `thread.create()` and that the condition holds in both directions.
- * What this scenario buys is the real end-to-end path: `/new`, a real goal
- * start, and the goal record actually landing in SQLite on the new thread.
+ * End-to-end coverage for goals started on an explicit new thread. The goal
+ * must still be on the thread created by `/new` once the app shuts down.
  */
 export const goalFreshThreadPersistenceScenario: McE2eScenario = {
   name: 'goal-fresh-thread-persistence',
@@ -41,9 +29,9 @@ export const goalFreshThreadPersistenceScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
 
-    // Queue a brand-new thread so the goal start is the thing that creates it.
+    // Create a durable blank thread before starting the goal.
     terminal.submit('/new');
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/Ready for new conversation/i, terminal);
 
     terminal.submit(`/goal ${OBJECTIVE}`);
     await runtime.waitForScreenText(/Fresh thread goal e2e acknowledged\./i, terminal, 20_000);

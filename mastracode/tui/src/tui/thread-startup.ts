@@ -4,6 +4,8 @@ import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 
+export const EXPLICIT_NEW_THREAD_SETTING = 'explicitNewThread';
+
 export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?: string): Promise<void> {
   const currentPath = state.projectInfo.rootPath;
   const allThreads = await state.session.thread.list(requestedThreadId ? { allResources: true } : undefined);
@@ -25,7 +27,9 @@ export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?:
   }
 
   const projectThreads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
-  const untitledThreads = projectThreads.filter(thread => !thread.title);
+  const untitledThreads = projectThreads.filter(
+    thread => !thread.title && thread.metadata?.[EXPLICIT_NEW_THREAD_SETTING] !== true,
+  );
   const emptyThreadIds = new Set(
     (
       await Promise.all(

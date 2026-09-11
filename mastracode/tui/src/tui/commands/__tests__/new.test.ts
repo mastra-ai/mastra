@@ -33,7 +33,11 @@ function createMockState() {
     taskToolInsertIndex: 5,
     session: {
       state: { set: vi.fn(async () => {}) },
-      thread: { detachFromCurrent: vi.fn() },
+      thread: {
+        detachFromCurrent: vi.fn(),
+        create: vi.fn(async () => ({ id: 'new-thread' })),
+        ensureCurrentSubscription: vi.fn(async () => {}),
+      },
       displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
     },
     controller: {
@@ -57,7 +61,7 @@ function createCtx(state: ReturnType<typeof createMockState>): SlashCommandConte
 }
 
 describe('handleNewCommand', () => {
-  it('detaches from current thread before setting pendingNewThread', async () => {
+  it('creates and marks a durable thread before reporting the new conversation ready', async () => {
     const state = createMockState();
     const ctx = createCtx(state);
     const callOrder: string[] = [];
@@ -65,22 +69,31 @@ describe('handleNewCommand', () => {
     state.session.thread.detachFromCurrent.mockImplementation(() => {
       callOrder.push('detach');
     });
-    const origPendingNewThread = Object.getOwnPropertyDescriptor(state, 'pendingNewThread');
-    Object.defineProperty(state, 'pendingNewThread', {
-      set(v: boolean) {
-        if (v) callOrder.push('pendingNewThread');
-        Object.defineProperty(state, 'pendingNewThread', { value: v, writable: true, configurable: true });
-      },
-      get() {
-        return origPendingNewThread?.value ?? false;
-      },
-      configurable: true,
+    state.session.thread.create.mockImplementation(async () => {
+      callOrder.push('create');
+      return { id: 'new-thread' };
     });
+    ctx.showInfo = vi.fn(() => callOrder.push('ready'));
 
     await handleNewCommand(ctx);
 
     expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
-    expect(callOrder).toEqual(['detach', 'pendingNewThread']);
+    expect(state.session.thread.create).toHaveBeenCalledWith({ metadata: { explicitNewThread: true } });
+    expect(state.pendingNewThread).toBe(false);
+    expect(callOrder).toEqual(['detach', 'create', 'ready']);
+  });
+
+  it('restores the previous thread subscription when durable thread creation fails', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+    const error = new Error('create failed');
+    state.session.thread.create.mockRejectedValue(error);
+
+    await expect(handleNewCommand(ctx)).rejects.toBe(error);
+
+    expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
+    expect(state.session.thread.ensureCurrentSubscription).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
   it('clears UI state and ephemeral thread state', async () => {
