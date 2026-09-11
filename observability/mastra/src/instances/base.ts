@@ -192,6 +192,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       this.logger.info(
         `[Observability] Storage exporters superseded by Mastra Platform [service=${this.config.serviceName}] [instance=${this.config.name}] [exporters=${this.#supersededStorageExporterNames.join(',')}]`,
       );
+      this.logger.info(
+        `[Observability] Active exporters after storage supersession [service=${this.config.serviceName}] [instance=${this.config.name}] [exporters=${this.exporters.map(exporter => exporter.name).join(',') || 'none'}]`,
+      );
     }
   }
 
