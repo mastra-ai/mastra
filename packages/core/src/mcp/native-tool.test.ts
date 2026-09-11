@@ -4,7 +4,7 @@ import { z } from 'zod/v4';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
 import { noopObserve } from '../tools/types';
-import { createMCPTool, isMCPToolV2 } from './native-tool';
+import { createMCPTool, isMCPToolV2, parseMCPInputRequiredV2 } from './native-tool';
 import type { MCPToolExecutionContextV2 } from './native-tool';
 
 function context(): MCPToolExecutionContextV2 {
@@ -157,6 +157,19 @@ describe('native MCP tool execution', () => {
       execute: () => ({ kind: 'input_required', result: { resultType: 'input_required' } }),
     });
     await expect(empty.invoke({}, context())).rejects.toThrow('must contain input requests or request state');
+  });
+
+  it('validates standalone input-required controls with the same rules as tool outcomes', () => {
+    const valid = inputRequired({
+      inputRequests: { approval: inputRequired.elicitUrl({ message: 'Continue', url: 'https://example.com/go' }) },
+    });
+    expect(parseMCPInputRequiredV2(valid)).toBe(valid);
+    expect(() => parseMCPInputRequiredV2({ resultType: 'input_required' })).toThrow(
+      'must contain input requests or request state',
+    );
+    expect(() =>
+      parseMCPInputRequiredV2(inputRequired({ inputRequests: { roots: inputRequired.listRoots() } })),
+    ).toThrow('Unsupported embedded input request');
   });
 
   it('rejects invalid completed output and does not treat resultType business data as control', async () => {
