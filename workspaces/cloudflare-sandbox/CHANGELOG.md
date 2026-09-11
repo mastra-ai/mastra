@@ -1,5 +1,14 @@
 # @mastra/cloudflare-sandbox
 
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Run bare Workspace command strings through `/bin/bash -c` so the built-in `execute_command` tool works on CloudflareSandbox. Previously a command string supplied without separate arguments was sent to the bridge as a single executable name and failed with exit 127 (`command not found`). Explicit argument arrays remain literal. ([#23546](https://github.com/mastra-ai/mastra/pull/23546))
+
+- Updated dependencies [[`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580)]:
+  - @mastra/core@1.66.1-alpha.0
+
 ## 0.3.0
 
 ### Minor Changes

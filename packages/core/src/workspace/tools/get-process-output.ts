@@ -16,7 +16,7 @@ Use this after starting a background command with execute_command (background: t
   inputSchema: z.object({
     pid: z.string().describe('The process ID returned when the background command was started'),
     tail: z
-      .preprocess(coerceNumericString, z.number())
+      .preprocess(coerceNumericString, z.number().int())
       .optional()
       .describe(
         `Number of lines to return, similar to tail -n. Positive or negative returns last N lines from end. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,

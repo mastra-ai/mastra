@@ -324,6 +324,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       input?: unknown;
       entityType?: string;
       entityId?: string;
+      attributes?: Record<string, unknown>;
       tracingPolicy?: TracingPolicy;
       requestContext?: RequestContext;
     };
@@ -1229,7 +1230,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   async executeMapping(params: ExecuteMappingParams): Promise<StepExecutionResult> {
     const { entry, ...rest } = params;
-    return this.executeStep({ ...rest, step: createMappingStep(entry.id, entry.mapConfig) });
+    return this.executeStep({
+      ...rest,
+      step: createMappingStep(entry.id, entry.mapConfig),
+      entryDescription: entry.description,
+      entryMetadata: entry.metadata,
+    });
   }
 
   async executeParallel(params: ExecuteParallelParams): Promise<StepResult<any, any, any, any>> {

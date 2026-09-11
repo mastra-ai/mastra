@@ -57,6 +57,19 @@ describe('createServerProject', () => {
     await expect(createServerProject('tok', 'org-1', 'New')).resolves.toEqual(project);
     expect(mockPOST).toHaveBeenCalledWith('/v1/server/projects', { body: { name: 'New' } });
   });
+
+  it('sends the factory flag and region when provided', async () => {
+    const project = { id: 'p1', name: 'Factory', slug: 'factory', organizationId: 'org-1' };
+    mockPOST.mockResolvedValue({ data: { project }, error: undefined, response: { status: 200 } });
+
+    const { createServerProject } = await import('./platform-api.js');
+    await expect(
+      createServerProject('tok', 'org-1', 'Factory', { factoryEnabled: true, region: 'eu' }),
+    ).resolves.toEqual(project);
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/projects', {
+      body: { name: 'Factory', factoryEnabled: true, region: 'eu' },
+    });
+  });
 });
 
 describe('fetchServerDeployStatus', () => {
@@ -562,6 +575,27 @@ describe('pollServerDeploy', () => {
 });
 
 describe('uploadServerDeploy', () => {
+  it('sends the factory flag on the deploy request for Factory builds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    mockPOST
+      .mockResolvedValueOnce({
+        data: { id: 'dep-1', uploadUrl: 'https://signed.example/put', status: 'queued' },
+        error: undefined,
+        response: { status: 202 },
+      })
+      .mockResolvedValueOnce({ data: { id: 'dep-1', status: 'queued' }, error: undefined, response: { status: 200 } });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'), {
+      projectName: 'goo',
+      factoryEnabled: true,
+    });
+
+    expect(mockPOST).toHaveBeenCalledWith('/v1/server/deploys', {
+      body: expect.objectContaining({ projectId: 'proj-1', projectName: 'goo', factoryEnabled: true }),
+    });
+  });
+
   it('throws platform detail on 402 from deploy create', async () => {
     mockPOST.mockResolvedValue({
       data: undefined,

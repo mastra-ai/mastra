@@ -125,16 +125,12 @@ function jsonField(value: unknown): unknown {
 }
 
 function parsedJson(value: unknown): unknown {
+  // The pg driver decodes jsonb columns into native JS values (objects, arrays,
+  // strings, numbers, booleans). Every caller here reads a jsonb column, so the
+  // value is already final. Re-parsing a decoded string would drop plain strings
+  // (JSON.parse('hello') throws) and coerce JSON-looking strings ('123' -> 123),
+  // so return the value unchanged, normalizing null/undefined to undefined.
   if (value == null) return undefined;
-  // pg returns parsed jsonb as native objects; if we somehow get a string,
-  // attempt to parse it for safety.
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return undefined;
-    }
-  }
   return value;
 }
 

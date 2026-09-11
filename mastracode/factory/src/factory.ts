@@ -1084,6 +1084,7 @@ export class MastraFactory {
       session =>
         hydrateSessionMemorySettings(session, {
           sourceControl: sourceControlStorage.forIntegration('github'),
+          projects: factoryProjectsStorage,
           memorySettings: memorySettingsStorage,
         }),
       { blocking: true },
