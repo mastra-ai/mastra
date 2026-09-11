@@ -7,7 +7,7 @@ packages:
 
 # Memory.copyThread()
 
-The `.copyThread()` method copies an existing thread and its messages to a new thread. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, observational memory, and semantic-recall embeddings, but it does not return the copied messages. Storage adapters with SQL support copy the rows inside the database, so message content is never loaded into the Node.js process.
+The `.copyThread()` method copies an existing thread and its messages to a new thread. It behaves like [`cloneThread()`](/reference/memory/cloneThread), including working memory, observational memory, and semantic-recall embeddings, but it does not return the copied messages. On `@mastra/libsql` and `@mastra/pg` the rows are copied inside the database, so the copy itself never loads message content into the Node.js process. See [Memory usage](#memory-usage) for the cases where content is still read.
 
 Use `copyThread()` when you only need the new thread ID, such as forking a conversation for a subagent. Use `cloneThread()` when you need the copied messages in the response.
 
@@ -113,9 +113,9 @@ const { thread, messageIdMap } = await memory.copyThread({
 
 `copyThread()` is designed for large threads:
 
-- `@mastra/libsql` and `@mastra/pg` copy messages with a single `INSERT … SELECT` statement. Message content never leaves the database.
-- Other storage adapters copy messages through the adapter's existing clone implementation.
-- When semantic recall is enabled, embeddings for the copied messages are generated in pages rather than all at once.
+- `@mastra/libsql` and `@mastra/pg` copy messages with `INSERT … SELECT` statements, so the copy step does not read message content into the process.
+- Other storage adapters copy messages through the adapter's existing `cloneThread()` implementation, which may read and re-write each message. `copyThread()` still discards the payloads before returning.
+- When semantic recall is enabled, the copied messages are read back to generate embeddings. This happens in batches of 100 by destination message ID, so only one batch is held in memory at a time.
 
 `cloneThread()` calls `copyThread()` and then reads the new thread's messages back to populate `clonedMessages`.
 

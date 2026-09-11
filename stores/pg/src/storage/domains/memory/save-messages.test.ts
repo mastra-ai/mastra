@@ -35,8 +35,9 @@ class RecordingTxClient implements TxClient {
     throw new Error('not implemented');
   }
 
-  async query(): Promise<QueryResult> {
-    throw new Error('not implemented');
+  async query(query: string, values?: QueryValues): Promise<QueryResult> {
+    this.queries.push({ query, values });
+    return { rowCount: 1, rows: [], command: 'INSERT', oid: 0, fields: [] };
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {
@@ -336,30 +337,25 @@ describe('MemoryPG.saveResource', () => {
   });
 });
 
-describe('MemoryPG.cloneThread', () => {
-  it('prefers createdAtZ and binds the UTC string to both timestamp columns', async () => {
+describe('MemoryPG.copyThread', () => {
+  it('copies both timestamp columns inside SQL instead of binding them from JS', async () => {
     const client = new RecordingDbClient();
     const memory = new MemoryPG({ client });
-    const legacyCreatedAt = new Date('2025-07-01T07:34:56.789Z');
-    const createdAtZ = new Date('2025-07-01T12:34:56.789Z');
     client.txClient.sourceMessages.push({
       id: 'message-1',
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      role: 'user',
-      type: 'v2',
-      content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'hello' }] }),
-      createdAt: legacyCreatedAt,
-      createdAtZ,
+      createdAt: new Date('2025-07-01T07:34:56.789Z'),
     });
 
-    const result = await memory.cloneThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
+    const result = await memory.copyThread({ sourceThreadId: 'thread-1', newThreadId: 'thread-2' });
 
     const messageInsert = client.txClient.queries[1]!;
     expect(messageInsert.query).toContain('mastra_messages');
-    expect(messageInsert.values![3]).toBe(createdAtZ.toISOString());
-    expect(messageInsert.values![4]).toBe(createdAtZ.toISOString());
-    expect(messageInsert.values![3]).not.toBe(legacyCreatedAt.toISOString());
-    expect(result.clonedMessages[0]!.createdAt).toEqual(createdAtZ);
+    // INSERT … SELECT carries createdAt/createdAtZ (and content) verbatim from the source row.
+    expect(messageInsert.query).toMatch(/INSERT INTO [\s\S]*SELECT \$1, \$2, content, "createdAt", "createdAtZ"/);
+    // Only ids and the target resource are bound; no timestamps or content cross into JS.
+    expect(messageInsert.values).toEqual([result.messageIdMap!['message-1'], 'thread-2', 'resource-1', 'message-1']);
+    expect(messageInsert.values!.some(v => v instanceof Date || (typeof v === 'string' && v.includes('T')))).toBe(
+      false,
+    );
   });
 });

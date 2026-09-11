@@ -351,7 +351,7 @@ const { thread, clonedMessages } = await memory.cloneThread({
 
 You can filter cloned messages by count or date range and specify custom thread IDs. Utility methods are also available to inspect clone relationships.
 
-If you don't need the copied messages returned, for example when forking a long thread, use `copyThread()`. It copies the thread inside the storage backend without loading message content into your process.
+If you don't need the copied messages returned, for example when forking a long thread, use `copyThread()`. It never returns message payloads, and on LibSQL and PostgreSQL the rows are copied inside the database. When semantic recall is enabled, the copied messages are still read back in batches to generate embeddings.
 
 See [`cloneThread()`](/reference/memory/cloneThread), [`copyThread()`](/reference/memory/copyThread), and [clone utilities](/reference/memory/clone-utilities) for the full API.
 

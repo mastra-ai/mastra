@@ -3084,9 +3084,9 @@ Notes:
     }
 
     // Embed copied messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors.
-    // Pages through the new thread so large threads are embedded without loading every payload at once.
+    // Batches through the new thread so large threads are embedded without loading every payload at once.
     if (this.vector && this.embedder && config.semanticRecall) {
-      await this.embedThreadMessagesInPages(memoryStore, result.thread, config);
+      await this.embedCopiedMessagesInBatches(memoryStore, result, config);
     }
 
     return result;
@@ -3094,25 +3094,40 @@ Notes:
 
   private static readonly CLONE_EMBED_PAGE_SIZE = 100;
 
-  private async embedThreadMessagesInPages(
+  private async embedCopiedMessagesInBatches(
     memoryStore: MemoryStorage,
-    thread: StorageThreadType,
+    copied: StorageCopyThreadOutput,
     config: MemoryConfigInternal,
   ): Promise<void> {
-    const perPage = Memory.CLONE_EMBED_PAGE_SIZE;
+    const size = Memory.CLONE_EMBED_PAGE_SIZE;
+    const copiedIds = Object.values(copied.messageIdMap ?? {});
+
+    if (copiedIds.length > 0) {
+      // Fetch by destination id: copied rows keep the source createdAt, so createdAt-ordered
+      // OFFSET paging is not stable across ties and could skip or double-embed a message.
+      for (let i = 0; i < copiedIds.length; i += size) {
+        const { messages } = await memoryStore.listMessagesById({ messageIds: copiedIds.slice(i, i + size) });
+        if (messages.length > 0) {
+          await this.embedClonedMessages(messages, config);
+        }
+      }
+      return;
+    }
+
+    // Adapters that don't report a messageIdMap: page the destination thread instead.
     for (let page = 0; ; page++) {
       const { messages, hasMore } = await memoryStore.listMessages({
-        threadId: thread.id,
-        resourceId: thread.resourceId,
+        threadId: copied.thread.id,
+        resourceId: copied.thread.resourceId,
         page,
-        perPage,
+        perPage: size,
         orderBy: { field: 'createdAt', direction: 'ASC' },
         includeTotal: false,
       });
       if (messages.length > 0) {
         await this.embedClonedMessages(messages, config);
       }
-      if (!hasMore || messages.length < perPage) break;
+      if (!hasMore || messages.length < size) break;
     }
   }
 
