@@ -71,10 +71,8 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
     clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connectionId: 'a1b_acme',
   });
-  vi.spyOn(jira, 'listConnections').mockResolvedValue([
-    { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
-  ]);
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
@@ -120,14 +118,16 @@ describe('status route', () => {
     });
   });
 
-  it('reports ready with the site host when configured', async () => {
+  it('reports ready with the configured connection', async () => {
     const res = await buildApp(org1()).request('/web/jira/status');
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
-      site: 'acme.atlassian.net',
-      sites: ['acme.atlassian.net'],
-      connections: [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
+      site: null,
+      sites: [],
+      connections: [
+        { id: 'a1b_acme', integrationId: 'mastra-factory-jira', status: 'active', accountLabel: null },
+      ],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });

@@ -349,7 +349,10 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'github')) {
         integrations.push(new PlatformGithubIntegration({ slug: this.#config.platform?.githubAppSlug }));
       }
-      if (!integrations.some(integration => integration.id === 'jira')) {
+      if (
+        process.env.MASTRA_JIRA_CONNECTION_ID?.trim() &&
+        !integrations.some(integration => integration.id === 'jira')
+      ) {
         integrations.push(new PlatformJiraIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
