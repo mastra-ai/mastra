@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraVector } from '@mastra/core/vector';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
