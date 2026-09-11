@@ -92,6 +92,10 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
     // @ai-sdk/amazon-bedrock exposes provider `amazon-bedrock` and region/vendor-qualified ids.
     expect(modelSupportsTemperature('amazon-bedrock/us.anthropic.claude-sonnet-5')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/eu.anthropic.claude-sonnet-4-6')).toBe(true);
+    // Global and geographic (JP/AU) inference-profile prefixes resolve the same way.
+    expect(modelSupportsTemperature('amazon-bedrock/global.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/jp.anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/au.anthropic.claude-sonnet-4-6')).toBe(true);
   });
 
   it('applies the Bedrock grok temperature override without affecting direct xai', () => {
