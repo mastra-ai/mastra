@@ -21,6 +21,7 @@ import {
   ThreadRail,
 } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -29,7 +30,6 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
-import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { SaveFullConversationAction } from './messages/dataset-save-action';

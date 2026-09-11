@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.66.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8))
+
+- Fixed file attachment names being lost when stored messages are converted to AI SDK v5 UI messages. ([#23523](https://github.com/mastra-ai/mastra/pull/23523))
+
+- Only emit the "logger already wired to another Mastra instance" re-attach warning when `loggerOptions.export` is enabled. With `export: false` there is no observability export target to clobber, so attaching a shared logger to multiple `Mastra` instances no longer prints a spurious warning. ([#23544](https://github.com/mastra-ai/mastra/pull/23544))
+
+- Fixed workspace tool output truncation producing invalid Unicode when cutting through emoji. ([#23431](https://github.com/mastra-ai/mastra/pull/23431))
+
 ## 1.66.0
 
 ### Minor Changes

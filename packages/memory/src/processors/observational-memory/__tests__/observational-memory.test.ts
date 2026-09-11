@@ -2667,15 +2667,24 @@ describe('Observer Agent Helpers', () => {
         ],
       };
 
-      await observer.call(undefined, [message]);
+      // Generated provider data can change independently of this text-only scenario.
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
 
-      const content = capturedPrompt[1].content as any[];
-      expect(content.some((part: any) => part.type === 'image')).toBe(false);
-      const joined = content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-      expect(joined).toContain('[Image #1: photo.png]');
+      try {
+        await observer.call(undefined, [message]);
+
+        expect(spy).toHaveBeenCalledWith('openrouter/deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('auto mode forwards attachments for multimodal function-based observer model', async () => {
