@@ -3649,16 +3649,44 @@ export class Session<TState = unknown> {
   }
 
   /**
+   * True while a follow-up sent from an idle session is on its way to becoming
+   * a run. A second follow-up arriving in that window must queue behind it
+   * instead of being folded into the run that is starting.
+   */
+  #followUpDispatchPending = false;
+
+  /**
    * Queue a follow-up message to be processed after the current run completes,
    * or send it immediately when the session is idle.
+   *
+   * "Idle" means no run is in progress AND nothing is parked: a run waiting on
+   * a tool suspension (a generation, a question to the user) or a tool
+   * approval has finished streaming but is not over. A message sent to it
+   * directly would be folded into the resumed run together with every other
+   * message sent meanwhile, so those wait in the queue and run one at a time
+   * once the parked run has ended.
    */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.run.isRunning()) {
+    if (this.run.isRunning() || this.#followUpDispatchPending || this.hasParkedRun()) {
       this.followUps.enqueue({ content, requestContext });
       this.emitFollowUpQueued();
-    } else {
-      await this.sendMessage({ content, requestContext });
+      return;
     }
+    this.#followUpDispatchPending = true;
+    try {
+      await this.sendMessage({ content, requestContext });
+    } finally {
+      this.#followUpDispatchPending = false;
+    }
+  }
+
+  /**
+   * Whether the current run has stopped streaming but is still waiting: a tool
+   * suspension awaiting resume data, or an armed tool approval. The queue does
+   * not drain into such a run; it drains once the run ends.
+   */
+  hasParkedRun(): boolean {
+    return this.displayState.get().pendingSuspensions.size > 0 || this.approval.isArmed();
   }
 
   /**
@@ -3690,7 +3718,9 @@ export class Session<TState = unknown> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<boolean> {
-    if (this.followUps.isEmpty()) return false;
+    // A parked run (tool suspension, armed approval) has ended its stream but
+    // not its turn: the next queued message waits until that run is over.
+    if (this.followUps.isEmpty() || this.hasParkedRun()) return false;
 
     const next = this.followUps.dequeue()!;
     const threadId = this.thread.getId();

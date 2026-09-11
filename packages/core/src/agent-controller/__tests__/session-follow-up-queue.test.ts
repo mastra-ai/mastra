@@ -137,3 +137,94 @@ describe('Session follow-up queue items', () => {
     }
   }, 15_000);
 });
+
+describe('Session follow-ups behind parked and starting runs', () => {
+  async function createIdleSession(id: string) {
+    const { agent } = makeHeldRuns(id);
+    // The drain dispatches through the agent's runtime queue when the thread
+    // stream is open; the direct send path serves the first message only.
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockImplementation(((message: any) => ({
+      signal: { id: 'queued', type: 'user-message', contents: message.content },
+      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'queued-run' }),
+    })) as any);
+    const controller = new AgentController({
+      id: `${id}-controller`,
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ resourceId: `owner-${id}` });
+    return { controller, session, queueMessage };
+  }
+
+  it('queues follow-ups while a tool suspension keeps the run parked, and drains only once it ends', async () => {
+    const { controller, session, queueMessage } = await createIdleSession('follow-up-parked-suspension');
+    try {
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => events.push(event));
+      const sendMessage = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      session.emit({
+        type: 'tool_suspended',
+        toolCallId: 'call-generate',
+        toolName: 'generate_image',
+        args: {},
+        suspendPayload: { prompt: 'a cat' },
+      });
+      expect(session.run.isRunning()).toBe(false);
+
+      await session.followUp({ content: 'Then make it blue.' });
+      await session.followUp({ content: 'Then add a hat.' });
+
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(queueMessage).not.toHaveBeenCalled();
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Then make it blue.', 'Then add a hat.']);
+      expect(events.filter(event => event.type === 'follow_up_queued')).toHaveLength(2);
+
+      // The parked run is not over: nothing drains into it.
+      await expect(session.drainFollowUpQueue()).resolves.toBe(false);
+      expect(session.followUps.count()).toBe(2);
+
+      // Once the suspension clears, the queue drains one message at a time.
+      session.emit({ type: 'tool_suspension_cancelled', toolCallId: 'call-generate' });
+      await expect(session.drainFollowUpQueue()).resolves.toBe(true);
+      const dispatched = [...sendMessage.mock.calls, ...queueMessage.mock.calls].map(call => {
+        const input = call[0] as { content?: unknown } | string;
+        return typeof input === 'string' ? input : input.content;
+      });
+      expect(dispatched).toEqual(['Then make it blue.']);
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Then add a hat.']);
+    } finally {
+      await controller.destroy();
+    }
+  });
+
+  it('queues the second of two follow-ups sent to an idle session before the first has become a run', async () => {
+    const { controller, session } = await createIdleSession('follow-up-rapid-idle');
+    try {
+      let releaseFirst!: () => void;
+      const sendMessage = vi
+        .spyOn(session, 'sendMessage')
+        .mockImplementation(() => new Promise<void>(resolve => (releaseFirst = resolve)));
+
+      const first = session.followUp({ content: 'First while idle.' });
+      await session.followUp({ content: 'Second, right behind it.' });
+
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ content: 'First while idle.' }));
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Second, right behind it.']);
+
+      releaseFirst();
+      await first;
+      // With the first dispatch settled and nothing parked, an idle follow-up sends again.
+      void session.followUp({ content: 'Third, after the first settled.' });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(sendMessage).toHaveBeenCalledTimes(2);
+      expect(sendMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ content: 'Third, after the first settled.' }),
+      );
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Second, right behind it.']);
+    } finally {
+      await controller.destroy();
+    }
+  });
+});
