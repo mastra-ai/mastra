@@ -11506,8 +11506,8 @@ describe('Full Async Buffering Flow', () => {
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     // Step 0: Load messages with pending tool call.
-    // Even though total tokens (~2200) exceed threshold (2000),
-    // OM should NOT trigger async buffering because a message has state: 'call'.
+    // The pending call must never be observed; the completed messages before it
+    // may still buffer as a safe chronological prefix.
     const messageList = new MessageList({ threadId, resourceId });
     const sharedState: Record<string, unknown> = {};
     const requestContext = new RequestContext();
@@ -11530,8 +11530,16 @@ describe('Full Async Buffering Flow', () => {
     });
     await waitForAsyncOps();
 
-    // Observer should NOT have been called because there's a pending tool call
-    expect(observerCalls.length).toBe(0);
+    // The pending tool call itself must never be observed. Completed messages
+    // before it may buffer as a safe chronological prefix (#22573 policy).
+    const recordAfterStep0 = await storage.getObservationalMemory(threadId, resourceId);
+    const bufferedIdsAfterStep0 = (recordAfterStep0?.bufferedObservationChunks ?? []).flatMap(
+      chunk => chunk.messageIds,
+    );
+    expect(bufferedIdsAfterStep0).not.toContain('pending-msg-tool-call');
+    for (const call of observerCalls) {
+      expect(call.input).not.toContain('call_pending_123');
+    }
 
     // ─── Simulate tool completion: update the message in the messageList ───
     // In real usage, llm-execution-step mutates the state:'call' part to state:'result'

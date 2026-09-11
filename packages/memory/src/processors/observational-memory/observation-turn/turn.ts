@@ -12,6 +12,7 @@ import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
 
@@ -229,35 +230,9 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      const chronological = [...unobservedMessages].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-      const firstPending = chronological.findIndex(message =>
-        message.content.parts?.some(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call'),
-      );
-      let idleMessages = unobservedMessages;
-      if (firstPending !== -1) {
-        const prefix = chronological.slice(0, firstPending);
-        const retained = chronological.slice(firstPending);
-        const retainedTime = new Date(retained[0]!.createdAt).getTime();
-        const retainedToolIds = new Set(
-          retained.flatMap(message =>
-            (message.content.parts ?? []).flatMap(part =>
-              part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
-            ),
-          ),
-        );
-        // Defer this attempt if the buffer cursor (+1ms) would consume retained
-        // messages or a tool ID spans the boundary. Don't search for a smaller prefix.
-        const unsafeBoundary = prefix.some(
-          message =>
-            new Date(message.createdAt).getTime() + 1 >= retainedTime ||
-            message.content.parts?.some(
-              part => part.type === 'tool-invocation' && retainedToolIds.has(part.toolInvocation.toolCallId),
-            ),
-        );
-        idleMessages = unsafeBoundary ? [] : prefix;
-      }
+      // Buffer only the safe completed prefix; defer while incomplete tool calls
+      // are pending or the cut before them is unsafe (see selectSafeBufferPrefix).
+      const idleMessages = selectSafeBufferPrefix(unobservedMessages);
       if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(
           this.om
