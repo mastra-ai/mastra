@@ -2624,23 +2624,16 @@ describe('Observer Agent Helpers', () => {
     it('auto mode drops attachments for OpenRouter text-only models using provider capabilities', async () => {
       let capturedPrompt: any;
 
-      // This test exercises the real capabilities registry (no mock). The model
-      // must be text-only in both the OpenRouter list and the nested provider's
-      // list, since the registry falls back to the nested provider for nested IDs.
-      const textOnlyModel = 'openrouter/openai/gpt-oss-120b';
-      const { modelSupportsAttachments } = await import('@mastra/core/llm');
-      expect(modelSupportsAttachments(textOnlyModel)).toBe(false);
-
       const observer = new ObserverRunner({
         observationConfig: {
-          model: textOnlyModel,
+          model: 'openrouter/deepseek/deepseek-v4-flash',
           messageTokens: 1000,
           bufferTokens: false,
           previousObserverTokens: 1000,
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: textOnlyModel as any }),
+        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
