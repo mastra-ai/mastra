@@ -589,9 +589,8 @@ export class Memory extends MastraMemory {
 
   /** Resolves the configured Knowledge storage domain used by every Subconscious path on this Memory. */
   public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined || this._knowledge === false) {
-      throw new Error('Subconscious Knowledge requires a configured Knowledge instance.');
-    }
+    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
+    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
         .getStorage()
@@ -602,6 +601,15 @@ export class Memory extends MastraMemory {
       this._knowledgeStore = promise;
     }
     return this._knowledgeStore;
+  }
+
+  /** Bare-storage fallback: the Knowledge storage domain on the configured storage, when no Knowledge instance is set. */
+  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
+    const store = await this.storage.getStore('knowledge');
+    if (!store) {
+      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
   }
 
   public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
