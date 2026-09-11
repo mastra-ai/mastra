@@ -74,7 +74,10 @@ describe('AgentController tracing propagation', () => {
   });
 
   it('should forward tracingContext to agent.stream() when provided', async () => {
-    const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
+    const mockSpan = {
+      spanContext: () => ({ traceId: 'abc', spanId: 'def' }),
+      createChildSpan: vi.fn(),
+    };
     const tracingContext: TracingContext = { currentSpan: mockSpan as any };
 
     await session.sendMessage({ content: 'hello', tracingContext });

@@ -12,7 +12,7 @@
  *         the new `run-failed` event so the controller surfaces an error event.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
@@ -142,7 +142,9 @@ describe('mc send-message reproduction', () => {
       events.push(event);
     });
 
-    await session.sendMessage({ content: 'Hello!' });
+    await expect(session.sendMessage({ content: 'Hello!' })).rejects.toThrow('No model selected');
+    await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
+    await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
 
     // With the fix, the error should propagate through the subscription stream
     // and the controller should emit an error event instead of silently completing
