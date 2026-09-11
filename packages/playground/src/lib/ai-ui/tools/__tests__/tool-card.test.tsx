@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MessageRow } from '../../messages/message-row';
@@ -26,14 +26,26 @@ const mcpEmptyHandlers = [
   http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
 ];
 
+const queryClients = new Set<QueryClient>();
+
 beforeEach(() => {
   server.use(...mcpEmptyHandlers);
 });
 
-afterEach(() => cleanup());
+afterEach(async () => {
+  cleanup();
+  for (const queryClient of queryClients) queryClient.clear();
+  queryClients.clear();
+  // Unmounting does not cancel React Query notifications already queued on timers.
+  await new Promise(resolve => setTimeout(resolve, 0));
+});
 
 const Providers = ({ children }: { children: ReactNode }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClients.add(client);
+    return client;
+  });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
