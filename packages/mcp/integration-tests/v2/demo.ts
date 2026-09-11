@@ -178,8 +178,8 @@ for (const method of ['GET', 'DELETE']) {
 pass('ping, logging/setLevel and legacy resource subscriptions are rejected; no SSE GET stream');
 
 // Legacy peers fail explicitly; nothing downgrades.
-const legacyModern = new Client({ name: 'legacy-mode', version: '1.0.0' });
-await assert.rejects(legacyModern.connect(new StreamableHTTPClientTransport(url)), error => error instanceof SdkError);
+const legacyClient = new Client({ name: 'legacy-mode', version: '1.0.0' });
+await assert.rejects(legacyClient.connect(new StreamableHTTPClientTransport(url)), error => error instanceof SdkError);
 const legacySdk = new LegacyClient({ name: 'sdk-1.x', version: '1.0.0' });
 await assert.rejects(legacySdk.connect(new LegacyHttpTransport(url)));
 assert.ok(
