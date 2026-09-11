@@ -1,4 +1,5 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
+import { EXPLICIT_NEW_THREAD_SETTING } from '../thread-startup.js';
 import { setCurrentThreadTitle } from '../thread-title.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -11,7 +12,11 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // on the same thread from pushing output into this TUI.
   state.session.thread.detachFromCurrent();
 
-  state.pendingNewThread = true;
+  // `/new` is an explicit request for a durable thread, even if the user exits
+  // before sending its first message. Mark it so startup cleanup can distinguish
+  // it from the disposable blank thread created during controller bootstrap.
+  await state.session.thread.create({ metadata: { [EXPLICIT_NEW_THREAD_SETTING]: true } });
+  state.pendingNewThread = false;
   setCurrentThreadTitle(state, undefined);
   disposeAssistantRenderState(state);
   state.chatContainer.clear();

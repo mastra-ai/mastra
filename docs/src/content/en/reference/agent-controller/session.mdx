@@ -353,14 +353,15 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 `session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. The live session and its event bus don't.
 
-### `session.thread.create({ title?, id? })`
+### `session.thread.create({ title?, id?, metadata? })`
 
-Create a thread, bind the session to it, and open its event stream.
+Create a thread, bind the session to it, and open its event stream. Pass `metadata` to persist values as part of the initial thread record. Session scope metadata takes precedence over matching keys supplied by the caller.
 
 ```typescript
 const thread = await session.thread.create({
   id: 'thread-7',
   title: 'Investigate login failure',
+  metadata: { source: 'support-queue' },
 })
 ```
 

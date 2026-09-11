@@ -475,6 +475,12 @@ export async function runTerminalScenario(
       runtime.stopApp = async () => {
         await stopApp?.();
       };
+      runtime.restartApp = async options => {
+        await stopApp?.();
+        releaseAllThreadLocks();
+        const app = await startMastraCodeApp(runConfig, terminal, options);
+        stopApp = app.stop;
+      };
 
       await withTerminalProcessOutput(terminal, () =>
         scenario.run({ terminal: scenarioTerminal, runtime, dbPath: runConfig.context.dbPath }),

@@ -166,6 +166,7 @@ export type ScenarioName =
   | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'
+  | 'new-thread-restart'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'
   | 'tool-schema-compat'
@@ -209,6 +210,8 @@ export type McE2eScenarioRuntime = {
    * need to inspect on-disk database state after shutdown call this first.
    */
   stopApp?: () => Promise<void>;
+  /** Stop and relaunch the default app against the same terminal and on-disk storage. */
+  restartApp?: (options?: McE2eStartMastraCodeAppOptions) => Promise<void>;
 };
 
 export type McE2ePrepareContext = {

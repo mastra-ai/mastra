@@ -14,7 +14,10 @@ function createThread(id: string, title: string, updatedAt: string) {
 
 describe('resumeThreadOnStartup', () => {
   it('resumes the requested thread instead of the latest thread', async () => {
-    const requested = { ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'), resourceId: 'resource-2' };
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+    };
     const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
     const setResourceId = vi.fn().mockResolvedValue(undefined);
     const switchThread = vi.fn().mockResolvedValue(undefined);
@@ -78,6 +81,36 @@ describe('resumeThreadOnStartup', () => {
 
     expect(deleteThread).toHaveBeenCalledWith({ threadId: 'thread-blank' });
     expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-saved' });
+  });
+
+  it('keeps an explicit blank /new thread active across restart', async () => {
+    const explicitBlank = {
+      ...createThread('thread-new', '', '2026-08-28T11:01:00Z'),
+      metadata: { projectPath: '/tmp/project', explicitNewThread: true },
+    };
+    const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');
+    const deleteThread = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => 'thread-new'),
+          list: vi.fn().mockResolvedValue([saved, explicitBlank]),
+          listMessages: vi.fn().mockResolvedValue([]),
+          delete: deleteThread,
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await resumeThreadOnStartup(state);
+
+    expect(deleteThread).not.toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(false);
   });
 
   it('resumes the latest unlocked thread for the current directory', async () => {
