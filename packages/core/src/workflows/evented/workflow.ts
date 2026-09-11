@@ -570,12 +570,19 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       // Track structured output result
       let structuredResult: any = null;
+      // Distinguishes "no object produced" from a validly-parsed falsy object
+      // (e.g. `0`/`false`/`""` for primitive-root schemas) at the return site.
+      let structuredResultProduced = false;
+      // Retained for diagnostics when the structured-output guard fires.
+      let finishResult: any = undefined;
 
       // Common callback to capture structured output
       const handleFinish = (result: { text: string; object?: unknown }) => {
         const resultWithObject = result as typeof result & { object?: unknown };
-        if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+        finishResult = result;
+        if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object !== undefined) {
           structuredResult = resultWithObject.object;
+          structuredResultProduced = true;
         }
       };
 
@@ -643,8 +650,25 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         throw createTripWireFromChunk(tripwireChunk);
       }
 
+      // A step that declared a structured-output schema but finished without an
+      // object must fail closed rather than silently returning `{ text }` as
+      // success. Matches runAgentEntry (issue #23403).
+      if ((agentOptions as any)?.structuredOutput?.schema && !structuredResultProduced) {
+        throw new MastraError({
+          id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Agent step '${params.id}' declared structuredOutput.schema but the agent finished without producing an object.`,
+          details: {
+            stepId: params.id,
+            finishReason: finishResult?.finishReason ?? 'unknown',
+            usage: finishResult?.usage,
+          },
+        });
+      }
+
       // Return structured output if available, otherwise return text
-      if (structuredResult !== null) {
+      if (structuredResultProduced) {
         return structuredResult as TStepOutput;
       }
 
