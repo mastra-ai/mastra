@@ -9,6 +9,8 @@ import {
   DEFAULT_VOICE,
   LIVE_EVENTS,
   LIVE_FIELDS,
+  LIVE_ITEM_TYPES,
+  LIVE_OUTPUT_TYPES,
   LIVE_WS_URL,
   VOICES,
 } from './protocol';
@@ -293,10 +295,10 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   waitForSessionReady(timeout?: number): Promise<void> {
-    return this.waitForHandshake('session.ready', timeout);
+    return this.waitForHandshake('session.started', timeout);
   }
 
-  private waitForHandshake(event: 'open' | 'session.ready', timeout?: number): Promise<void> {
+  private waitForHandshake(event: 'open' | 'session.started', timeout?: number): Promise<void> {
     const ws = this.ws;
     const signal = this.connectionAbort?.signal;
     return new Promise((resolve, reject) => {
@@ -322,7 +324,7 @@ export class OpenAILiveVoice extends MastraVoice {
         ws.removeListener('open', onReady);
         ws.removeListener('error', onError);
         ws.removeListener('close', onClose);
-        this.client.removeListener(LIVE_EVENTS.sessionReady, onReady);
+        this.client.removeListener(LIVE_EVENTS.sessionStarted, onReady);
         this.client.removeListener(LIVE_EVENTS.error, onProtocolError);
         signal?.removeEventListener('abort', onAbort);
       };
@@ -346,7 +348,7 @@ export class OpenAILiveVoice extends MastraVoice {
       );
 
       if (event === 'open') ws.once('open', onReady);
-      else this.client.once(LIVE_EVENTS.sessionReady, onReady);
+      else this.client.once(LIVE_EVENTS.sessionStarted, onReady);
       ws.once('error', onError);
       ws.once('close', onClose);
       this.client.once(LIVE_EVENTS.error, onProtocolError);
@@ -415,8 +417,8 @@ export class OpenAILiveVoice extends MastraVoice {
       }
     });
 
-    this.client.on(LIVE_EVENTS.sessionReady, ev => {
-      this.emit('session.ready', ev);
+    this.client.on(LIVE_EVENTS.sessionStarted, ev => {
+      this.emit('session.started', ev);
       const queue = this.queue.splice(0, this.queue.length);
       for (const queued of queue) {
         this.ws?.send(JSON.stringify(queued));
@@ -457,13 +459,32 @@ export class OpenAILiveVoice extends MastraVoice {
       this.emit('writing', { text: '\n', role: 'assistant' });
     });
 
-    this.client.on(LIVE_EVENTS.functionCall, async (ev: any) => {
-      await this.handleFunctionCall(ev);
+    this.client.on(LIVE_EVENTS.responseDone, async (ev: any) => {
+      await this.handleFunctionCalls(ev);
     });
 
     this.client.on(LIVE_EVENTS.error, ev => {
       this.emit('error', ev);
     });
+  }
+
+  /**
+   * Handle any function-call output items on a completed response. Mirrors the
+   * Realtime GA contract: results are returned to the session via
+   * `conversation.item.create` (`function_call_output` items), followed by a
+   * single `response.create` to let the model continue with the results.
+   */
+  private async handleFunctionCalls(ev: any) {
+    const outputs: any[] = ev?.response?.output ?? [];
+    const functionCalls = outputs.filter(o => o?.type === LIVE_OUTPUT_TYPES.functionCall);
+    if (functionCalls.length === 0) return;
+
+    for (const output of functionCalls) {
+      await this.handleFunctionCall(output);
+    }
+
+    // A single response.create resumes the model after all tool results are sent.
+    this.sendEvent(LIVE_EVENTS.responseCreate, {});
   }
 
   private async handleFunctionCall(output: any) {
@@ -500,19 +521,22 @@ export class OpenAILiveVoice extends MastraVoice {
         result,
       });
 
-      this.sendEvent(LIVE_EVENTS.functionCallOutput, {
-        [LIVE_FIELDS.callId]: callId,
-        output: JSON.stringify(result),
-      });
-      this.sendEvent(LIVE_EVENTS.responseCreate, {});
+      this.sendFunctionCallOutput(callId, JSON.stringify(result));
     } catch (e) {
       const err = e as Error;
       console.warn(`Error calling tool "${name}":`, err.message);
-      this.sendEvent(LIVE_EVENTS.functionCallOutput, {
-        [LIVE_FIELDS.callId]: callId,
-        output: JSON.stringify({ error: err.message }),
-      });
+      this.sendFunctionCallOutput(callId, JSON.stringify({ error: err.message }));
     }
+  }
+
+  private sendFunctionCallOutput(callId: string, output: string): void {
+    this.sendEvent(LIVE_EVENTS.conversationItemCreate, {
+      item: {
+        type: LIVE_ITEM_TYPES.functionCallOutput,
+        [LIVE_FIELDS.callId]: callId,
+        output,
+      },
+    });
   }
 
   private int16ArrayToBase64(int16Array: Int16Array): string {

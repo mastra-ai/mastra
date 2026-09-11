@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
-import { LIVE_EVENTS, LIVE_WS_URL } from './protocol';
+import { LIVE_EVENTS, LIVE_ITEM_TYPES, LIVE_WS_URL } from './protocol';
 import { OpenAILiveVoice } from './index';
 
 vi.mock('ws', () => {
@@ -192,39 +192,61 @@ describe('OpenAILiveVoice', () => {
   });
 
   describe('function call dispatch', () => {
-    it('executes the tool and returns its result', async () => {
+    it('executes the tool, returns its result, and resumes the response', async () => {
       const ws = attachOpenSocket(voice);
       const execute = vi.fn().mockResolvedValue({ ok: true });
       voice.addTools({
         my_tool: { description: 'T', inputSchema: undefined, execute } as any,
       } as any);
 
-      await (voice as any).handleFunctionCall({
-        type: LIVE_EVENTS.functionCall,
-        name: 'my_tool',
-        call_id: 'call-1',
-        arguments: '{"q":"x"}',
+      await (voice as any).handleFunctionCalls({
+        type: LIVE_EVENTS.responseDone,
+        response: {
+          output: [
+            {
+              type: 'function_call',
+              name: 'my_tool',
+              call_id: 'call-1',
+              arguments: '{"q":"x"}',
+            },
+          ],
+        },
       });
 
       expect(execute).toHaveBeenCalledTimes(1);
-      const outputs = ws.send.mock.calls
-        .map(([raw]: [string]) => JSON.parse(raw))
-        .filter((ev: any) => ev.type === LIVE_EVENTS.functionCallOutput);
+      const sent = ws.send.mock.calls.map(([raw]: [string]) => JSON.parse(raw));
+      const outputs = sent.filter((ev: any) => ev.type === LIVE_EVENTS.conversationItemCreate);
       expect(outputs).toHaveLength(1);
-      expect(outputs[0].call_id).toBe('call-1');
-      expect(JSON.parse(outputs[0].output)).toEqual({ ok: true });
+      expect(outputs[0].item.type).toBe(LIVE_ITEM_TYPES.functionCallOutput);
+      expect(outputs[0].item.call_id).toBe('call-1');
+      expect(JSON.parse(outputs[0].item.output)).toEqual({ ok: true });
+      // Exactly one response.create resumes the model after all tool results.
+      expect(sent.filter((ev: any) => ev.type === LIVE_EVENTS.responseCreate)).toHaveLength(1);
+    });
+
+    it('sends no response.create when the response has no function calls', async () => {
+      const ws = attachOpenSocket(voice);
+      await (voice as any).handleFunctionCalls({
+        type: LIVE_EVENTS.responseDone,
+        response: { output: [{ type: 'message' }] },
+      });
+      const sent = ws.send.mock.calls.map(([raw]: [string]) => JSON.parse(raw));
+      expect(sent.filter((ev: any) => ev.type === LIVE_EVENTS.responseCreate)).toHaveLength(0);
     });
 
     it('reports an error output for an unknown tool without throwing', async () => {
-      attachOpenSocket(voice);
+      const ws = attachOpenSocket(voice);
       await expect(
-        (voice as any).handleFunctionCall({
-          type: LIVE_EVENTS.functionCall,
-          name: 'nope',
-          call_id: 'c',
-          arguments: '{}',
+        (voice as any).handleFunctionCalls({
+          type: LIVE_EVENTS.responseDone,
+          response: {
+            output: [{ type: 'function_call', name: 'nope', call_id: 'c', arguments: '{}' }],
+          },
         }),
       ).resolves.toBeUndefined();
+      const sent = ws.send.mock.calls.map(([raw]: [string]) => JSON.parse(raw));
+      // Unknown tool: no function_call_output item, but the response is still resumed.
+      expect(sent.filter((ev: any) => ev.type === LIVE_EVENTS.conversationItemCreate)).toHaveLength(0);
     });
   });
 
