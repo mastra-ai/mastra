@@ -1423,9 +1423,16 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
+    const hydrateMessages = options?.hydrateMessages ?? true;
+
     try {
-      // Build message query with filters
-      let messageQuery = `SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+      // Build message query with filters. When not hydrating, we only need the ids
+      // (and createdAt for ordering / clone metadata) — content is copied inside the
+      // database via INSERT … SELECT and never returned to the JS heap.
+      const messageColumns = hydrateMessages
+        ? `id, content, role, type, "createdAt", thread_id, "resourceId"`
+        : `id, "createdAt"`;
+      let messageQuery = `SELECT ${messageColumns}
                           FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`;
       const messageParams: InValue[] = [sourceThreadId];
 
@@ -1517,7 +1524,21 @@ export class MemoryLibSQL extends MemoryStorage {
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
-          messageIdMap[sourceMsg.id as string] = newMessageId;
+          const sourceMsgId = sourceMsg.id as string;
+          messageIdMap[sourceMsgId] = newMessageId;
+
+          if (!hydrateMessages) {
+            // Copy the row inside the database. content/role/type are read from the
+            // source row within SQL and never materialized in the JS heap.
+            await tx.execute({
+              sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
+                    SELECT ?, ?, content, role, type, "createdAt", ?
+                    FROM "${TABLE_MESSAGES}" WHERE id = ?`,
+              args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
+            });
+            continue;
+          }
+
           const contentStr = sourceMsg.content as string;
           let parsedContent: MastraDBMessage['content'];
           try {

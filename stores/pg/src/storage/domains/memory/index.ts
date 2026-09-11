@@ -1971,10 +1971,17 @@ export class MemoryPG extends MemoryStorage {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
+    const hydrateMessages = options?.hydrateMessages ?? true;
+
     try {
       return await this.#db.client.tx(async t => {
-        // Build message query with filters
-        let messageQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
+        // Build message query with filters. When not hydrating, we only need the ids
+        // (and createdAt for ordering / clone metadata) — content is copied inside the
+        // database via INSERT … SELECT and never returned to the JS heap.
+        const messageColumns = hydrateMessages
+          ? `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`
+          : `id, "createdAt"`;
+        let messageQuery = `SELECT ${messageColumns}
                             FROM ${messageTableName} WHERE thread_id = $1`;
         const messageParams: any[] = [sourceThreadId];
         let paramIndex = 2;
@@ -2065,6 +2072,19 @@ export class MemoryPG extends MemoryStorage {
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
           messageIdMap[sourceMsg.id] = newMessageId;
+
+          if (!hydrateMessages) {
+            // Copy the row inside the database. content/role/type are read from the
+            // source row within SQL and never materialized in the JS heap.
+            await t.none(
+              `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+               SELECT $1, $2, content, "createdAt", "createdAtZ", role, type, $3
+               FROM ${messageTableName} WHERE id = $4`,
+              [newMessageId, newThreadId, targetResourceId, sourceMsg.id],
+            );
+            continue;
+          }
+
           const normalizedMsg = this.normalizeMessageRow(sourceMsg);
           let parsedContent = normalizedMsg.content;
           try {

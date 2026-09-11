@@ -722,13 +722,16 @@ export class InMemoryMemory extends MemoryStorage {
     // Save the new thread
     this.db.threads.set(newThreadId, newThread);
 
+    // When not hydrating, skip building the parsed clonedMessages array so message
+    // payloads never accumulate on the heap; the copied storage rows keep the raw content.
+    const hydrateMessages = options?.hydrateMessages ?? true;
+
     // Clone messages with new IDs
     const clonedMessages: MastraDBMessage[] = [];
     const messageIdMap: Record<string, string> = {};
     for (const sourceMsg of sourceMessages) {
       const newMessageId = crypto.randomUUID();
       messageIdMap[sourceMsg.id] = newMessageId;
-      const parsedContent = safelyParseJSON(sourceMsg.content);
 
       // Create storage message
       const newStorageMessage: StorageMessageType = {
@@ -743,11 +746,15 @@ export class InMemoryMemory extends MemoryStorage {
 
       this.db.messages.set(newMessageId, newStorageMessage);
 
+      if (!hydrateMessages) {
+        continue;
+      }
+
       // Create MastraDBMessage for return
       clonedMessages.push({
         id: newMessageId,
         threadId: newThreadId,
-        content: parsedContent,
+        content: safelyParseJSON(sourceMsg.content),
         role: sourceMsg.role as MastraDBMessage['role'],
         type: sourceMsg.type,
         createdAt: sourceMsg.createdAt,

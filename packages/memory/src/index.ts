@@ -2973,8 +2973,18 @@ Notes:
     memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
-    const result = await memoryStore.cloneThread(args);
     const config = this.getMergedThreadConfig(memoryConfig);
+
+    // The caller may opt out of hydrating message payloads (e.g. forked subagents that
+    // only need the new thread id). Force hydration when semantic recall is active, since
+    // embedding requires the cloned message payloads.
+    const requestedHydrate = args.options?.hydrateMessages ?? true;
+    const effectiveHydrate = requestedHydrate || Boolean(this.vector && config.semanticRecall);
+    const result = await memoryStore.cloneThread(
+      effectiveHydrate === requestedHydrate
+        ? args
+        : { ...args, options: { ...args.options, hydrateMessages: effectiveHydrate } },
+    );
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
