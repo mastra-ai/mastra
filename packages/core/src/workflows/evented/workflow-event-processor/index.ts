@@ -1334,6 +1334,73 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
+    // Record "this step is running, with this input" BEFORE executing it —
+    // mirroring the default engine's `persistStepUpdate` phase:'start' contract
+    // (handlers/step.ts). After a crash the persisted snapshot is the only
+    // source of truth: without this write a mid-step crash leaves a snapshot
+    // claiming nothing was ever running (`activePaths: []`, no running record),
+    // `createRestartExecutionParams` then publishes an empty execution path and
+    // recovery dies with "Execution path is empty" (#22636). The running
+    // record's `payload` is also what restart re-enters the step with (the
+    // restart branches read the active step's own recorded payload), so it must
+    // carry the exact input — captured while terminal predecessors may already
+    // have had heavy fields pruned from their outputs.
+    const shouldPersistRunning =
+      workflow?.options?.shouldPersistSnapshot?.({
+        stepResults: stepResults ?? {},
+        workflowStatus: 'running',
+      }) ?? true;
+    if (shouldPersistRunning && workflowsStore) {
+      // A resumed step keeps its stored record untouched: its suspendPayload is
+      // the richer resume artifact (stream state, nested-run ids) and a
+      // redelivered step.run must not clobber it. Same for a step timeTravel
+      // resumes into. Foreach iterations are also skipped — the aggregate
+      // foreach record is maintained at step-end, and a per-iteration overwrite
+      // here would clobber sibling iterations' results.
+      const isResumedEntry =
+        ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId) ||
+        timeTravel?.stepResults?.[leafId]?.status === 'suspended';
+      // Record first, then routing state: if the process dies between the two
+      // writes recovery still routes through the old path, whereas the reverse
+      // order would point restart at a step whose input was never recorded.
+      if (!isResumedEntry && step.type !== 'foreach') {
+        await workflowsStore.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: leafId,
+          result: {
+            // Loop re-entries overwrite the previous iteration's completion
+            // fields (like the default engine's stepInfo) while preserving
+            // e.g. metadata.nestedRunId for nested-run recovery.
+            ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt: Date.now(),
+            status: 'running',
+          } as any,
+          requestContext,
+        });
+      }
+      // `expectedStatus` makes this a compare-and-set: the row is 'running' on
+      // the normal path (written by processWorkflowStart for both start and
+      // resume), and if a concurrent sibling already committed a suspension
+      // this write no-ops instead of clobbering it.
+      // `activePaths` carries the FULL execution path of the running leaf —
+      // the same shape the default engine persists (handlers/entry.ts) and the
+      // shape restart routing expects: `createRestartExecutionParams` feeds it
+      // back as the workflow.start executionPath, and parallel/conditional
+      // restart routing keeps it at the same depth instead of re-appending.
+      await workflowsStore.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: 'running',
+          activePaths: executionPath,
+          activeStepsPath,
+          expectedStatus: 'running',
+        },
+      });
+    }
+
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
     const nestedWorkflowStep = getEntryWorkflow(leaf);
     if (nestedWorkflowStep) {
