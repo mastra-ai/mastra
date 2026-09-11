@@ -58,7 +58,7 @@ export interface MCPToolV2<TInput = unknown, TOutput = unknown> {
   invoke(input: TInput, context: MCPToolExecutionContextV2): Promise<MCPToolOutcomeV2<TOutput>>;
 }
 
-export function isMCPToolV2(value: unknown): value is MCPToolV2 {
+export function isMCPToolV2(value: unknown): value is MCPToolV2<any, any> {
   return typeof value === 'object' && value !== null && MCP_NATIVE_TOOL in value && value[MCP_NATIVE_TOOL] === true;
 }
 

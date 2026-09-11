@@ -12,7 +12,9 @@ import type { MCPServerBase } from './index';
 
 export type MCPServerRegistryEntry = MCPServerBase | MCPServerBaseV2;
 export type MCPServerHTTPOptionsV2 = Pick<MCPServerHTTPOptions, 'url' | 'httpPath' | 'req' | 'res'>;
-export type MCPServerToolsV2 = Record<string, Tool | MCPToolV2>;
+/** A catalogue entry: any ordinary business tool or a native MCP tool. */
+export type MCPServerToolV2 = Tool<any, any, any, any, any, any, any> | MCPToolV2<any, any>;
+export type MCPServerToolsV2 = Record<string, MCPServerToolV2>;
 
 export interface MCPServerConfigV2 extends Pick<
   MCPServerConfig,
