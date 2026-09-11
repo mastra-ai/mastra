@@ -770,7 +770,8 @@ describe('KnowledgePage', () => {
       expect(requests.some(url => url.pathname.endsWith('/importers'))).toBe(true);
       expect(requests.some(url => url.pathname.endsWith('/github/runs'))).toBe(true);
       expect(requests.some(url => url.pathname.endsWith('/github/runs/run-1'))).toBe(true);
-      expect(requests.every(url => url.searchParams.get('knowledgeKey') === 'team')).toBe(true);
+      // Importer surfaces are host-vouched: a stray client key never reaches the server.
+      expect(requests.every(url => url.searchParams.get('knowledgeKey') === null)).toBe(true);
     } finally {
       server.events.removeListener('request:match', observeRequest);
     }
