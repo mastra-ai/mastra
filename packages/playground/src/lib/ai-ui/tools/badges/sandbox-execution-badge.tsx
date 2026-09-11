@@ -1,5 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -8,8 +10,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"

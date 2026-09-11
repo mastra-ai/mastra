@@ -1,9 +1,9 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AskUserBadge } from '../ask-user-badge';
 import type { AskUserResult, AskUserSuspendPayload } from '../types';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 
 type ProviderOverrides = {
   approveToolcall?: (toolCallId: string, resumeData?: unknown) => void;

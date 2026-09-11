@@ -303,6 +303,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       input?: unknown;
       entityType?: string;
       entityId?: string;
+      attributes?: Record<string, unknown>;
       tracingPolicy?: any;
     };
     executionContext: ExecutionContext;
