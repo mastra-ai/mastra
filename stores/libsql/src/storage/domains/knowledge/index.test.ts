@@ -168,16 +168,21 @@ describe('KnowledgeLibSQL initialization', () => {
         `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'now','now')`,
       );
       const before = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
-      const execute = client.execute.bind(client);
-      const spy = vi.spyOn(client, 'execute').mockImplementation(async statement => {
-        const sql = typeof statement === 'string' ? statement : statement.sql;
-        if (sql.startsWith('CREATE TABLE') && sql.includes(TABLE_KNOWLEDGE_ACCESS_STATE)) {
-          throw new Error('injected schema creation failure');
-        }
-        return execute(statement);
+      const transaction = client.transaction.bind(client);
+      const spy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
+        const tx = await transaction(mode);
+        const execute = tx.execute.bind(tx);
+        vi.spyOn(tx, 'execute').mockImplementation(async statement => {
+          const sql = typeof statement === 'string' ? statement : statement.sql;
+          if (sql.startsWith('CREATE TABLE') && sql.includes(TABLE_KNOWLEDGE_ACCESS_STATE)) {
+            throw new Error('injected schema creation failure');
+          }
+          return execute(statement);
+        });
+        return tx;
       });
 
-      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow();
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow('injected schema creation failure');
       spy.mockRestore();
       expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
       expect((await client.execute('SELECT id FROM mastra_knowledge_nodes')).rows[0]?.id).toBe('legacy');
