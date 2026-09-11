@@ -97,13 +97,23 @@ async function record(
   });
 }
 
+function selectedQuery(query: string): string {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  if (!params.has('scopeLevel')) params.set('scopeLevel', params.has('threadId') ? 'thread' : 'resource');
+  return `?${params}`;
+}
+
 async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph${query}`);
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/subgraph${selectedQuery(query)}`,
+  );
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
 }
 
 async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/activity${query}`);
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/activity${selectedQuery(query)}`,
+  );
   return { status: response.status, body: (await response.json().catch(() => ({}))) as { events: unknown[] } };
 }
 
@@ -112,12 +122,14 @@ async function nodeDetail(
   entityId: string,
   query = '',
 ): Promise<{ status: number; body: KnowledgeNodePayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${query}`);
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${selectedQuery(query)}`,
+  );
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeNodePayload };
 }
 
 describe('KnowledgeRoutes', () => {
-  it('keeps graph, activity, and detail reads on the requested key without fallback', async () => {
+  it('keeps scope, subgraph, activity, and detail reads on the requested key without fallback', async () => {
     const first = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const second = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const resolve = vi.fn(async (key: string) => (key === 'first' ? first : key === 'second' ? second : undefined));
@@ -130,10 +142,13 @@ describe('KnowledgeRoutes', () => {
     expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['Second runtime']);
     expect((await nodeDetail(h, a.id, '?knowledgeKey=second')).status).toBe(404);
     expect((await activity(h, '?knowledgeKey=second')).status).toBe(200);
-    for (const endpoint of ['graph', 'activity', `nodes/${a.id}`]) {
-      const response = await h.app.request(
-        `/web/factory/projects/${h.projectId}/knowledge/${endpoint}?knowledgeKey=missing`,
-      );
+    for (const endpoint of [
+      'scopes?knowledgeKey=missing',
+      'subgraph?knowledgeKey=missing&scopeLevel=resource',
+      'activity?knowledgeKey=missing&scopeLevel=resource',
+      `nodes/${a.id}?knowledgeKey=missing&scopeLevel=resource`,
+    ]) {
+      const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/${endpoint}`);
       expect(response.status).toBe(503);
     }
     expect(resolve.mock.calls.map(([key]) => key)).not.toContain('default');
@@ -147,6 +162,21 @@ describe('KnowledgeRoutes', () => {
 
     expect((await graph(h)).body.nodes.map(item => item.name)).toEqual(['Host runtime']);
     expect(resolve).toHaveBeenCalledWith('mastra');
+  });
+
+  it('exposes bounded scope-tree and selected-subgraph reads without a whole-graph endpoint', async () => {
+    const h = await createHarness();
+    const scopes = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(scopes.status).toBe(200);
+    expect(await scopes.json()).toEqual({
+      roots: [
+        { level: 'org', id: ORG, available: true },
+        { level: 'resource', id: h.projectId, available: true },
+      ],
+      defaultLevel: 'resource',
+    });
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`)).status).toBe(404);
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph`)).status).toBe(404);
   });
 
   it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
@@ -376,7 +406,7 @@ describe('KnowledgeRoutes', () => {
         knowledge: async () => h.knowledge,
       }).routes(),
     );
-    const response = await outsider.request(`/web/factory/projects/${h.projectId}/knowledge/graph`);
+    const response = await outsider.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
     expect(response.status).toBe(404);
   });
 

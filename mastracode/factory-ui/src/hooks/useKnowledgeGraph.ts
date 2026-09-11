@@ -15,7 +15,9 @@ import {
   fetchKnowledgeActivity,
   fetchKnowledgeNode,
   fetchKnowledgeGraph,
+  fetchKnowledgeScopes,
 } from '../ui/domains/factory/services/knowledge';
+import type { KnowledgeRung } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -30,8 +32,22 @@ export function knowledgeRefetchInterval(error: unknown, paused: boolean): numbe
   return 5_000;
 }
 
+export function useKnowledgeScopes(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
+  return useQuery({
+    queryKey: [...queryKeys.knowledgeScopes(factoryProjectId, threadId), knowledgeKey],
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
+      : skipToken,
+    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
+  });
+}
+
 export function useKnowledgeGraph(
   factoryProjectId: string | undefined,
+  scopeLevel: KnowledgeRung | undefined,
   threadId?: string,
   options?: { paused?: boolean },
 ) {
@@ -40,10 +56,11 @@ export function useKnowledgeGraph(
   const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   const paused = options?.paused ?? false;
   return useQuery({
-    queryKey: [...queryKeys.knowledgeGraph(factoryProjectId, threadId), knowledgeKey],
-    queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
-      : skipToken,
+    queryKey: [...queryKeys.knowledgeGraph(factoryProjectId, scopeLevel, threadId), knowledgeKey],
+    queryFn:
+      factoryProjectId && scopeLevel
+        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, scopeLevel, threadId, signal, knowledgeKey)
+        : skipToken,
     // Live: same 5s cadence as the board (useWorkItems precedent).
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
     refetchOnWindowFocus: !paused,
@@ -51,28 +68,39 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeActivity(factoryProjectId: string | undefined, threadId?: string) {
+export function useKnowledgeActivity(
+  factoryProjectId: string | undefined,
+  scopeLevel: KnowledgeRung | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
   const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, threadId), knowledgeKey],
-    queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, threadId, signal, knowledgeKey)
-      : skipToken,
+    queryKey: [...queryKeys.knowledgeActivity(factoryProjectId, scopeLevel, threadId), knowledgeKey],
+    queryFn:
+      factoryProjectId && scopeLevel
+        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeLevel, threadId, signal, knowledgeKey)
+        : skipToken,
     refetchInterval: 5_000,
   });
 }
 
-export function useKnowledgeNode(factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) {
+export function useKnowledgeNode(
+  factoryProjectId: string | undefined,
+  nodeId: string | undefined,
+  scopeLevel: KnowledgeRung | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
   const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
   return useQuery({
-    queryKey: [...queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId), knowledgeKey],
+    queryKey: [...queryKeys.knowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId), knowledgeKey],
     queryFn:
-      factoryProjectId && nodeId
-        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, threadId, signal, knowledgeKey)
+      factoryProjectId && nodeId && scopeLevel
+        ? ({ signal }) =>
+            fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, scopeLevel, threadId, signal, knowledgeKey)
         : skipToken,
   });
 }

@@ -4,13 +4,14 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useKnowledgeActivity, useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
+import { useKnowledgeActivity, useKnowledgeGraph, useKnowledgeScopes } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
+import type { KnowledgeRung, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -91,27 +92,56 @@ function Breadcrumb({
   );
 }
 
-function ScopeTree({ threadId, onProjectClick }: { threadId?: string; onProjectClick: () => void }) {
+function ScopeTree({
+  scopes,
+  selectedLevel,
+  onSelect,
+}: {
+  scopes: KnowledgeScopeTreePayload | undefined;
+  selectedLevel: KnowledgeRung | undefined;
+  onSelect: (level: KnowledgeRung) => void;
+}) {
   return (
     <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
-        <button type="button" className="hover:text-icon6 text-left" onClick={onProjectClick}>
-          Organization scope
-        </button>
-        <button type="button" className="hover:text-icon6 pl-3 text-left" onClick={onProjectClick}>
-          Project scope
-        </button>
-        {threadId ? <span className="truncate pl-6 text-purple-300">session {threadId.slice(0, 8)}</span> : null}
+        {scopes?.roots.map((root, index) => (
+          <button
+            key={root.level}
+            type="button"
+            aria-pressed={selectedLevel === root.level}
+            className="hover:text-icon6 truncate text-left"
+            style={{ paddingLeft: `${index * 12}px` }}
+            onClick={() => onSelect(root.level)}
+          >
+            {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
+            {root.id.slice(0, 8)}
+          </button>
+        ))}
       </div>
     </aside>
   );
 }
 
-function ActivityPanel({ factoryProjectId, threadId }: { factoryProjectId?: string; threadId?: string }) {
-  const activity = useKnowledgeActivity(factoryProjectId, threadId);
+function ActivityPanel({
+  factoryProjectId,
+  scopeLevel,
+  threadId,
+}: {
+  factoryProjectId?: string;
+  scopeLevel: KnowledgeRung | undefined;
+  threadId?: string;
+}) {
+  const activity = useKnowledgeActivity(factoryProjectId, scopeLevel, threadId);
+  if (!scopeLevel) {
+    return (
+      <Txt as="p" variant="ui-md" className="text-icon3">
+        Select a scope to review its activity.
+      </Txt>
+    );
+  }
   if (activity.isPending) return <SkeletonRows label="Loading knowledge activity" rows={6} />;
   if (activity.isError) {
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
@@ -145,6 +175,13 @@ function ActivityPanel({ factoryProjectId, threadId }: { factoryProjectId?: stri
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
+  const requestedScope = searchParams.get('scope');
+  const scopeLevel: KnowledgeRung | undefined =
+    requestedScope === 'org' || requestedScope === 'resource' || (requestedScope === 'thread' && threadId)
+      ? requestedScope
+      : threadId
+        ? 'thread'
+        : undefined;
   const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
@@ -156,7 +193,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // zooming) and resume after 10s of stillness — the layout never shifts
   // under someone mid-interaction.
   const { idle, onActivity } = useInteractionIdle(10_000);
-  const graphQuery = useKnowledgeGraph(factoryProjectId, threadId, { paused: !idle });
+  const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
+  const graphQuery = useKnowledgeGraph(scopesQuery.data ? factoryProjectId : undefined, scopeLevel, threadId, {
+    paused: !idle,
+  });
 
   // Arrival diffing: baseline per view; a view switch resets it (no mass
   // arrival animation on switch), same-view polls diff by id sets.
@@ -164,12 +204,12 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const nextBaseline = useMemo<DiffBaseline | undefined>(() => {
     if (!graphQuery.data) return undefined;
     return {
-      viewKey: threadId ? `thread:${threadId}` : 'project',
+      viewKey: `${scopeLevel}:${threadId ?? 'project'}`,
       version: graphQuery.data.version,
       nodeIds: new Set(graphQuery.data.nodes.map(node => node.id)),
       edgeIds: new Set(graphQuery.data.edges.map(edge => edge.id)),
     };
-  }, [graphQuery.data, threadId]);
+  }, [graphQuery.data, scopeLevel, threadId]);
   const arrivals = useMemo<Arrivals | undefined>(
     () => (nextBaseline ? computeArrivals(baseline.current, nextBaseline) : undefined),
     [nextBaseline],
@@ -185,6 +225,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.set('thread', nextThreadId);
+      copy.set('scope', 'thread');
       return copy;
     });
   };
@@ -193,30 +234,53 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.delete('thread');
+      copy.set('scope', 'resource');
+      return copy;
+    });
+  };
+  const selectScope = (level: KnowledgeRung) => {
+    setSelected(null);
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('scope', level);
       return copy;
     });
   };
 
+  const threadGone = Boolean(
+    threadId &&
+    ((scopesQuery.error instanceof RequestError && scopesQuery.error.status === 404) ||
+      (graphQuery.error instanceof RequestError && graphQuery.error.status === 404)),
+  );
   let body: React.ReactNode;
-  if (graphQuery.isError) {
-    if (threadId && graphQuery.error instanceof RequestError && graphQuery.error.status === 404) {
-      // Stale deep link or a session whose knowledge was since deleted —
-      // calm state with a way back, never an error toast.
-      body = (
-        <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-          <Txt as="p" variant="ui-md" className="text-icon4">
-            This session's knowledge is no longer available.
-          </Txt>
-          <button type="button" className="text-sm text-purple-300 hover:underline" onClick={backToProject}>
-            Back to the project view
-          </button>
-        </div>
-      );
-    } else {
-      const message =
-        graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
-      body = <Notice variant="destructive">{message}</Notice>;
-    }
+  if (threadGone) {
+    // Stale deep link or a session whose knowledge was since deleted —
+    // calm state with a way back, never an error toast.
+    body = (
+      <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
+        <Txt as="p" variant="ui-md" className="text-icon4">
+          This session's knowledge is no longer available.
+        </Txt>
+        <button type="button" className="text-sm text-purple-300 hover:underline" onClick={backToProject}>
+          Back to the project view
+        </button>
+      </div>
+    );
+  } else if (scopesQuery.isError) {
+    const message = scopesQuery.error instanceof Error ? scopesQuery.error.message : 'Unable to load knowledge scopes.';
+    body = <Notice variant="destructive">{message}</Notice>;
+  } else if (scopesQuery.isPending) {
+    body = <SkeletonRows label="Loading knowledge scopes" rows={3} />;
+  } else if (!scopeLevel) {
+    body = (
+      <Txt as="p" variant="ui-md" className="text-icon3">
+        Select a scope to explore its knowledge.
+      </Txt>
+    );
+  } else if (graphQuery.isError) {
+    const message =
+      graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
+    body = <Notice variant="destructive">{message}</Notice>;
   } else if (graphQuery.isPending) {
     body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
   } else if (graphQuery.data.nodes.length === 0) {
@@ -256,6 +320,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
+            scopeLevel={scopeLevel}
             threadId={threadId}
             focusRecordId={selected.recordId}
             onSelectRecord={recordId =>
@@ -324,9 +389,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         />
       </header>
       <div className="flex min-h-0 flex-1 gap-4">
-        <ScopeTree threadId={threadId} onProjectClick={backToProject} />
+        <ScopeTree scopes={scopesQuery.data} selectedLevel={scopeLevel} onSelect={selectScope} />
         <div className="min-w-0 flex-1">
-          {activeView === 'activity' ? <ActivityPanel factoryProjectId={factoryProjectId} threadId={threadId} /> : body}
+          {activeView === 'activity' ? (
+            <ActivityPanel factoryProjectId={factoryProjectId} scopeLevel={scopeLevel} threadId={threadId} />
+          ) : (
+            body
+          )}
         </div>
       </div>
     </section>

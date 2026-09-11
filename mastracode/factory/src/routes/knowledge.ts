@@ -1,10 +1,9 @@
 /**
  * Read-only Mastra `apiRoutes` exposing the factory project's knowledge graph.
  *
- * Serves the Knowledge page in factory-ui: a polling graph snapshot (nodes
- * as nodes, wikilink edges derived from record text), a node flyout payload
- * with per-record provenance, and the recent activity feed. Every endpoint is a
- * GET — this module never writes knowledge.
+ * Serves the Knowledge page in factory-ui through bounded scope-tree,
+ * selected-subgraph, node-detail, and activity reads. Every endpoint is a GET;
+ * this module never writes knowledge.
  *
  * Scoping is fail-closed: the org and resource rungs are derived server-side
  * from the authenticated caller and the validated `:id` project. The DEFAULT
@@ -42,6 +41,17 @@ function truncateRecordText(text: string): string {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
+
+export interface KnowledgeScopeTreePayload {
+  roots: Array<{
+    level: KnowledgeScopeLevel;
+    id: string;
+    available: boolean;
+  }>;
+  defaultLevel: 'resource';
+}
 
 /** Window caps. Injectable at construction only — never per-request. */
 export interface KnowledgeRouteLimits {
@@ -383,6 +393,26 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     };
   }
 
+  #selectedView(view: ResolvedView, level: string | undefined): ResolvedView | undefined {
+    const projectView = {
+      orgId: view.orgId,
+      userId: view.userId,
+      factoryProjectId: view.factoryProjectId,
+      store: view.store,
+      view: 'project' as const,
+    };
+    if (level === 'org') return { ...projectView, scope: view.scope.slice(0, 1), pinRungs: [] };
+    if (level === 'resource') {
+      return {
+        ...projectView,
+        scope: view.scope.slice(0, 2),
+        pinRungs: view.pinRungs.filter(rung => rung.rung === 'resource'),
+      };
+    }
+    if (level === 'thread' && view.threadId) return view;
+    return undefined;
+  }
+
   /** Reserved `pinned` node ids at the active view's rungs (one exact-scope lookup per rung). */
   async #pinnedNodeIds(view: ResolvedView): Promise<Array<{ rung: 'resource' | 'thread'; id: string }>> {
     const out: Array<{ rung: 'resource' | 'thread'; id: string }> = [];
@@ -408,13 +438,30 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
   routes(): ApiRoute[] {
     return [
-      // ── Graph snapshot: nodes + derived edges, polled by the page ──────────
-      registerApiRoute('/web/factory/projects/:id/knowledge/graph', {
+      registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
+          return c.json({
+            roots: [
+              { level: 'org', id: view.orgId, available: true },
+              { level: 'resource', id: view.factoryProjectId, available: true },
+              ...(view.threadId ? [{ level: 'thread' as const, id: view.threadId, available: true }] : []),
+            ],
+            defaultLevel: 'resource',
+          } satisfies KnowledgeScopeTreePayload);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveView(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
+          if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const { store, scope } = view;
           const limits = this.#limits;
 
@@ -548,8 +595,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const view = await this.#resolveView(loose(c));
-          if ('response' in view) return view.response;
+          const resolved = await this.#resolveView(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
+          if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const { store, scope } = view;
           const nodeId = loose(c).req.param('nodeId');
           if (!nodeId || nodeId.length > 512) return c.json({ error: 'node_not_found' }, 404);
@@ -615,8 +664,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const view = await this.#resolveView(loose(c));
-          if ('response' in view) return view.response;
+          const resolved = await this.#resolveView(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
+          if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const events = await view.store.listActivity({ scope: view.scope, limit: 100 });
           return c.json({
             events: await Promise.all(
