@@ -63,10 +63,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
             className,
           )}
         >
-          <span className="flex items-center gap-1.5">
-            {activeTab.label}
-            {'badge' in activeTab && activeTab.badge && <span className="learn-tab-badge">{activeTab.badge}</span>}
-          </span>
+          <span className="flex items-center gap-1.5">{activeTab.label}</span>
           <ChevronDown
             className={cn(
               'size-4 text-(--mastra-text-quaternary) transition-transform duration-200',
@@ -91,10 +88,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
                   isActive && 'font-medium text-(--mastra-text-primary)',
                 )}
               >
-                <span className="flex items-center gap-1.5">
-                  {tab.label}
-                  {'badge' in tab && tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
-                </span>
+                <span className="flex items-center gap-1.5">{tab.label}</span>
                 {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
               </Link>
             </DropdownMenuItem>

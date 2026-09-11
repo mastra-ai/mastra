@@ -18,7 +18,7 @@ import {
 import type { Props } from '@theme/Tabs'
 import styles from './styles.module.css'
 
-function TabList({ className }: Props) {
+function TabList({ className }: Pick<Props, 'className'>) {
   const { selectedValue, selectValue, tabValues, block } = useTabs()
   const tabRefs: (HTMLLIElement | null)[] = []
   const { blockElementScrollPositionUntilNextRender } = useScrollPositionBlocker()

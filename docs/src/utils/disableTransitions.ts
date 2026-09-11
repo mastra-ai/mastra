@@ -16,7 +16,6 @@ export function disableTransitions(): () => void {
   document.head.appendChild(css)
 
   return () => {
-    // @ts-expect-error
     const _ = window.getComputedStyle(css).opacity
     document.head.removeChild(css)
   }

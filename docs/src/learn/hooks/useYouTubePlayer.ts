@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 declare global {
   interface Window {
     onYouTubeIframeAPIReady?: () => void
+    // @ts-expect-error The iframe API loads at runtime; its global typings are not installed.
     YT?: typeof YT
   }
 }
@@ -39,6 +40,7 @@ function loadYouTubeAPI(): Promise<void> {
 
 export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAutoComplete }: UseYouTubePlayerOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
+  // @ts-expect-error The iframe API loads at runtime; its global typings are not installed.
   const playerRef = useRef<YT.Player | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -58,6 +60,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
     // Reset auto-complete flag so the new video can trigger onAutoComplete
     autoCompletedRef.current = false
 
+    // @ts-expect-error The iframe API loads at runtime; its global typings are not installed.
     let player: YT.Player | null = null
     let playerDiv: HTMLDivElement | null = null
     let pollInterval: ReturnType<typeof setInterval> | null = null
@@ -96,6 +99,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
               player!.seekTo(saved, true)
             }
           },
+          // @ts-expect-error The iframe API loads at runtime; its global typings are not installed.
           onStateChange: (event: YT.OnStateChangeEvent) => {
             if (destroyed) return
             const time = player!.getCurrentTime()

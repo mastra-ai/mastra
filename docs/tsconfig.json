@@ -2,6 +2,15 @@
   "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
     "baseUrl": ".",
+    "paths": {
+      "@site/*": ["./*"],
+      "@theme/Admonition/Type/Beta": ["./src/theme/Admonition/Type/Beta.tsx"],
+      "@theme/SearchBar/custom-search": [
+        "./node_modules/@mastra/docusaurus-plugin-algolia/dist/theme/SearchBar/custom-search.d.ts"
+      ],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
+    },
     "types": ["@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
   },
   "include": ["src/**/*", "config/docs"]

@@ -48,6 +48,7 @@
     "@docusaurus/plugin-vercel-analytics": "^3.10.2",
     "@docusaurus/preset-classic": "^3.10.2",
     "@docusaurus/remark-plugin-npm2yarn": "^3.10.2",
+    "@docusaurus/theme-classic": "3.10.2",
     "@docusaurus/theme-common": "^3.10.2",
     "@docusaurus/theme-mermaid": "^3.10.2",
     "@headlessui/react": "^2.2.9",

@@ -18,6 +18,7 @@ function inertProps(inert: boolean) {
 
 function NavbarMobileSidebarPanel({ children, inert }: { children: ReactNode; inert: boolean }) {
   return (
+    // @ts-expect-error The upstream pre-React-19 compatibility branch returns string-valued inert.
     <div
       className={clsx(ThemeClassNames.layout.navbar.mobileSidebar.panel, 'navbar-sidebar__item menu')}
       {...inertProps(inert)}
