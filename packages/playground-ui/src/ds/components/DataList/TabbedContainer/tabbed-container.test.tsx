@@ -234,7 +234,7 @@ describe('TabbedContainer', () => {
 
     expect(screen.queryByRole('tab', { name: 'Runs' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close tab' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Close Runs' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');

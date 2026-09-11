@@ -337,15 +337,19 @@ describe('Tab', () => {
       );
 
       const tab = screen.getByRole('tab', { name: 'Second' });
-      const closeButton = screen.getByRole('button', { name: 'Close tab' });
-      expect(tab.contains(closeButton)).toBe(false);
-      expect(closeButton.parentElement).toBe(tab.parentElement);
+      const closeButton = screen.getByRole('button', { name: 'Close Second' });
+      const tabList = tab.closest('[role="tablist"]');
+      expect(tabList?.contains(closeButton)).toBe(false);
+      expect(closeButton.closest('[data-slot="tabs-list-scroll"]')).toBe(tabList?.parentElement);
+      expect(closeButton.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(false);
+      act(() => tab.focus());
+      expect(closeButton.closest('[data-slot="tab-close-item"]')?.hasAttribute('data-visible')).toBe(true);
+      expect(closeButton.tabIndex).toBe(0);
       closeButton.focus();
       expect(document.activeElement).toBe(closeButton);
       fireEvent.click(closeButton);
 
       expect(onClose).toHaveBeenCalledTimes(1);
-      // The click must not bubble into the tab underneath it.
       expect(onClick).not.toHaveBeenCalled();
       expect(screen.getByRole('tab', { name: /First/ }).getAttribute('aria-selected')).toBe('true');
     });
@@ -383,7 +387,7 @@ describe('Tab', () => {
         </Tabs>,
       );
 
-      expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Close / })).toBeNull();
     });
   });
 

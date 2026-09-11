@@ -1,5 +1,4 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { X } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
@@ -53,11 +52,15 @@ export const Tab = ({
   useEffect(() => () => unregister?.(value), [unregister, value]);
   const tab = (
     <BaseTabs.Tab
+      ref={ref}
       render={<div />}
       nativeButton={false}
+      data-overflowed={overflowed || undefined}
+      aria-hidden={overflowed || undefined}
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
+      data-tab-value={value}
       data-closable={onClose ? '' : undefined}
       className={cn(
         'text-ui-md font-normal text-neutral3',
@@ -83,36 +86,14 @@ export const Tab = ({
       )}
     </BaseTabs.Tab>
   );
-  const tabWithTooltip =
-    disabled && disabledTooltip ? (
+  if (disabled && disabledTooltip) {
+    return (
       <Tooltip>
         <TooltipTrigger asChild>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
       </Tooltip>
-    ) : (
-      tab
     );
+  }
 
-  return (
-    <div
-      ref={ref}
-      data-slot="tab-item"
-      data-overflowed={overflowed || undefined}
-      aria-hidden={overflowed || undefined}
-      className="relative flex shrink-0 items-center"
-    >
-      {tabWithTooltip}
-      {onClose ? (
-        <button
-          type="button"
-          data-slot="tab-close"
-          onClick={onClose}
-          className={cn('rounded p-0.5 hover:bg-surface4', transitions.colors, 'hover:text-neutral5')}
-          aria-label="Close tab"
-        >
-          <X className="size-3" />
-        </button>
-      ) : null}
-    </div>
-  );
+  return tab;
 };

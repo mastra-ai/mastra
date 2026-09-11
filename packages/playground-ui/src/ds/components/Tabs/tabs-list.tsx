@@ -4,8 +4,10 @@ import type { VariantProps } from 'class-variance-authority';
 import { ChevronDown, X } from 'lucide-react';
 import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const tabListVariants = cva('relative flex items-center text-ui-lg', {
@@ -55,6 +57,8 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const resolvedVariant = variant ?? 'line';
   const tabs = useContext(TabsContext);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const closeRefs = useRef(new Map<string, HTMLDivElement>());
+  const [activeCloseValue, setActiveCloseValue] = useState<string | null>(null);
   const [available, setAvailable] = useState<number | null>(null);
   const [measurements, setMeasurements] = useState<TabMeasurement[]>([]);
   const register = useCallback((tab: TabMeasurement) => {
@@ -115,81 +119,160 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
   const overflowX = measurements
     .filter(tab => !hiddenValues.has(tab.value))
     .reduce((sum, tab) => sum + tab.width + gap, tabs?.frame === 'inset' ? 4 : 0);
+  const visibleClosableTabs = measurements.filter(tab => !hiddenValues.has(tab.value) && tab.onClose);
   const listContext = useMemo(() => ({ hiddenValues, register, unregister }), [hiddenValues, register, unregister]);
+  useLayoutEffect(() => {
+    for (const tab of visibleClosableTabs) {
+      const close = closeRefs.current.get(tab.value);
+      if (!close) continue;
+      close.style.left = `${tab.element.offsetLeft}px`;
+      close.style.top = `${tab.element.offsetTop}px`;
+      close.style.width = `${tab.element.offsetWidth}px`;
+      close.style.height = `${tab.element.offsetHeight}px`;
+    }
+  }, [visibleClosableTabs]);
 
   return (
-    <TabListContext.Provider value={contained ? listContext : null}>
-      <div
-        ref={scrollRef}
-        data-slot="tabs-list-scroll"
-        className={cn('w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}
-      >
-        <BaseTabs.List
-          data-slot="tabs-list"
-          data-overflow={hiddenTabs.length > 0 || undefined}
-          data-variant={resolvedVariant}
-          className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
-          style={style}
+    <TabListContext.Provider value={listContext}>
+      <TooltipProvider delay={200}>
+        <div
+          ref={scrollRef}
+          data-slot="tabs-list-scroll"
+          className={cn('relative w-full overflow-x-auto', sticky && 'sticky top-0 z-10 bg-surface2')}
+          onPointerMove={event => {
+            if (!(event.target instanceof Element)) return;
+            const item = event.target.closest<HTMLElement>('[data-tab-value]');
+            setActiveCloseValue(item?.dataset.tabValue ?? null);
+          }}
+          onPointerLeave={() => setActiveCloseValue(null)}
+          onFocusCapture={event => {
+            if (!(event.target instanceof Element)) return;
+            const item = event.target.closest<HTMLElement>('[data-tab-value]');
+            setActiveCloseValue(item?.dataset.tabValue ?? null);
+          }}
+          onBlurCapture={event => {
+            const nextTarget = event.relatedTarget;
+            if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setActiveCloseValue(null);
+          }}
         >
-          {children}
-          {resolvedVariant === 'line' && (
-            <BaseTabs.Indicator
-              className={cn(
-                'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
-                'h-0.5 w-[var(--active-tab-width)]',
-                'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-              )}
-              data-slot="tabs-indicator"
-              style={{ transform: 'translateX(var(--active-tab-left))' }}
-            />
-          )}
-          {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
-            <BaseTabs.Indicator
-              className={cn(
-                'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
-                'h-[calc(100%-0.5rem)] w-[var(--active-tab-width)]',
-                'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-              )}
-              data-slot="tabs-indicator"
-              style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
-            />
-          )}
-        </BaseTabs.List>
-        {hiddenTabs.length > 0 && (
-          <div data-slot="tabs-overflow" style={{ transform: `translateX(${overflowX}px)` }} className="tabs-overflow">
-            <DropdownMenu>
-              <DropdownMenu.Trigger
-                aria-label={`${hiddenTabs.length} more tabs`}
-                className="text-ui-sm text-neutral3 hover:bg-surface3 hover:text-neutral5 focus-visible:ring-accent1 flex items-center gap-1 rounded px-1.5 py-1 tabular-nums focus-visible:ring-1 focus-visible:outline-none"
+          <BaseTabs.List
+            data-slot="tabs-list"
+            data-overflow={hiddenTabs.length > 0 || undefined}
+            data-variant={resolvedVariant}
+            className={cn('group/tabs-list', tabListVariants({ variant: resolvedVariant }), className)}
+            style={style}
+          >
+            {children}
+            {resolvedVariant === 'line' && (
+              <BaseTabs.Indicator
+                className={cn(
+                  'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
+                  'h-0.5 w-[var(--active-tab-width)]',
+                  'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
+                )}
+                data-slot="tabs-indicator"
+                style={{ transform: 'translateX(var(--active-tab-left))' }}
+              />
+            )}
+            {(resolvedVariant === 'pill' || resolvedVariant === 'pill-ghost') && (
+              <BaseTabs.Indicator
+                className={cn(
+                  'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
+                  'h-[calc(100%-0.5rem)] w-[var(--active-tab-width)]',
+                  'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
+                )}
+                data-slot="tabs-indicator"
+                style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
+              />
+            )}
+          </BaseTabs.List>
+          <div data-slot="tabs-close-actions">
+            {visibleClosableTabs.map(tab => (
+              <div
+                key={tab.value}
+                ref={element => {
+                  if (element) closeRefs.current.set(tab.value, element);
+                  else closeRefs.current.delete(tab.value);
+                }}
+                data-slot="tab-close-item"
+                data-tab-value={tab.value}
+                data-visible={activeCloseValue === tab.value || undefined}
               >
-                +{hiddenTabs.length}
-                <ChevronDown aria-hidden="true" className="size-3" />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content>
-                {hiddenTabs.map(tab => (
-                  <Fragment key={tab.value}>
-                    <DropdownMenu.Item
-                      disabled={tab.disabled}
-                      onClick={() => {
-                        tabs?.select(tab.value);
-                        tab.onClick?.();
-                      }}
-                    >
-                      {tab.label}
-                    </DropdownMenu.Item>
-                    {tab.onClose ? (
-                      <DropdownMenu.Item className="text-neutral3" onClick={tab.onClose}>
-                        <X aria-hidden="true" className="size-3" />
-                        <span>Close {tab.label}</span>
-                      </DropdownMenu.Item>
-                    ) : null}
-                  </Fragment>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        tabIndex={activeCloseValue === tab.value ? 0 : -1}
+                        data-slot="tab-close"
+                        onClick={tab.onClose}
+                        className={cn('rounded p-0.5 hover:bg-surface4 hover:text-accent2', transitions.colors)}
+                      />
+                    }
+                  >
+                    <span className="sr-only">Close {tab.label}</span>
+                    <X aria-hidden="true" className="size-3" />
+                  </TooltipTrigger>
+                  <TooltipContent>Close {tab.label}</TooltipContent>
+                </Tooltip>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+          {hiddenTabs.length > 0 && (
+            <div
+              data-slot="tabs-overflow"
+              style={{ transform: `translateX(${overflowX}px)` }}
+              className="tabs-overflow"
+            >
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  aria-label={`${hiddenTabs.length} more tabs`}
+                  className="text-ui-sm text-neutral3 hover:bg-surface3 hover:text-neutral5 focus-visible:ring-accent1 flex items-center gap-1 rounded px-1.5 py-1 tabular-nums focus-visible:ring-1 focus-visible:outline-none"
+                >
+                  +{hiddenTabs.length}
+                  <ChevronDown aria-hidden="true" className="size-3" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content className="grid">
+                  {hiddenTabs.map((tab, index) => (
+                    <Fragment key={tab.value}>
+                      <DropdownMenu.Item
+                        data-slot="tabs-overflow-tab"
+                        disabled={tab.disabled}
+                        className={tab.onClose ? 'pr-9' : undefined}
+                        style={{ gridArea: `${index + 1} / 1` }}
+                        onClick={() => {
+                          tabs?.select(tab.value);
+                          tab.onClick?.();
+                        }}
+                      >
+                        {tab.label}
+                      </DropdownMenu.Item>
+                      {tab.onClose ? (
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <DropdownMenu.Item
+                                data-slot="tabs-overflow-close"
+                                className="hover:text-accent2 data-[highlighted]:text-accent2 pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0"
+                                style={{ gridArea: `${index + 1} / 1` }}
+                                onClick={tab.onClose}
+                              />
+                            }
+                          >
+                            <span className="sr-only">Close {tab.label}</span>
+                            <X aria-hidden="true" className="size-3" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Close {tab.label}</TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
+      </TooltipProvider>
     </TabListContext.Provider>
   );
 };
