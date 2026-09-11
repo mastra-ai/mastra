@@ -1,8 +1,20 @@
-import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { CodeModeBadge } from '../code-mode-badge';
+
+// jsdom does not implement Range.prototype.getClientRects, which CodeMirror's
+// measure cycle calls asynchronously after mount.
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => {
+    const rects = [] as unknown as DOMRectList;
+    (rects as unknown as { item: (index: number) => DOMRect | null }).item = () => null;
+    return rects;
+  };
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
 
 const renderWithProvider = (node: ReactNode) =>
   render(

@@ -1,9 +1,10 @@
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { AskUserBadge } from '../ask-user-badge';
-import type { AskUserResult, AskUserSuspendPayload } from '../types';
+import type { AskUserPayload, AskUserResult } from '@/ds/components/ai/ask-user';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 type ProviderOverrides = {
   approveToolcall?: (toolCallId: string, resumeData?: unknown) => void;
@@ -12,7 +13,7 @@ type ProviderOverrides = {
 };
 
 const renderBadge = (
-  props: { toolCallId: string; suspendPayload: AskUserSuspendPayload; result: AskUserResult | undefined },
+  props: { toolCallId: string; suspendPayload: AskUserPayload; result: AskUserResult | undefined },
   overrides: ProviderOverrides = {},
 ) => {
   const approveToolcall = overrides.approveToolcall ?? vi.fn();
@@ -42,7 +43,7 @@ afterEach(() => cleanup());
 
 describe('AskUserBadge', () => {
   describe('when the payload offers single-select options', () => {
-    const suspendPayload: AskUserSuspendPayload = {
+    const suspendPayload: AskUserPayload = {
       question: 'Pick a fruit',
       options: [{ label: 'Apple', description: 'A red fruit' }, { label: 'Banana' }],
       selectionMode: 'single_select',
@@ -68,7 +69,7 @@ describe('AskUserBadge', () => {
   });
 
   describe('when the payload offers multi-select options', () => {
-    const suspendPayload: AskUserSuspendPayload = {
+    const suspendPayload: AskUserPayload = {
       question: 'Pick toppings',
       options: [{ label: 'Cheese' }, { label: 'Olives' }],
       selectionMode: 'multi_select',
@@ -101,7 +102,7 @@ describe('AskUserBadge', () => {
   });
 
   describe('when the payload offers no options (free text)', () => {
-    const suspendPayload: AskUserSuspendPayload = { question: 'What is your name?' };
+    const suspendPayload: AskUserPayload = { question: 'What is your name?' };
 
     it('submits the trimmed text on Enter', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
@@ -137,7 +138,7 @@ describe('AskUserBadge', () => {
   });
 
   describe('when the tool call has already been answered', () => {
-    const suspendPayload: AskUserSuspendPayload = {
+    const suspendPayload: AskUserPayload = {
       question: 'Pick a fruit',
       options: [{ label: 'Apple' }],
       selectionMode: 'single_select',
@@ -184,7 +185,7 @@ describe('AskUserBadge', () => {
   });
 
   describe('when a tool call with options is already running', () => {
-    const suspendPayload: AskUserSuspendPayload = {
+    const suspendPayload: AskUserPayload = {
       question: 'Pick a fruit',
       options: [{ label: 'Apple' }],
       selectionMode: 'single_select',

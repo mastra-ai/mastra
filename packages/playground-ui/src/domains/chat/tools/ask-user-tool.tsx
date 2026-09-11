@@ -1,6 +1,6 @@
-import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import type { MessageMetadata } from '../messages/message-metadata';
 import { AskUserBadge } from './badges/ask-user-badge';
-import type { AskUserResult, AskUserSuspendPayload } from './badges/types';
+import type { AskUserPayload, AskUserResult } from '@/ds/components/ai/ask-user';
 
 export interface AskUserToolProps {
   toolName: string;
@@ -9,12 +9,12 @@ export interface AskUserToolProps {
   metadata?: MessageMetadata;
 }
 
-function isAskUserSuspendPayload(payload: unknown): payload is AskUserSuspendPayload {
+function isAskUserPayload(payload: unknown): payload is AskUserPayload {
   return (
     typeof payload === 'object' &&
     payload !== null &&
     'question' in payload &&
-    typeof (payload as AskUserSuspendPayload).question === 'string'
+    typeof (payload as AskUserPayload).question === 'string'
   );
 }
 
@@ -40,7 +40,7 @@ export const AskUserTool = ({ toolName, toolCallId, output, metadata }: AskUserT
   const suspendPayload = (metadata?.suspendedTools?.[toolName] ?? metadata?.suspendedTools?.[toolCallId])
     ?.suspendPayload;
 
-  if (!isAskUserSuspendPayload(suspendPayload)) {
+  if (!isAskUserPayload(suspendPayload)) {
     return null;
   }
 

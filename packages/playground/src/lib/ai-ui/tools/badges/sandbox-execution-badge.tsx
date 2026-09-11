@@ -1,6 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -8,8 +10,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
