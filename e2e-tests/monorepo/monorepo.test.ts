@@ -1,7 +1,8 @@
+import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -47,6 +48,32 @@ async function findInDir(root: string, targetName: string): Promise<boolean> {
     }
   }
   return false;
+}
+
+async function getDirectoryDigests(root: string): Promise<Record<string, string>> {
+  const digests: Record<string, string> = {};
+
+  async function visit(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    entries.sort((first, second) => first.name.localeCompare(second.name));
+
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      const relativePath = relative(root, path).replaceAll('\\', '/');
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.isSymbolicLink()) {
+        digests[relativePath] = `link:${await readlink(path)}`;
+      } else if (entry.isFile()) {
+        digests[relativePath] = createHash('sha256')
+          .update(await readFile(path))
+          .digest('hex');
+      }
+    }
+  }
+
+  await visit(root);
+  return digests;
 }
 
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
@@ -988,6 +1015,52 @@ export const mastra = new Mastra({
           expect(output).toContain('pnpm blocked build scripts for: bcrypt');
           expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
           expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('reproducible tool bundles', () => {
+    it(
+      'produces identical tool bundles when invoked from the app and monorepo roots',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-reproducible-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const outputRoot = join(appDir, '.mastra', 'output');
+          const build = async (cwd: string, args: string[], cliPath?: string) => {
+            await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+            const options = {
+              cwd,
+              env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+              reject: false,
+            };
+            const result = cliPath ? await execaNode(cliPath, args, options) : await execa(pkgManager, args, options);
+            expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+            const outputDigests = await getDirectoryDigests(outputRoot);
+            return Object.fromEntries(
+              Object.entries(outputDigests).filter(
+                ([path]) => path === 'tools.mjs' || (path.startsWith('tools/') && path.endsWith('.mjs')),
+              ),
+            );
+          };
+
+          const first = await build(appDir, ['build']);
+          const second = await build(
+            isolatedFixturePath,
+            ['build', '--root', 'apps/custom'],
+            join(appDir, 'node_modules', 'mastra', 'dist', 'index.js'),
+          );
+
+          expect(
+            Object.keys(first).filter(path => path.startsWith('tools/') && path.endsWith('.mjs')).length,
+          ).toBeGreaterThan(0);
+          expect(second).toEqual(first);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
