@@ -9,13 +9,13 @@ import {
 } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
   try {

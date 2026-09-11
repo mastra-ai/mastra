@@ -337,8 +337,35 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
 const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
 
 /**
- * Concrete implementation of MastraMemory that adds support for thread configuration
- * and message injection.
+ * Gives Mastra agents conversation history, with optional working memory,
+ * semantic recall, and observational memory.
+ *
+ * @remarks
+ * Configure storage on this instance or its Mastra instance before use.
+ * See the bundled docs for setup and conversation identifiers.
+ *
+ * @example
+ * Attach memory to an agent; `yourModel` is your configured model.
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { Memory } from '@mastra/memory';
+ *
+ * const agent = new Agent({
+ *   id: 'assistant',
+ *   name: 'Assistant',
+ *   instructions: 'You are a helpful assistant.',
+ *   model: yourModel,
+ *   memory: new Memory(),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/memory/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Memory documentation](https://mastra.ai/docs/memory/overview)
+ * if packaged docs are unavailable.
  */
 export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;

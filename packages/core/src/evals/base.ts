@@ -1866,6 +1866,29 @@ class MastraScorer<
 }
 
 // Overload: enum type shortcuts (e.g., type: 'agent')
+/**
+ * Creates a scorer builder for evaluating input/output pairs.
+ * Add a `generateScore` stage before running the scorer.
+ *
+ * @example
+ * ```typescript
+ * import { createScorer } from '@mastra/core/evals';
+ *
+ * const scorer = createScorer({
+ *   id: 'response-presence',
+ *   description: 'Check whether the agent produced any output messages.',
+ *   type: 'agent',
+ * }).generateScore(({ run }) => (run.output.length > 0 ? 1 : 0));
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Scorer documentation](https://mastra.ai/reference/evals/create-scorer)
+ * if packaged docs are unavailable.
+ */
 export function createScorer<TID extends string, TType extends keyof ScorerTypeShortcuts>(
   config: Omit<ScorerConfig<TID, any, any>, 'type'> & {
     type: TType;

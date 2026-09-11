@@ -113,7 +113,7 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
       // Normalize sibling fields (like properties/items) before returning
       const { anyOf, ...rest } = result;
       const fixedRest = fixAnyOfNullable(rest as JSONSchema7);
-      const fixedOther = fixAnyOfNullable(otherSchema as JSONSchema7);
+      const fixedOther = fixAnyOfNullable(otherSchema);
       return {
         ...fixedRest,
         ...fixedOther,
@@ -215,12 +215,12 @@ export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
     if (Array.isArray(result.items)) {
       result.items = result.items.map(item => ensureAllPropertiesRequired(item as JSONSchema7));
     } else if (typeof result.items === 'object') {
-      result.items = ensureAllPropertiesRequired(result.items as JSONSchema7);
+      result.items = ensureAllPropertiesRequired(result.items);
     }
   }
 
   if (result.additionalProperties && typeof result.additionalProperties === 'object') {
-    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties as JSONSchema7);
+    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties);
   }
 
   if (result.anyOf && Array.isArray(result.anyOf)) {
@@ -541,7 +541,7 @@ function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
     if (Array.isArray(result.items)) {
       result.items = result.items.map(item => ensureAdditionalPropertiesFalse(item as JSONSchema7));
     } else if (typeof result.items === 'object') {
-      result.items = ensureAdditionalPropertiesFalse(result.items as JSONSchema7);
+      result.items = ensureAdditionalPropertiesFalse(result.items);
     }
   }
 
