@@ -1,11 +1,9 @@
 import { z } from 'zod';
 
-import {
-  BOARD_IDENTIFIER_RE,
-  IDENTIFIER_RE,
-  MAX_BOARD_IDENTIFIER_LENGTH,
-  MAX_ROLE_LENGTH,
-} from '../rules/validation.js';
+import { FACTORY_ROLE_STAGES } from '../rules/types.js';
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+
+const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -164,7 +162,7 @@ export const automationRunStartBodySchema = z
   .object({
     requestId: trimmedUuidSchema,
     expectedRevision: z.number().int().min(1),
-    role: z.string().trim().min(1).max(MAX_ROLE_LENGTH).regex(IDENTIFIER_RE),
+    role: z.enum(FACTORY_ROLE_VALUES),
     skillName: nonEmptyTrimmed(128),
     arguments: nonEmptyTrimmed(4_096).optional(),
   })

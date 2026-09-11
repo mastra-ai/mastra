@@ -1,19 +1,11 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { AutomationRunRoutes } from './automation-runs.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
-
-let auditRecorded: Array<Record<string, any>> = [];
-
-const audit: AuditEmitter = {
-  async emit({ input }) {
-    auditRecorded.push({ action: input.action, factoryProjectId: input.factoryProjectId, metadata: input.metadata });
-  },
-};
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
@@ -30,6 +22,11 @@ function buildApp(
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
+  const audit = new AuditDomain({
+    auth: fakeRouteAuth(options),
+    audit: seed.audit,
+    projects: seed.projects,
+  });
   mountApiRoutes(
     app as any,
     new AutomationRunRoutes({
@@ -42,6 +39,8 @@ function buildApp(
   );
   return app;
 }
+
+const listAudit = (orgId: string) => seed.audit.list({ orgId });
 
 function post(body: unknown, user: typeof orgUser | null = orgUser, options = {}) {
   const path = `/web/factory/projects/${PROJECT_ID}/work-items/${WORK_ITEM_ID}/automation-runs`;
@@ -79,7 +78,6 @@ async function seedProjectAndItem(orgId = 'org1') {
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
-  auditRecorded = [];
 });
 
 afterEach(() => {
@@ -97,7 +95,8 @@ describe('automation-runs ingress', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]!.decision).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
     expect(decisions[0]!.actor).toEqual({ type: 'system', id: 'factory-external-orchestrator' });
-    expect(auditRecorded.map(e => e.action)).toContain('factory.run.queued');
+    const events = await listAudit('org1');
+    expect(events.events.map(e => e.action)).toContain('factory.run.queued');
   });
 
   it('rejects tenant callers who are not organization administrators', async () => {
@@ -122,6 +121,13 @@ describe('automation-runs ingress', () => {
     const decisions = await listDecisionsLocal();
     expect(decisions).toHaveLength(1);
     expect(decisions[0]!.actor).toEqual({ type: 'system', id: 'factory-external-orchestrator' });
+    // Audit must persist under the synthetic `local` scope — the tenant-gated
+    // emit() path would silently drop it here.
+    const events = await listAudit('local');
+    const queued = events.events.find(e => e.action === 'factory.run.queued');
+    expect(queued).toBeDefined();
+    expect(queued!.actorType).toBe('system');
+    expect(queued!.actorId).toBe('factory-external-orchestrator');
   });
 
   it('replays the same request id without inserting a second decision', async () => {
@@ -140,7 +146,26 @@ describe('automation-runs ingress', () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ status: 'rejected', code: 'stale' });
     expect(await listDecisions()).toHaveLength(0);
-    expect(auditRecorded.map(e => e.action)).toContain('factory.run.rejected');
+    const events = await listAudit('org1');
+    expect(events.events.map(e => e.action)).toContain('factory.run.rejected');
+  });
+
+  it('rejects reuse of a request id for a different operation', async () => {
+    await seedProjectAndItem();
+    const first = await post(validBody());
+    expect(first.status).toBe(202);
+
+    // Same requestId, different skill — must not be reported as durably queued.
+    const conflict = await post(validBody({ skillName: 'factory-triage', role: 'triage' }));
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({ status: 'rejected', code: 'request_id_conflict' });
+    expect(await listDecisions()).toHaveLength(1);
+
+    const events = await listAudit('org1');
+    const rejected = events.events.find(
+      e => e.action === 'factory.run.rejected' && (e.metadata as any)?.code === 'request_id_conflict',
+    );
+    expect(rejected).toBeDefined();
   });
 
   it('rejects unsupported request fields at the HTTP boundary', async () => {

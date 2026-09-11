@@ -19,8 +19,10 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { isFactoryRole } from '../rules/types.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditAction } from '../storage/domains/audit/actions.js';
+import type { AuditTarget } from '../storage/domains/audit/base.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
+import { auditRequestContext } from '../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -31,8 +33,47 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
+/** The invokeSkill payload this route commits, matched against a prior replay. */
+interface AutomationInvokeSkillDecision {
+  type: 'invokeSkill';
+  idempotencyKey: string;
+  role: string;
+  skillName: string;
+  arguments?: string;
+}
+
+/**
+ * Whether a replayed rule-evaluation record describes the SAME operation as the
+ * current request. `commitRuleEvaluation` keys idempotency on `(org, project,
+ * ingress identity)` alone, so a reused `requestId` replays regardless of the
+ * work item or decision payload. We reconstruct the prior `invokeSkill`
+ * decision from the stored result and compare the item id, role, skill, and
+ * arguments; any divergence is a collision, not a legitimate retry.
+ */
+function replayMatchesRequest(
+  result: { itemId?: string | null; decisions?: unknown[] },
+  itemId: string,
+  request: AutomationInvokeSkillDecision,
+): boolean {
+  if (result.itemId != null && result.itemId !== itemId) return false;
+  const decisions = Array.isArray(result.decisions) ? result.decisions : [];
+  const prior = decisions.find(
+    (candidate): candidate is Record<string, unknown> =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      (candidate as Record<string, unknown>).type === 'invokeSkill' &&
+      (candidate as Record<string, unknown>).idempotencyKey === request.idempotencyKey,
+  );
+  if (!prior) return false;
+  return (
+    prior.role === request.role &&
+    prior.skillName === request.skillName &&
+    (prior.arguments ?? undefined) === (request.arguments ?? undefined)
+  );
+}
+
 export interface AutomationRunRoutesDeps extends RouteDependencies {
-  audit: AuditEmitter;
+  audit: AuditEmitter & AuditRecorder;
   /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
   projects: FactoryProjectsStorage;
   /** Work-items domain backing `commitRuleEvaluation`. */
@@ -99,8 +140,34 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
     return { ...scope, factoryProjectId: parsedPath.data.id };
   }
 
+  /**
+   * Persist an audit event under the ingress-resolved scope. This route can run
+   * under the synthetic `local` no-auth scope, where the tenant-gated
+   * `audit.emit()` derives no org from the request and drops the event; writing
+   * through `record()` with the explicit org + system actor keeps traceability
+   * in every deployment mode.
+   */
+  async #writeAudit(
+    c: Context,
+    scope: AutomationRunScope,
+    action: AuditAction,
+    targets: AuditTarget[],
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    await this.deps.audit.record({
+      orgId: scope.orgId,
+      actorId: 'factory-external-orchestrator',
+      actorType: 'system',
+      action,
+      targets,
+      metadata,
+      factoryProjectId: scope.factoryProjectId,
+      context: auditRequestContext(c),
+    });
+  }
+
   routes(): ApiRoute[] {
-    const { audit, workItems, configVersion } = this.deps;
+    const { workItems, configVersion } = this.deps;
     const contract = FACTORY_ROUTE_CONTRACTS.workItemAutomationRun;
 
     return [
@@ -128,8 +195,6 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
             skillName: string;
             arguments?: string;
           };
-
-          if (!isFactoryRole(request.role)) return c.json({ error: 'invalid_automation_run_request' }, 400);
 
           const item = await workItems.getForProject(
             resolved.orgId,
@@ -164,9 +229,15 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
 
           if (commit.status === 'missing') return c.json({ error: 'Work item not found' }, 404);
 
-          const result = commit.result as { status?: string; code?: string };
+          const result = commit.result as {
+            status?: string;
+            code?: string;
+            itemId?: string | null;
+            decisions?: unknown[];
+          };
           const resultStatus = result.status ?? 'accepted';
           const code = typeof result.code === 'string' ? result.code : undefined;
+          const targets = [{ type: 'work_item' as const, id: item.id, name: item.title }];
 
           const auditMetadata = {
             requestId: request.requestId,
@@ -177,31 +248,36 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
             ...(code ? { code } : {}),
           };
 
-          if (resultStatus === 'accepted') {
-            await audit.emit({
-              context,
-              input: {
-                action: 'factory.run.queued',
-                factoryProjectId: resolved.factoryProjectId,
-                targets: [{ type: 'work_item', id: item.id, name: item.title }],
-                metadata: auditMetadata,
-              },
+          // A replay only means "this request was already committed" — it must
+          // be the SAME operation. If the caller reused a requestId against a
+          // different work item, role, skill, or arguments, returning
+          // `replayed` would report durable success for work that was never
+          // enqueued. Reject the collision instead of silently swallowing it.
+          if (commit.status === 'replayed' && !replayMatchesRequest(result, item.id, decision)) {
+            await this.#writeAudit(context, resolved, 'factory.run.rejected', targets, {
+              ...auditMetadata,
+              resultStatus: 'rejected',
+              code: 'request_id_conflict',
             });
+            return c.json(
+              {
+                status: 'rejected',
+                code: 'request_id_conflict',
+                requestId: request.requestId,
+              },
+              409,
+            );
+          }
+
+          if (resultStatus === 'accepted') {
+            await this.#writeAudit(context, resolved, 'factory.run.queued', targets, auditMetadata);
             return c.json(
               { status: commit.status === 'replayed' ? 'replayed' : 'committed', requestId: request.requestId },
               commit.status === 'replayed' ? 200 : 202,
             );
           }
 
-          await audit.emit({
-            context,
-            input: {
-              action: 'factory.run.rejected',
-              factoryProjectId: resolved.factoryProjectId,
-              targets: [{ type: 'work_item', id: item.id, name: item.title }],
-              metadata: auditMetadata,
-            },
-          });
+          await this.#writeAudit(context, resolved, 'factory.run.rejected', targets, auditMetadata);
           return c.json(
             { status: 'rejected', ...(code ? { code } : {}), requestId: request.requestId },
             code === 'stale' ? 409 : 422,
