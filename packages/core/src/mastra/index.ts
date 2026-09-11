@@ -232,9 +232,12 @@ function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
  * @template TVectors - Record of vector store instances
  * @template TTTS - Record of text-to-speech instances
  * @template TLogger - Logger implementation type
- * @template TVNextNetworks - Record of agent network instances
  * @template TMCPServers - Record of MCP server instances
  * @template TScorers - Record of scorer instances
+ * @template TTools - Record of executable tool instances
+ * @template TProcessors - Record of processor instances
+ * @template TMemory - Record of memory instances
+ * @template TChannels - Record of channel provider instances
  *
  * @example
  * ```typescript
@@ -325,7 +328,7 @@ export interface Config<
   /**
    * Harnesses to host on this Mastra instance, keyed by id.
    *
-   * @deprecated Use {@link MastraConfig.agentControllers} instead. `harnesses`
+   * @deprecated Use {@link Config.agentControllers} instead. `harnesses`
    * is retained as a backwards-compatible alias and will be removed in a future
    * major. Entries from both keys are merged, with `agentControllers` taking
    * precedence on key collisions.
@@ -667,7 +670,6 @@ export interface MastraRecoveryConfig {
  * @template TVectors - Record of vector store instances for semantic search and RAG
  * @template TTTS - Record of text-to-speech provider instances
  * @template TLogger - Logger implementation type for application logging
- * @template TVNextNetworks - Record of next-generation agent network instances
  * @template TMCPServers - Record of Model Context Protocol server instances
  * @template TScorers - Record of evaluation scorer instances for measuring AI performance
  *

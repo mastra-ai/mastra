@@ -13,5 +13,5 @@
     },
     "types": ["@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
   },
-  "include": ["src/**/*", "config/docs"]
+  "include": ["src/**/*", "config/docs", "scripts/api-reference/**/*"]
 }

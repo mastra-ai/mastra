@@ -8000,6 +8000,15 @@ export class Agent<
     return this.resumeNetwork({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
 
+  /**
+   * Generates a complete response with a schema-compatible structured output type.
+   *
+   * @typeParam OUTPUT - Standard Schema type describing the structured output.
+   * @typeParam T - Result type constrained by the schema's output type.
+   * @param messages - Input messages or text for the agent.
+   * @param options - Execution options with a required structured output configuration.
+   * @returns The complete response, including the structured object and execution metadata.
+   */
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -8009,18 +8018,45 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
+  /**
+   * Generates a complete response with an explicitly typed structured object.
+   *
+   * @typeParam OUTPUT - Structured result object type.
+   * @param messages - Input messages or text for the agent.
+   * @param options - Execution options with a required structured output configuration.
+   * @returns The complete response with an object of type OUTPUT.
+   */
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
+  /**
+   * Generates a complete response without a per-call structured output override.
+   *
+   * @param messages - Input messages or text for the agent.
+   * @param options - Execution options that retain the agent's configured output type.
+   * @returns The complete response using the agent's output type.
+   */
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
+  /**
+   * Generates a complete response using the agent's default execution options.
+   *
+   * @typeParam OUTPUT - Result object type, defaulting to the agent's output type.
+   * @param messages - Input messages or text for the agent.
+   * @returns The complete response after generation finishes.
+   * @example
+   * ```typescript
+   * const result = await agent.generate('Hello');
+   * console.log(result.text);
+   * ```
+   */
   async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
