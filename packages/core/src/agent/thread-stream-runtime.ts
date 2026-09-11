@@ -183,7 +183,6 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
-  isOwnerActive?: () => boolean;
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -954,7 +953,6 @@ export class AgentThreadStreamRuntime {
         resourceId: owner.resourceId,
         threadId: owner.threadId,
         streamOptions,
-        isOwnerActive,
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
@@ -2340,10 +2338,6 @@ export class AgentThreadStreamRuntime {
       state.pendingIdleSignalsByThread.delete(key);
     }
 
-    if (pendingIdle.isOwnerActive && !pendingIdle.isOwnerActive()) {
-      return this.#drainPendingIdleSignals(state, pubsub, key, fromRunId);
-    }
-
     state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
 
@@ -2354,17 +2348,15 @@ export class AgentThreadStreamRuntime {
     // way the run must only start if this process owns the cross-process lease,
     // otherwise two processes could each start a competing idle run.
     const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
-    const ownerActive = pendingIdle.isOwnerActive?.() ?? true;
-    if (!owns.acquired || !ownerActive) {
+    if (!owns.acquired) {
       // Roll back the optimistic local reservation. If another process owns the
-      // lease, hand the already-accepted signal to that run; a released claimed
-      // owner must not start new work.
+      // lease, hand the already-accepted signal to that run.
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
-      if (ownerActive && owns.owner) {
+      if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
           runId: owns.owner,

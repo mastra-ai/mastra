@@ -3,6 +3,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import {
   AGENT_CONNECTIONS_STATE_TYPE,
   type AgentConnectionsState,
+  type AgentSignalPriority,
+  type AgentSignalRoutingAction,
   type ConnectedAgentPeer,
   type SentAgentSignal,
 } from './types.js';
@@ -85,22 +87,46 @@ export function sortConnectedPeers(peers: ConnectedAgentPeer[]): ConnectedAgentP
   return [...peers].sort((a, b) => a.id.localeCompare(b.id));
 }
 
+const agentSignalPriorities = new Set<AgentSignalPriority>(['low', 'medium', 'high', 'urgent']);
+const agentSignalRoutingActions = new Set<AgentSignalRoutingAction>(['wake', 'deliver', 'persist', 'discard', 'blocked']);
+
 export function normalizeSentAgentSignals(signals: unknown[]): SentAgentSignal[] {
   return signals.flatMap(signal => {
     if (!signal || typeof signal !== 'object') return [];
     const candidate = signal as Partial<SentAgentSignal>;
+    const messageId = readString(candidate.messageId);
+    const fingerprint = readString(candidate.fingerprint);
+    const targetId = readString(candidate.targetId);
+    const returnPeerId = readString(candidate.returnPeerId);
     if (
-      !candidate.messageId ||
-      !candidate.fingerprint ||
-      !candidate.targetId ||
-      !candidate.priority ||
+      !messageId ||
+      !fingerprint ||
+      !targetId ||
+      !agentSignalPriorities.has(candidate.priority as AgentSignalPriority) ||
       typeof candidate.expectsReply !== 'boolean' ||
-      !candidate.returnPeerId ||
-      typeof candidate.sentAt !== 'number'
+      !returnPeerId ||
+      !Number.isFinite(candidate.sentAt) ||
+      (candidate.replyTo !== undefined && !readString(candidate.replyTo)) ||
+      (candidate.routingAction !== undefined &&
+        !agentSignalRoutingActions.has(candidate.routingAction as AgentSignalRoutingAction)) ||
+      (candidate.runId !== undefined && !readString(candidate.runId))
     ) {
       return [];
     }
-    return [candidate as SentAgentSignal];
+    return [
+      {
+        messageId,
+        fingerprint,
+        targetId,
+        priority: candidate.priority as AgentSignalPriority,
+        expectsReply: candidate.expectsReply,
+        ...(candidate.replyTo ? { replyTo: candidate.replyTo } : {}),
+        returnPeerId,
+        ...(candidate.routingAction ? { routingAction: candidate.routingAction } : {}),
+        ...(candidate.runId ? { runId: candidate.runId } : {}),
+        sentAt: candidate.sentAt as number,
+      },
+    ];
   });
 }
 

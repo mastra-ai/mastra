@@ -164,6 +164,30 @@ describe('AgentConnectionRegistry', () => {
     expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-2:thread-2']);
   });
 
+  it('keeps successful discovery sources when other sources reject', async () => {
+    const registry = new AgentConnectionRegistry({
+      now: () => 20,
+      listPeers: async () => {
+        throw new Error('injected discovery failed');
+      },
+    });
+    const context = {
+      ...createContext(),
+      runtimeAgent: {
+        discoverThreadPeers: async () => {
+          throw new Error('core discovery failed');
+        },
+      },
+    };
+    context.requestContext.set(AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY, [
+      { resourceId: 'resource-2', threadId: 'thread-2' },
+    ]);
+
+    const peers = await registry.listPeers(context);
+
+    expect(peers.map(peer => peer.id)).toEqual(['code-agent:resource-2:thread-2']);
+  });
+
   it('keeps a different agent on the current resource and thread visible', async () => {
     const registry = new AgentConnectionRegistry({
       now: () => 20,

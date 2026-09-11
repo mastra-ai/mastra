@@ -181,6 +181,31 @@ describe('CrossAgentMessagingExpectedReplyProcessor', () => {
     });
   });
 
+  it('still retries when reminder delivery rejects', async () => {
+    const processor = new CrossAgentMessagingExpectedReplyProcessor();
+    const sendSignal = vi.fn().mockRejectedValue(new Error('reminder delivery failed'));
+    const abort = vi.fn((reason: string, options: unknown) => {
+      throw Object.assign(new Error(reason), { options });
+    });
+
+    await expect(
+      processor.processOutputStep({
+        finishReason: 'stop',
+        toolCalls: [],
+        messageList: messageList([notificationMessage(REQUEST)]),
+        retryCount: 0,
+        sendSignal,
+        abort,
+      } as any),
+    ).rejects.toThrow('A connected peer expected a correlated reply');
+
+    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'expected-reply-reminder' }));
+    expect(abort).toHaveBeenCalledWith(expect.stringContaining('replyTo="request-1"'), {
+      retry: true,
+      metadata: { peerIds: ['code-agent:r:t'], messageIds: ['request-1'] },
+    });
+  });
+
   it('does not remind on later turns after a correlated reply finds the peer unavailable', async () => {
     const processor = new CrossAgentMessagingExpectedReplyProcessor();
     const sendSignal = vi.fn();

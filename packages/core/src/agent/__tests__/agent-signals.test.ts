@@ -1793,7 +1793,7 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('acknowledges a queued remote wake while the claimed owner is busy', async () => {
+  it('preserves an acknowledged remote wake when the busy owner releases its claim', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
@@ -1829,43 +1829,47 @@ describe('Agent signals', () => {
       pubsub,
     );
 
-    const firstSignal = senderRuntime.sendSignal(
-      senderAgent,
-      { type: 'user-message', contents: 'start the first owner run' },
-      {
-        resourceId: 'queued-admission-user',
-        threadId: 'queued-admission-thread',
-        ifIdle: { behavior: 'wake' },
-      },
-      pubsub,
-    );
-    await expect(firstSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
-    await waitForCondition(() => getStreamCount() === 1);
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'start the first owner run' },
+        {
+          resourceId: 'queued-admission-user',
+          threadId: 'queued-admission-thread',
+          ifIdle: { behavior: 'wake' },
+        },
+        pubsub,
+      );
+      await expect(firstSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
 
-    const queuedSignal = senderRuntime.sendSignal(
-      senderAgent,
-      { type: 'user-message', contents: 'queue the second owner run' },
-      {
-        resourceId: 'queued-admission-user',
-        threadId: 'queued-admission-thread',
-        ifIdle: { behavior: 'wake' },
-      },
-      pubsub,
-    );
-    await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
-    expect(getStreamCount()).toBe(1);
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue the second owner run' },
+        {
+          resourceId: 'queued-admission-user',
+          threadId: 'queued-admission-thread',
+          ifIdle: { behavior: 'wake' },
+        },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      expect(getStreamCount()).toBe(1);
 
-    // Queued delivery is durable beyond the sender's 5-second acceptance window.
-    now.mockReturnValue(10_000);
-    releaseFirst();
-    await firstRun;
-    const queuedRun = await readNextRunWithParts(iterator);
-    expect(queuedRun.value.text).toBe('queued owner response');
-    expect(getStreamCount()).toBe(2);
-
-    now.mockRestore();
-    claim.unsubscribe();
-    subscription.unsubscribe();
+      // Once accepted, queued work remains in flight even if the claim is released.
+      claim.unsubscribe();
+      now.mockReturnValue(10_000);
+      releaseFirst();
+      await firstRun;
+      const queuedRun = await readNextRunWithParts(iterator);
+      expect(queuedRun.value.text).toBe('queued owner response');
+      expect(getStreamCount()).toBe(2);
+    } finally {
+      releaseFirst();
+      now.mockRestore();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
   });
 
   it('acknowledges a queued remote wake before a later lease handoff failure', async () => {

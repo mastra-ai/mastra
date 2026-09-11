@@ -60,17 +60,23 @@ export class AgentConnectionRegistry {
   }
 
   async #discover(context: AgentConnectionContext): Promise<NormalizedAgentPeerIdentity[]> {
-    const injected = await this.#discoverFromInjectedSource(context);
-    const core = await discoverFromCoreAgent(context);
-    const requestContext = discoverFromRequestContext(context.requestContext);
-    const env = discoverFromEnv();
-    const sources = [injected, core, requestContext, env];
+    const sources = await Promise.allSettled([
+      Promise.resolve().then(() => this.#discoverFromInjectedSource(context)),
+      Promise.resolve().then(() => discoverFromCoreAgent(context)),
+      Promise.resolve().then(() => discoverFromRequestContext(context.requestContext)),
+      Promise.resolve().then(() => discoverFromEnv()),
+    ]);
     const byId = new Map<string, NormalizedAgentPeerIdentity>();
-    for (const peers of sources) {
-      for (const peer of peers) {
+    for (const source of sources) {
+      if (source.status === 'rejected') continue;
+      for (const peer of source.value) {
         const normalized = normalizePeerIdentity(peer, this.#now());
         if (normalized) byId.set(normalized.id, normalized);
       }
+    }
+    if (byId.size === 0) {
+      const rejected = sources.find(source => source.status === 'rejected');
+      if (rejected) throw rejected.reason;
     }
     return [...byId.values()].sort(comparePeers);
   }
