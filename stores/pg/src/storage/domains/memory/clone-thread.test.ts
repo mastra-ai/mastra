@@ -35,8 +35,9 @@ class RecordingTxClient implements TxClient {
     throw new Error('not implemented');
   }
 
-  async query(): Promise<QueryResult> {
-    throw new Error('not implemented');
+  async query(query: string, values?: QueryValues): Promise<QueryResult> {
+    this.queries.push({ query, values });
+    return { rowCount: 1 } as QueryResult;
   }
 
   async batch<T>(promises: Promise<T>[]): Promise<T[]> {

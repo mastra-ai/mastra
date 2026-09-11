@@ -1530,12 +1530,17 @@ export class MemoryLibSQL extends MemoryStorage {
           if (!hydrateMessages) {
             // Copy the row inside the database. content/role/type are read from the
             // source row within SQL and never materialized in the JS heap.
-            await tx.execute({
+            const insertResult = await tx.execute({
               sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
                     SELECT ?, ?, content, role, type, "createdAt", ?
                     FROM "${TABLE_MESSAGES}" WHERE id = ?`,
               args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
             });
+            if (insertResult.rowsAffected !== 1) {
+              throw new Error(
+                `Failed to clone message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
+              );
+            }
             continue;
           }
 

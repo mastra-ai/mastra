@@ -2076,12 +2076,17 @@ export class MemoryPG extends MemoryStorage {
           if (!hydrateMessages) {
             // Copy the row inside the database. content/role/type are read from the
             // source row within SQL and never materialized in the JS heap.
-            await t.none(
+            const insertResult = await t.query(
               `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
                SELECT $1, $2, content, "createdAt", "createdAtZ", role, type, $3
                FROM ${messageTableName} WHERE id = $4`,
               [newMessageId, newThreadId, targetResourceId, sourceMsg.id],
             );
+            if (insertResult.rowCount !== 1) {
+              throw new Error(
+                `Failed to clone message ${sourceMsg.id}: expected 1 row copied but got ${insertResult.rowCount}`,
+              );
+            }
             continue;
           }
 
