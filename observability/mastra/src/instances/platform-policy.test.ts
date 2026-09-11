@@ -124,12 +124,19 @@ describe('Platform storage exporter supersession', () => {
     });
     const mastra = new Mastra({ logger: false, observability });
     const storageExporter = new MastraStorageExporter();
+    const warnSpy = vi.spyOn(instance.getLogger(), 'warn');
 
     mastra.registerExporter(storageExporter, createInstance([], 'fallback'), observability);
 
     expect(instance.getExporters()).toEqual([customExporter]);
     expect(instance.getConfig().exporters).toEqual([customExporter]);
     expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter]);
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalledWith('Storage exporter registration skipped on Mastra Platform', {
+      exporterName: 'mastra-storage-exporter',
+      serviceName: 'test-service',
+      instanceName: 'default',
+    });
   });
 
   it('registers a storage exporter through Mastra outside a Platform deployment', () => {
@@ -142,12 +149,14 @@ describe('Platform storage exporter supersession', () => {
     });
     const mastra = new Mastra({ logger: false, observability });
     const storageExporter = new MastraStorageExporter();
+    const warnSpy = vi.spyOn(instance.getLogger(), 'warn');
 
     mastra.registerExporter(storageExporter, createInstance([], 'fallback'), observability);
 
     expect(instance.getExporters()).toEqual([customExporter, storageExporter]);
     expect(instance.getConfig().exporters).toEqual([customExporter, storageExporter]);
     expect(instance.getObservabilityBus().getExporters()).toEqual([customExporter, storageExporter]);
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('does not initialize a superseded storage exporter after setting the Mastra context', () => {

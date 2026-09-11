@@ -405,6 +405,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   registerExporter(exporter: ObservabilityExporter): void {
     if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
+      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      });
       return;
     }
 
