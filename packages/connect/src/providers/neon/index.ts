@@ -1,4 +1,4 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ 7c94e2fbfccf — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ fe8e08c019e7 — do not edit by hand.
 import type { ProviderRegistration } from '../../registry.js';
 import { createNeonTools } from './tools.js';
 

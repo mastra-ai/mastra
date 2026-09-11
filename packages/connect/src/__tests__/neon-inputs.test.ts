@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compareBranchSchemaInputSchema } from '../providers/neon/tools/compare-branch-schema.js';
+import { createEndpointInputSchema } from '../providers/neon/tools/create-endpoint.js';
 import { getBranchSchemaInputSchema } from '../providers/neon/tools/get-branch-schema.js';
 
 describe('generated Neon input constraints', () => {
@@ -17,4 +18,15 @@ describe('generated Neon input constraints', () => {
         .success,
     ).toBe(true);
   });
+});
+
+it('preserves compute sizing constraints through generation', () => {
+  expect(
+    createEndpointInputSchema.safeParse({
+      project_id: 'project',
+      body: {
+        endpoint: { branch_id: 'branch', type: 'read_only', autoscaling_limit_min_cu: 4, autoscaling_limit_max_cu: 1 },
+      },
+    }).success,
+  ).toBe(false);
 });
