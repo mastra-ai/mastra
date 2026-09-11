@@ -621,6 +621,30 @@ Omit `[environment]` to show deploys across all environments; pass an environmen
 
 Emit machine-readable JSON.
 
+### `mastra env diagnosis`
+
+Diagnoses a failed deploy and prints suggestions for fixing it. Each suggestion includes a description, a recommended action, and a documentation link when one applies, followed by a link to the deploy logs in the dashboard. `mastra env suggestions` is an alias.
+
+```bash
+mastra env diagnosis
+mastra env diagnosis <deploy-id>
+mastra env diagnosis --environment staging
+```
+
+Omit `<deploy-id>` to diagnose the environment's latest deploy. The environment comes from `--environment`, or from the project when it has exactly one environment. Projects with several environments require `--environment` or a deploy ID. A deploy ID passed on its own works without a linked project.
+
+If the deploy is running successfully, the command reports that no suggestions are required and exits. Otherwise it starts a diagnosis when one doesn't already exist and polls until the result is ready, for up to five minutes. Rerunning the command is safe: an in-progress diagnosis is reused rather than restarted. The command exits with a non-zero code when the diagnosis itself fails.
+
+After a failed `mastra deploy`, the CLI prints the exact `mastra env diagnosis <deploy-id>` command to run.
+
+#### `--project`
+
+Project name, slug, or ID. Defaults to the linked project, as described in [`mastra env`](#mastra-env).
+
+#### `--environment`
+
+Environment name, slug, or ID. Defaults to the project's only environment; required when the project has more than one and no deploy ID is passed.
+
 ## `mastra studio deploy`
 
 :::note
