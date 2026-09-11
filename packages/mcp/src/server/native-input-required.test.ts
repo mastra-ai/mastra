@@ -366,7 +366,12 @@ describe('native input_required continuation', () => {
         },
       );
       expect(mismatched.isError).toBe(true);
-      expect(textOf(mismatched)).toContain('Missing response for "address"');
+      // Handler failures are reported as a structured error envelope, not raw text.
+      expect(JSON.parse(textOf(mismatched))).toMatchObject({
+        code: 'TOOL_EXECUTION_FAILED',
+        message: 'Missing response for "address"',
+        details: { toolName: 'bookDelivery' },
+      });
 
       const otherOperation = await callRound(
         client,

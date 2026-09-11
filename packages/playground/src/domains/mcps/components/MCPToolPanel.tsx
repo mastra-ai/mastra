@@ -1,3 +1,4 @@
+import { MastraClientError } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -28,13 +29,39 @@ function getAppResourceUri(meta?: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+/**
+ * A native MCP tool answers with protocol continuation (`input_required`) that the
+ * REST route cannot carry, so the server refuses it with 422; say so instead of
+ * showing an empty result.
+ */
+function describeExecutionError(error: unknown): string {
+  if (error instanceof MastraClientError && error.status === 422) {
+    return JSON.stringify(
+      {
+        unsupported: 'native-interaction',
+        message:
+          'This tool uses native MCP input rounds and cannot run from Studio. Connect an MCP client that answers input requests to run it.',
+        detail: error.message,
+      },
+      null,
+      2,
+    );
+  }
+  return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2);
+}
+
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
   const client = useMastraClient();
 
   const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
-  const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
+  const {
+    mutateAsync: executeTool,
+    isPending: isExecuting,
+    data: result,
+    error: executionError,
+  } = useExecuteMCPTool(serverId, toolId);
 
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 
@@ -68,7 +95,8 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
 
-    return await executeTool(data);
+    // Failures are rendered in the result panel via `executionError`.
+    return await executeTool(data).catch(() => undefined);
   };
 
   if (isLoading) {
@@ -118,6 +146,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
       )}
       <ToolExecutor
         executionResult={result}
+        errorString={executionError ? describeExecutionError(executionError) : undefined}
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}

@@ -28,10 +28,11 @@ export interface MCPTransportTestConfig {
  *
  * Tests MCP protocol transport endpoints using MCPClient:
  * - HTTP Transport (POST /api/mcp/:serverId/mcp)
- * - SSE Transport (GET /api/mcp/:serverId/sse, POST /api/mcp/:serverId/messages)
+ * - Legacy SSE routes (GET /api/mcp/:serverId/sse, POST /api/mcp/:serverId/messages)
+ *   are only served for MCP 1.x servers; modern MCPServer instances answer 404.
  *
- * These tests require a real HTTP server because MCPClient needs to perform
- * the full MCP protocol handshake with session management.
+ * These tests require a real HTTP server because MCPClient drives the
+ * self-contained 2026-07-28 request lifecycle over real Streamable HTTP.
  *
  * Usage:
  * ```ts
@@ -407,125 +408,33 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         });
       });
 
-      describe('Protocol operations (MCPClient with SSE)', () => {
-        let sseClient: MCPClient;
+      describe('Modern-only servers (MCPClient)', () => {
+        it('does not serve the legacy SSE transport for a modern MCPServer', async () => {
+          const res = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`);
+          expect(res.status).toBe(404);
 
-        beforeAll(async () => {
-          sseClient = new MCPClient({
+          const messages = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
+          });
+          expect(messages.status).toBe(404);
+        });
+
+        it('fails to connect through the SSE URL without downgrading', async () => {
+          const sseClient = new MCPClient({
+            id: `sse-rejection-${port}`,
             servers: {
-              server1: {
-                url: new URL(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`),
-              },
+              server1: { url: new URL(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`) },
             },
           });
-        }, 30000);
-
-        afterAll(async () => {
-          await sseClient?.disconnect();
-        }, 30000);
-
-        it('should list tools via MCPClient over SSE', async () => {
-          const tools = await sseClient.listTools();
-
-          expect(tools['server1_getWeather']).toBeDefined();
-          expect(tools['server1_calculate']).toBeDefined();
-        });
-
-        it('should execute tool via MCPClient over SSE', async () => {
-          const tools = await sseClient.listTools();
-          const calculateTool = tools['server1_calculate'];
-
-          expect(calculateTool).toBeDefined();
-          expect(calculateTool.execute).toBeDefined();
-
-          const result = await calculateTool.execute!({ operation: 'add', a: 10, b: 5 }, {} as any);
-
-          expectTextToolResult(result, { result: 15 });
-        });
-
-        it('should execute weather tool via MCPClient over SSE', async () => {
-          const tools = await sseClient.listTools();
-          const weatherToolInstance = tools['server1_getWeather'];
-
-          expect(weatherToolInstance).toBeDefined();
-          expect(weatherToolInstance.execute).toBeDefined();
-
-          const result = await weatherToolInstance.execute!({ location: 'New York' }, {} as any);
-
-          expectTextToolResult(result, {
-            temperature: 72,
-            condition: 'Sunny in New York',
-          });
-        });
-      });
-
-      describe('Tool execution errors (MCPClient with SSE)', () => {
-        let sseFailingClient: MCPClient;
-        let sseFailingServer: MCPServer;
-        let sseFailingMastra: Mastra;
-        let sseFailingHttpServer: { close: () => void };
-
-        beforeAll(async () => {
-          const failingTool = createTool({
-            id: 'failingTool',
-            description: 'A tool that always throws an error',
-            inputSchema: z.object({}),
-            execute: async () => {
-              throw new Error('SSE tool execution failed intentionally');
-            },
-          });
-
-          sseFailingServer = new MCPServer({
-            name: 'sseFailingServer',
-            version: '1.0.0',
-            tools: { failingTool },
-          });
-
-          sseFailingMastra = new Mastra({
-            mcpServers: { 'sse-failing-server': sseFailingServer },
-          });
-
-          const serverSetup = await createServer(sseFailingMastra);
-          sseFailingHttpServer = serverSetup.server;
-          const sseFailingPort = serverSetup.port;
-
-          sseFailingClient = new MCPClient({
-            servers: {
-              failing: {
-                url: new URL(`http://localhost:${sseFailingPort}/api/mcp/${sseFailingServer.id}/sse`),
-                // This test asserts the shape of the server's isError envelope
-                // (result.content carries the serialized error), so opt out of the
-                // default throw-on-error behavior and resolve with the raw result.
-                onToolError: 'return',
-              },
-            },
-          });
-        }, 30000);
-
-        afterAll(async () => {
-          await sseFailingClient?.disconnect();
-          sseFailingHttpServer?.close();
-          await sseFailingServer?.close();
-        }, 30000);
-
-        it('should return error when tool execution fails over SSE', async () => {
-          const tools = await sseFailingClient.listTools();
-          const failingTool = tools['failing_failingTool'];
-
-          expect(failingTool).toBeDefined();
-
-          const result = await failingTool.execute!({}, {} as any);
-
-          expect(result).toBeDefined();
-          expect(result.content).toBeInstanceOf(Array);
-          expect(result.content.length).toBeGreaterThan(0);
-
-          const errorOutput = result.content[0];
-          expect(errorOutput.type).toBe('text');
-
-          const errorData = JSON.parse(errorOutput.text);
-          expect(errorData.message).toContain('SSE tool execution failed intentionally');
-          expect(errorData.code).toBe('TOOL_EXECUTION_FAILED');
+          try {
+            const { tools, errors } = await sseClient.listToolsWithErrors();
+            expect(tools).toEqual({});
+            expect(errors.server1).toContain('Failed to connect to MCP server server1');
+          } finally {
+            await sseClient.disconnect();
+          }
         });
       });
     });

@@ -6,7 +6,6 @@ import { noopObserve } from '@mastra/core/tools';
 
 import type { InternalMastraMCPClient } from './client';
 
-type ProxyToolInfo = MCPToolInfoV2 & { id: string };
 
 /**
  * Wraps a single MCPClient server connection as an `MCPServerBaseV2` so external
@@ -19,7 +18,7 @@ type ProxyToolInfo = MCPToolInfoV2 & { id: string };
 export class MCPClientServerProxy extends MCPServerBaseV2 {
   private clientGetter: () => Promise<InternalMastraMCPClient>;
   private cachedClient: InternalMastraMCPClient | null = null;
-  private cachedToolList: { tools: ProxyToolInfo[] } | null = null;
+  private cachedToolList: { tools: MCPToolInfoV2[] } | null = null;
 
   constructor(
     config: { name: string; version?: string; id?: string; description?: string },
@@ -49,7 +48,7 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
     return (schema as { jsonSchema?: unknown } | undefined)?.jsonSchema ?? schema;
   }
 
-  private async fetchToolList(): Promise<{ tools: ProxyToolInfo[] }> {
+  private async fetchToolList(): Promise<{ tools: MCPToolInfoV2[] }> {
     if (this.cachedToolList) return this.cachedToolList;
     const client = await this.getClient();
     const tools = await client.tools();
@@ -73,7 +72,7 @@ export class MCPClientServerProxy extends MCPServerBaseV2 {
   }
 
   public getToolInfo(toolId: string): MCPToolInfoV2 | undefined | Promise<MCPToolInfoV2 | undefined> {
-    const find = (list: { tools: ProxyToolInfo[] }) => list.tools.find(t => t.id === toolId || t.name === toolId);
+    const find = (list: { tools: MCPToolInfoV2[] }) => list.tools.find(t => t.id === toolId || t.name === toolId);
     if (this.cachedToolList) return find(this.cachedToolList);
     return this.fetchToolList().then(find);
   }

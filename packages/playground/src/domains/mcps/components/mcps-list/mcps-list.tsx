@@ -25,7 +25,9 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const { paths, Link } = useLinkComponent();
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
-  const sseUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/sse` : '';
+  // Modern (v2) servers only serve Streamable HTTP; legacy servers are listed by their SSE endpoint.
+  const transportPath = server.transports.includes('sse') ? 'sse' : 'mcp';
+  const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
   const { data: tools } = useMCPServerTools(server);
   const toolsList = Object.values(tools || {});
@@ -38,7 +40,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   return (
     <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link} {...rowProps}>
       <EntityList.NameCell>{name}</EntityList.NameCell>
-      <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
+      <EntityList.DescriptionCell>{serverUrl}</EntityList.DescriptionCell>
       <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{toolsCount || ''}</EntityList.TextCell>
       <EntityList.TextCell className="text-center">{workflowToolsCount || ''}</EntityList.TextCell>

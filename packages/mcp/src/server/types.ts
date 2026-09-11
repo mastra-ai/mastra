@@ -89,7 +89,7 @@ export interface MCPServerHTTPRequestOptions {
   allowedOrigins?: string[];
 }
 
-export type { Resource, ResourceTemplateType as ResourceTemplate, InputRequiredResult };
+export type { Prompt, PromptMessage, Resource, ResourceTemplateType as ResourceTemplate, InputRequiredResult };
 
 /** Configuration for a single MCP App resource served under the `ui://` scheme. */
 export interface AppResource {
