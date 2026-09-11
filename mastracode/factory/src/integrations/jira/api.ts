@@ -168,7 +168,7 @@ export class JiraApiClient {
     if (!config.baseUrl) {
       throw new Error('JiraApiClient is missing required config: baseUrl.');
     }
-    if ('accessToken' in config) {
+    if (config.accessToken !== undefined) {
       if (!config.accessToken) {
         throw new Error('JiraApiClient is missing required config: accessToken.');
       }
