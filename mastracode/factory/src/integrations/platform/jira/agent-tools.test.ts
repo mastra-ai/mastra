@@ -61,6 +61,7 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
     clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connectionId: 'a1b_acme',
   });
   vi.spyOn(jira, 'hasActiveConnections').mockResolvedValue(true);
   jira.initialize({ projects: seed.projects, auth: fakeRouteAuth() });

@@ -23,7 +23,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
+import { platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -79,11 +79,12 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
+  connectionId?: string;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
-  readonly #client: PlatformApiClient;
+  readonly #connection: PlatformIntegrationConnection;
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #endpointHost: string;
   readonly #siteUrlByConnectionId = new Map<string, string>();
@@ -92,8 +93,18 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: PlatformJiraIntegrationConfig = {}) {
+    const connectionId = config.connectionId?.trim() || process.env.MASTRA_JIRA_CONNECTION_ID?.trim();
+    if (!connectionId) {
+      throw new Error('PlatformJiraIntegration: missing required MASTRA_JIRA_CONNECTION_ID.');
+    }
+
+    this.#connection = {
+      id: connectionId,
+      integrationId: 'mastra-factory-jira',
+      status: 'active',
+      accountLabel: null,
+    };
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
   }
 
@@ -136,15 +147,11 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
-      'GET',
-      '/v2/connections',
-    );
-    return result.connections.filter(connection => connection.integrationId === 'jira');
+    return [this.#connection];
   }
 
   async hasActiveConnections(): Promise<boolean> {
-    return (await this.#activeConnections()).length > 0;
+    return true;
   }
 
   readonly intake: Intake = {
@@ -160,7 +167,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
     const reference = decodeIssueReference(externalSource.externalId);
-    if (!reference) return null;
+    if (!reference || reference.connectionId !== this.#connection.id) return null;
     return {
       connection: jiraConnection(reference.connectionId),
       ...(reference.projectId ? { sourceId: encodeSourceId(reference.connectionId, reference.projectId) } : {}),
@@ -375,14 +382,14 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   async #activeConnections(): Promise<PlatformIntegrationConnection[]> {
-    return (await this.listConnections()).filter(connection => connection.status === 'active');
+    return [this.#connection];
   }
 
   async #connectionContextById(connectionId: string): Promise<JiraConnectionContext> {
-    const connection = (await this.#activeConnections()).find(candidate => candidate.id === connectionId);
-    if (!connection)
+    if (connectionId !== this.#connection.id) {
       throw new JiraApiError('Jira connection is unavailable or requires reauthentication.', 401);
-    return this.#connectionContext(connection);
+    }
+    return this.#connectionContext(this.#connection);
   }
 
   async #connectionContext(connection: PlatformIntegrationConnection): Promise<JiraConnectionContext> {
