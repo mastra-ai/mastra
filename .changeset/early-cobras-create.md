@@ -1,16 +1,5 @@
 ---
 '@mastra/mcp': major
-'@mastra/mcp-docs-server': patch
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/elysia': patch
-'@mastra/nestjs': patch
-'@mastra/client-js': patch
-'@mastra/hono': patch
-'@mastra/koa': patch
-'@mastra/editor': patch
-'@mastra/server': patch
-'@mastra/core': patch
 ---
 
 Rebuilt `@mastra/mcp` on the MCP 2026-07-28 revision only. Servers and clients no longer negotiate older protocol revisions, and every request is self-contained: there is no `initialize` handshake, session header, `ping`, or standalone HTTP+SSE transport. Streamable HTTP responses still stream as Server-Sent Events.
