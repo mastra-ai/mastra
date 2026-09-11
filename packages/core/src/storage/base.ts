@@ -509,10 +509,10 @@ export class MastraCompositeStore extends MastraBase {
   async initKnowledge(): Promise<void> {
     const knowledge = this.stores?.knowledge;
     if (!knowledge) return;
-    await this.init();
     let initialization = knowledgeInitializations.get(knowledge);
     if (!initialization) {
       initialization = Promise.resolve()
+        .then(() => this.init())
         .then(() => knowledge.init())
         .catch(error => {
           knowledgeInitializations.delete(knowledge);
