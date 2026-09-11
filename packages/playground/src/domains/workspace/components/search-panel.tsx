@@ -93,7 +93,7 @@ export function SearchWorkspacePanel({
 
           {/* Top K */}
           <div className="flex items-center gap-1.5">
-            <span className="text-neutral4 text-xs">Top</span>
+            <span className="text-neutral4 text-ui-sm">Top</span>
             <Input
               type="number"
               min={1}
@@ -122,7 +122,7 @@ export function SearchWorkspacePanel({
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${isActive ? config.color : 'bg-surface2 text-neutral4 hover:bg-surface3 border-transparent'} `}
+                  className={`text-ui-sm inline-flex items-center gap-1.5 rounded border px-2.5 py-1 font-medium transition-colors ${isActive ? config.color : 'bg-surface2 text-neutral4 hover:bg-surface3 border-transparent'} `}
                 >
                   {config.icon}
                   {config.label}
@@ -136,7 +136,7 @@ export function SearchWorkspacePanel({
       {/* Results */}
       {searchResults && (
         <div className="border-border1 border-t">
-          <div className="flex items-center justify-between px-4 py-2 text-xs">
+          <div className="text-ui-sm flex items-center justify-between px-4 py-2">
             <span className="text-neutral4">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
               <span className="text-neutral6">{searchResults.query}</span>"
@@ -147,7 +147,9 @@ export function SearchWorkspacePanel({
           </div>
 
           {searchResults.results.length === 0 ? (
-            <div className="text-neutral4 px-4 py-8 text-center text-sm">No results found. Try a different query.</div>
+            <div className="text-neutral4 text-ui-md px-4 py-8 text-center">
+              No results found. Try a different query.
+            </div>
           ) : (
             <ul className="max-h-[320px] overflow-auto">
               {searchResults.results.map((result, index) => (
@@ -179,11 +181,11 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   return (
     <li className="border-border1 border-t first:border-t-0">
       <button onClick={onClick} className="hover:bg-surface5 flex w-full gap-3 px-4 py-3 text-left transition-colors">
-        <span className="text-neutral3 w-4 shrink-0 text-xs tabular-nums">{rank}</span>
+        <span className="text-neutral3 text-ui-sm w-4 shrink-0 tabular-nums">{rank}</span>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="text-neutral4 h-3.5 w-3.5 shrink-0" />
-            <span className="text-neutral6 truncate font-mono text-sm">{fileId}</span>
+            <span className="text-neutral6 text-ui-md truncate font-mono">{fileId}</span>
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="bg-surface2 h-1 w-12 overflow-hidden rounded-full">
                 <div className="bg-accent1 h-full rounded-full" style={{ width: `${scorePercent}%` }} />
@@ -191,9 +193,9 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
               <span className="text-ui-xs text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
             </div>
           </div>
-          <p className="text-neutral4 line-clamp-2 text-xs">{result.content}</p>
+          <p className="text-neutral4 text-ui-sm line-clamp-2">{result.content}</p>
           {result.lineRange && (
-            <p className="text-neutral3 mt-1 text-xs">
+            <p className="text-neutral3 text-ui-sm mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}
@@ -237,7 +239,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="bg-surface3 border-border1 text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-lg border py-2 pr-4 pl-10 text-sm focus:ring-2 focus:outline-hidden"
+              className="bg-surface3 border-border1 text-neutral6 placeholder:text-neutral3 focus:ring-accent1 text-ui-md w-full rounded-lg border py-2 pr-4 pl-10 focus:ring-2 focus:outline-hidden"
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>
@@ -245,7 +247,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
           </Button>
         </div>
 
-        <div className="flex items-center gap-4 text-sm">
+        <div className="text-ui-md flex items-center gap-4">
           <label className="text-neutral4 flex items-center gap-2">
             <span>Results:</span>
             <select
@@ -275,7 +277,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-neutral5 text-sm font-medium">
+          <h3 className="text-neutral5 text-ui-md font-medium">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
           </h3>
           <div className="space-y-2">
@@ -312,15 +314,15 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="text-neutral6 font-medium">{result.skillName}</span>
-            <span className="text-neutral3 text-xs">{result.source}</span>
-            <span className="text-neutral3 ml-auto text-xs">Score: {result.score.toFixed(3)}</span>
+            <span className="text-neutral3 text-ui-sm">{result.source}</span>
+            <span className="text-neutral3 text-ui-sm ml-auto">Score: {result.score.toFixed(3)}</span>
           </div>
-          <p className="text-neutral4 line-clamp-3 text-sm whitespace-pre-wrap">
+          <p className="text-neutral4 text-ui-md line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
           </p>
           {result.lineRange && (
-            <p className="text-neutral3 mt-2 text-xs">
+            <p className="text-neutral3 text-ui-sm mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}

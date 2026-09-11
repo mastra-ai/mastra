@@ -73,6 +73,86 @@ function replyingModel() {
   });
 }
 
+/** The answer the model gives once its tool has run. Asserted on to prove it reached the channel. */
+const TOOL_ANSWER = 'The tool answer';
+
+/**
+ * A model that calls `getAnswer` on its first turn and answers on the second, so one run exercises both
+ * a tool step and the step that follows it.
+ *
+ * `toolTurnFinishReason` defaults to `tool-calls`. Pass `stop` to model an LLM that reports `stop` even
+ * though it asked for a tool — the case the loop's tool-error recovery has to survive.
+ */
+function toolThenReplyingModel(toolTurnFinishReason: 'tool-calls' | 'stop' = 'tool-calls') {
+  return new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const sawToolResult = /tool-result-payload|getAnswer exploded/.test(JSON.stringify(prompt));
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream<any>(
+          sawToolResult
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'r-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 't-2' },
+                { type: 'text-delta', id: 't-2', delta: TOOL_ANSWER },
+                { type: 'text-end', id: 't-2' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'r-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: 'getAnswer',
+                  input: '{}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: toolTurnFinishReason,
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ],
+        ),
+      };
+    },
+  });
+}
+
+/** The `getAnswer` tool, succeeding or throwing. */
+function answerTools(mode: 'ok' | 'throw') {
+  return {
+    getAnswer: createTool({
+      id: 'getAnswer',
+      description: 'Looks the answer up.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (mode === 'throw') {
+          throw new Error('getAnswer exploded');
+        }
+        return { result: 'tool-result-payload' };
+      },
+    }),
+  };
+}
+
+/** Records the `stepResult` of every `step-finish` chunk that reaches an output processor. */
+function stepFinishRecorder(seen: Array<Record<string, unknown> | undefined>) {
+  return {
+    id: 'step-finish-recorder',
+    async processOutputStream({ part }: any) {
+      if (part.type === 'step-finish') {
+        seen.push(part.payload?.stepResult);
+      }
+      return part;
+    },
+  };
+}
+
 /** A thread as the channel edge leaves it: the platform and external id are what the rebuild reads. */
 async function seedChannelThread(storage: InMemoryStore) {
   const memoryStore = await storage.getStore('memory');
@@ -102,16 +182,21 @@ async function untilChatReady(agent: Agent) {
 }
 
 /** Builds a plain and durable agent pair backed by a seeded channel thread. */
-async function channelBackedAgent(id: string, outputProcessors?: any[]) {
+async function channelBackedAgent(
+  id: string,
+  outputProcessors?: any[],
+  options: { model?: unknown; tools?: Record<string, unknown>; instructions?: string } = {},
+) {
   const { adapter, postMessage } = createMockAdapter();
   const storage = new InMemoryStore();
   const agent = new Agent({
     id,
     name: id,
-    instructions: 'Answer briefly.',
-    model: replyingModel() as any,
+    instructions: options.instructions ?? 'Answer briefly.',
+    model: (options.model ?? replyingModel()) as any,
     memory: new MockMemory(),
     outputProcessors,
+    tools: options.tools as any,
     channels: { adapters: { [PLATFORM]: { adapter, streaming: false } } },
   });
   const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
@@ -205,6 +290,79 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     await drain(await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
 
     expect(postMessage).toHaveBeenCalled();
+  });
+
+  /**
+   * The regular loop stamps `stepResult.isContinued` on every `step-finish` chunk it emits
+   * (`loop/workflows/agentic-loop/index.ts`), and `ChatChannelOutputProcessor` closes its render queue on
+   * the first chunk where that flag is not `true`. These two tests pin the same contract down for a run
+   * that calls a tool: the plain run is the control, the durable run is the regression from #23341, where
+   * the tool step looked terminal and the answer that followed never reached the channel.
+   */
+  const toolStepOptions = {
+    model: toolThenReplyingModel(),
+    tools: answerTools('ok'),
+    instructions: 'Use the tool, then answer.',
+  };
+
+  it('posts the final answer after a plain tool step', async () => {
+    const stepFinishes: Array<Record<string, unknown> | undefined> = [];
+    const { agent, postMessage } = await channelBackedAgent(
+      'channel-render-plain-tool',
+      [stepFinishRecorder(stepFinishes)],
+      toolStepOptions,
+    );
+
+    await drain(
+      await agent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+    );
+
+    expect(stepFinishes.map(step => step?.isContinued)).toEqual([true, false]);
+    expect(JSON.stringify(postMessage.mock.calls)).toContain(TOOL_ANSWER);
+  });
+
+  it('posts the final answer after a durable tool step', async () => {
+    const stepFinishes: Array<Record<string, unknown> | undefined> = [];
+    const { durableAgent, postMessage } = await channelBackedAgent(
+      'channel-render-durable-tool',
+      [stepFinishRecorder(stepFinishes)],
+      toolStepOptions,
+    );
+
+    await drain(
+      await durableAgent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+    );
+
+    // The tool step must not read as terminal, or the queue closes and the answer is dropped.
+    expect(stepFinishes.map(step => step?.isContinued)).toEqual([true, false]);
+    expect(JSON.stringify(postMessage.mock.calls)).toContain(TOOL_ANSWER);
+  });
+
+  /**
+   * A tool that errors is recoverable: the loop runs another turn so the model can see the error and
+   * self-correct, even when the model said `stop` (`agent/durable/workflows/steps/llm-mapping.ts`). The
+   * chunk the renderer sees has to carry the value the loop actually decided on, not the model's.
+   */
+  it('keeps rendering after a durable tool step errors', async () => {
+    const stepFinishes: Array<Record<string, unknown> | undefined> = [];
+    const { durableAgent, postMessage } = await channelBackedAgent(
+      'channel-render-durable-tool-error',
+      [stepFinishRecorder(stepFinishes)],
+      {
+        model: toolThenReplyingModel('stop'),
+        tools: answerTools('throw'),
+        instructions: 'Use the tool, then answer.',
+      },
+    );
+
+    await drain(
+      await durableAgent.stream('look it up', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, maxSteps: 3 }),
+    );
+
+    // The tool errored, so the loop runs a second turn even though the model said `stop`. Stamping the
+    // model's finish reason here instead of the loop's decision would read as terminal and close early.
+    expect(stepFinishes.map(step => step?.isContinued)).toEqual([true, false]);
+    expect(JSON.stringify(postMessage.mock.calls)).toContain(TOOL_ANSWER);
   });
 
   it("passes the caller's request context to durable output processors", async () => {

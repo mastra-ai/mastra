@@ -20,6 +20,9 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { badgeStatus } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import type { ToolCardContext } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import { collectToolGroups } from '@mastra/playground-ui/domains/chat/tools/tool-groups';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
@@ -31,9 +34,6 @@ import type { ReactNode } from 'react';
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
-import { badgeStatus } from '../tools/tool-card-kind';
-import type { ToolCardContext } from '../tools/tool-card-kind';
-import { collectToolGroups } from '../tools/tool-groups';
 import { DatasetSaveAction } from './dataset-save-action';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 import { useMcpAppTools } from '@/domains/mcps/hooks';

@@ -1,9 +1,10 @@
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+// @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ToolCallProvider } from '../../context/tool-call-context';
+import type { MessageMetadata } from '../../messages/message-metadata';
 import { AskUserTool } from '../ask-user-tool';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 type RenderProps = {
   toolName: string;

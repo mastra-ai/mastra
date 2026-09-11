@@ -349,14 +349,14 @@ export function SkillEditDialog({
               <div className="border-border1 border-t pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
+                  className="text-neutral3 hover:text-neutral5 text-ui-sm mb-3 flex items-center gap-1.5 transition-colors"
                 >
                   <ChevronDown className="h-3 w-3" />
                   Hide skill details
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
-                  <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
+                  <div className="text-ui-sm mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-yellow-600">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
                       {!workspaceId
@@ -393,7 +393,7 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className="text-neutral3 hover:text-neutral5 mt-3 flex items-center gap-1.5 text-xs transition-colors"
+                        className="text-neutral3 hover:text-neutral5 text-ui-sm mt-3 flex items-center gap-1.5 transition-colors"
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                         Advanced mode
@@ -413,7 +413,7 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
+                        className="text-neutral3 hover:text-neutral5 text-ui-sm mb-3 flex items-center gap-1.5 transition-colors"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Simple mode
@@ -435,7 +435,7 @@ export function SkillEditDialog({
               <div className="border-border1 border-t pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs transition-colors"
+                  className="text-neutral3 hover:text-neutral5 text-ui-sm flex items-center gap-1.5 transition-colors"
                 >
                   <ChevronRight className="h-3 w-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}

@@ -1729,7 +1729,183 @@ describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => 
   });
 });
 
+describe('DefaultExecutionEngine retryCount isolation', () => {
+  it.each([
+    { concurrency: 1, retryItems: [] },
+    { concurrency: 2, retryItems: [] },
+    { concurrency: 2, retryItems: ['a', 'b'] },
+    { concurrency: 2, retryItems: ['a'] },
+  ])(
+    'isolates nested children with $concurrency concurrent items and retries for $retryItems',
+    async ({ concurrency, retryItems }) => {
+      const calls: { item: string; runId: string; retryCount: number }[] = [];
+      const inspect = createStep({
+        id: 'inspect',
+        inputSchema: z.string(),
+        outputSchema: z.string(),
+        retries: 1,
+        execute: async ({ inputData, runId, retryCount }) => {
+          const firstAttempt = !calls.some(call => call.runId === runId);
+          calls.push({ item: inputData, runId, retryCount });
+          if (firstAttempt && retryItems.includes(inputData)) throw new Error('transient');
+          return inputData;
+        },
+      });
+      const child = createWorkflow({ id: 'child', inputSchema: z.string(), outputSchema: z.string() })
+        .then(inspect)
+        .commit();
+      const parent = createWorkflow({
+        id: 'parent',
+        inputSchema: z.array(z.string()),
+        outputSchema: z.array(z.string()),
+      })
+        .foreach(child, { id: 'items', concurrency })
+        .commit();
+
+      for (let execution = 0; execution < 2; execution++) {
+        calls.length = 0;
+        const run = await parent.createRun();
+        const result = await run.start({ inputData: ['a', 'b'] });
+        expect(result.status).toBe('success');
+        if (result.status === 'success') expect(result.result).toEqual(['a', 'b']);
+        expect(new Set(calls.map(call => call.runId)).size).toBe(2);
+        for (const item of ['a', 'b']) {
+          expect(calls.filter(call => call.item === item).map(call => call.retryCount)).toEqual(
+            retryItems.includes(item) ? [0, 1] : [0],
+          );
+        }
+      }
+    },
+  );
+
+  it('isolates overlapping runs when another run starts between retries', async () => {
+    let signalStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>(resolve => {
+      signalStarted = resolve;
+    });
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const calls: Record<string, number[]> = { a: [], b: [] };
+    const step = createStep({
+      id: 'inspect',
+      inputSchema: z.string(),
+      outputSchema: z.string(),
+      retries: 1,
+      execute: async ({ inputData, retryCount }) => {
+        calls[inputData]!.push(retryCount);
+        if (inputData === 'a' && calls.a!.length === 1) {
+          signalStarted();
+          await blocked;
+          throw new Error('transient');
+        }
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({ id: 'overlap', inputSchema: z.string(), outputSchema: z.string() })
+      .then(step)
+      .commit();
+    const first = await workflow.createRun();
+    const second = await workflow.createRun();
+    const pending = first.start({ inputData: 'a' });
+    try {
+      await Promise.race([
+        started,
+        pending.then(() => {
+          throw new Error('First run never reached barrier');
+        }),
+      ]);
+      expect((await second.start({ inputData: 'b' })).status).toBe('success');
+    } finally {
+      release();
+      await pending;
+    }
+    expect((await pending).status).toBe('success');
+    expect(calls).toEqual({ a: [0, 1], b: [0] });
+  });
+
+  it('starts each plain foreach invocation at zero', async () => {
+    const step = createStep({
+      id: 'inspect',
+      inputSchema: z.string(),
+      outputSchema: z.number(),
+      execute: async ({ retryCount }) => retryCount,
+    });
+    const workflow = createWorkflow({
+      id: 'plain-foreach',
+      inputSchema: z.array(z.string()),
+      outputSchema: z.array(z.number()),
+    })
+      .foreach(step, { concurrency: 2 })
+      .commit();
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: ['a', 'b'] });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toEqual([0, 0]);
+  });
+});
+
 describe('DefaultExecutionEngine.executeStepWithRetry', () => {
+  it('keeps reads stable across awaits and restores nested attempt contexts', async () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    const params = { retries: 1, delay: 0, workflowId: 'test', runId: 'run' };
+    const outerCounts: number[] = [];
+    const innerCounts: number[] = [];
+    const result = await engine.executeStepWithRetry(
+      'outer',
+      async () => {
+        const attempt = outerCounts.length;
+        outerCounts.push(engine.getOrGenerateRetryCount('outer'));
+        await Promise.resolve();
+        expect(engine.getOrGenerateRetryCount('outer')).toBe(attempt);
+        let innerCalls = 0;
+        const innerResult = await engine.executeStepWithRetry(
+          'inner',
+          async () => {
+            innerCounts.push(engine.getOrGenerateRetryCount('inner'));
+            if (innerCalls++ === 0) throw new Error('inner transient');
+            return 'inner';
+          },
+          params,
+        );
+        expect(innerResult).toEqual({ ok: true, result: 'inner' });
+        expect(engine.getOrGenerateRetryCount('outer')).toBe(attempt);
+        if (attempt === 0) throw new Error('outer transient');
+        return 'outer';
+      },
+      params,
+    );
+    expect(result).toEqual({ ok: true, result: 'outer' });
+    expect(outerCounts).toEqual([0, 1]);
+    expect(innerCounts).toEqual([0, 1, 0, 1]);
+    expect(engine.getOrGenerateRetryCount('outer')).toBe(0);
+  });
+
+  it('preserves the delay between retry attempts', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new DefaultExecutionEngine({ mastra: undefined });
+      const counts: number[] = [];
+      const pending = engine.executeStepWithRetry(
+        'delayed',
+        async () => {
+          counts.push(engine.getOrGenerateRetryCount('delayed'));
+          if (counts.length === 1) throw new Error('transient');
+          return 'done';
+        },
+        { retries: 1, delay: 100, workflowId: 'test', runId: 'run' },
+      );
+      await vi.advanceTimersByTimeAsync(99);
+      expect(counts).toEqual([0]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual({ ok: true, result: 'done' });
+      expect(counts).toEqual([0, 1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not retry when the step throws MastraNonRetryableError', async () => {
     const engine = new DefaultExecutionEngine({
       mastra: undefined,

@@ -1135,6 +1135,80 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single write transaction. SQLite serializes write transactions, so overlapping
+   * transfers of the same thread cannot interleave the thread update with the message update:
+   * either both the thread and every message move to the new resource, or neither does. The
+   * thread's `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    try {
+      const tx = await this.#client.transaction('write');
+      try {
+        const result = await tx.execute({
+          sql: `SELECT * FROM "${TABLE_THREADS}" WHERE id = ?`,
+          args: [threadId],
+        });
+        const row = result.rows?.[0] as
+          | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+          | undefined;
+
+        if (!row) {
+          throw new Error(`Thread "${threadId}" not found`);
+        }
+
+        const currentResourceId = row.resourceId as string;
+        const normalized: StorageThreadType = {
+          id: row.id as string,
+          resourceId: currentResourceId,
+          title: row.title as string,
+          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+          createdAt: new Date(row.createdAt),
+          updatedAt: new Date(row.updatedAt),
+        };
+
+        if (currentResourceId === resourceId) {
+          await tx.commit();
+          return normalized;
+        }
+
+        const now = new Date();
+        await tx.execute({
+          sql: `UPDATE "${TABLE_THREADS}" SET "resourceId" = ?, "updatedAt" = ? WHERE id = ?`,
+          args: [resourceId, now.toISOString(), threadId],
+        });
+        await tx.execute({
+          sql: `UPDATE "${TABLE_MESSAGES}" SET "resourceId" = ? WHERE thread_id = ?`,
+          args: [resourceId, threadId],
+        });
+
+        await tx.commit();
+        return { ...normalized, resourceId, updatedAt: now };
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 

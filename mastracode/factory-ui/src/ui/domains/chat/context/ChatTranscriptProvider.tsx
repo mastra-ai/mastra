@@ -1,3 +1,4 @@
+import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
@@ -6,7 +7,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
-import type { ChatRuntimeState } from '../services/runtime';
+import type { ChatRuntimeState, SessionStateSnapshot } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
@@ -37,13 +38,14 @@ export function ChatTranscriptProvider({
   const viewerId = useFactoryAuth().data?.user?.userId;
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages, viewerId });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
-  const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
+  const onEvent = (event: AgentControllerEvent) => {
     transcriptApi.onEvent(event);
-    dispatchRuntime(event);
+    dispatchRuntime({ type: 'event', event });
   };
-
-  // Merge is by id and idempotent — mount seed, grown load-more window and
-  // post-navigation revalidation all fold in through the same path.
+  const reset = (nextThreadId?: string, state?: SessionStateSnapshot) => {
+    transcriptApi.reset(nextThreadId);
+    dispatchRuntime({ type: 'reset', threadId: nextThreadId, state });
+  };
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
     if (initialMessages === undefined) return;
@@ -58,11 +60,12 @@ export function ChatTranscriptProvider({
 
   return (
     <ChatConnectionProvider onEvent={onEvent}>
-      <ChatRuntimeValueProvider runtime={runtime}>
+      <ChatRuntimeValueProvider runtime={runtime} threadId={transcriptApi.transcript.threadId ?? threadId}>
         <ChatTranscriptValueProvider
           threadId={threadId}
           viewerId={viewerId}
           transcriptApi={transcriptApi}
+          reset={reset}
           loadMore={loadMore}
         >
           {children}
@@ -72,14 +75,23 @@ export function ChatTranscriptProvider({
   );
 }
 
-function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; runtime: ChatRuntimeState }) {
+function ChatRuntimeValueProvider({
+  children,
+  runtime,
+  threadId,
+}: {
+  children: ReactNode;
+  runtime: ChatRuntimeState;
+  threadId?: string;
+}) {
   const { state } = useChatConnection();
+  const sessionState = !threadId || state?.threadId === threadId ? state : undefined;
   return (
     <ChatRuntimeContext.Provider
       value={{
-        usage: runtime.usage ?? state?.tokenUsage,
+        usage: runtime.usage ?? sessionState?.tokenUsage,
         followUpCount: runtime.followUpCount,
-        omProgress: runtime.omProgress ?? state?.omProgress,
+        omProgress: runtime.omProgress ?? sessionState?.omProgress,
         omPhase: runtime.omPhase,
         bufferingMessages: runtime.bufferingMessages,
         bufferingObservations: runtime.bufferingObservations,
@@ -97,12 +109,14 @@ function ChatTranscriptValueProvider({
   threadId,
   viewerId,
   transcriptApi,
+  reset,
   loadMore,
 }: {
   children: ReactNode;
   threadId?: string;
   viewerId?: string;
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
+  reset: ChatTranscriptApi['reset'];
   loadMore: LoadMoreHistory;
 }) {
   const connection = useChatConnection();
@@ -110,7 +124,7 @@ function ChatTranscriptValueProvider({
   const messagesThreadId = useContext(ChatThreadMessagesContext)?.threadId;
   const messagesInitializing = useChatMessagesInitializing();
   const messagesError = useChatMessagesError();
-  const { transcript, initialHistoryReady, reset, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
+  const { transcript, initialHistoryReady, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
     transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
 
@@ -118,8 +132,6 @@ function ChatTranscriptValueProvider({
     ...transcript,
     threadId: effectiveThreadId,
     tasks: connection.state?.tasks ?? transcript.tasks,
-    omProgress: transcript.omProgress ?? connection.state?.omProgress,
-    usage: transcript.usage ?? connection.state?.tokenUsage,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;
   const historyInitializing = Boolean(messagesThreadId) && !messagesError && !initialHistoryReady;
