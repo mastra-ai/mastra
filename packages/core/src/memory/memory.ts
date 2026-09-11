@@ -995,6 +995,20 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
 
   /**
+   * Reassign a thread and all of its messages to a different resource.
+   * Preserves the thread's `createdAt`. Performs no ownership authorization.
+   * @param args - The thread to reassign and the resource that should own it.
+   * @returns Promise resolving to the updated thread
+   */
+  updateThreadResourceId(_args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    throw new Error('Thread resource transfer is not supported by this memory implementation.');
+  }
+
+  /**
    * Get serializable configuration for this memory instance
    * @returns Serializable memory configuration
    */

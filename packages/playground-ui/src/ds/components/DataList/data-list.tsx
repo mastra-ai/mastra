@@ -19,6 +19,7 @@ import { DataListRowButton } from './data-list-row-button';
 import { DataListRowLink } from './data-list-row-link';
 import { DataListRowStatic } from './data-list-row-static';
 import { DataListRowWrapper } from './data-list-row-wrapper';
+import { DataListSortableTopCell } from './data-list-sortable-top-cell';
 import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
@@ -32,11 +33,13 @@ import {
 import { DataListTopCells } from './data-list-top-cells';
 
 export type { DataListRootProps, DataListVariant } from './data-list-root';
+export type { DataListSortableTopCellProps, DataListSortDirection } from './data-list-sortable-top-cell';
 
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
   TopCells: DataListTopCells,
   TopCell: DataListTopCell,
+  SortableTopCell: DataListSortableTopCell,
   TopCellWithTooltip: DataListTopCellWithTooltip,
   TopCellSmart: DataListTopCellSmart,
   RowWrapper: DataListRowWrapper,

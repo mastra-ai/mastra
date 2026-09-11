@@ -1,12 +1,11 @@
-import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
-
-import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '@mastra/playground-ui/domains/chat';
-import type { ToolPartFields } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
-import { isRecord } from '@mastra/playground-ui/domains/chat/messages/signal-data';
-import { getCodeModeCall } from '@mastra/playground-ui/domains/chat/tools/code-mode';
-import { SUBMIT_PLAN_TOOL_ID } from '@mastra/playground-ui/domains/chat/tools/submit-plan-tool-id';
-import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
+import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
+import type { ToolPartFields } from '../messages/renderers/tool-part';
+import { isRecord } from '../messages/signal-data';
+import { getCodeModeCall } from './code-mode';
+import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
+import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import { isTaskTool } from '@/ds/components/ai/tool-call';
+import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =

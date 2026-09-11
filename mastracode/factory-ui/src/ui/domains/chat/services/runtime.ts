@@ -1,37 +1,15 @@
-import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import type { TokenUsage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage, TokenUsage } from '@mastra/core/agent-controller';
 
-/**
- * The memory budgets the status line reads. Two sources feed them and only
- * agree on these fields: the session-state route (which also derives projected
- * savings) and the `display_state_changed` snapshot (which also carries the
- * buffering internals).
- */
-export type OMBudgets = Pick<
-  AgentControllerOMProgress,
-  | 'status'
-  | 'pendingTokens'
-  | 'threshold'
-  | 'thresholdPercent'
-  | 'observationTokens'
-  | 'reflectionThreshold'
-  | 'reflectionThresholdPercent'
+import type { OMBudgets } from './om';
+
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
+export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+export type GoalSnapshot = Pick<
+  Extract<AgentControllerEvent, { type: 'goal_evaluation' }>['payload'],
+  'objective' | 'status' | 'iteration' | 'maxRuns' | 'passed' | 'reason'
 >;
-
-export type OMPhase = 'idle' | 'observing' | 'reflecting';
-
-/** Memory work on one budget: none, in the background, or with the turn on hold. */
-export type OMWork = 'idle' | 'background' | 'blocking';
-
-export interface GoalSnapshot {
-  objective: string;
-  status: 'active' | 'paused' | 'done';
-  iteration: number;
-  maxRuns: number;
-  passed: boolean;
-  reason?: string;
-}
 
 export interface ChatRuntimeState {
   usage?: TokenUsage;
@@ -54,27 +32,18 @@ export const initialChatRuntime: ChatRuntimeState = {
   _decodeStartedAt: 0,
 };
 
-export interface OMWorkByBudget {
-  messages: OMWork;
-  observations: OMWork;
-}
+type RuntimeAction =
+  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
 
-function budgetWork(buffering: boolean, blocking: boolean): OMWork {
-  if (buffering) return 'background';
-  return blocking ? 'blocking' : 'idle';
-}
+export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
+  if (action.type === 'reset') {
+    const matchingSnapshot =
+      action.threadId !== undefined && action.state?.threadId === action.threadId ? action.state : undefined;
+    return { ...initialChatRuntime, usage: matchingSnapshot?.tokenUsage, omProgress: matchingSnapshot?.omProgress };
+  }
 
-/** Buffering is level-triggered from the display state, so it outranks the start events a background retry also emits. */
-export function omWork(
-  state: Pick<ChatRuntimeState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
-): OMWorkByBudget {
-  return {
-    messages: budgetWork(state.bufferingMessages, state.omPhase === 'observing'),
-    observations: budgetWork(state.bufferingObservations, state.omPhase === 'reflecting'),
-  };
-}
-
-export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEvent): ChatRuntimeState {
+  const event = action.event;
   if (!isKnownAgentControllerEvent(event)) return state;
 
   switch (event.type) {
@@ -103,51 +72,34 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'display_state_changed':
       return {
         ...state,
-        omProgress: event.displayState.omProgress,
-        usage: event.displayState.tokenUsage,
+        omProgress: event.displayState.omProgress ?? state.omProgress,
+        usage: event.displayState.tokenUsage ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? false,
         bufferingObservations: event.displayState.bufferingObservations ?? false,
       };
     case 'goal_evaluation':
-      return {
-        ...state,
-        goal: {
-          objective: event.payload.objective,
-          status: event.payload.status,
-          iteration: event.payload.iteration,
-          maxRuns: event.payload.maxRuns,
-          passed: event.payload.passed,
-          reason: event.payload.reason,
-        },
-      };
+      return { ...state, goal: event.payload };
     case 'follow_up_queued':
       return { ...state, followUpCount: event.count };
     case 'om_observation_start':
       return { ...state, omPhase: 'observing' };
+    case 'om_reflection_start':
+      return { ...state, omPhase: 'reflecting' };
+    case 'om_buffering_start':
+      return { ...state, omPhase: 'buffering' };
     case 'om_observation_end':
     case 'om_observation_failed':
     case 'om_reflection_end':
     case 'om_reflection_failed':
+    case 'om_buffering_end':
+    case 'om_buffering_failed':
     case 'om_activation':
       return { ...state, omPhase: 'idle' };
-    case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
     default:
       return state;
   }
 }
 
-interface RuntimeMessagePart {
-  type: string;
-  text?: string;
-}
-
-interface RuntimeMessage {
-  role: string;
-  content: RuntimeMessagePart[] | { parts: RuntimeMessagePart[] };
-}
-
-function hasAssistantText(message: RuntimeMessage) {
-  const parts = Array.isArray(message.content) ? message.content : message.content.parts;
-  return message.role === 'assistant' && parts.some(part => part.type === 'text' && part.text?.trim());
+function hasAssistantText(message: MastraDBMessage) {
+  return message.role === 'assistant' && message.content.parts.some(part => part.type === 'text' && part.text.trim());
 }

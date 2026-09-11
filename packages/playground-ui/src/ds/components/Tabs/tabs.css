@@ -1,8 +1,43 @@
+[data-slot='tabs-overflow-tab']:hover + [data-slot='tabs-overflow-close'],
+[data-slot='tabs-overflow-close']:hover,
+[data-slot='tabs-overflow-close'][data-highlighted] {
+  pointer-events: auto;
+  opacity: 1;
+}
+
 [data-slot='tabs'] {
   [data-slot='tab'][data-overflowed] {
     position: absolute;
     visibility: hidden;
     pointer-events: none;
+  }
+
+  [data-slot='tabs-close-actions'] {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  [data-slot='tab-close-item'] {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  [data-slot='tab-close-item'][data-visible] {
+    opacity: 1;
+  }
+
+  [data-slot='tab-close'] {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  [data-slot='tab-close-item'][data-visible] [data-slot='tab-close'] {
+    pointer-events: auto;
   }
 
   &[data-appearance='default'] {
@@ -11,15 +46,34 @@
       border-bottom: 2px solid transparent;
     }
 
+    [data-variant='line'] [data-slot='tab'][data-active][data-closable] {
+      padding-right: 42px;
+    }
+
+    [data-variant='line'] [data-slot='tab-close'] {
+      right: 20px;
+    }
+
     :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'] {
       position: relative;
       z-index: 10;
       padding: 4px 12px;
       border-radius: 9999px;
     }
+
+    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab'][data-active][data-closable] {
+      padding-right: 34px;
+    }
+
+    :is([data-variant='pill'], [data-variant='pill-ghost']) [data-slot='tab-close'] {
+      right: 12px;
+    }
   }
 
   &[data-appearance='contained'] {
+    display: flex;
+    flex-direction: column;
+
     --tab-frame-radius: var(--radius-xl);
     --tab-inset: 4px;
     --tab-inner-radius: calc(var(--tab-frame-radius) - var(--tab-inset));
@@ -28,6 +82,7 @@
     [data-slot='tabs-list-scroll'] {
       position: relative;
       z-index: 10;
+      flex-shrink: 0;
       scrollbar-width: none;
     }
 
@@ -51,6 +106,14 @@
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
       background: var(--surface4);
       padding: 6px 16px;
+    }
+
+    [data-slot='tab'][data-active][data-closable] {
+      padding-right: 38px;
+    }
+
+    [data-slot='tab-close'] {
+      right: 16px;
     }
 
     [data-slot='tab']:not(:first-child) {
@@ -87,6 +150,14 @@
     }
 
     &[data-frame='stroke'] {
+      [data-slot='tabs-content'][data-flush] {
+        padding: var(--tab-inset);
+        grid-template-rows: minmax(0, 1fr);
+        overflow: hidden;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
       [data-slot='tabs-list-scroll'] {
         padding-bottom: 10px;
         margin-bottom: -10px;
@@ -179,6 +250,21 @@
         background: var(--surface4);
         padding: var(--tab-inset);
       }
+
+      [data-slot='tabs-content'][data-flush] {
+        padding: 0;
+        grid-template-rows: minmax(0, 1fr);
+        overflow: hidden;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      [data-slot='tabs-content'][data-flush] [data-slot='tabs-content-body'] {
+        display: contents;
+        background: none;
+        padding: 0;
+      }
+
       [data-slot='tabs-content-body'] {
         display: block;
         min-width: 0;
@@ -205,7 +291,7 @@
         height: calc(var(--active-tab-height) + var(--tab-join-radius));
         border-radius: var(--tab-inner-radius) var(--tab-inner-radius) 0 0;
         background: var(--surface2);
-        transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+        transition: none;
       }
 
       [data-slot='tabs-indicator']::before,
@@ -242,6 +328,18 @@
       visibility: hidden;
       width: max-content;
       pointer-events: none;
+    }
+
+    &[data-frame='inset']:has([data-slot='tabs-content'][data-flush]:not([hidden])) {
+      [data-slot='tabs-indicator'] {
+        height: var(--active-tab-height);
+        border-radius: var(--tab-inner-radius);
+      }
+
+      [data-slot='tabs-indicator']::before,
+      [data-slot='tabs-indicator']::after {
+        display: none;
+      }
     }
 
     @media (pointer: coarse) {

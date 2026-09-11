@@ -245,7 +245,7 @@ function ObservationItem({
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
       <div
         className={cn(
-          'flex items-start gap-1.5 text-xs',
+          'flex items-start gap-1.5 text-ui-sm',
           bgColor && 'rounded px-1.5 py-0.5',
           bgColor,
           !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`,
@@ -254,13 +254,13 @@ function ObservationItem({
         {observation.isNested && (
           <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
-        <span className="flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[10px]">
+        <span className="[&_code]:text-ui-xs flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
           <span
             className={cn(
-              'shrink-0 font-mono text-[10px] ml-2',
+              'shrink-0 font-mono text-ui-xs ml-2',
               useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
             )}
           >
@@ -291,11 +291,11 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
-        <span className={cn('text-xs font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
+        <span className={cn('text-ui-sm font-medium', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
           {block.date}
         </span>
         {block.relativeTime && (
-          <span className={cn('text-[10px]', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+          <span className={cn('text-ui-xs', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
             ({block.relativeTime})
           </span>
         )}
@@ -326,7 +326,7 @@ function ThreadSection({
       {showThreadId && thread.threadId !== 'default' && (
         <div
           className={cn(
-            'text-[10px] font-mono mb-1 px-1 py-0.5 rounded inline-block',
+            'text-ui-xs font-mono mb-1 px-1 py-0.5 rounded inline-block',
             useInheritedTextColor ? 'opacity-60 bg-current/10' : 'text-muted-foreground bg-muted/50',
           )}
         >
@@ -367,11 +367,11 @@ export function ObservationRenderer({
     parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0].threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-xs text-muted-foreground italic', className)}>No observations</div>;
+    return <div className={cn('text-ui-sm text-muted-foreground italic', className)}>No observations</div>;
   }
 
   return (
-    <div className={cn('text-sm overflow-hidden', className)}>
+    <div className={cn('text-ui-md overflow-hidden', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
@@ -388,17 +388,17 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">Current Task</div>
-          <div className="text-foreground text-xs whitespace-pre-wrap">{parsed.currentTask}</div>
+          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">Current Task</div>
+          <div className="text-foreground text-ui-sm whitespace-pre-wrap">{parsed.currentTask}</div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">
             Suggested Response
           </div>
-          <div className="text-foreground/80 text-xs whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>
+          <div className="text-foreground/80 text-ui-sm whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>
         </div>
       )}
     </div>

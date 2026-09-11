@@ -9,6 +9,7 @@
  */
 
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
+import { SandboxAbortError } from '@mastra/core/workspace';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DockerSandbox } from './index';
@@ -103,5 +104,19 @@ describe('DockerSandbox writeFiles (integration)', () => {
 
     const result = await sandbox.executeCommand!('cat', ['/workspace/overwrite.txt']);
     expect(result.stdout.trim()).toBe('second');
+  }, 120000);
+
+  it('rejects with SandboxAbortError when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      sandbox.writeFiles([{ path: 'never.txt', content: 'nope\n' }], { abortSignal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxAbortError);
+
+    // Container remains usable after a cancelled write.
+    await sandbox.writeFiles([{ path: 'after-abort.txt', content: 'ok\n' }]);
+    const result = await sandbox.executeCommand!('cat', ['/workspace/after-abort.txt']);
+    expect(result.stdout.trim()).toBe('ok');
   }, 120000);
 });
