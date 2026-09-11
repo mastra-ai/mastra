@@ -857,6 +857,34 @@ describe('createScorer', () => {
       }
     });
 
+    it('forwards scorer-level judge modelSettings to the V1 generateLegacy run', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+      try {
+        const scorer = createScorer({
+          id: 'model-settings-v1-scorer',
+          name: 'model-settings-v1-scorer',
+          description: 'Forwards scorer-level modelSettings to a V1 judge',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            modelSettings: { temperature: 0.42 },
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        const [, options] = (generateLegacySpy.mock.calls[0] ?? []) as any[];
+        expect(options?.modelSettings).toEqual({ temperature: 0.42 });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
     it('forwards scorer-level judge modelSettings to the judge run', async () => {
       const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
