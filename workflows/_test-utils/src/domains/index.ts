@@ -63,6 +63,9 @@ export { createVersionOverridesTests } from './version-overrides';
 export { createMemoryPersistenceTests } from './memory-persistence';
 export { createBackgroundTaskTests } from './background-tasks';
 
+// Crash-recovery tests (kill mid-run, fresh host over same storage, recover)
+export { createRecoveryTests } from './recovery';
+
 // === Workflow domain test creators ===
 
 export { createBasicExecutionTests, createBasicExecutionWorkflows } from './basic-execution';

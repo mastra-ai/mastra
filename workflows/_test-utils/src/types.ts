@@ -57,6 +57,30 @@ export interface DurableAgentLike<TOutput = undefined> {
     runId: string;
     cleanup: () => void;
   }>;
+  /**
+   * Crash-recovery surface (recovery domain). Optional because not every
+   * engine supports in-process crash recovery (e.g. Inngest orchestrates its
+   * own retries externally); legs without it set `skip.recovery`.
+   */
+  listActiveRuns?(options?: any): Promise<{
+    runs: Array<{ runId: string; status: string; threadId?: string; resourceId?: string; updatedAt: Date }>;
+    total: number;
+  }>;
+  recoverActiveRuns?(options?: any): Promise<{
+    recovered: Array<{ runId: string; status: 'success' | 'failed'; error?: Error }>;
+    succeeded: number;
+    failed: number;
+  }>;
+  recover?(
+    runId: string,
+    options?: any,
+  ): Promise<{
+    output: any;
+    runId: string;
+    threadId?: string;
+    resourceId?: string;
+    cleanup: () => void;
+  }>;
 }
 
 /**
@@ -69,6 +93,29 @@ export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutp
   instructions: string;
   model: any;
   tools?: TTools;
+  /**
+   * Wire the agent into a Mastra host backed by this exact storage instance
+   * instead of a fresh MockStore. Lets a test build two "hosts" over the same
+   * store to simulate a process crash + restart (recovery domain).
+   */
+  storage?: MastraStorage;
+  /**
+   * Use `id` verbatim instead of appending a per-test uniqueness suffix.
+   * Recovery tests create a second host that must resolve the same agent id
+   * the crashed host persisted into the run snapshot, so the ids must match
+   * exactly across both createAgent calls.
+   */
+  exactId?: boolean;
+  /**
+   * Give this agent (and its Mastra host, for engines that host one) a fresh
+   * pubsub instead of the suite-shared instance. A recovered host must not
+   * share the crashed host's bus, mirroring a real process restart.
+   */
+  isolatedPubsub?: boolean;
+  /** Forwarded to the underlying Agent when set (shared MastraMemory instance). */
+  memory?: any;
+  /** Forwarded to the underlying Agent when set. */
+  outputProcessors?: any;
   /** Any other agent config options */
   [key: string]: any;
 }
@@ -126,7 +173,9 @@ export type DurableAgentTestDomain =
   | 'processorPipeline'
   | 'versionOverrides'
   | 'memoryPersistence'
-  | 'backgroundTasks';
+  | 'backgroundTasks'
+  // Crash-recovery domain (kill mid-run, fresh host over same storage, recover)
+  | 'recovery';
 
 /**
  * Configuration for creating a DurableAgent test suite

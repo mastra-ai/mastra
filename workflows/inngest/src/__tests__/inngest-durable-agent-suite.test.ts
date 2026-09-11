@@ -91,5 +91,9 @@ createDurableAgentTestSuite({
     // not auto-attached, so `for await (textStream)` can hang waiting for run-scoped
     // events that never get routed to this run's subscribers.
     workspace: true,
+    // Crash-recovery drives DurableAgent.recover()/recoverActiveRuns() against two
+    // in-process "hosts" over shared storage. Inngest orchestrates retries and
+    // recovery externally, and this harness cannot host two processes.
+    recovery: true,
   },
 });

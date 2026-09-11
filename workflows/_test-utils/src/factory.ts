@@ -4,6 +4,7 @@
 
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -67,6 +68,8 @@ import {
   createVersionOverridesTests,
   createMemoryPersistenceTests,
   createBackgroundTaskTests,
+  // Crash-recovery tests (kill mid-run, fresh host over same storage, recover)
+  createRecoveryTests,
 } from './domains';
 
 // Workflow domain imports (imported directly to avoid circular deps with domains/index)
@@ -109,25 +112,33 @@ const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
  * If config.needsStorage is true, creates a Mastra with MockStore for snapshot persistence (needed for resume)
  */
 function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTestContext): DurableAgentLike {
-  const pubsub = context.getPubSub();
+  // Recovery tests give each simulated "host" its own bus, mirroring a real
+  // process restart; everything else shares the suite pubsub.
+  const pubsub = config.isolatedPubsub ? new EventEmitterPubSub() : context.getPubSub();
   const agent = new Agent({
     id: config.id,
     name: config.name || config.id,
     instructions: config.instructions,
     model: config.model,
     tools: config.tools,
+    ...(config.memory ? { memory: config.memory } : {}),
+    ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
   });
   const durableAgent = createDurableAgent({ agent, pubsub });
 
-  if (config.needsStorage) {
+  if (config.needsStorage || config.storage) {
     new Mastra({
       logger: false,
-      storage: new MockStore(),
+      // A caller-supplied store is shared across hosts (crash-recovery tests
+      // build a second host over the crashed host's storage).
+      storage: config.storage ?? new MockStore(),
       agents: { [config.id]: durableAgent as any },
     });
   }
 
-  return durableAgent;
+  // Cast matches the evented/inngest harnesses: DurableAgentLike is a loose
+  // behavioral interface and engine callback shapes differ slightly.
+  return durableAgent as unknown as DurableAgentLike;
 }
 
 /**
@@ -368,6 +379,13 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
 
     if (!skip.backgroundTasks) {
       createBackgroundTaskTests(context);
+    }
+
+    // Crash-recovery (kill mid-run, fresh host over same storage, recover).
+    // Engines whose recovery is orchestrated externally (e.g. Inngest) set
+    // skip.recovery.
+    if (!skip.recovery) {
+      createRecoveryTests(context);
     }
   });
 }
