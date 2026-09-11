@@ -721,6 +721,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'voice/openai-live',
+          label: 'OpenAI Live',
+          customProps: { icon: 'https://svgl.app/library/openai.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
           id: 'voice/sarvam',
           label: 'Sarvam',
           customProps: { icon: '/img/integrations/sarvam.svg', customCSS: 'dark:invert' },
