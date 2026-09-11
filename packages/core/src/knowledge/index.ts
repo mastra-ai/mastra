@@ -238,7 +238,7 @@ export class Knowledge extends MastraBase {
     importerId: string,
     binding: KnowledgeImporterBindingInput,
     payload?: TPayload,
-    options: { triggerKind?: 'programmatic' | 'webhook' | 'cron' } = {},
+    options: { triggerKind?: 'programmatic' | 'webhook' | 'cron'; awaitCompletion?: boolean } = {},
   ) {
     const importer = this.#assertImporter(importerId);
     const triggerKind = options.triggerKind ?? 'programmatic';
@@ -248,7 +248,9 @@ export class Knowledge extends MastraBase {
     if (triggerKind === 'cron' && !importer.triggers.cron) {
       throw new Error(`Knowledge importer ${importerId} does not have a cron trigger`);
     }
-    return this.#importerRunner.enqueue(importer, binding, payload, triggerKind);
+    return this.#importerRunner.enqueue(importer, binding, payload, triggerKind, {
+      awaitCompletion: options.awaitCompletion,
+    });
   }
 
   /** @internal */
