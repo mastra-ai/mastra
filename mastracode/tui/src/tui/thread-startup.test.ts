@@ -57,6 +57,33 @@ describe('resumeThreadOnStartup', () => {
     await expect(resumeThreadOnStartup(state, 'missing-thread')).rejects.toThrow('Thread not found: missing-thread');
   });
 
+  it('does not resume a requested thread from another project', async () => {
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+      metadata: { projectPath: '/tmp/other-project' },
+    };
+    const setResourceId = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      controller: { setResourceId },
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([requested]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).rejects.toThrow(
+      'Thread not found: thread-requested',
+    );
+    expect(setResourceId).not.toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
+  });
+
   it('deletes an unsent startup thread before resuming saved work', async () => {
     const blank = createThread('thread-blank', '', '2026-08-28T11:01:00Z');
     const saved = createThread('thread-saved', 'Saved thread', '2026-08-28T11:00:00Z');

@@ -10,7 +10,9 @@ export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?:
   const activeThreadId = state.session.thread.getId();
 
   if (requestedThreadId) {
-    const thread = allThreads.find(candidate => candidate.id === requestedThreadId);
+    const thread = allThreads.find(
+      candidate => candidate.id === requestedThreadId && candidate.metadata?.projectPath === currentPath,
+    );
     if (!thread) throw new Error(`Thread not found: ${requestedThreadId}`);
     if (thread.resourceId !== state.session.identity.getResourceId()) {
       await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
