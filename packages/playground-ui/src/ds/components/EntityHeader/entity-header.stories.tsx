@@ -69,7 +69,7 @@ export const WithRichContent: Story = {
       <EntityHeader icon={<Bot />} title="AI Assistant">
         <div className="space-y-2">
           <p className="text-neutral3 text-ui-md">An intelligent assistant for customer support tasks</p>
-          <div className="text-neutral3 flex items-center gap-4 text-ui-sm">
+          <div className="text-neutral3 text-ui-sm flex items-center gap-4">
             <span>Model: GPT-4</span>
             <span>Temperature: 0.7</span>
             <span>Max Tokens: 4096</span>

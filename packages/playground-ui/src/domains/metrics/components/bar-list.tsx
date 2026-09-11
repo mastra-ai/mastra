@@ -28,7 +28,7 @@ export function BarListContent({
             </div>
           ))}
         </div>
-        {valueLabel && <span className="text-icon2 shrink-0 text-ui-sm">{valueLabel}</span>}
+        {valueLabel && <span className="text-icon2 text-ui-sm shrink-0">{valueLabel}</span>}
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -40,11 +40,11 @@ export function BarListContent({
                   className="absolute inset-y-0 left-0 rounded"
                   style={{ width: `${pct}%`, backgroundColor: color }}
                 />
-                <span className="absolute inset-y-0 left-2 flex items-center text-ui-sm whitespace-nowrap text-white">
+                <span className="text-ui-sm absolute inset-y-0 left-2 flex items-center whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 shrink-0 font-mono text-ui-sm tabular-nums">{fmt(d.value)}</span>
+              <span className="text-icon6 text-ui-sm shrink-0 font-mono tabular-nums">{fmt(d.value)}</span>
             </div>
           );
         })}
@@ -69,7 +69,7 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
             <span className="text-icon2 text-ui-sm">Errors</span>
           </div>
         </div>
-        <span className="text-icon2 shrink-0 text-ui-sm">Total (Success)</span>
+        <span className="text-icon2 text-ui-sm shrink-0">Total (Success)</span>
       </div>
       <div className="space-y-2.5">
         {sorted.map(d => {
@@ -112,11 +112,11 @@ export function StackedRunsBars({ data }: { data: Array<{ name: string; complete
                     {d.errors.toLocaleString()} errors
                   </TooltipContent>
                 </Tooltip>
-                <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-ui-sm whitespace-nowrap text-white">
+                <span className="text-ui-sm pointer-events-none absolute inset-y-0 left-2 flex items-center whitespace-nowrap text-white">
                   {d.name}
                 </span>
               </div>
-              <span className="text-icon6 shrink-0 font-mono text-ui-sm tabular-nums">
+              <span className="text-icon6 text-ui-sm shrink-0 font-mono tabular-nums">
                 {total.toLocaleString()} ({successPct}%)
               </span>
             </div>

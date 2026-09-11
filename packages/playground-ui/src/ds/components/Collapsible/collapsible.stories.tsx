@@ -52,7 +52,7 @@ export const SettingsSection: Story = {
     <div className="w-100 space-y-2">
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <button className="text-neutral6 flex w-full items-center justify-between py-2 text-ui-md font-medium hover:text-white">
+          <button className="text-neutral6 text-ui-md flex w-full items-center justify-between py-2 font-medium hover:text-white">
             Advanced Settings
             <ChevronDown className="size-4" />
           </button>

@@ -135,7 +135,7 @@ export const Hierarchy: Story = {
       <Txt as="p" variant="ui-sm" className="text-neutral3">
         Secondary text (ui-sm) for helper copy and descriptions.
       </Txt>
-      <Txt as="span" variant="ui-xs" className="text-neutral3 uppercase tracking-wide">
+      <Txt as="span" variant="ui-xs" className="text-neutral3 tracking-wide uppercase">
         Meta / badge (ui-xs)
       </Txt>
     </div>

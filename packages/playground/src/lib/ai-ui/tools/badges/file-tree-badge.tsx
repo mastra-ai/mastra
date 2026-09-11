@@ -149,7 +149,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-ui-sm transition-colors"
+            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 text-ui-sm flex items-center gap-1.5 rounded border px-1.5 py-0.5 transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -205,7 +205,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown-max-height overflow-x-auto overflow-y-auto p-3 font-mono text-ui-sm whitespace-pre">
+              <pre className="text-mastra-el-6 max-h-dropdown-max-height text-ui-sm overflow-x-auto overflow-y-auto p-3 font-mono whitespace-pre">
                 {treeOutput}
               </pre>
             </div>

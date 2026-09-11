@@ -16,7 +16,7 @@ export function SignalsErrorState({
         <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-red-500" />
         <div>
           <h1 className="text-neutral6 text-ui-md font-semibold">{message}</h1>
-          <p className="text-neutral3 mt-1 text-ui-sm">Check the connection and try again.</p>
+          <p className="text-neutral3 text-ui-sm mt-1">Check the connection and try again.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button onClick={onRetry} size="sm" type="button" variant="outline">
               Retry

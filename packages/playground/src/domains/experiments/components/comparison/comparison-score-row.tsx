@@ -23,13 +23,13 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
         <Link
           href={paths.scorerLink(scorerId)}
           aria-label={`Open ${scorerId}`}
-          className="text-neutral5 flex min-w-0 items-center gap-1.5 text-ui-md font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+          className="text-neutral5 text-ui-md flex min-w-0 items-center gap-1.5 font-medium hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{scorerId}</span>
         </Link>
         <div className="flex items-center gap-3">
-          <span className="text-neutral3 font-mono text-ui-md">{value != null ? value.toFixed(2) : '-'}</span>
+          <span className="text-neutral3 text-ui-md font-mono">{value != null ? value.toFixed(2) : '-'}</span>
           {delta != null && <ScoreDelta delta={delta} />}
         </div>
       </div>

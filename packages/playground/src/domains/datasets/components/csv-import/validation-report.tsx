@@ -29,7 +29,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="text-warning flex items-center gap-2 text-ui-md">
+      <div className="text-warning text-ui-md flex items-center gap-2">
         <AlertTriangleIcon className="h-4 w-4" />
         {invalidCount} of {totalRows} rows will be skipped (validation failed)
       </div>
@@ -38,7 +38,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
 
       {/* Failing rows table */}
       <div className="max-h-48 overflow-y-auto rounded-md border">
-        <table className="w-full text-ui-sm">
+        <table className="text-ui-sm w-full">
           <thead className="bg-muted sticky top-0">
             <tr>
               <th className="px-2 py-1 text-left font-medium">Row</th>
@@ -75,7 +75,7 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
     <tr className="border-t">
       <td className="text-muted-foreground px-2 py-1">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <code className="bg-muted rounded px-1 text-ui-sm">
+        <code className="bg-muted text-ui-sm rounded px-1">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
         </code>

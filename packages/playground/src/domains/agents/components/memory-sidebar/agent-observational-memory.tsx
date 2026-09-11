@@ -120,7 +120,7 @@ const ProgressBar = ({
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="bg-surface3 border-border1 text-foreground max-w-xs border">
-            <div className="space-y-1.5 text-ui-sm">
+            <div className="text-ui-sm space-y-1.5">
               <div className="text-neutral5 font-medium">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
               </div>
@@ -225,7 +225,7 @@ const ObservationalMemoryDisabled = () => (
       <h3 className="text-neutral5 text-ui-md font-medium">Observational Memory</h3>
     </div>
     <div className="bg-surface3 border-border1 rounded-lg border p-4">
-      <p className="text-neutral3 mb-3 text-ui-md">
+      <p className="text-neutral3 text-ui-md mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </p>
@@ -233,7 +233,7 @@ const ObservationalMemoryDisabled = () => (
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 text-ui-md text-blue-400 transition-colors hover:text-blue-300"
+        className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
       >
         Learn about Observational Memory
         <ExternalLink className="h-3 w-3" />

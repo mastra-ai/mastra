@@ -82,7 +82,7 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-header-sm font-medium">
+        <h3 className="text-header-sm flex items-center gap-2 font-medium">
           <Pencil className="h-5 w-5" /> Edit Item
         </h3>
       </div>

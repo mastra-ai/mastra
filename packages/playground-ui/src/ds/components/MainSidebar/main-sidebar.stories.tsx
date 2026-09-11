@@ -103,7 +103,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
             ].map(([label, value]) => (
               <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
                 <p className="text-ui-xs text-neutral3 font-medium uppercase">{label}</p>
-                <p className="text-neutral6 mt-2 text-header-lg font-semibold">{value}</p>
+                <p className="text-neutral6 text-header-lg mt-2 font-semibold">{value}</p>
               </div>
             ))}
           </div>
@@ -246,7 +246,7 @@ const StudioSidebarBody = () => {
           <span className="flex items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="size-[1.5rem] shrink-0" />
-              <span className="font-display truncate text-ui-md font-semibold tracking-tight whitespace-nowrap">
+              <span className="font-display text-ui-md truncate font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -269,7 +269,7 @@ const StudioSidebarBody = () => {
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-ui-xs leading-none"
+                  className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>

@@ -74,7 +74,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         </div>
         <div className="flex-1">
           <h1 className="text-neutral6 text-header-md font-semibold">{skill.name}</h1>
-          <p className="text-neutral4 mt-1 text-ui-md">{skill.description}</p>
+          <p className="text-neutral4 text-ui-md mt-1">{skill.description}</p>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 flex items-center gap-1.5 rounded px-2 py-1 text-ui-sm transition-colors"
+            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
@@ -232,10 +232,10 @@ function MetadataCard({ label, value, icon }: { label: string; value: unknown; i
   const displayValue = formatDisplayValue(value);
   return (
     <div className="bg-surface3 rounded-lg p-3">
-      <p className="text-neutral3 mb-1 text-ui-sm">{label}</p>
+      <p className="text-neutral3 text-ui-sm mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-neutral5 truncate text-ui-md font-medium" title={displayValue}>
+        <p className="text-neutral5 text-ui-md truncate font-medium" title={displayValue}>
           {displayValue}
         </p>
       </div>

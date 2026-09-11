@@ -100,13 +100,15 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Overview</Section.Heading>
         </Section.Header>
-        <p className="text-neutral5 text-ui-md">This section provides an overview of the feature and its capabilities.</p>
+        <p className="text-neutral5 text-ui-md">
+          This section provides an overview of the feature and its capabilities.
+        </p>
       </Section>
       <Section>
         <Section.Header>
           <Section.Heading>Installation</Section.Heading>
         </Section.Header>
-        <pre className="bg-surface2 text-neutral5 overflow-x-auto rounded-md p-4 font-mono text-ui-md">
+        <pre className="bg-surface2 text-neutral5 text-ui-md overflow-x-auto rounded-md p-4 font-mono">
           npm install @mastra/core
         </pre>
       </Section>
@@ -114,7 +116,7 @@ export const DocumentationSections: Story = {
         <Section.Header>
           <Section.Heading>Usage</Section.Heading>
         </Section.Header>
-        <pre className="bg-surface2 text-neutral5 overflow-x-auto rounded-md p-4 font-mono text-ui-md">
+        <pre className="bg-surface2 text-neutral5 text-ui-md overflow-x-auto rounded-md p-4 font-mono">
           {`import { Mastra } from '@mastra/core';
 
 const mastra = new Mastra({

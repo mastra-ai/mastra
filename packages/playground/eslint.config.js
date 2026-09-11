@@ -229,7 +229,11 @@ export default [
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
     rules: {
-      'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors, ...restrictedTypographySelectors],
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiBroadImportSelectors,
+        ...restrictedTypographySelectors,
+      ],
     },
   },
   {

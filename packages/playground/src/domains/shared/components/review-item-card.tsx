@@ -191,7 +191,7 @@ export function ReviewItemCard({
             <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-medium">
               Input
             </Txt>
-            <pre className="text-neutral4 bg-surface3 max-h-24 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-ui-sm wrap-break-word whitespace-pre-wrap">
+            <pre className="text-neutral4 bg-surface3 text-ui-sm max-h-24 overflow-x-auto overflow-y-auto rounded px-3 py-2 wrap-break-word whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>

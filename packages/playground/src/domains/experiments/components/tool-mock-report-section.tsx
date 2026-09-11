@@ -47,9 +47,9 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="mt-1 block font-mono text-ui-sm">Called with: {formatArgs(failure.args)}</span>
+            <span className="text-ui-sm mt-1 block font-mono">Called with: {formatArgs(failure.args)}</span>
             {unconsumed.length > 0 && (
-              <span className="mt-1 block font-mono text-ui-sm">
+              <span className="text-ui-sm mt-1 block font-mono">
                 Unconsumed mocks: {unconsumed.map(u => formatArgs(u.args)).join(', ')}
               </span>
             )}
@@ -57,7 +57,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
         </Notice>
       )}
 
-      <div className="border-border1 divide-border1 divide-y rounded border text-ui-md">
+      <div className="border-border1 divide-border1 text-ui-md divide-y rounded border">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
@@ -65,9 +65,11 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
           >
             <span className="min-w-0 truncate">
               <span className="text-neutral4 font-mono">{row.toolName}</span>
-              <span className="text-neutral3 ml-2 font-mono text-ui-sm">{formatArgs(row.args)}</span>
+              <span className="text-neutral3 text-ui-sm ml-2 font-mono">{formatArgs(row.args)}</span>
             </span>
-            <span className={`shrink-0 rounded px-2 py-0.5 text-ui-sm ${outcomeClass(row.outcome)}`}>{row.outcome}</span>
+            <span className={`text-ui-sm shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
+              {row.outcome}
+            </span>
           </div>
         ))}
       </div>

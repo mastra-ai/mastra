@@ -62,7 +62,7 @@ export function ToolCallEdit({ edit }: { edit: ToolEdit }) {
 
   return (
     <div
-      className="border-border1 bg-neutral6/5 max-w-full min-w-0 overflow-x-auto rounded-md border font-mono text-ui-sm"
+      className="border-border1 bg-neutral6/5 text-ui-sm max-w-full min-w-0 overflow-x-auto rounded-md border font-mono"
       role="group"
       aria-label="File change"
     >

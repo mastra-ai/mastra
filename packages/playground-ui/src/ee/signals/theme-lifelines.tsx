@@ -74,7 +74,7 @@ export function ThemeLifelines({
         <span aria-hidden="true" className="w-9 shrink-0" />
       </div>
       {snapshots[selectedIndex] ? (
-        <p className="text-neutral4 font-mono text-ui-sm" data-testid="snapshot-summary">
+        <p className="text-neutral4 text-ui-sm font-mono" data-testid="snapshot-summary">
           {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
         </p>
       ) : null}

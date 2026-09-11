@@ -120,12 +120,12 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         {/* Info section */}
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-neutral6 truncate text-ui-md font-medium">{agentName}&apos;s browser</span>
+            <span className="text-neutral6 text-ui-md truncate font-medium">{agentName}&apos;s browser</span>
             <Badge variant={isLive ? 'green' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
               {isLive ? 'Live' : 'Idle'}
             </Badge>
           </div>
-          <p className="text-neutral4 mt-0.5 truncate text-ui-sm">{displayUrl}</p>
+          <p className="text-neutral4 text-ui-sm mt-0.5 truncate">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
@@ -169,7 +169,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
           {toolCalls.length > 0 && (
             <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
               <div className="px-3 py-2">
-                <h4 className="text-neutral4 mb-2 text-ui-md font-medium">Browser Actions</h4>
+                <h4 className="text-neutral4 text-ui-md mb-2 font-medium">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

@@ -155,7 +155,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <Label htmlFor="memory-embedder" className="text-neutral4 text-ui-sm">
                             Embedder Model
                           </Label>
-                          <span className="text-neutral3 text-ui-sm">Select an embedding model for semantic search</span>
+                          <span className="text-neutral3 text-ui-sm">
+                            Select an embedding model for semantic search
+                          </span>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
                             <SelectTrigger id="memory-embedder" className="bg-surface3">
                               <SelectValue placeholder="Select an embedder model" />
@@ -307,7 +309,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <ChevronRight
                           className={`text-neutral3 h-3 w-3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-neutral5 cursor-pointer text-ui-md">Observer</Label>
+                        <Label className="text-neutral5 text-ui-md cursor-pointer">Observer</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
@@ -335,7 +337,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-neutral4 text-ui-sm">Model Override</Label>
-                            <span className="text-neutral3 text-ui-sm">Override the default model for the observer</span>
+                            <span className="text-neutral3 text-ui-sm">
+                              Override the default model for the observer
+                            </span>
                             <Controller
                               name="memory.observationalMemory.observation.model.name"
                               control={control}
@@ -512,7 +516,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                         <ChevronRight
                           className={`text-neutral3 h-3 w-3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-neutral5 cursor-pointer text-ui-md">Reflector</Label>
+                        <Label className="text-neutral5 text-ui-md cursor-pointer">Reflector</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
@@ -540,7 +544,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-neutral4 text-ui-sm">Model Override</Label>
-                            <span className="text-neutral3 text-ui-sm">Override the default model for the reflector</span>
+                            <span className="text-neutral3 text-ui-sm">
+                              Override the default model for the reflector
+                            </span>
                             <Controller
                               name="memory.observationalMemory.reflection.model.name"
                               control={control}

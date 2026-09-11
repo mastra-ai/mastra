@@ -514,11 +514,11 @@ export function DatasetReview({
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="mb-1 block text-ui-sm">Provider</Label>
+                <Label className="text-ui-sm mb-1 block">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="mb-1 block text-ui-sm">Model</Label>
+                <Label className="text-ui-sm mb-1 block">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -532,7 +532,7 @@ export function DatasetReview({
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="mt-1 text-ui-sm"
+                className="text-ui-sm mt-1"
               />
             </div>
           </div>

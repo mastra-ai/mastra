@@ -105,7 +105,7 @@ export const Badges: Story = {
 export const CodeBlock: Story = {
   render: () => (
     <ScrollArea orientation="both" className="border-border1 bg-surface2 h-50 w-100 rounded-md border">
-      <pre className="text-neutral5 p-4 font-mono text-ui-md">
+      <pre className="text-neutral5 text-ui-md p-4 font-mono">
         {`function example() {
   const data = fetchData();
 

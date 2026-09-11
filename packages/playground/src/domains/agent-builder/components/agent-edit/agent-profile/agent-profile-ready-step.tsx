@@ -60,7 +60,7 @@ export const AgentProfileReadyStep = () => {
           <h2 className="text-neutral6 text-header-xl font-semibold" data-testid="agent-builder-ready-heading">
             Your agent is ready
           </h2>
-          <p className="text-neutral3 max-w-md text-header-sm">
+          <p className="text-neutral3 text-header-sm max-w-md">
             You can review and fine-tune everything, or jump straight in and try it out.
           </p>
         </div>

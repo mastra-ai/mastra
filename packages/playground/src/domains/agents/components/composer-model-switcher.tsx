@@ -127,7 +127,7 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {stale && (
         <div
-          className="text-accent6 flex max-w-full min-w-0 items-start gap-1 text-ui-sm"
+          className="text-accent6 text-ui-sm flex max-w-full min-w-0 items-start gap-1"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -141,7 +141,7 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="text-accent6 flex max-w-full min-w-0 items-start gap-1 text-ui-sm">
+        <div className="text-accent6 text-ui-sm flex max-w-full min-w-0 items-start gap-1">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
             Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{envVar}</code> to use this

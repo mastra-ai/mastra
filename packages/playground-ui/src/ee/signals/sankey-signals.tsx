@@ -442,12 +442,12 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-ui-md">
+              <section className="border-border1 bg-surface2 text-neutral3 text-ui-md rounded-lg border p-6">
                 This theme is not present in the selected snapshot. Use the clear filter action above to return to the
                 full flow.
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-ui-md">
+              <section className="border-border1 bg-surface2 text-neutral3 text-ui-md rounded-lg border p-6">
                 No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
                 Pick another snapshot from the timeline below.
               </section>
@@ -466,7 +466,7 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <p className="text-neutral3 font-mono text-ui-sm" role="status">
+              <p className="text-neutral3 text-ui-sm font-mono" role="status">
                 Reloading snapshots for new trace signal perspective…
               </p>
             ) : null}

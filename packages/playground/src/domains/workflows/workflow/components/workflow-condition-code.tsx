@@ -62,7 +62,7 @@ export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: Workf
             <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                 <pre
-                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-ui-md dark:bg-zinc-800`}
+                  className={`${className} text-ui-md relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono dark:bg-zinc-800`}
                   style={{
                     ...style,
                     backgroundColor: '#121212',

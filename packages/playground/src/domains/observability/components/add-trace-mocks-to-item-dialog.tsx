@@ -77,7 +77,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         </SideDialog.Header>
 
         {isTrajectoryLoading ? (
-          <div className="text-neutral4 px-2 py-4 text-ui-md">Loading tool calls from trace...</div>
+          <div className="text-neutral4 text-ui-md px-2 py-4">Loading tool calls from trace...</div>
         ) : (
           // Remount when the source trace changes so the form's useState seeds
           // from the freshly derived mocks — no state-reset effect needed.
@@ -179,7 +179,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className="text-neutral4 px-2 py-4 text-center text-ui-md">No datasets available</div>
+              <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No datasets available</div>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -207,7 +207,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className="text-neutral4 px-2 py-4 text-center text-ui-md">No items available</div>
+              <div className="text-neutral4 text-ui-md px-2 py-4 text-center">No items available</div>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>

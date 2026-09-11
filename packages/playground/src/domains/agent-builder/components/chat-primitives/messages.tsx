@@ -344,7 +344,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-neutral4 bg-surface1 max-h-48 overflow-auto rounded-md p-2 text-ui-sm break-all whitespace-pre-wrap"
+              className="text-neutral4 bg-surface1 text-ui-sm max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -426,7 +426,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                   Input
                 </Txt>
               </div>
-              <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-ui-sm break-words whitespace-pre-wrap">
+              <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                 {inputJson || '{}'}
               </pre>
             </div>
@@ -437,7 +437,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
                     Output
                   </Txt>
                 </div>
-                <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-ui-sm break-words whitespace-pre-wrap">
+                <pre className="text-neutral5 text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
                   {outputJson}
                 </pre>
               </div>

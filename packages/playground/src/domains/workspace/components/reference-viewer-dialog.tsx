@@ -88,7 +88,7 @@ export function ReferenceViewerDialog({
               <p className="text-neutral3 text-ui-md">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-neutral5 bg-surface3 overflow-auto rounded-lg p-4 font-mono text-ui-md whitespace-pre-wrap">
+            <pre className="text-neutral5 bg-surface3 text-ui-md overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

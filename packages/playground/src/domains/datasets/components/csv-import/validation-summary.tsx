@@ -22,7 +22,7 @@ export function ValidationSummary({ errors }: ValidationSummaryProps) {
 
   return (
     <Notice variant="destructive" title={`${errors.length} validation error${errors.length !== 1 ? 's' : ''} found`}>
-      <div className="max-h-[120px] space-y-1 overflow-y-auto text-ui-md">
+      <div className="text-ui-md max-h-[120px] space-y-1 overflow-y-auto">
         {errors.map((error: ValidationError, index: number) => (
           <div key={index}>
             Row {error.row}: <span className="font-medium">[{error.column}]</span> - {error.message}

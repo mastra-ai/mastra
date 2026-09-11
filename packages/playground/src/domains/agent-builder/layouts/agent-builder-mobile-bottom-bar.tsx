@@ -71,7 +71,7 @@ export function AgentBuilderMobileBottomBar() {
               <Link
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
-                className={`duration-normal ease-out-custom relative flex flex-col items-center justify-center gap-1 py-2 text-ui-sm transition-colors ${
+                className={`duration-normal ease-out-custom text-ui-sm relative flex flex-col items-center justify-center gap-1 py-2 transition-colors ${
                   isActive
                     ? 'text-icon6 before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
                     : 'text-icon3 hover:text-icon6'

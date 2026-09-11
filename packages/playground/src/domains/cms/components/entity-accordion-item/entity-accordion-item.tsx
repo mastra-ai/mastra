@@ -60,7 +60,7 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-ui-sm"
+          className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />

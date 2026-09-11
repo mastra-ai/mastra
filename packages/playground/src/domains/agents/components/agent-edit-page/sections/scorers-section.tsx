@@ -196,7 +196,7 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-ui-sm"
+        className="bg-surface3 text-ui-sm min-h-[40px] border-dashed px-2 py-1"
         size="sm"
         disabled={readOnly}
       />
@@ -214,13 +214,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer text-ui-md">
+            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 text-ui-md cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer text-ui-md">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 text-ui-md cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>

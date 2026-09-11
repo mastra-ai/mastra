@@ -44,7 +44,7 @@ export function SignalDeltaColumn({
   return (
     <section aria-label={`${label} changes`} className="min-w-0">
       <h3
-        className="font-mono text-ui-sm font-semibold tracking-widest uppercase"
+        className="text-ui-sm font-mono font-semibold tracking-widest uppercase"
         style={{ color: nodeColor(getSignalHue(signalName)) }}
       >
         <Tooltip>
@@ -61,14 +61,14 @@ export function SignalDeltaColumn({
           const card = (
             <>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-neutral6 truncate text-ui-sm font-medium" title={delta.label}>
+                <span className="text-neutral6 text-ui-sm truncate font-medium" title={delta.label}>
                   {delta.label}
                 </span>
-                <span className="text-neutral6 shrink-0 font-mono text-ui-sm font-semibold tabular-nums">
+                <span className="text-neutral6 text-ui-sm shrink-0 font-mono font-semibold tabular-nums">
                   {deltaLabel(delta.delta)}
                 </span>
               </div>
-              <p className="text-neutral3 font-mono text-ui-sm tabular-nums">
+              <p className="text-neutral3 text-ui-sm font-mono tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
               </p>
               <ThemeCompareSparkline

@@ -353,7 +353,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Compact preview */}
             <div className="border-border1 border-t pt-4">
-              <div className="text-neutral4 mb-2 text-ui-sm">Data Preview</div>
+              <div className="text-neutral4 text-ui-sm mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -375,7 +375,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                   <span className="text-header-sm">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="text-muted-foreground mt-1 text-ui-md">
+                <p className="text-muted-foreground text-ui-md mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </p>
               </div>
@@ -406,7 +406,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <Spinner />
             <div className="text-center">
               <div className="text-neutral1 text-header-sm font-medium">Importing items...</div>
-              <div className="text-neutral4 mt-1 text-ui-md">
+              <div className="text-neutral4 text-ui-md mt-1">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -419,7 +419,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <div className="text-header-xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
               <div className="text-neutral1 text-header-sm font-medium">Import Complete</div>
-              <div className="text-neutral4 mt-1 text-ui-md">
+              <div className="text-neutral4 text-ui-md mt-1">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">

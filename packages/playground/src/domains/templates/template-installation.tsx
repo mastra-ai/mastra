@@ -103,7 +103,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-neutral3 grid justify-items-center gap-4 text-center text-ui-md">
+        <div className="text-neutral3 text-ui-md grid justify-items-center gap-4 text-center">
           <Spinner />
           <p>This may take some time...</p>
         </div>

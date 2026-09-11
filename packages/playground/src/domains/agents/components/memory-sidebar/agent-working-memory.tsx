@@ -86,7 +86,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className="bg-surface3 border-border1 min-h-[150px] rounded-lg border font-mono text-ui-md"
+                      className="bg-surface3 border-border1 text-ui-md min-h-[150px] rounded-lg border font-mono"
                     />
                   ) : (
                     <>
@@ -117,14 +117,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-neutral3 font-mono text-ui-md">
+                <div className="text-neutral3 text-ui-md font-mono">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
             <textarea
-              className="border-border1 bg-surface3 text-neutral5 min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono text-ui-md"
+              className="border-border1 bg-surface3 text-neutral5 text-ui-md min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono"
               value={editState.value}
               onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
@@ -142,7 +142,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
-                        className="cursor-not-allowed text-ui-sm opacity-50"
+                        className="text-ui-sm cursor-not-allowed opacity-50"
                       >
                         Edit Working Memory
                       </Button>
@@ -190,14 +190,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
         </>
       ) : (
         <div className="bg-surface3 border-border1 rounded-lg border p-4">
-          <p className="text-neutral3 mb-3 text-ui-md">
+          <p className="text-neutral3 text-ui-md mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </p>
           <a
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-ui-md text-blue-400 transition-colors hover:text-blue-300"
+            className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
           >
             Learn about working memory
             <ExternalLink className="h-3 w-3" />

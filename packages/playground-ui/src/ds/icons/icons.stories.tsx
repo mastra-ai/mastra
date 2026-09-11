@@ -109,7 +109,7 @@ const IconGrid = ({ size = 'default' }: { size?: 'sm' | 'default' | 'lg' }) => (
         <Icon size={size} className="text-neutral5">
           <IconComponent />
         </Icon>
-        <span className="text-neutral3 text-center text-ui-sm">{name.replace('Icon', '')}</span>
+        <span className="text-neutral3 text-ui-sm text-center">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>

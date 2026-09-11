@@ -220,7 +220,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 border-0! text-ui-sm whitespace-nowrap"
+          className="text-ui-sm flex items-center gap-1.5 border-0! whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />

@@ -544,7 +544,7 @@ export function DatasetDetailView({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 w-full rounded border px-3 py-1.5 text-ui-md focus:ring-1 focus:outline-none"
+                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 text-ui-md w-full rounded border px-3 py-1.5 focus:ring-1 focus:outline-none"
                 />
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {
@@ -675,7 +675,7 @@ function ExpandedItemEditor({
           <Textarea
             value={inputValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
-            className="mt-1 font-mono text-ui-sm"
+            className="text-ui-sm mt-1 font-mono"
             rows={4}
           />
         </div>
@@ -686,7 +686,7 @@ function ExpandedItemEditor({
           <Textarea
             value={groundTruthValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGroundTruthValue(e.target.value)}
-            className="mt-1 font-mono text-ui-sm"
+            className="text-ui-sm mt-1 font-mono"
             rows={3}
             placeholder="Optional"
           />
@@ -698,7 +698,7 @@ function ExpandedItemEditor({
           <Textarea
             value={trajectoryValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTrajectoryValue(e.target.value)}
-            className="mt-1 font-mono text-ui-sm"
+            className="text-ui-sm mt-1 font-mono"
             rows={3}
             placeholder="Optional — JSON trajectory expectation"
           />
@@ -731,7 +731,7 @@ function ExpandedItemEditor({
         <Txt variant="ui-xs" className="text-neutral3 font-medium">
           Input
         </Txt>
-        <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-ui-sm wrap-break-word whitespace-pre-wrap">
+        <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
           {formatValue(item.input)}
         </pre>
       </div>
@@ -740,7 +740,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Ground Truth
           </Txt>
-          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-ui-sm wrap-break-word whitespace-pre-wrap">
+          <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
             {formatValue(item.groundTruth)}
           </pre>
         </div>
@@ -750,7 +750,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Expected Trajectory
           </Txt>
-          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-ui-sm break-words whitespace-pre-wrap">
+          <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 break-words whitespace-pre-wrap">
             {formatValue(item.expectedTrajectory)}
           </pre>
         </div>

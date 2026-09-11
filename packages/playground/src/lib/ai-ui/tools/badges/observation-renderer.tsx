@@ -254,7 +254,7 @@ function ObservationItem({
         {observation.isNested && (
           <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
-        <span className="flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-ui-xs">
+        <span className="[&_code]:text-ui-xs flex-1 [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
@@ -388,14 +388,14 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-ui-xs font-medium tracking-wide uppercase">Current Task</div>
+          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">Current Task</div>
           <div className="text-foreground text-ui-sm whitespace-pre-wrap">{parsed.currentTask}</div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-ui-xs font-medium tracking-wide uppercase">
+          <div className="text-muted-foreground text-ui-xs mb-1 font-medium tracking-wide uppercase">
             Suggested Response
           </div>
           <div className="text-foreground/80 text-ui-sm whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>

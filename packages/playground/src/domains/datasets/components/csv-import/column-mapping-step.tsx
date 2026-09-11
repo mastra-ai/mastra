@@ -84,7 +84,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`bg-surface2 text-neutral1 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-ui-md font-medium transition-all ${snapshot.isDragging ? 'ring-accent1/30 shadow-lg ring-2' : 'hover:bg-surface3'} `}
+                              className={`bg-surface2 text-neutral1 text-ui-md inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium transition-all ${snapshot.isDragging ? 'ring-accent1/30 shadow-lg ring-2' : 'hover:bg-surface3'} `}
                             >
                               <span
                                 {...provided.dragHandleProps}

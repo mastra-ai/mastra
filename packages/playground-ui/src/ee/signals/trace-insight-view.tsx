@@ -70,9 +70,9 @@ function ObservationItem({ observation }: { observation: string }) {
   const { severity, kind, text } = parseTraceObservation(observation);
 
   return (
-    <li className={`rounded-md border p-3 text-ui-md ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+    <li className={`text-ui-md rounded-md border p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <p className="text-neutral3 font-mono text-ui-xs tracking-wider uppercase">
+        <p className="text-neutral3 text-ui-xs font-mono tracking-wider uppercase">
           {severity === 'problem' && (
             <>
               <span className="text-red-400">problem</span>
@@ -95,24 +95,27 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
         <p className="text-neutral3 text-ui-md">No insight available yet for this trace.</p>
       ) : (
         <section aria-labelledby="trace-insight-summary-heading">
-          <h2 id="trace-insight-summary-heading" className="text-neutral3 font-mono text-ui-sm tracking-wider uppercase">
+          <h2
+            id="trace-insight-summary-heading"
+            className="text-neutral3 text-ui-sm font-mono tracking-wider uppercase"
+          >
             Trace summary
           </h2>
-          <p className="text-neutral5 mt-3 text-ui-md">{insight.summary.summary}</p>
+          <p className="text-neutral5 text-ui-md mt-3">{insight.summary.summary}</p>
           {insight.summary.currentTask !== undefined && (
-            <dl className="mt-4 text-ui-md">
+            <dl className="text-ui-md mt-4">
               <dt className="text-neutral3">Current task</dt>
               <dd className="text-neutral5 mt-1">{insight.summary.currentTask}</dd>
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="mt-4 text-ui-md text-red-500">This trace was flagged as degenerate or looping.</p>
+            <p className="text-ui-md mt-4 text-red-500">This trace was flagged as degenerate or looping.</p>
           )}
           {insight.summary.observations.length > 0 && (
             <>
               <h3
                 id="trace-insight-observations-heading"
-                className="text-neutral3 mt-4 font-mono text-ui-sm tracking-wider uppercase"
+                className="text-neutral3 text-ui-sm mt-4 font-mono tracking-wider uppercase"
               >
                 Observations
               </h3>
@@ -127,12 +130,15 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
       )}
       {insight.signals.length > 0 && (
         <section aria-labelledby="trace-insight-signals-heading">
-          <h2 id="trace-insight-signals-heading" className="text-neutral3 font-mono text-ui-sm tracking-wider uppercase">
+          <h2
+            id="trace-insight-signals-heading"
+            className="text-neutral3 text-ui-sm font-mono tracking-wider uppercase"
+          >
             Trace signal summaries
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
-              <li key={signal.signalName} className="border-border1 bg-surface3 rounded-md border p-3 text-ui-md">
+              <li key={signal.signalName} className="border-border1 bg-surface3 text-ui-md rounded-md border p-3">
                 <p className="text-neutral3">{signalLabel(signalCatalog, signal.signalName)}</p>
                 <p className="text-neutral5 mt-1">{signal.signalText}</p>
               </li>

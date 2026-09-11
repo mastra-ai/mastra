@@ -171,7 +171,7 @@ const PackagesModalContent = ({
       </DialogHeader>
 
       <DialogBody>
-        <div className="text-neutral3 flex items-center justify-between gap-3 py-2 text-ui-md">
+        <div className="text-neutral3 text-ui-md flex items-center justify-between gap-3 py-2">
           {isLoadingUpdates ? (
             <span className="text-neutral3">Checking for updates...</span>
           ) : !hasUpdates ? (
@@ -205,7 +205,7 @@ const PackagesModalContent = ({
         </div>
 
         <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
-          <div className="grid grid-cols-[1fr_auto_auto] text-ui-md">
+          <div className="text-ui-md grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
                 <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">

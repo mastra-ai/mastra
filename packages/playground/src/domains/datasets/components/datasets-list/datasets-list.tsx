@@ -111,7 +111,7 @@ export function DatasetsList({
                     {tags.slice(0, 2).map(tag => (
                       <ComputedTag key={tag} value={tag} className="shrink-0" />
                     ))}
-                    {tags.length > 2 && <span className="text-neutral2 shrink-0 text-ui-xs">+{tags.length - 2}</span>}
+                    {tags.length > 2 && <span className="text-neutral2 text-ui-xs shrink-0">+{tags.length - 2}</span>}
                   </div>
                 ) : (
                   <span className="text-neutral2">—</span>

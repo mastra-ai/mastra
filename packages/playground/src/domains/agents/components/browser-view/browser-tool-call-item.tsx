@@ -98,23 +98,23 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 
         <StatusDot status={entry.status} />
 
-        <span className="text-neutral6 shrink-0 text-ui-sm font-medium">{displayName}</span>
+        <span className="text-neutral6 text-ui-sm shrink-0 font-medium">{displayName}</span>
 
-        {keyArg && <span className="text-neutral3 truncate text-ui-sm">{keyArg}</span>}
+        {keyArg && <span className="text-neutral3 text-ui-sm truncate">{keyArg}</span>}
       </button>
 
       {isExpanded && (
         <div className="space-y-2 px-3 pb-2">
           <div>
-            <p className="text-neutral4 pb-1 text-ui-sm font-medium">Arguments</p>
+            <p className="text-neutral4 text-ui-sm pb-1 font-medium">Arguments</p>
             <CodeEditor data={displayArgs} data-testid="browser-tool-args" />
           </div>
 
           {entry.result !== undefined && entry.result !== null && (
             <div>
-              <p className="text-neutral4 pb-1 text-ui-sm font-medium">Result</p>
+              <p className="text-neutral4 text-ui-sm pb-1 font-medium">Result</p>
               {typeof entry.result === 'string' ? (
-                <pre className="bg-surface4 max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 text-ui-sm whitespace-pre">
+                <pre className="bg-surface4 text-ui-sm max-h-40 overflow-x-auto overflow-y-auto rounded-md p-2 whitespace-pre">
                   {entry.result}
                 </pre>
               ) : (

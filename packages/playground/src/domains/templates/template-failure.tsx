@@ -55,13 +55,13 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
           <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
             Show Validation Issues ({validationErrors.length})
           </summary>
-          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-gray-100 p-3 text-left text-ui-sm dark:bg-gray-800">
+          <div className="text-ui-sm mt-4 max-h-60 space-y-2 overflow-auto rounded bg-gray-100 p-3 text-left dark:bg-gray-800">
             {validationErrors.map((error, index) => (
               <div key={index} className="border-l-2 border-red-400 pl-2">
                 <div className="font-medium text-red-600 dark:text-red-400">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </div>
-                <div className="mt-1 font-mono text-ui-sm wrap-break-word whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                <div className="text-ui-sm mt-1 font-mono wrap-break-word whitespace-pre-wrap text-gray-700 dark:text-gray-300">
                   {error.message}
                 </div>
               </div>
@@ -76,7 +76,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
           <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
             Show Details
           </summary>
-          <div className="mt-4 max-h-60 overflow-auto rounded bg-gray-100 p-3 text-left font-mono text-ui-sm dark:bg-gray-800">
+          <div className="text-ui-sm mt-4 max-h-60 overflow-auto rounded bg-gray-100 p-3 text-left font-mono dark:bg-gray-800">
             <div className="wrap-break-word whitespace-pre-wrap">{errorString}</div>
           </div>
         </details>

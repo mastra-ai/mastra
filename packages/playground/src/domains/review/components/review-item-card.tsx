@@ -211,7 +211,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3">
                 Experiment:
               </Txt>
-              <code className="text-neutral4 bg-surface2 rounded px-1.5 py-0.5 font-mono text-ui-xs">
+              <code className="text-neutral4 bg-surface2 text-ui-xs rounded px-1.5 py-0.5 font-mono">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
@@ -220,7 +220,7 @@ export function ReviewItemCard({
             <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
               Input
             </Txt>
-            <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-ui-sm whitespace-pre-wrap">
+            <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -229,7 +229,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Output
               </Txt>
-              <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-ui-sm whitespace-pre-wrap">
+              <pre className="text-neutral5 bg-surface2 text-ui-sm max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-surface2 max-h-20 overflow-auto rounded p-2 text-ui-sm whitespace-pre-wrap">
+              <pre className="text-negative1 bg-surface2 text-ui-sm max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>

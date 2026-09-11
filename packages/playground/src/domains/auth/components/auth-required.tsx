@@ -90,7 +90,7 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         {capabilities.login.description && (
           <div className="border-border1 bg-surface2 flex items-start gap-2.5 rounded-md border p-3 text-left">
             <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-neutral3 max-w-sm text-ui-md">{capabilities.login.description}</p>
+            <p className="text-neutral3 text-ui-md max-w-sm">{capabilities.login.description}</p>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
