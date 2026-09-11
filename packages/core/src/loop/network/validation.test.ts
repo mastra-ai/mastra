@@ -294,9 +294,10 @@ describe('runCompletionScorers', () => {
         const scorer = createMockScorer('fast', 1, 'Passed');
         const context = createMockContext();
 
-        const promise = runCompletionScorers([scorer], context, { timeout: 600000 });
-        await vi.runAllTimersAsync();
-        await promise;
+        // The scorer resolves synchronously (delay 0), so the run completes
+        // without advancing timers. Asserting the count before advancing any
+        // timers proves the deadline timer was cleared rather than merely fired.
+        await runCompletionScorers([scorer], context, { timeout: 600000 });
 
         // No lingering default 10-minute timer should remain.
         expect(vi.getTimerCount()).toBe(0);
