@@ -712,6 +712,9 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/alerts',
       label: 'Alerts',
+      customProps: {
+        tags: ['new'],
+      },
     },
     {
       type: 'doc',
