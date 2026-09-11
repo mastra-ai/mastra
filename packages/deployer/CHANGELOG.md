@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 1.66.1-alpha.0
+
+### Patch Changes
+
+- Add `MASTRA_BUILD_SKIP_INSTALL` to skip dependency installation during `mastra build`. When set to `true` or `1`, the deployer no longer runs the dependency install or generates a `package-lock.json` in the build output directory. This unblocks hermetic build systems (such as Bazel) that supply `node_modules` externally and run in a network-less sandbox, where the output install was previously both redundant and fatal. Default behavior is unchanged. ([#23530](https://github.com/mastra-ai/mastra/pull/23530))
+
+  ```sh
+  MASTRA_BUILD_SKIP_INSTALL=1 mastra build
+  ```
+
+- Updated dependencies [[`e86be03`](https://github.com/mastra-ai/mastra/commit/e86be034c017fca7deae7d1ebb34d36413928cb8), [`4b3f587`](https://github.com/mastra-ai/mastra/commit/4b3f587ceabb3f3697c4c1ad4fb154d58002ef7c), [`3a1d253`](https://github.com/mastra-ai/mastra/commit/3a1d2537ad28754a164aedbf0dd94be224ccb0c3), [`2c501bc`](https://github.com/mastra-ai/mastra/commit/2c501bc8f661b27a06842f1312221efa6125e580)]:
+  - @mastra/core@1.66.1-alpha.0
+  - @mastra/server@1.66.1-alpha.0
+
 ## 1.66.0
 
 ### Minor Changes

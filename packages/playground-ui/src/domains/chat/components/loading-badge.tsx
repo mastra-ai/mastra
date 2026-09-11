@@ -1,5 +1,6 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Spinner } from '../../../ds/components/Spinner';
+
 import { BadgeWrapper } from './badge-wrapper';
 
 export const LoadingBadge = () => {

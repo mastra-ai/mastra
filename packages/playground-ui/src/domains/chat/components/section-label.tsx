@@ -1,5 +1,6 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
+
+import { Txt } from '../../../ds/components/Txt';
 
 /** Names a section of an expanded call body at the body's own quiet scale. */
 export const SectionLabel = ({ children }: { children: ReactNode }) => (
