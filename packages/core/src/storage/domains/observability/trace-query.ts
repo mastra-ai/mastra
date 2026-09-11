@@ -392,6 +392,7 @@ export type TraceQueryCursorValues =
 export type TraceQueryIssueCode =
   | 'invalid_request'
   | 'invalid_time_range'
+  | 'time_range_too_large'
   | 'predicate_too_complex'
   | 'field_not_allowed'
   | 'invalid_metadata_key'
@@ -624,6 +625,12 @@ export function planTraceQuery(
   const to = new Date(request.timeRange.to);
   if (from >= to) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
+  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    issues.push({
+      code: 'time_range_too_large',
+      path: ['timeRange'],
+      message: 'The time range cannot exceed 31 days',
+    });
   }
 
   if (request.group && request.orderBy) {
@@ -690,6 +697,12 @@ export function planThreadQuery(
       code: 'invalid_time_range',
       path: ['traces', 'timeRange'],
       message: '`from` must be earlier than `to`',
+    });
+  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    issues.push({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
+      message: 'The time range cannot exceed 31 days',
     });
   }
 

@@ -158,19 +158,21 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('enforces ordered time ranges and permits ranges longer than 31 days', () => {
+  it('enforces ordered and maximum time ranges', () => {
     const reversed = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-08-02T00:00:00Z', to: '2026-08-01T00:00:00Z' } })),
     );
     expect(reversed.issues).toEqual([expect.objectContaining({ code: 'invalid_time_range', path: ['timeRange'] })]);
 
-    const longRange = planTraceQuery(
-      parsed({ timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
-    );
-    expect(longRange.timeRange).toEqual({
-      from: '2026-01-01T00:00:00.000Z',
+    expect(planTraceQuery(parsed()).timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
       to: '2026-09-01T00:00:00.000Z',
     });
+
+    const tooLarge = validationError(() =>
+      planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
+    );
+    expect(tooLarge.issues[0]).toMatchObject({ code: 'time_range_too_large', path: ['timeRange'] });
   });
 
   it('plans recursive trace and same-record collection predicates', () => {
@@ -1063,14 +1065,21 @@ describe('queryThreads input and planning', () => {
       expect.objectContaining({ code: 'invalid_time_range', path: ['traces', 'timeRange'] }),
     );
 
-    const longRange = planThreadQuery(
-      parsedThreads({
-        traces: { timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
-      }),
-    );
-    expect(longRange.traces.timeRange).toEqual({
-      from: '2026-01-01T00:00:00.000Z',
+    expect(planThreadQuery(parsedThreads()).traces.timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
       to: '2026-09-01T00:00:00.000Z',
+    });
+
+    const tooLarge = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+        }),
+      ),
+    );
+    expect(tooLarge.issues[0]).toMatchObject({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
     });
 
     const invalidField = validationError(() =>
