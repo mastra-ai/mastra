@@ -37,6 +37,69 @@ describe('readToolPart', () => {
     ).toEqual({ toolName: 'view', toolCallId: 'call-2', state: 'output-available', input: 1, output: 2 });
   });
 
+  describe('when a persisted tool result has model output metadata', () => {
+    it('includes the model output used by the assistant', () => {
+      const part: ToolInvocationPart = {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'result',
+          args: {},
+          result: { data: [] },
+        },
+        providerMetadata: {
+          mastra: { modelOutput: { type: 'content', value: [{ type: 'media', data: 'image-data' }] } },
+        },
+      };
+
+      expect(readToolPart(part).modelOutput).toEqual({
+        type: 'content',
+        value: [{ type: 'media', data: 'image-data' }],
+      });
+    });
+  });
+
+  describe('when a streamed tool result has separate call and result metadata', () => {
+    it('uses the result model output', () => {
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'output-available',
+          input: {},
+          output: { data: [] },
+        },
+        {
+          callProviderMetadata: { mastra: { modelOutput: { type: 'text', value: 'calling' } } },
+          resultProviderMetadata: { mastra: { modelOutput: { type: 'text', value: 'complete' } } },
+        },
+      );
+
+      expect(readToolPart(part).modelOutput).toEqual({ type: 'text', value: 'complete' });
+    });
+  });
+
+  describe('when tool result metadata has no Mastra metadata object', () => {
+    it('does not expose model output', () => {
+      const emptyMetadata: unknown = JSON.parse('null');
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'createImage',
+          toolCallId: 'call-image',
+          state: 'output-available',
+          input: {},
+          output: { data: [] },
+        },
+        { resultProviderMetadata: { mastra: emptyMetadata } },
+      );
+
+      expect(readToolPart(part).modelOutput).toBeUndefined();
+    });
+  });
+
   it('names a typed v5 part after its type when it carries no tool name, and gives it an empty id', () => {
     expect(readToolPart({ type: 'tool-search', input: {} })).toMatchObject({ toolName: 'search', toolCallId: '' });
   });
