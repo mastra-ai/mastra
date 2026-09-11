@@ -61,7 +61,7 @@ async function createScopeIds(memory: Memory, store: any, resourceId: string, th
     const thread = await knowledge.materializeScope({
       address: threadAddress,
       parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
+      contextualScopeAddress: threadAddress,
       parameters: { orgId: 'acme', resourceId, threadId },
     });
     return [organization.scopes['org:acme']!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
@@ -220,7 +220,11 @@ describe('Subconscious LibSQL integration', () => {
     await expect(
       knowledge.updateNode({ id: atlas!.id, version: atlas!.version + 1, name: 'Stale Atlas' }),
     ).rejects.toThrow('version');
-    const deleted = await knowledge.deleteRecord({ id: record.id, version: record.version, deletedBy: 'subconscious:curate' });
+    const deleted = await knowledge.deleteRecord({
+      id: record.id,
+      version: record.version,
+      deletedBy: 'subconscious:curate',
+    });
     await memory.drainKnowledgeSemanticIndex(scopeIds);
     expect(await knowledge.getRecord({ id: record.id })).toBeNull();
     expect(
