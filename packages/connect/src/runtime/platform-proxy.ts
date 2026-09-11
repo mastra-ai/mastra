@@ -13,7 +13,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import {
   getConnectionContext,
-  proxyRequest,
+  proxyRequestWithResponse,
   resolveClient,
   type ConnectClientOptions,
   type ConnectionContext,
@@ -131,18 +131,15 @@ async function callProxy<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const data = (await proxyRequest(client, resolvedConnectionId, {
+      const response = await proxyRequestWithResponse(client, resolvedConnectionId, {
         method,
         path: config.endpoint,
         query: config.params,
         headers: config.headers,
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
-      })) as T;
-      // proxyRequest currently returns the parsed JSON body only; templates
-      // rarely inspect status/headers, but expose stubs to keep the shape
-      // faithful.
-      return { data, status: 200, headers: {} };
+      });
+      return { ...response, data: response.data as T };
     } catch (error) {
       lastError = error;
       // Only retry on network-ish failures. MastraConnectError with

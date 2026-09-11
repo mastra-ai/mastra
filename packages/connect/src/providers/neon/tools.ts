@@ -1,15 +1,18 @@
-// AUTO-GENERATED from rhysbalevicius/integration-templates @ fe8e08c019e7 — do not edit by hand.
+// AUTO-GENERATED from rhysbalevicius/integration-templates @ 15123cf72c67 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
 import { compareBranchSchemaTool } from './tools/compare-branch-schema.js';
 import { createBranchTool } from './tools/create-branch.js';
+import { createDatabaseTool } from './tools/create-database.js';
 import { createEndpointTool } from './tools/create-endpoint.js';
 import { createProjectTool } from './tools/create-project.js';
 import { deleteBranchTool } from './tools/delete-branch.js';
+import { deleteDatabaseTool } from './tools/delete-database.js';
 import { deleteEndpointTool } from './tools/delete-endpoint.js';
 import { getBranchSchemaTool } from './tools/get-branch-schema.js';
 import { getBranchTool } from './tools/get-branch.js';
+import { getDatabaseTool } from './tools/get-database.js';
 import { getEndpointTool } from './tools/get-endpoint.js';
 import { getOperationTool } from './tools/get-operation.js';
 import { getProjectTool } from './tools/get-project.js';
@@ -24,6 +27,7 @@ import { setDefaultBranchTool } from './tools/set-default-branch.js';
 import { startEndpointTool } from './tools/start-endpoint.js';
 import { suspendEndpointTool } from './tools/suspend-endpoint.js';
 import { updateBranchTool } from './tools/update-branch.js';
+import { updateDatabaseTool } from './tools/update-database.js';
 import { updateEndpointTool } from './tools/update-endpoint.js';
 import { updateProjectTool } from './tools/update-project.js';
 
@@ -32,12 +36,15 @@ export function createNeonTools(options?: ProviderToolsOptions) {
   const tools = {
     neon_compare_branch_schema: compareBranchSchemaTool(platformProxy),
     neon_create_branch: createBranchTool(platformProxy),
+    neon_create_database: createDatabaseTool(platformProxy),
     neon_create_endpoint: createEndpointTool(platformProxy),
     neon_create_project: createProjectTool(platformProxy),
     neon_delete_branch: deleteBranchTool(platformProxy),
+    neon_delete_database: deleteDatabaseTool(platformProxy),
     neon_delete_endpoint: deleteEndpointTool(platformProxy),
     neon_get_branch_schema: getBranchSchemaTool(platformProxy),
     neon_get_branch: getBranchTool(platformProxy),
+    neon_get_database: getDatabaseTool(platformProxy),
     neon_get_endpoint: getEndpointTool(platformProxy),
     neon_get_operation: getOperationTool(platformProxy),
     neon_get_project: getProjectTool(platformProxy),
@@ -52,6 +59,7 @@ export function createNeonTools(options?: ProviderToolsOptions) {
     neon_start_endpoint: startEndpointTool(platformProxy),
     neon_suspend_endpoint: suspendEndpointTool(platformProxy),
     neon_update_branch: updateBranchTool(platformProxy),
+    neon_update_database: updateDatabaseTool(platformProxy),
     neon_update_endpoint: updateEndpointTool(platformProxy),
     neon_update_project: updateProjectTool(platformProxy),
   };

@@ -1091,5 +1091,175 @@
         }
       ]
     }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_get_database",
+    "method": "GET",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example"
+    },
+    "response": {
+      "database": {
+        "id": 834686,
+        "branch_id": "br-aged-salad-637688",
+        "name": "main",
+        "owner_name": "casey",
+        "created_at": "2022-11-30T18:25:15Z",
+        "updated_at": "2022-11-30T18:25:15Z"
+      }
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_create_database",
+    "method": "POST",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "body": {
+        "database": {
+          "name": "example",
+          "owner_name": "example"
+        }
+      }
+    },
+    "response": {
+      "database": {
+        "id": 876692,
+        "branch_id": "br-aged-salad-637688",
+        "name": "mydb",
+        "owner_name": "casey",
+        "created_at": "2022-12-04T00:15:04Z",
+        "updated_at": "2022-12-04T00:15:04Z"
+      },
+      "operations": [
+        {
+          "id": "39426015-db00-40fa-85c5-1c7072df46d0",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:15:04Z",
+          "updated_at": "2022-12-04T00:15:04Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "b7483d4e-33da-4d40-b319-ac858d4d3e69",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:15:04Z",
+          "updated_at": "2022-12-04T00:15:04Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_update_database",
+    "method": "PATCH",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example",
+      "body": {
+        "database": {}
+      }
+    },
+    "response": {
+      "database": {
+        "id": 876692,
+        "branch_id": "br-aged-salad-637688",
+        "name": "mydb",
+        "owner_name": "sally",
+        "created_at": "2022-12-04T00:15:04Z",
+        "updated_at": "2022-12-04T00:15:04Z"
+      },
+      "operations": [
+        {
+          "id": "9ef1c2ed-dce4-43aa-bae8-78aea636bf8a",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:21:01Z",
+          "updated_at": "2022-12-04T00:21:01Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "42dafb46-f861-497b-ae89-f2bec54f4966",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-aged-salad-637688",
+          "endpoint_id": "ep-little-smoke-851426",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-04T00:21:01Z",
+          "updated_at": "2022-12-04T00:21:01Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
+  },
+  {
+    "provider": "neon",
+    "tool": "neon_delete_database",
+    "method": "DELETE",
+    "path": "/v2/projects/{project_id}/branches/{branch_id}/databases/{database_name}",
+    "input": {
+      "project_id": "example",
+      "branch_id": "example",
+      "database_name": "example"
+    },
+    "response": {
+      "database": {
+        "id": 851537,
+        "branch_id": "br-raspy-hill-832856",
+        "name": "mydb",
+        "owner_name": "casey",
+        "created_at": "2022-12-01T19:41:46Z",
+        "updated_at": "2022-12-01T19:41:46Z"
+      },
+      "operations": [
+        {
+          "id": "9ef1c2ed-dce4-43aa-bae8-78aea636bf8a",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "apply_config",
+          "status": "running",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:51:41Z",
+          "updated_at": "2022-12-01T19:51:41Z",
+          "total_duration_ms": 100
+        },
+        {
+          "id": "42dafb46-f861-497b-ae89-f2bec54f4966",
+          "project_id": "shiny-wind-028834",
+          "branch_id": "br-raspy-hill-832856",
+          "endpoint_id": "ep-steep-bush-777093",
+          "action": "suspend_compute",
+          "status": "scheduling",
+          "failures_count": 0,
+          "created_at": "2022-12-01T19:51:41Z",
+          "updated_at": "2022-12-01T19:51:41Z",
+          "total_duration_ms": 100
+        }
+      ]
+    }
   }
 ]

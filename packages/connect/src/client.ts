@@ -267,11 +267,26 @@ function hasDotSegment(path: string): boolean {
   });
 }
 
+export interface ProxyResponse {
+  data: unknown;
+  status: number;
+  headers: Record<string, string>;
+}
+
 export async function proxyRequest(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<unknown> {
+  return (await proxyRequestWithResponse(client, connectionId, options)).data;
+}
+
+/** Preserves HTTP metadata for tools with status-dependent provider contracts. */
+export async function proxyRequestWithResponse(
+  client: ResolvedClient,
+  connectionId: string,
+  options: ProxyRequestOptions,
+): Promise<ProxyResponse> {
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
@@ -338,12 +353,13 @@ export async function proxyRequest(
     );
   }
 
-  if (response.status === 204) return null;
+  const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
+  if (response.status === 204) return { ...metadata, data: null };
   const text = await response.text();
-  if (!text) return null;
+  if (!text) return { ...metadata, data: null };
   try {
-    return JSON.parse(text);
+    return { ...metadata, data: JSON.parse(text) };
   } catch {
-    return text;
+    return { ...metadata, data: text };
   }
 }

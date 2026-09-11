@@ -17,7 +17,7 @@ interface ActionFixture {
 
 // Copied from the pinned template contribution; examples and synthetic fixtures, not live recordings.
 for (const [providerId, count] of [
-  ['neon', 24],
+  ['neon', 28],
   ['resend', 8],
   ['incident-io', 11],
 ] as const) {
