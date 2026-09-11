@@ -6,13 +6,21 @@ Scorer judge configuration now accepts an optional `modelSettings` field (temper
 
 ```ts
 const scorer = createScorer({
-  id: 'my-scorer',
-  name: 'my-scorer',
-  description: 'Example scorer',
+  id: 'answer-relevancy',
+  description: 'Scores answer relevancy',
   judge: {
-    model,
-    instructions: 'Evaluate the response.',
-    modelSettings: { temperature: 0.2, maxOutputTokens: 512 },
+    model: openai('gpt-4o'),
+    instructions: 'Return a relevancy score.',
+    // New: configure the judge model call directly
+    modelSettings: { temperature: 0, maxRetries: 3 },
   },
-});
+})
+  .analyze({
+    description: 'analyze',
+    outputSchema: z.object({ value: z.number() }),
+    createPrompt: () => 'analyze this',
+    // Optional per-step override (replaces the scorer-level value)
+    judge: { modelSettings: { temperature: 0.7 } },
+  })
+  .generateScore(({ results }) => results.analyzeStepResult.value);
 ```
