@@ -391,7 +391,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         throw new Error('No enabled models available for execution');
       }
 
-      // 4. Execute with model fallback - try each model in the list with retries
+      // 4. Execute with model fallback - try each model in the list with retries.
+      // Errors recovered inside this ladder (per-attempt retry / model
+      // rotation) are never emitted as chunks, so output processors only ever
+      // see the attempt that succeeds; only the terminal exhausted-models
+      // error is published. Main needed an explicit guard to keep recovered
+      // errors away from processors (#21738) — durable is immune by
+      // construction, don't port that guard here.
       let lastError: Error | undefined;
       let processorRetryCount = 0;
       const maxProcessorRetries =
@@ -1226,6 +1232,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const releaseStreamActivity = markRunActive(runId);
             try {
               let stepStartEmitted = false;
+              // Stream driver — deliberate divergence from the main loop
+              // (PHASE3 ledger L20, decided permanent): main commits chunks to
+              // the message list and then emits them into its request-scoped
+              // in-process stream; durable publishes to pubsub FIRST because
+              // consumers are cross-process and must see chunks live, while
+              // the authoritative commits land after the stream completes
+              // (buildMessagesFromChunks below; tool results later in
+              // llm-mapping, across a serialization boundary). Don't reorder
+              // to match main — emit-after-commit would require buffering the
+              // whole step.
               for await (const rawChunk of trackedStream) {
                 if (!rawChunk) continue;
 
@@ -1236,6 +1252,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                 // Emit step-start before the first stream chunk so the
                 // ordering matches the regular agent: start → step-start → response-metadata → …
+                // Published directly to pubsub — deliberate divergence from
+                // the main loop, which injects step-start into its
+                // request-scoped in-process pipeline via onResult
+                // (#16687/#17370). That injection point cannot exist here
+                // (durable steps serialize at their boundaries), and porting
+                // it would double-emit lifecycle chunks. Processor visibility
+                // is unchanged: the consumer-side MastraModelOutput runs
+                // processors on every chunk either way.
                 // Keep the full model request out of the durable event stream; the helper
                 // preserves the canonical payload shape with an empty `request` object.
                 if (!stepStartEmitted && pubsub) {

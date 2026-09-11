@@ -349,6 +349,11 @@ export function createDurableLLMMappingStep() {
       // it arrives AFTER tool-result chunks (emitted by tool-call.ts). This
       // matches the regular agent's chunk ordering which MastraModelOutput
       // relies on for correct step content reconstruction in onStepFinish.
+      // Unlike the main loop — where one in-process driver holds the deferred
+      // chunk in a local variable — the emission point here lives in a
+      // different workflow step than the stream that produced it, so the
+      // deferral must ride the serialized step output
+      // (`deferredStepFinishChunk`).
       const deferredChunk = llmOutput.deferredStepFinishChunk as any;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       if (deferredChunk && pubsub) {

@@ -33,12 +33,17 @@ export interface BackgroundToolResultParams {
  *   produce nothing: a tool with no `toModelOutput`, a mapping that returns
  *   nullish, and a mapping that throws. A null `modelOutput` is the
  *   established "no mapping, use the raw result" signal `MessageList` keys
- *   off by value.
- * - Transcript payload transforms remain an engine-supplied hook: the main
- *   loop reads its transform policy from run scope, which is not yet plumbed
- *   into the durable registry (tracked as a parity item, not adjudicated
- *   here). Without the hook, raw args/result are recorded — durable's
- *   existing behavior.
+ *   off by value. Deliberately not shared with tool-result-commit-core's
+ *   `computeModelOutputProviderMetadata`, which omits the key on nullish
+ *   (presence-keyed) and runs under a MAPPING span — the policies differ on
+ *   purpose.
+ * - Transcript payload transforms remain an engine-supplied hook. Main
+ *   supplies `transformForTranscript` from its run scope; durable's transform
+ *   policy IS on its run registry (the sync tool-call path consumes it), but
+ *   durable's background `onResult` does not wire this hook yet, so raw
+ *   args/result are recorded there (open parity item, PHASE3 ledger L22 —
+ *   security-adjacent: a configured transcript redaction is skipped for
+ *   background results on durable).
  */
 export async function applyBackgroundToolResult(deps: {
   params: BackgroundToolResultParams;

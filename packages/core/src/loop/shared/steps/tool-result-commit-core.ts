@@ -27,9 +27,15 @@ export interface ToolMappingParentSpan {
  * real result with `undefined`, producing a tool message with no output.
  *
  * Mapping-failure policy is engine-supplied (PHASE3 ledger): when
- * `onMappingError` is omitted the error propagates (the main loop's current
- * policy); when supplied, the core reports the failure and keeps the existing
- * metadata — the tool result itself is still usable (durable's policy).
+ * `onMappingError` is omitted the error propagates; both engines currently
+ * supply it and log a warning instead of failing the commit — the tool result
+ * itself is still usable without the mapped output.
+ *
+ * Deliberately NOT consolidated with the background-task path
+ * (`background-task-result-core.ts`), which always overwrites
+ * `mastra.modelOutput` (null included) to clear the placeholder-derived value
+ * and runs without a tracing span. The presence-keyed omit here vs the
+ * always-overwrite there are both load-bearing; see its docblock.
  */
 export async function computeModelOutputProviderMetadata(deps: {
   /** Pre-resolved tool. Engines own the lookup: run-scope stepTools / static

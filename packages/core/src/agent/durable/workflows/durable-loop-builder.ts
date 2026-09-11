@@ -191,6 +191,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   }
 
   /**
+   * TODO: always use pubsub, it's better
    * Chunk transport: publish through pubsub instead of enqueueing onto a live
    * stream controller. No-op when the run has no pubsub transport — callers
    * that must not consume input without a transport (signal drain) guard on
@@ -299,6 +300,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * Note: tool-call foreach concurrency is resolved per run at execution time
    * (see resolveDurableToolCallConcurrency) — approval/suspend flows force
    * sequential execution; otherwise the run's `toolCallConcurrency` applies.
+   * This deliberately differs from the main loop, which resolves concurrency
+   * once at loop build from the active tool set (#15978): the durable workflow
+   * graph is built once and shared across runs, so anything per-run must be a
+   * resolver evaluated at execution time.
    */
   override buildIterationWorkflow() {
     const llmExecutionStep = this.llmExecutionStep();
@@ -339,6 +344,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // resume never reads before persisting.
           pruneSnapshot: pruneAgentLoopSnapshot,
           validateInputs: false,
+          // Deliberate divergence from the main loop (#21529): the workflow
+          // engine's own step events repeatedly serialized cumulative
+          // conversation state and paused the run between model steps.
+          // Agent-stream lifecycle chunks are unaffected — llm-execution emits
+          // step-start and llm-mapping emits the deferred step-finish straight
+          // to pubsub. Main's in-process loop workflow pays no serialization
+          // cost for engine step events, so it doesn't set this.
           emitStepEvents: false,
           sharePubsub: true,
           // Internal durable-agent execution plumbing — hide workflow spans;
@@ -708,6 +720,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // resume never reads before persisting.
           pruneSnapshot: pruneAgentLoopSnapshot,
           validateInputs: false,
+          // Engine step events off for the same reason as the iteration
+          // workflow (#21529) — see singleIterationWorkflow.
           emitStepEvents: false,
           // Internal durable-agent execution plumbing — see singleIterationWorkflow.
           tracingPolicy: {

@@ -244,6 +244,13 @@ async function processChunkThroughOutputProcessors(
  * - Tool approval: step suspends with approval payload
  * - In-execution suspension: tool calls suspend() callback, step suspends with suspension payload
  * - Message persistence: messages are flushed before any suspension
+ *
+ * Deliberate divergence from the main loop: main cannot pause its
+ * request-scoped loop, so pending client tools ride the finish payload for
+ * browser-side handling and results come back on a follow-up request (#21688
+ * family). Durable has first-class suspension — the whole workflow parks at
+ * this step and resumes with the decision/result — so none of main's
+ * pending-tool plumbing applies here.
  */
 export function createDurableToolCallStep() {
   return createStep({
@@ -290,6 +297,10 @@ export function createDurableToolCallStep() {
       };
 
       const resumeData = resumeDataFromArgs ?? workflowResumeData;
+      // Approval decisions are read from the serialized resume payload — never
+      // from live in-memory policy objects. Main's #20487 bug (a live
+      // `requireToolApproval` policy that didn't survive serialization let
+      // declined tools execute) cannot occur here by construction.
       const approvalDecision =
         workflowResumeData != null &&
         typeof workflowResumeData === 'object' &&
