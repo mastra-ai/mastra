@@ -725,6 +725,32 @@ describe('BackgroundTaskManager lifecycle', () => {
     mastra.__unregisterHooks();
   });
 
+  it('logs storage failures while draining instead of rejecting', async () => {
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const manager = new BackgroundTaskManager({ enabled: true });
+    manager.__registerMastra(mastra);
+    const error = new Error('storage failed');
+    vi.spyOn(manager, 'getStorage').mockResolvedValue({
+      getTask: async () => {
+        throw error;
+      },
+    } as any);
+    (manager as any).localPendingTaskIds.add('task-1');
+
+    try {
+      await expect((manager as any).drainPending()).resolves.toBeUndefined();
+
+      expect(warn).toHaveBeenCalledWith('background-task queue drain failed:', error);
+      expect((manager as any).localPendingTaskIds.has('task-1')).toBe(true);
+      expect((manager as any).drainingPending).toBe(false);
+    } finally {
+      await manager.shutdown();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('still restarts an explicitly restarted running task', async () => {
     const pubsub = new CapturingPubSub();
     const manager = new BackgroundTaskManager({ enabled: true });

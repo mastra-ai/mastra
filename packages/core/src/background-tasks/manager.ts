@@ -1602,6 +1602,8 @@ export class BackgroundTaskManager {
           return;
         }
       }
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn('background-task queue drain failed:', error as any);
     } finally {
       this.drainingPending = false;
     }
