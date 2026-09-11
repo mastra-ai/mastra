@@ -989,6 +989,76 @@ describe('prepareJsonSchemaForOpenAIStrictMode', () => {
     expect(out.additionalProperties).toBe(false);
   });
 
+  it('hoists non-object keywords (enum, const, items, anyOf) from allOf branches', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        status: { allOf: [{ type: 'string' }, { enum: ['open', 'closed'] }] },
+        fixed: { allOf: [{ const: 'x' }] },
+        list: { allOf: [{ type: 'array' }, { items: { type: 'string', minLength: 1 } }] },
+        union: { allOf: [{ anyOf: [{ type: 'string' }, { type: 'number' }] }] },
+      },
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(collectLeakedKeywords(out)).toEqual([]);
+    const props = out.properties as any;
+    expect(props.status).toMatchObject({ type: 'string', enum: ['open', 'closed'] });
+    expect(props.fixed).toMatchObject({ const: 'x' });
+    expect(props.list.type).toBe('array');
+    expect(props.list.items.description).toContain('minimum length 1');
+    expect(props.union.anyOf).toHaveLength(2);
+  });
+
+  it('accepts identical duplicate properties across allOf branches', () => {
+    const schema = {
+      allOf: [
+        { type: 'object', properties: { id: { type: 'string' }, a: { type: 'string' } } },
+        { type: 'object', properties: { id: { type: 'string' }, b: { type: 'number' } } },
+      ],
+    } as unknown as JSONSchema7;
+
+    const out = prepareJsonSchemaForOpenAIStrictMode(schema);
+    expect(Object.keys(out.properties as object).sort()).toEqual(['a', 'b', 'id']);
+    expect(out.required).toEqual(expect.arrayContaining(['a', 'b', 'id']));
+  });
+
+  it('rejects allOf branches that define the same property differently', () => {
+    const schema = {
+      allOf: [
+        { type: 'object', properties: { id: { type: 'string' } } },
+        { type: 'object', properties: { id: { type: 'number' } } },
+      ],
+    } as unknown as JSONSchema7;
+
+    expect(() => prepareJsonSchemaForOpenAIStrictMode(schema)).toThrow(/property "id" is defined differently/);
+  });
+
+  it('rejects allOf branches with conflicting scalar keywords', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        val: { allOf: [{ type: 'string' }, { type: 'number' }] },
+      },
+    } as unknown as JSONSchema7;
+
+    expect(() => prepareJsonSchemaForOpenAIStrictMode(schema)).toThrow(/conflicting "type" values/);
+  });
+
+  it('rejects a node that carries both anyOf and oneOf', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        val: {
+          anyOf: [{ type: 'string' }, { type: 'number' }],
+          oneOf: [{ type: 'string' }, { type: 'boolean' }],
+        },
+      },
+    } as unknown as JSONSchema7;
+
+    expect(() => prepareJsonSchemaForOpenAIStrictMode(schema)).toThrow(/"oneOf" and "anyOf" on the same node/);
+  });
+
   it('converts oneOf to anyOf and strips its branches', () => {
     const schema = {
       type: 'object',

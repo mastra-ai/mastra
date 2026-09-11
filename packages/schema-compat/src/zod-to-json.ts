@@ -270,11 +270,24 @@ const STRICT_MODE_DROPPED_KEYWORDS = [
   'dependentSchemas',
 ] as const;
 
+function isDeepEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * Merge `allOf` subschemas into the containing node. OpenAI strict mode rejects `allOf`
- * (only `anyOf` composition is supported), so the intersection is flattened: object
- * `properties`/`required` are combined and descriptions are concatenated. This preserves
- * the common Zod-intersection case (`allOf: [objectA, objectB]`) instead of dropping intent.
+ * (only `anyOf` composition is supported), so the intersection is flattened into a single
+ * node. Every keyword from every branch is hoisted so nothing (e.g. `enum`, `const`,
+ * `items`, `anyOf`) is silently discarded:
+ *
+ * - `properties` are unioned; a property present in more than one branch must be identical.
+ * - `required` is unioned. `additionalProperties: false` wins. Descriptions are concatenated.
+ * - Any other keyword must either be absent from the target or deep-equal to the branch value.
+ *
+ * Intersections that cannot be represented this way (conflicting property schemas, types,
+ * enums, nested `anyOf`, ...) are rejected with an error instead of producing a schema that
+ * accepts values the original would have rejected. This mirrors the tool-path behaviour in
+ * SchemaCompatLayer ("Cannot flatten intersections with overlapping keys").
  */
 function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, subschemas: JSONSchema7[]): void {
   const mergedProps: Record<string, JSONSchema7> = { ...((target.properties as Record<string, JSONSchema7>) ?? {}) };
@@ -286,22 +299,47 @@ function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, sub
     if (!sub || typeof sub !== 'object') {
       continue;
     }
-    if (sub.properties) {
-      Object.assign(mergedProps, sub.properties);
-    }
-    if (Array.isArray(sub.required)) {
-      for (const key of sub.required) {
-        requiredSet.add(key);
+    for (const [key, value] of Object.entries(sub as Record<string, unknown>)) {
+      switch (key) {
+        case 'properties': {
+          for (const [propName, propSchema] of Object.entries(value as Record<string, JSONSchema7>)) {
+            if (propName in mergedProps && !isDeepEqual(mergedProps[propName], propSchema)) {
+              throw new Error(
+                `Cannot flatten allOf for OpenAI strict mode: property "${propName}" is defined differently in multiple branches`,
+              );
+            }
+            mergedProps[propName] = propSchema;
+          }
+          break;
+        }
+        case 'required': {
+          if (Array.isArray(value)) {
+            for (const name of value) {
+              requiredSet.add(name);
+            }
+          }
+          break;
+        }
+        case 'additionalProperties': {
+          if (value === false) {
+            target.additionalProperties = false;
+          }
+          break;
+        }
+        case 'description': {
+          if (typeof value === 'string' && value) {
+            descriptions.push(value);
+          }
+          break;
+        }
+        default: {
+          if (target[key] === undefined) {
+            target[key] = value;
+          } else if (!isDeepEqual(target[key], value)) {
+            throw new Error(`Cannot flatten allOf for OpenAI strict mode: conflicting "${key}" values across branches`);
+          }
+        }
       }
-    }
-    if (sub.type && !target.type) {
-      target.type = sub.type;
-    }
-    if (sub.additionalProperties === false) {
-      target.additionalProperties = false;
-    }
-    if (typeof sub.description === 'string' && sub.description) {
-      descriptions.push(sub.description);
     }
   }
 
@@ -443,10 +481,16 @@ function stripUnsupportedStrictModeKeywords(schema: JSONSchema7): JSONSchema7 {
   }
 
   // oneOf is unsupported; anyOf is the documented replacement, so convert it.
+  // When both are present the schema is a conjunction (value must satisfy both lists);
+  // concatenating the branches would turn that into a union, so reject instead.
   if (result.oneOf && Array.isArray(result.oneOf)) {
-    const converted = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
+    if (Array.isArray(result.anyOf)) {
+      throw new Error(
+        'Cannot convert schema for OpenAI strict mode: "oneOf" and "anyOf" on the same node cannot be merged without changing semantics',
+      );
+    }
+    result.anyOf = result.oneOf.map(s => stripUnsupportedStrictModeKeywords(s as JSONSchema7));
     delete result.oneOf;
-    result.anyOf = Array.isArray(result.anyOf) ? [...result.anyOf, ...converted] : converted;
   }
 
   // allOf is unsupported; flatten the intersection into the containing node.
