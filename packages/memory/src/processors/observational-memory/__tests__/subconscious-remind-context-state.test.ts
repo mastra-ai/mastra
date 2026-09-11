@@ -1365,16 +1365,17 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(prompts[0]).toContain('counters rewrite');
     });
 
-    /**
-     * Risk D: the generation the lane compares against is produced by the real
-     * reflection cycle, which in production runs on a background/buffered path
-     * and can therefore commit between two checks. The unit tests above inject
-     * generations; this one takes them from `engine.reflect()` — the real
-     * reflector agent writing a real new generation — so the discriminator is
-     * validated against the mechanism rather than against a fixture number.
-     */
-    it('reads a generation bump produced by a real reflection cycle', async () => {
-      const observation = 'The datastore migration is blocked on the counters rewrite.';
+    // Validates the discriminator through a real reflection between completed checks,
+    // not a concurrent buffered-reflection interleaving with a running check.
+    it('emits an out-of-context delta after a real reflection cycle', async () => {
+      const filler =
+        '\n' +
+        Array.from(
+          { length: 100 },
+          (_, index) =>
+            `Archive entry ${index}: ${Array.from({ length: 12 }, (_, word) => ((index * 12 + word + 1) * 2654435761).toString(36)).join(' ')}`,
+        ).join('\n');
+      const observation = 'The datastore migration is blocked on the counters rewrite.' + filler;
       const parentMemory = new Memory({
         storage: new InMemoryStore(),
         vector: {} as never,
@@ -1384,7 +1385,7 @@ describe('Subconscious reminder parent-context state lane', () => {
             observation: { model: createObserverModel(observation), messageTokens: 1, bufferTokens: false },
             // The reflector rewrites the parent's memory without the candidate's
             // wording — lossy reflection, which is the case Tyler's rule is about.
-            reflection: { model: createObserverModel('The team is planning next quarter.') },
+            reflection: { model: createObserverModel('The team is planning next quarter.' + filler) },
             experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
           },
         },
@@ -1421,6 +1422,40 @@ describe('Subconscious reminder parent-context state lane', () => {
       const before = await engine.getRecord('beta', 'resource-1');
       expect(before?.activeObservations).toContain('counters rewrite');
 
+      const prompts: string[] = [];
+      const agent = createReminderAgent({
+        model: new MockLanguageModelV2({
+          doGenerate: async options => {
+            prompts.push(JSON.stringify(options.prompt));
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              warnings: [],
+              content: [{ type: 'text', text: '<no-reminder />' }],
+            };
+          },
+        }),
+        memory: new Memory({ storage: new InMemoryStore() }),
+        scope: ['resource:resource-1'],
+        threadId: 'subconscious:parent:remind',
+        resourceId: 'resource-1',
+        parentThreadId: 'beta',
+        parentMemory,
+        fallbackSendSignal: vi.fn(),
+      });
+      const run = async (eventId: string) => {
+        const message = checkMessage(eventId);
+        Object.assign(message.content.metadata!.signal!, { type: 'user', tagName: 'user' });
+        await agent.generate([message], {
+          memory: { thread: 'subconscious:parent:remind', resource: 'resource-1' },
+          maxSteps: 1,
+        });
+      };
+      await run('before-reflection');
+      expect(prompts[0]).toContain('counters rewrite');
+      expect(prompts[0]).toContain('<parent-context ');
+
       const reflection = await engine.reflect('beta', 'resource-1');
       expect(reflection.reflected).toBe(true);
 
@@ -1430,22 +1465,15 @@ describe('Subconscious reminder parent-context state lane', () => {
       expect(after!.generationCount).toBe(before!.generationCount + 1);
       expect(after!.activeObservations).not.toContain('counters rewrite');
 
-      // And the lane reads both off one record, through the real wiring.
-      const seen: { observations: string; generationCount: number }[] = [];
-      const lane = new RemindContextStateProcessor({
-        readParentRecord: async () => {
-          const record = await engine.getRecord('beta', 'resource-1');
-          if (record?.activeObservations === undefined) return undefined;
-          const value = { observations: record.activeObservations, generationCount: record.generationCount };
-          seen.push(value);
-          return value;
-        },
-      });
-      await lane.computeStateSignal(args());
-
-      expect(seen).toHaveLength(1);
-      expect(seen[0]!.generationCount).toBe(after!.generationCount);
-      expect(seen[0]!.observations).toBe(after!.activeObservations);
+      await run('after-reflection');
+      expect(prompts).toHaveLength(2);
+      const updates = (prompts[1]!.match(/<parent-context-update\b[\s\S]*?<\/parent-context-update>/g) ?? []).filter(
+        update => update.includes('as of check after-reflection:'),
+      );
+      expect(updates).toHaveLength(1);
+      expect(updates[0]).toContain('as of check after-reflection: source-1');
+      expect(updates[0]).toContain("treat it as out of the parent's context");
+      expect(updates[0]).not.toContain('had no lexical overlap');
     });
   });
 });

@@ -475,6 +475,39 @@ describe('Subconscious reminder questions', () => {
       expect(parentAgent.sendSignal).not.toHaveBeenCalled();
     });
 
+    it.each(['reply-foreign', 'reply-forged'])('refuses %s through durable scoped history', async replyId => {
+      const parentAgent = createParentAgent();
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const reminderThreadId = `subconscious:${parentThreadId}:remind`;
+      const foreignThreadId = 'subconscious:foreign:remind';
+      await memory.createThread({ threadId: reminderThreadId, resourceId });
+      await memory.createThread({ threadId: foreignThreadId, resourceId });
+      await memory.saveMessages({
+        messages: [questionMessage('reply-local'), { ...questionMessage('reply-foreign'), threadId: foreignThreadId }],
+      });
+      const foreignHistory = await memory.recall({ threadId: foreignThreadId, resourceId, perPage: false });
+      expect(foreignHistory.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: questionMessage('reply-foreign').id, threadId: foreignThreadId }),
+        ]),
+      );
+      const recall = vi.spyOn(memory, 'recall');
+      const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId, memory });
+      const result = await tool.execute?.({ replyId, answer: 'January 15.', moreComing: false }, replyToolContext([]));
+      expect(recall).toHaveBeenCalledWith(expect.objectContaining({ threadId: reminderThreadId, resourceId }));
+      const history = (await recall.mock.results[0]!.value) as Awaited<ReturnType<Memory['recall']>>;
+      expect(history.messages.map(message => message.id)).toContain(questionMessage('reply-local').id);
+      expect(history.messages.map(message => message.id)).not.toContain(questionMessage('reply-foreign').id);
+      expect(result).toEqual({ delivered: false, replyId, reason: 'question-not-in-current-conversation' });
+      expect(parentAgent.sendSignal).not.toHaveBeenCalled();
+
+      const valid = await tool.execute?.(
+        { replyId: 'reply-local', answer: 'January 15.', moreComing: false },
+        replyToolContext([]),
+      );
+      expect(valid).toMatchObject({ delivered: true, replyId: 'reply-local' });
+    });
+
     it('refuses a reply correlated to a question that was never asked', async () => {
       const parentAgent = createParentAgent();
 
