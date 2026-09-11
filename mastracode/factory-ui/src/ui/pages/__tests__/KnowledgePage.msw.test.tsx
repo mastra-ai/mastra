@@ -127,6 +127,26 @@ function stubKnowledgeRoute(
           ...(threadId ? [{ level: 'thread', id: threadId, available: true }] : []),
         ],
         defaultLevel: 'resource',
+        scopeNodes: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'mastra',
+            kind: 'org',
+            parentIds: [],
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            name: 'features',
+            kind: 'feature',
+            parentIds: ['11111111-1111-4111-8111-111111111111'],
+          },
+          {
+            id: '33333333-3333-4333-8333-333333333333',
+            name: 'memory',
+            kind: 'feature',
+            parentIds: ['22222222-2222-4222-8222-222222222222'],
+          },
+        ],
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
@@ -215,7 +235,7 @@ describe('KnowledgePage', () => {
     expect(subgraphReads).toBe(1);
   });
 
-  it('keeps the selected Knowledge key on scope, subgraph, activity, and detail requests', async () => {
+  it('never sends a Knowledge key — the server resolves the host-selected runtime', async () => {
     stubKnowledgeRoute();
     const requests: string[] = [];
     server.use(
@@ -244,23 +264,92 @@ describe('KnowledgePage', () => {
       }),
     );
     const user = userEvent.setup();
-    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team&scope=resource`);
+    // Even with a stale `knowledgeKey` in the URL, every request must omit it —
+    // request input can never select a Knowledge runtime.
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team&scope=resource`);
     fireEvent.click(await screen.findByText('Payments Service'));
-    await waitFor(() => expect(requests).toContain('node:team'));
+    await waitFor(() => expect(requests).toContain('node:null'));
     await user.click(screen.getByRole('tab', { name: 'activity' }));
-    await waitFor(() => expect(requests).toContain('activity:team'));
-    expect(requests).toContain('scopes:team');
-    expect(requests).toContain('subgraph:team:resource');
+    await waitFor(() => expect(requests).toContain('activity:null'));
+    expect(requests).toContain('scopes:null');
+    expect(requests).toContain('subgraph:null:resource');
+    expect(requests.every(entry => !entry.endsWith(':team') && !entry.endsWith(':second'))).toBe(true);
+  });
 
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=second&scope=resource`));
-    await waitFor(() => expect(requests).toContain('subgraph:second:resource'));
-    await screen.findByText('Payments Service');
-    expect(requests).not.toContain('node:second');
-    expect(
-      within(screen.getByRole('navigation', { name: 'Knowledge scope' })).queryByText('Payments Service'),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Payments Service'));
-    await waitFor(() => expect(requests).toContain('node:second'));
+  it('renders the reconciled structural scope tree and drills through scope members', async () => {
+    stubKnowledgeRoute();
+    const subgraphParams: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        const url = new URL(request.url);
+        const scopeNodeId = url.searchParams.get('scopeNodeId');
+        if (!scopeNodeId) return HttpResponse.json(graphFixture);
+        subgraphParams.push(scopeNodeId);
+        return HttpResponse.json({
+          ...graphFixture,
+          nodes: [
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              name: 'memory',
+              kind: 'feature',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              rung: 'resource' as const,
+              pinned: false,
+              recordCount: 0,
+              createdAt: '2026-08-13T00:00:00.000Z',
+              updatedAt: '2026-08-13T01:00:00.000Z',
+            },
+            {
+              id: '44444444-4444-4444-8444-444444444444',
+              name: 'observational',
+              kind: 'feature',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              rung: 'resource' as const,
+              pinned: false,
+              recordCount: 0,
+              createdAt: '2026-08-13T00:00:00.000Z',
+              updatedAt: '2026-08-13T01:00:00.000Z',
+            },
+          ],
+          edges: [
+            {
+              id: 'wikilink:memory:observational',
+              source: '33333333-3333-4333-8333-333333333333',
+              target: '44444444-4444-4444-8444-444444444444',
+              type: 'wikilink' as const,
+            },
+            {
+              id: 'wikilink:observational:memory',
+              source: '44444444-4444-4444-8444-444444444444',
+              target: '33333333-3333-4333-8333-333333333333',
+              type: 'wikilink' as const,
+            },
+          ],
+          records: [],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    // The reconciled hierarchy renders nested under the identity rungs.
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    expect(await within(scopes).findByRole('button', { name: 'mastra' })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: 'features' })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: 'memory' })).toBeInTheDocument();
+
+    // Selecting a structural scope fetches the bounded member subgraph by id.
+    await user.click(within(scopes).getByRole('button', { name: 'features' }));
+    expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
+    expect(await screen.findByText('observational')).toBeVisible();
+    await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
+    expect(subgraphParams.every(id => id !== '33333333-3333-4333-8333-333333333333')).toBe(true);
+
+    // Clicking a member scope node inside the structural lens drills down —
+    // no record flyout opens for structural members.
+    fireEvent.click(await screen.findByText('observational'));
+    await waitFor(() => expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {

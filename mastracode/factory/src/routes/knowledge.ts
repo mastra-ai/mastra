@@ -17,7 +17,13 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { KnowledgeNode, KnowledgeRecord, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
+import type {
+  KnowledgeNode,
+  KnowledgeRecord,
+  KnowledgeScope,
+  KnowledgeScopeNodeSummary,
+  KnowledgeStorage,
+} from '@mastra/core/storage';
 import {
   canonicalizeKnowledgeScope,
   isKnowledgeScopeVisible,
@@ -42,6 +48,13 @@ function truncateRecordText(text: string): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Visible events returned per activity window. */
+const ACTIVITY_LIMIT = 100;
+/** Events fetched per `listActivity` batch while filling the visible window. */
+const ACTIVITY_BATCH = 100;
+/** Hard scan cap so a huge hidden backlog cannot spin the request. */
+const ACTIVITY_SCAN_CAP = 1000;
+
 export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
 
 export interface KnowledgeScopeTreePayload {
@@ -51,6 +64,12 @@ export interface KnowledgeScopeTreePayload {
     available: boolean;
   }>;
   defaultLevel: 'resource';
+  /**
+   * Reconciled structural scope tree (isScope nodes with membership edges),
+   * e.g. `mastra → features → memory` and `repo:mastra → issues/prs`. Omitted
+   * only when the storage adapter does not expose structural scope nodes.
+   */
+  scopeNodes?: KnowledgeScopeNodeSummary[];
 }
 
 /** Window caps. Injectable at construction only — never per-request. */
@@ -70,7 +89,7 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Lazy handle to the knowledge storage domain; endpoints 503 when absent. */
   knowledge: (key: string) => Promise<KnowledgeStorage | undefined>;
-  /** Host-selected key used when the caller does not explicitly select another registered runtime. */
+  /** Host-selected Knowledge key. Requests cannot override it; endpoints 503 when it does not resolve. */
   defaultKnowledgeKey?: string;
   limits?: Partial<KnowledgeRouteLimits>;
 }
@@ -342,8 +361,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
     let store: KnowledgeStorage | undefined;
     try {
-      const key = c.req.query('knowledgeKey') ?? this.deps.defaultKnowledgeKey ?? 'default';
-      store = key.trim() ? await this.deps.knowledge(key) : undefined;
+      // Host-selected key only: an untrusted query parameter must never select
+      // another registered Knowledge runtime.
+      const key = this.deps.defaultKnowledgeKey ?? 'default';
+      store = await this.deps.knowledge(key);
     } catch {
       store = undefined;
     }
@@ -444,6 +465,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
+          // The structural tree comes from the reconciled scope nodes
+          // themselves — never synthesized from the identity rungs. Adapters
+          // without the structural read (MySQL/MongoDB) omit the tree.
+          let scopeNodes: KnowledgeScopeNodeSummary[] | undefined;
+          try {
+            scopeNodes = await view.store.listScopeNodes();
+          } catch {
+            scopeNodes = undefined;
+          }
           return c.json({
             roots: [
               { level: 'org', id: view.orgId, available: true },
@@ -451,6 +481,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...(view.threadId ? [{ level: 'thread' as const, id: view.threadId, available: true }] : []),
             ],
             defaultLevel: 'resource',
+            ...(scopeNodes ? { scopeNodes } : {}),
           } satisfies KnowledgeScopeTreePayload);
         },
       }),
@@ -460,6 +491,44 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;
+
+          // Structural lens: a reconciled scope node selected in the scope
+          // tree reads its direct members (child scopes and, later waves,
+          // content placed under structural scopes) instead of the identity
+          // rung window. Pins/wikilinks do not apply to structural members.
+          const scopeNodeId = loose(c).req.query('scopeNodeId');
+          if (scopeNodeId !== undefined) {
+            if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
+            const limits = this.#limits;
+            const fetched = await resolved.store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes + 1 });
+            const truncated = fetched.length > limits.maxNodes;
+            const members = fetched.slice(0, limits.maxNodes);
+            const payload: KnowledgeGraphPayload = {
+              view: resolved.view,
+              ...(resolved.threadId ? { threadId: resolved.threadId } : {}),
+              nodes: members.map(node => ({
+                id: node.id,
+                name: node.name,
+                kind: node.kind,
+                ...(node.description ? { description: node.description } : {}),
+                scope: node.scope,
+                rung: deepestRung(node.scope),
+                pinned: false,
+                recordCount: 0,
+                createdAt: node.createdAt.toISOString(),
+                updatedAt: node.updatedAt.toISOString(),
+              })),
+              edges: [],
+              records: [],
+              truncated,
+              outOfWindow: [],
+              unresolvedCapped: { count: 0, names: [] },
+              pinCensus: { resource: 0, thread: null },
+              version: null,
+            };
+            return c.json(payload);
+          }
+
           const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
           if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const { store, scope } = view;
@@ -668,34 +737,49 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
           if (!view) return c.json({ error: 'scope_not_found' }, 404);
-          const events = await view.store.listActivity({ scope: view.scope, limit: 100 });
+          const events = await this.#visibleActivity(view);
           return c.json({
-            events: await Promise.all(
-              events.map(async event => {
-                const recordVisible =
-                  event.recordType === 'node'
-                    ? Boolean(
-                        await view.store
-                          .getNode(event.recordId)
-                          .then(node => node && isKnowledgeScopeVisible(node.scope, view.scope)),
-                      )
-                    : Boolean(
-                        await view.store
-                          .getKnowledge({ id: event.recordId })
-                          .then(record => record && isKnowledgeScopeVisible(record.scope, view.scope)),
-                      );
-                return {
-                  id: event.id,
-                  action: event.action,
-                  recordType: event.recordType,
-                  scope: recordVisible ? event.scope : [],
-                  createdAt: event.createdAt.toISOString(),
-                };
-              }),
-            ),
+            events: events.map(event => ({
+              id: event.id,
+              action: event.action,
+              recordType: event.recordType,
+              scope: event.scope,
+              createdAt: event.createdAt.toISOString(),
+            })),
           });
         },
       }),
     ];
+  }
+
+  /**
+   * Newest-first activity window where EVERY returned event targets a record
+   * visible in the view. Visibility is decided BEFORE window shaping: hidden
+   * rows are skipped entirely (no action/type/id/time metadata leaks) and a
+   * hidden backlog can never displace visible events from the window.
+   */
+  async #visibleActivity(view: ResolvedView): Promise<KnowledgeActivityEvent[]> {
+    const out: KnowledgeActivityEvent[] = [];
+    let after: string | undefined;
+    let scanned = 0;
+    while (out.length < ACTIVITY_LIMIT && scanned < ACTIVITY_SCAN_CAP) {
+      const batch = await view.store.listActivity({ scope: view.scope, after, limit: ACTIVITY_BATCH });
+      if (batch.length === 0) break;
+      for (const event of batch) {
+        after = event.id;
+        scanned += 1;
+        const visible =
+          event.recordType === 'node'
+            ? await view.store
+                .getNode(event.recordId)
+                .then(node => Boolean(node && isKnowledgeScopeVisible(node.scope, view.scope)))
+            : await view.store
+                .getKnowledge({ id: event.recordId })
+                .then(record => Boolean(record && isKnowledgeScopeVisible(record.scope, view.scope)));
+        if (visible) out.push(event);
+        if (out.length >= ACTIVITY_LIMIT) break;
+      }
+    }
+    return out;
   }
 }

@@ -92,10 +92,71 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
             { level: 'resource', id: projectId, available: true },
           ],
           defaultLevel: 'resource',
+          // The reconciled structural tree rides along — identity rungs stay
+          // server-derived, scope nodes come from host reconciliation.
+          scopeNodes: [
+            { id: '11111111-1111-4111-8111-111111111111', name: 'mastra', kind: 'org', parentIds: [] },
+            {
+              id: '22222222-2222-4222-8222-222222222222',
+              name: 'features',
+              kind: 'feature',
+              description: 'Shipped Mastra features',
+              parentIds: ['11111111-1111-4111-8111-111111111111'],
+            },
+          ],
         },
       });
     }
-    if (url.pathname.endsWith('/knowledge/subgraph')) return route.fulfill({ json: graph });
+    if (url.pathname.endsWith('/knowledge/subgraph')) {
+      const scopeNodeId = url.searchParams.get('scopeNodeId');
+      if (scopeNodeId) {
+        return route.fulfill({
+          json: {
+            ...graph,
+            nodes: [
+              {
+                id: 'memory-scope',
+                name: 'memory',
+                kind: 'feature',
+                scope: ['org:proof', `resource:${projectId}`],
+                rung: 'resource',
+                pinned: false,
+                recordCount: 0,
+                createdAt: '2026-08-28T10:00:00.000Z',
+                updatedAt: '2026-08-28T10:00:00.000Z',
+              },
+              {
+                id: 'subconscious-scope',
+                name: 'subconscious',
+                kind: 'feature',
+                scope: ['org:proof', `resource:${projectId}`],
+                rung: 'resource',
+                pinned: false,
+                recordCount: 0,
+                createdAt: '2026-08-28T10:00:00.000Z',
+                updatedAt: '2026-08-28T10:00:00.000Z',
+              },
+            ],
+            edges: [
+              {
+                id: 'wikilink:memory:subconscious',
+                source: 'memory-scope',
+                target: 'subconscious-scope',
+                type: 'wikilink',
+              },
+              {
+                id: 'wikilink:subconscious:memory',
+                source: 'subconscious-scope',
+                target: 'memory-scope',
+                type: 'wikilink',
+              },
+            ],
+            records: [],
+          },
+        });
+      }
+      return route.fulfill({ json: graph });
+    }
     if (url.pathname.endsWith('/knowledge/activity')) {
       return route.fulfill({
         json: {
@@ -145,6 +206,19 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
 
   await page.getByRole('tab', { name: 'activity' }).click();
   await expect(page.getByText('knowledge-appended')).toBeVisible();
+
+  // Structural scopes render under the identity rungs and drive the bounded
+  // member subgraph by scope node id.
+  await page.getByRole('tab', { name: 'explore' }).click();
+  const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
+  await expect(scopeTree.getByRole('button', { name: 'mastra' })).toBeVisible();
+  await scopeTree.getByRole('button', { name: 'features' }).click();
+  await expect(page).toHaveURL(/scope=22222222-2222-4222-8222-222222222222/);
+  await expect(page.getByText('subconscious')).toBeVisible();
+
+  // Clicking a member scope drills down into it instead of opening a flyout.
+  await page.locator('.react-flow__node[data-id="subconscious-scope"]').dispatchEvent('click');
+  await expect(page).toHaveURL(/scope=subconscious-scope/);
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });
