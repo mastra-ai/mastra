@@ -366,6 +366,25 @@ describe('BackgroundTaskManager', () => {
       expect((await manager.getTask(bgTask.task.id))?.status).toBe('cancelled');
     });
 
+    it('stops waiting when the caller aborts', async () => {
+      const bgTask = createBackgroundTask(manager, {
+        toolName: 'tool',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'a1',
+        runId: 'run-1',
+        context: ctx(vi.fn(() => new Promise(() => {}))),
+      });
+      const abortController = new AbortController();
+
+      await bgTask.dispatch();
+      const waiting = bgTask.waitForCompletion({ abortSignal: abortController.signal });
+      abortController.abort(new Error('request aborted'));
+
+      await expect(waiting).rejects.toThrow('request aborted');
+      await bgTask.cancel();
+    });
+
     it('throws if cancel/wait called before dispatch', async () => {
       const bgTask = createBackgroundTask(manager, {
         toolName: 'tool',

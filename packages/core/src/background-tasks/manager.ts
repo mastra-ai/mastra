@@ -619,6 +619,7 @@ export class BackgroundTaskManager {
       timeoutMs?: number;
       onProgress?: (elapsedMs: number) => void;
       progressIntervalMs?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<BackgroundTask> {
     const storage = await this.getStorage();
@@ -635,28 +636,45 @@ export class BackgroundTaskManager {
 
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let progressInterval: ReturnType<typeof setInterval> | undefined;
+      let pollInterval: ReturnType<typeof setInterval> | undefined;
 
-      const timeout = options?.timeoutMs
+      const cleanup = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        if (timeout) clearTimeout(timeout);
+        if (progressInterval) clearInterval(progressInterval);
+        options?.abortSignal?.removeEventListener('abort', handleAbort);
+      };
+      const handleAbort = () => {
+        cleanup();
+        reject(options?.abortSignal?.reason ?? new Error('Background task wait aborted'));
+      };
+
+      if (options?.abortSignal?.aborted) {
+        handleAbort();
+        return;
+      }
+      options?.abortSignal?.addEventListener('abort', handleAbort, { once: true });
+
+      timeout = options?.timeoutMs
         ? setTimeout(() => {
-            clearInterval(pollInterval);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             reject(new Error('Timed out waiting for background task'));
           }, options.timeoutMs)
         : undefined;
 
-      const progressInterval = options?.onProgress
+      progressInterval = options?.onProgress
         ? setInterval(() => {
             options.onProgress!(Date.now() - startTime);
           }, options.progressIntervalMs ?? 3000)
         : undefined;
 
-      const pollInterval = setInterval(async () => {
+      pollInterval = setInterval(async () => {
         for (const id of taskIds) {
           const task = await storage.getTask(id);
           if (task && isTerminal(task.status)) {
-            clearInterval(pollInterval);
-            if (timeout) clearTimeout(timeout);
-            if (progressInterval) clearInterval(progressInterval);
+            cleanup();
             resolve(task);
             return;
           }

@@ -422,7 +422,9 @@ describe('createToolCallStep background task stream replay', () => {
     expect(result).toMatchObject({ result: { authoritative: true } });
     expect(backgroundTaskManager.registerTaskContext).toHaveBeenCalledWith('task-resumed-awaited', expect.any(Object));
     expect(backgroundTaskManager.resume).toHaveBeenCalledWith('task-resumed-awaited', { approved: true });
-    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], undefined);
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], {
+      abortSignal: undefined,
+    });
   });
 
   it.each([
@@ -523,7 +525,9 @@ describe('createToolCallStep background task stream replay', () => {
     );
 
     expect(result).toMatchObject({ result: { answer: 42, authoritative: true } });
-    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], undefined);
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], {
+      abortSignal: undefined,
+    });
     expect(tools['background-tool'].execute).toHaveBeenCalledOnce();
     expect(tools['background-tool'].onOutput).toHaveBeenCalledWith({
       toolCallId: 'call-awaited',
@@ -532,6 +536,59 @@ describe('createToolCallStep background task stream replay', () => {
       abortSignal: undefined,
     });
     expect(order).toEqual(['onOutput', 'reconciled', 'flushed', 'terminal']);
+  });
+
+  it('stops awaiting background work when the request is aborted', async () => {
+    const abortController = new AbortController();
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async () => ({ task: { id: 'task-aborted' }, fallbackToSync: false })),
+      waitForNextTask: vi.fn(
+        async (_taskIds: string[], waitOptions?: { abortSignal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            waitOptions?.abortSignal?.addEventListener('abort', () => reject(waitOptions.abortSignal?.reason), {
+              once: true,
+            });
+          }),
+      ),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': {
+          backgroundConfig: { enabled: true },
+          execute: vi.fn(),
+        },
+      },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      options: { abortSignal: abortController.signal },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const execution = toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-aborted',
+          toolName: 'background-tool',
+          args: { _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+    await vi.waitFor(() => expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledOnce());
+
+    abortController.abort(new Error('request aborted'));
+
+    await expect(execution).resolves.toMatchObject({ aborted: true });
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-aborted'], {
+      abortSignal: abortController.signal,
+    });
   });
 
   it('awaits failed background work until the failure is reconciled', async () => {

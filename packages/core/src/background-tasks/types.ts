@@ -464,5 +464,6 @@ export interface BackgroundTaskHandle {
   waitForCompletion(options?: {
     timeoutMs?: number;
     onProgress?: (elapsedMs: number) => void;
+    abortSignal?: AbortSignal;
   }): Promise<BackgroundTask>;
 }

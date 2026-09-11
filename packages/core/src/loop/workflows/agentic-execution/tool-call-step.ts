@@ -1394,7 +1394,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             });
 
             const awaitAuthoritativeBackgroundResult = async () => {
-              const completedTask = await bgTask.waitForCompletion();
+              const completedTask = await bgTask.waitForCompletion({ abortSignal: options?.abortSignal });
               if (completedTask.status !== 'completed') {
                 throw new Error(
                   completedTask.error?.message ??
