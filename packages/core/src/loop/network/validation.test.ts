@@ -144,6 +144,166 @@ describe('runCompletionScorers', () => {
       expect(ok?.errored).toBeFalsy();
       expect(ok?.score).toBe(0);
     });
+
+    it('preserves a null rejection as an explicit scorer failure', async () => {
+      const nullScorer = {
+        id: 'null-scorer',
+        name: 'Null Scorer',
+        run: vi.fn().mockRejectedValue(null),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([nullScorer], context);
+
+      expect(result.complete).toBe(false);
+      expect(result.scorers[0].passed).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+      expect(result.scorers[0].reason).toContain('Scorer threw an error');
+    });
+
+    it('preserves an undefined rejection as an explicit scorer failure', async () => {
+      const undefinedScorer = {
+        id: 'undefined-scorer',
+        name: 'Undefined Scorer',
+        run: vi.fn().mockRejectedValue(undefined),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([undefinedScorer], context);
+
+      expect(result.scorers[0].passed).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+    });
+
+    it('preserves the text of a string rejection', async () => {
+      const stringScorer = {
+        id: 'string-scorer',
+        name: 'String Scorer',
+        run: vi.fn().mockRejectedValue('boom happened'),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([stringScorer], context);
+
+      expect(result.scorers[0].passed).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+      expect(result.scorers[0].reason).toContain('boom happened');
+    });
+
+    it('preserves the message of a plain-object rejection', async () => {
+      const objectScorer = {
+        id: 'object-scorer',
+        name: 'Object Scorer',
+        run: vi.fn().mockRejectedValue({ message: 'plain object failure' }),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([objectScorer], context);
+
+      expect(result.scorers[0].passed).toBe(false);
+      expect(result.scorers[0].reason).toContain('plain object failure');
+    });
+
+    it('does not crash when a rejection has a throwing message getter', async () => {
+      const hostile = {};
+      Object.defineProperty(hostile, 'message', {
+        get() {
+          throw new Error('hostile getter');
+        },
+      });
+      const hostileScorer = {
+        id: 'hostile-scorer',
+        name: 'Hostile Scorer',
+        run: vi.fn().mockRejectedValue(hostile),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([hostileScorer], context);
+
+      expect(result.scorers[0].passed).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+    });
+  });
+
+  describe('timeout enforcement', () => {
+    it('returns promptly at the deadline instead of waiting for a slow passing scorer', async () => {
+      // Scorer resolves a PASS after 150ms; timeout is 10ms. Must not wait ~150ms
+      // and must not report complete:true from the late pass.
+      const slowPass = createMockScorer('slow-pass', 1, 'Passed', 150);
+      const context = createMockContext();
+
+      const start = Date.now();
+      const result = await runCompletionScorers([slowPass], context, { timeout: 10 });
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(100);
+      expect(result.timedOut).toBe(true);
+      expect(result.complete).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+      expect(result.scorers[0].passed).toBe(false);
+    });
+
+    it('resolves even when a scorer never settles', async () => {
+      const neverSettles = {
+        id: 'never',
+        name: 'Never Scorer',
+        run: vi.fn().mockImplementation(() => new Promise(() => {})),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([neverSettles], context, { timeout: 10 });
+
+      expect(result.timedOut).toBe(true);
+      expect(result.complete).toBe(false);
+      expect(result.scorers[0].errored).toBe(true);
+    });
+
+    it('does not let a late passing scorer flip the verdict in parallel mode', async () => {
+      const fastFail = createMockScorer('fast-fail', 0, 'Failed', 1);
+      const slowPass = createMockScorer('slow-pass', 1, 'Passed', 150);
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([fastFail, slowPass], context, {
+        strategy: 'any',
+        timeout: 20,
+      });
+
+      expect(result.timedOut).toBe(true);
+      expect(result.complete).toBe(false);
+    });
+
+    it('bounds an overrunning scorer in sequential mode', async () => {
+      const slowPass = createMockScorer('slow-pass', 1, 'Passed', 150);
+      const secondScorer = createMockScorer('second', 1, 'Passed');
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([slowPass, secondScorer], context, {
+        parallel: false,
+        timeout: 20,
+      });
+
+      expect(result.timedOut).toBe(true);
+      expect(result.complete).toBe(false);
+      // The second scorer must never run once the deadline is hit.
+      expect(secondScorer.run).not.toHaveBeenCalled();
+    });
+
+    it('clears the timeout timer after a successful run', async () => {
+      vi.useFakeTimers();
+      try {
+        const scorer = createMockScorer('fast', 1, 'Passed');
+        const context = createMockContext();
+
+        const promise = runCompletionScorers([scorer], context, { timeout: 600000 });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // No lingering default 10-minute timer should remain.
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('sequential execution', () => {
