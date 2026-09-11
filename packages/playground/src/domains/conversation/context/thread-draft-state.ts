@@ -31,16 +31,16 @@ interface DraftState {
   subscribe: (listener: () => void) => () => void;
   move: (to: string) => Promise<void>;
   discardUnreadable: () => Promise<void>;
-  signedOut: (version: string) => void;
+  signedOut: () => void;
 }
 const EMPTY_DRAFT: ThreadDraft = { text: '', attachments: [] };
 const PERSISTED = Symbol('persisted-draft');
 // Keep mounted, pending, and unsaved drafts so navigation cannot discard edits after a storage failure.
 const activeDrafts = new Map<string, DraftState>();
 let signoutChannel: BroadcastChannel | undefined;
-const forgetUserDrafts = (scope: string, version: string) => {
+const forgetUserDrafts = (scope: string) => {
   for (const [key, state] of activeDrafts) {
-    if (getDraftUserScope(key) === scope) state.signedOut(version);
+    if (getDraftUserScope(key) === scope) state.signedOut();
   }
 };
 function listenForSignouts() {
@@ -53,13 +53,13 @@ function listenForSignouts() {
   }
   signoutChannel.onmessage = ({ data }) => {
     if (data && typeof data.scope === 'string' && typeof data.version === 'string') {
-      forgetUserDrafts(data.scope, data.version);
+      forgetUserDrafts(data.scope);
     }
   };
 }
 export async function clearDraftsOnLogout(scope: string) {
   const version = await clearUserThreadDrafts(scope);
-  forgetUserDrafts(scope, version);
+  forgetUserDrafts(scope);
   listenForSignouts();
   signoutChannel?.postMessage({ scope, version });
 }
@@ -218,9 +218,8 @@ function createState(initialKey?: string): DraftState {
         release();
       };
     },
-    signedOut(version) {
-      if (logoutVersion !== version) forget();
-    },
+    // Reading a sign-out version from storage does not establish a new authenticated session.
+    signedOut: forget,
     async discardUnreadable() {
       const key = unreadableKey;
       if (forgotten || key === undefined) return;
