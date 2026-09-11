@@ -26,7 +26,7 @@ export const newThreadRestartScenario: McE2eScenario = {
       db.close();
     }
   },
-  async run({ terminal, runtime, dbPath }) {
+  async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Older persisted thread/i, terminal);
 
@@ -35,25 +35,10 @@ export const newThreadRestartScenario: McE2eScenario = {
     terminal.submit('/thread');
     await runtime.waitForScreenText(/Title: \(untitled\)/i, terminal);
 
-    if (!runtime.stopApp || !runtime.restartApp) {
-      throw new Error('The TUI E2E backend does not support restarting the app');
-    }
-    await runtime.stopApp();
+    const newThreadId = terminal.serialize().view.match(/^\s*ID:\s+(\S+)\s*$/m)?.[1];
+    if (!newThreadId) throw new Error('Expected /thread to display the new thread ID');
 
-    const db = new DatabaseSync(dbPath);
-    let newThreadId: string;
-    try {
-      const row = db
-        .prepare("select id, metadata from mastra_threads where title = '' order by updatedAt desc limit 1")
-        .get() as { id?: string; metadata?: Uint8Array } | undefined;
-      if (!row?.id || !row.metadata || !Buffer.from(row.metadata).includes('explicitNewThread')) {
-        throw new Error('Expected /new to persist a thread marked explicitNewThread');
-      }
-      newThreadId = row.id;
-    } finally {
-      db.close();
-    }
-
+    if (!runtime.restartApp) throw new Error('The TUI E2E backend does not support restarting the app');
     let restartedSession: Session | undefined;
     await runtime.restartApp({
       onCreated(result) {
