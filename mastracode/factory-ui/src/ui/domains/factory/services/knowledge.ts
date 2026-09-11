@@ -11,6 +11,15 @@ import { requestJson } from './request';
 
 export type KnowledgeRung = 'org' | 'resource' | 'thread';
 
+/** A reconciled structural scope node from the server's scope tree. */
+export interface KnowledgeScopeNode {
+  id: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  parentIds: string[];
+}
+
 export interface KnowledgeScopeTreePayload {
   roots: Array<{
     level: KnowledgeRung;
@@ -18,7 +27,17 @@ export interface KnowledgeScopeTreePayload {
     available: boolean;
   }>;
   defaultLevel: 'resource';
+  /** Reconciled structural scope tree (omitted when the adapter lacks it). */
+  scopeNodes?: KnowledgeScopeNode[];
 }
+
+/**
+ * What the explore view reads: an identity rung (org/resource/thread) or one
+ * reconciled structural scope node by id.
+ */
+export type KnowledgeSelection =
+  | { scopeLevel: KnowledgeRung; scopeNodeId?: never }
+  | { scopeNodeId: string; scopeLevel?: never };
 
 export interface KnowledgeGraphNode {
   id: string;
@@ -117,11 +136,14 @@ function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function knowledgeQuery(knowledgeKey: string, threadId: string | undefined, scopeLevel?: KnowledgeRung): string {
-  const query = new URLSearchParams({ knowledgeKey });
+// The Knowledge runtime is host-selected; requests carry no key override.
+function knowledgeQuery(threadId: string | undefined, selection?: KnowledgeSelection): string {
+  const query = new URLSearchParams();
   if (threadId) query.set('threadId', threadId);
-  if (scopeLevel) query.set('scopeLevel', scopeLevel);
-  return `?${query}`;
+  if (selection?.scopeLevel) query.set('scopeLevel', selection.scopeLevel);
+  if (selection?.scopeNodeId) query.set('scopeNodeId', selection.scopeNodeId);
+  const text = query.toString();
+  return text ? `?${text}` : '';
 }
 
 export async function fetchKnowledgeScopes(
@@ -129,10 +151,9 @@ export async function fetchKnowledgeScopes(
   factoryProjectId: string,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeScopeTreePayload> {
   return requestJson<KnowledgeScopeTreePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery(knowledgeKey, threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery(threadId)}`,
     { signal },
   );
 }
@@ -140,13 +161,12 @@ export async function fetchKnowledgeScopes(
 export async function fetchKnowledgeGraph(
   baseUrl: string,
   factoryProjectId: string,
-  scopeLevel: KnowledgeRung,
+  selection: KnowledgeSelection,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeGraphPayload> {
   return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/subgraph${knowledgeQuery(threadId, selection)}`,
     { signal },
   );
 }
@@ -157,10 +177,9 @@ export async function fetchKnowledgeActivity(
   scopeLevel: KnowledgeRung,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(threadId, { scopeLevel })}`,
     { signal },
   );
 }
@@ -169,13 +188,12 @@ export async function fetchKnowledgeNode(
   baseUrl: string,
   factoryProjectId: string,
   nodeId: string,
-  scopeLevel: KnowledgeRung,
+  selection: KnowledgeSelection,
   threadId?: string,
   signal?: AbortSignal,
-  knowledgeKey = 'default',
 ): Promise<KnowledgeNodePayload> {
   return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery(knowledgeKey, threadId, scopeLevel)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${knowledgeQuery(threadId, selection)}`,
     { signal },
   );
 }
