@@ -78,7 +78,9 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
   ObservabilityStorageStrategy,
+  QueryThreadsResult,
   TraceQueryResponse,
+  TrustedThreadQueryPlan,
   TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
@@ -209,10 +211,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs', 'trace-query'] as const;
+      return ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query'] as const;
   }
 
   // Tracing
@@ -245,6 +247,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
+  }
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    return traceQueryOps.queryThreads(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     if (args.mode === 'delta') {

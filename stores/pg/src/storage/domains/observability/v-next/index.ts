@@ -104,9 +104,11 @@ import type {
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
   TraceQueryResponse,
+  TrustedThreadQueryPlan,
   TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
@@ -348,8 +350,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query'] as const;
-    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
+    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query'] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -420,6 +422,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
       traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    return this.#run('QUERY_THREADS', () =>
+      traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

@@ -1,5 +1,6 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  QueryThreadsResult,
   TraceQueryCanonicalField,
   TraceQueryFeedbackField,
   TraceQueryField,
@@ -7,6 +8,8 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedThreadPredicate,
+  TrustedThreadQueryPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -17,6 +20,11 @@ import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_E
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
+type RelatedCollection = 'spans' | 'scores' | 'feedback';
+type TraceSelection = {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+};
 
 const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
@@ -234,8 +242,8 @@ function latestFeedbackPredicate(feedbackTable: string): string {
 
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores' | 'feedback'>(),
-): Set<'spans' | 'scores' | 'feedback'> {
+  collections = new Set<RelatedCollection>(),
+): Set<RelatedCollection> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -243,6 +251,21 @@ function collectRelationCollections(
     for (const arg of predicate.args) collectRelationCollections(arg, collections);
   } else if (predicate.type === 'not') {
     collectRelationCollections(predicate.arg, collections);
+  }
+  return collections;
+}
+
+function collectThreadRelationCollections(
+  predicate: TrustedThreadPredicate | undefined,
+  collections: Set<RelatedCollection>,
+): Set<RelatedCollection> {
+  if (!predicate) return collections;
+  if (predicate.type === 'relation') {
+    collectRelationCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectThreadRelationCollections(arg, collections);
+  } else {
+    collectThreadRelationCollections(predicate.arg, collections);
   }
   return collections;
 }
@@ -293,17 +316,48 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset
   return compileScalarPredicate(predicate, TRACE_FIELDS, parameterOffset, true);
 }
 
+function compileThreadPredicate(predicate: TrustedThreadPredicate, parameterOffset: number): SqlFragment {
+  if (predicate.type === 'relation') {
+    const compiled = compilePredicate(predicate.predicate, parameterOffset);
+    const existence = `EXISTS (
+      SELECT 1 FROM eligible_roots r
+      WHERE r."threadId" = t."threadId"
+        AND (${compiled.sql})
+    )`;
+    return {
+      sql: predicate.quantifier === 'some' ? existence : `NOT ${existence}`,
+      values: compiled.values,
+    };
+  }
+
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileThreadPredicate(arg, parameterOffset + values.length);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+
+  const compiled = compileThreadPredicate(predicate.arg, parameterOffset);
+  return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+}
+
 export interface CompiledPostgresTraceQuery {
   text: string;
   values: unknown[];
 }
 
-export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQueryPlan): CompiledPostgresTraceQuery {
+function compilePostgresTraceScope(
+  schema: string,
+  selection: TraceSelection,
+  relationCollections: Set<RelatedCollection>,
+): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
   const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
-  const relationCollections = collectRelationCollections(plan.where);
+  const values: unknown[] = [selection.timeRange.from, selection.timeRange.to];
   const rootConditions = [
     `r."parentSpanId" IS NULL`,
     latestRootPredicate(spanTable),
@@ -389,6 +443,13 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   )`);
   }
 
+  return { ctes, values };
+}
+
+export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQueryPlan): CompiledPostgresTraceQuery {
+  const relationCollections = collectRelationCollections(plan.where);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections);
+
   let predicateSql = 'TRUE';
   if (plan.where) {
     const predicate = compilePredicate(plan.where, values.length + 1);
@@ -436,6 +497,56 @@ SELECT *
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, "traceId" ASC
+LIMIT $${values.length}`,
+    values,
+  };
+}
+
+export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQueryPlan): CompiledPostgresTraceQuery {
+  const relationCollections = collectRelationCollections(plan.traces.where);
+  collectThreadRelationCollections(plan.where, relationCollections);
+  const { ctes, values } = compilePostgresTraceScope(schema, plan.traces, relationCollections);
+
+  let eligibilitySql = 'TRUE';
+  if (plan.traces.where) {
+    const eligibility = compilePredicate(plan.traces.where, values.length + 1);
+    eligibilitySql = eligibility.sql;
+    values.push(...eligibility.values);
+  }
+  ctes.push(`eligible_roots AS MATERIALIZED (
+    SELECT *
+    FROM root_scope r
+    WHERE ${eligibilitySql}
+  )`);
+  ctes.push(`thread_ids AS (
+    SELECT "threadId"
+    FROM eligible_roots
+    WHERE "threadId" IS NOT NULL
+    GROUP BY "threadId"
+  )`);
+
+  let threadPredicateSql = 'TRUE';
+  if (plan.where) {
+    const predicate = compileThreadPredicate(plan.where, values.length + 1);
+    threadPredicateSql = predicate.sql;
+    values.push(...predicate.values);
+  }
+  ctes.push(`qualified_threads AS (
+    SELECT t."threadId"
+    FROM thread_ids t
+    WHERE ${threadPredicateSql}
+  )`);
+
+  const pageCondition = plan.cursor ? `WHERE "threadId" > $${values.length + 1}` : '';
+  if (plan.cursor) values.push(plan.cursor.threadId);
+  values.push(plan.limit + 1);
+
+  return {
+    text: `WITH ${ctes.join(',\n')}
+SELECT "threadId"
+FROM qualified_threads
+${pageCondition}
+ORDER BY "threadId" ASC
 LIMIT $${values.length}`,
     values,
   };
@@ -518,6 +629,29 @@ export async function queryTraces(
               sortValue: last[plan.orderBy.field],
               traceId: last.traceId,
             })
+          : null,
+    },
+  });
+}
+
+export async function queryThreads(
+  client: DbClient,
+  schema: string,
+  plan: TrustedThreadQueryPlan,
+  timeoutMs: number,
+): Promise<QueryThreadsResult> {
+  const query = compilePostgresThreadQuery(schema, plan);
+  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
+    transaction.any<Record<string, unknown>>(query.text, query.values),
+  );
+  const threads = rows.slice(0, plan.limit).map(row => ({ threadId: String(row.threadId) }));
+  const last = threads.at(-1);
+  return coreStorage.queryThreadsResultSchema.parse({
+    threads,
+    page: {
+      next:
+        rows.length > plan.limit && last
+          ? coreStorage.encodeTraceQueryCursor(plan, { result: 'threads', threadId: last.threadId })
           : null,
     },
   });

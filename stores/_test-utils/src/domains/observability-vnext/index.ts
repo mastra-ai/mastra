@@ -2,7 +2,7 @@ export * from './trace-query';
 
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import { parseQueryThreadsInput, parseTraceQueryRequest, planThreadQuery, planTraceQuery } from '@mastra/core/storage';
 import type {
   CreateFeedbackRecord,
   CreateSpanRecord,
@@ -13,11 +13,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
 import {
   normalizeTraceQueryResponse,
+  THREAD_QUERY_CONFORMANCE_CASES,
+  THREAD_QUERY_FIXTURE_DATA,
   TRACE_QUERY_CONFORMANCE_CASES,
   TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS,
   TRACE_QUERY_FIXTURE_DATA,
   TRACE_QUERY_ORDINAL_FIXTURE_DATA,
 } from './trace-query';
+import type { TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -33,6 +36,8 @@ export interface ObservabilityVNextCapabilities {
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
   /** Whether this adapter implements the advanced trusted trace-query plan. */
   traceQuery?: boolean;
+  /** Whether this adapter implements the trusted thread-query plan. */
+  threadQuery?: boolean;
   /**
    * The span write model used to seed trace-query conformance fixtures. Completion-only
    * adapters receive only completed span records. Score and feedback history is always
@@ -90,10 +95,17 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
-function completionOnlyTraceQueryFixture() {
-  const roots = new Map<string | null, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
-  const spans = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
-  for (const span of TRACE_QUERY_FIXTURE_DATA.spans) {
+function traceQueryFixtureForWriteModel(
+  data: TraceQueryFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  if (writeModel !== 'completion-only') {
+    return { spans: data.spans, relatedSpans: [], scores: data.scores, feedback: data.feedback };
+  }
+
+  const roots = new Map<string | null, TraceQueryFixtureData['spans'][number]>();
+  const spans = new Map<string, TraceQueryFixtureData['spans'][number]>();
+  for (const span of data.spans) {
     if (span.parentSpanId === null) {
       roots.set(span.traceId, span);
     } else {
@@ -104,9 +116,86 @@ function completionOnlyTraceQueryFixture() {
   return {
     spans: [...roots.values()].filter(root => !root.isPending),
     relatedSpans: [...spans.values()],
-    scores: TRACE_QUERY_FIXTURE_DATA.scores,
-    feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
+    scores: data.scores,
+    feedback: data.feedback,
   };
+}
+
+async function writeTraceQueryFixture(
+  storage: ObservabilityStorage,
+  data: TraceQueryFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  const fixture = traceQueryFixtureForWriteModel(data, writeModel);
+  const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
+    .filter(span => span.traceId !== null)
+    .map(span => ({
+      traceId: span.traceId!,
+      spanId: span.spanId,
+      parentSpanId: span.parentSpanId,
+      name: span.name,
+      spanType: span.spanType as SpanType,
+      isEvent: false,
+      startedAt: new Date(span.startedAt),
+      endedAt: span.endedAt ? new Date(span.endedAt) : null,
+      threadId: span.threadId,
+      resourceId: span.resourceId,
+      entityType: span.entityType as EntityType,
+      entityId: span.entityId,
+      entityName: span.entityName,
+      entityVersionId: span.entityVersionId,
+      parentEntityVersionId: span.parentEntityVersionId,
+      rootEntityVersionId: span.rootEntityVersionId,
+      environment: span.environment,
+      attributes: span.attributes,
+      metadata: span.metadata,
+      error: span.error as CreateSpanRecord['error'],
+    }));
+  for (const span of records) await storage.createSpan({ span });
+
+  const scores = fixture.scores
+    .filter(score => score.score !== null)
+    .map(score => {
+      const timestamp = new Date(score.timestamp);
+      return {
+        id: score.scoreId,
+        scoreId: score.scoreId,
+        traceId: score.traceId,
+        spanId: score.spanId,
+        scorerId: score.scorerId,
+        scorerVersion: score.scorerVersion,
+        scoreSource: score.scoreSource,
+        score: score.score!,
+        entityVersionId: score.entityVersionId,
+        parentEntityVersionId: score.parentEntityVersionId,
+        rootEntityVersionId: score.rootEntityVersionId,
+        timestamp,
+        createdAt: timestamp,
+        updatedAt: null,
+      };
+    });
+  for (const score of scores) await storage.createScore({ score });
+
+  for (const feedback of fixture.feedback) {
+    await storage.createFeedback({
+      feedback: {
+        feedbackId: feedback.feedbackId,
+        traceId: feedback.traceId,
+        spanId: null,
+        timestamp: new Date(feedback.timestamp),
+        feedbackType: feedback.feedbackType,
+        feedbackSource: feedback.feedbackSource,
+        feedbackUserId: feedback.feedbackUserId,
+        sourceId: feedback.sourceId,
+        value: feedback.value,
+        comment: feedback.comment,
+        entityVersionId: feedback.entityVersionId,
+        parentEntityVersionId: feedback.parentEntityVersionId,
+        rootEntityVersionId: feedback.rootEntityVersionId,
+        metadata: null,
+      },
+    });
+  }
 }
 
 async function waitFor<T>(
@@ -150,84 +239,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
 
     if (capabilities.traceQuery) {
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
-        const fixture =
-          capabilities.traceQuerySpanWriteModel === 'completion-only'
-            ? completionOnlyTraceQueryFixture()
-            : {
-                spans: TRACE_QUERY_FIXTURE_DATA.spans,
-                relatedSpans: [],
-                scores: TRACE_QUERY_FIXTURE_DATA.scores,
-                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
-              };
-        const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
-          .filter(span => span.traceId !== null)
-          .map(span => ({
-            traceId: span.traceId!,
-            spanId: span.spanId,
-            parentSpanId: span.parentSpanId,
-            name: span.name,
-            spanType: span.spanType as SpanType,
-            isEvent: false,
-            startedAt: new Date(span.startedAt),
-            endedAt: span.endedAt ? new Date(span.endedAt) : null,
-            threadId: span.threadId,
-            resourceId: span.resourceId,
-            entityType: span.entityType as EntityType,
-            entityId: span.entityId,
-            entityName: span.entityName,
-            entityVersionId: span.entityVersionId,
-            parentEntityVersionId: span.parentEntityVersionId,
-            rootEntityVersionId: span.rootEntityVersionId,
-            environment: span.environment,
-            attributes: span.attributes,
-            metadata: span.metadata,
-            error: span.error as CreateSpanRecord['error'],
-          }));
-        for (const span of records) await storage.createSpan({ span });
-
-        const scores = fixture.scores
-          .filter(score => score.score !== null)
-          .map(score => {
-            const timestamp = new Date(score.timestamp);
-            return {
-              id: score.scoreId,
-              scoreId: score.scoreId,
-              traceId: score.traceId,
-              spanId: score.spanId,
-              scorerId: score.scorerId,
-              scorerVersion: score.scorerVersion,
-              scoreSource: score.scoreSource,
-              score: score.score!,
-              entityVersionId: score.entityVersionId,
-              parentEntityVersionId: score.parentEntityVersionId,
-              rootEntityVersionId: score.rootEntityVersionId,
-              timestamp,
-              createdAt: timestamp,
-              updatedAt: null,
-            };
-          });
-        for (const score of scores) await storage.createScore({ score });
-
-        for (const feedback of fixture.feedback) {
-          await storage.createFeedback({
-            feedback: {
-              feedbackId: feedback.feedbackId,
-              traceId: feedback.traceId,
-              spanId: null,
-              timestamp: new Date(feedback.timestamp),
-              feedbackType: feedback.feedbackType,
-              feedbackSource: feedback.feedbackSource,
-              feedbackUserId: feedback.feedbackUserId,
-              sourceId: feedback.sourceId,
-              value: feedback.value,
-              comment: feedback.comment,
-              entityVersionId: feedback.entityVersionId,
-              parentEntityVersionId: feedback.parentEntityVersionId,
-              rootEntityVersionId: feedback.rootEntityVersionId,
-              metadata: null,
-            },
-          });
-        }
+        await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
           if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
@@ -367,6 +379,58 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expected,
         );
         await expect(collectPages({ timeRange, group: { by: ['threadId'] } })).resolves.toEqual(expected);
+      });
+    }
+
+    if (capabilities.threadQuery) {
+      it('matches the shared thread-query conformance cases without merge assistance', async () => {
+        await writeTraceQueryFixture(storage, THREAD_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+        for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
+          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request));
+          const response = await storage.queryThreads(plan);
+          expect(response.threads, testCase.name).toEqual(testCase.expected);
+        }
+
+        const threadIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const pagePlan = planThreadQuery(
+            parseQueryThreadsInput({
+              traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryThreads(pagePlan);
+          threadIds.push(...response.threads.map(thread => thread.threadId));
+          after = response.page.next ?? undefined;
+        } while (after);
+        expect(threadIds).toEqual(['thread-1', 'thread-2']);
+        expect(new Set(threadIds).size).toBe(threadIds.length);
+      });
+
+      it('paginates mixed-case and non-ASCII thread IDs in ordinal order', async () => {
+        await writeTraceQueryFixture(storage, TRACE_QUERY_ORDINAL_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+
+        const threadIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const plan = planThreadQuery(
+            parseQueryThreadsInput({
+              traces: { timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryThreads(plan);
+          threadIds.push(...response.threads.map(thread => thread.threadId));
+          after = response.page.next ?? undefined;
+        } while (after);
+
+        expect(threadIds).toEqual(['A', 'a', 'é', 'Ω']);
+        expect(new Set(threadIds).size).toBe(threadIds.length);
       });
     }
 
