@@ -60,8 +60,8 @@ export function sandboxToModelOutput(output: unknown): unknown {
  */
 export function applyTail(output: string, tail: number | null | undefined): string {
   if (!output) return output;
-  const n = Math.abs(tail ?? DEFAULT_TAIL_LINES);
-  if (n === 0) return output; // 0 = no limit
+  const n = Math.floor(Math.abs(tail ?? DEFAULT_TAIL_LINES));
+  if (n === 0) return output; // 0 = no limit (also covers |tail| < 1)
   // Strip trailing newline before splitting so it doesn't count as a line
   const trailingNewline = output.endsWith('\n');
   const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
