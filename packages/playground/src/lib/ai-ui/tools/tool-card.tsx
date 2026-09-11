@@ -1,5 +1,7 @@
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { ChatAgentContext, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { AskUserTool } from '@mastra/playground-ui/domains/chat/tools/ask-user-tool';
+import { CodeModeBadge } from '@mastra/playground-ui/domains/chat/tools/badges/code-mode-badge';
 import {
   badgeStatus,
   codeModeCall,
@@ -10,9 +12,7 @@ import {
   toolInteraction,
 } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import { useCallback, useContext } from 'react';
-import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { CodeModeBadge } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';

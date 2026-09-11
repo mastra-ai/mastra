@@ -1,14 +1,14 @@
-import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badge-wrapper';
-import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
-import type { CodeModeResult } from '@mastra/playground-ui/domains/chat/tools/code-mode';
-import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
-import { formatTypeScript } from '@mastra/playground-ui/utils/formatting';
 import { useEffect, useState } from 'react';
+import { BadgeWrapper } from '../../components/badge-wrapper';
+import { SectionLabel } from '../../components/section-label';
+import type { MessageMetadata } from '../../messages/message-metadata';
+import type { CodeModeResult } from '../code-mode';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import { CodeBlock } from '@/ds/components/CodeBlock';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
+import { formatTypeScript } from '@/utils/formatting';
 
 export interface CodeModeBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
@@ -30,7 +30,8 @@ export const CodeModeBadge = ({
 }: CodeModeBadgeProps) => {
   const logs = result?.logs ?? [];
   const error = result?.error;
-  const hasResultValue = result !== undefined && result.result !== undefined;
+  const resultValue = result?.result;
+  const hasResultValue = resultValue !== undefined;
 
   const toolCalled = toolCalledProp ?? result !== undefined;
 
@@ -84,15 +85,15 @@ export const CodeModeBadge = ({
         {hasResultValue && (
           <div>
             <SectionLabel>Result</SectionLabel>
-            {typeof result!.result === 'string' ? (
+            {typeof resultValue === 'string' ? (
               <pre
                 className="bg-surface4 max-h-60 overflow-auto rounded-md px-3 py-2 font-mono text-xs leading-normal break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
               >
-                {result!.result as string}
+                {resultValue}
               </pre>
             ) : (
-              <CodeEditor data={result!.result as Record<string, unknown>} data-testid="code-mode-result" />
+              <CodeEditor data={resultValue as Record<string, unknown>} data-testid="code-mode-result" />
             )}
           </div>
         )}

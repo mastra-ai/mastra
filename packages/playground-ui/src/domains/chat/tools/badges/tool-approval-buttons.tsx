@@ -1,8 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
-import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, X } from 'lucide-react';
+import { SectionLabel } from '../../components/section-label';
+import { useToolCall } from '../../context/tool-call-context';
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons/Icon';
 
 export interface ToolApprovalButtonsProps {
   toolCallId: string;
