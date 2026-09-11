@@ -1,8 +1,8 @@
 'use client';
 
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { cn } from '@/utils/cn';
 
 // Priority emoji to color mapping
 // P1 (🔴) = highest priority = purple theme
@@ -97,7 +97,7 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
     return {
       priority: (priority as Priority) || null,
       time: time || null,
-      content: content.trim(),
+      content: (content ?? '').trim(),
       children: [],
       isNested,
     };
@@ -128,18 +128,18 @@ function parseObservations(raw: string): ParsedObservations {
   // Extract current-task if present
   const currentTaskMatch = raw.match(/<current-task>\s*([\s\S]*?)\s*<\/current-task>/);
   if (currentTaskMatch) {
-    result.currentTask = currentTaskMatch[1].trim();
+    result.currentTask = (currentTaskMatch[1] ?? '').trim();
   }
 
   // Extract suggested-response if present
   const suggestedMatch = raw.match(/<suggested-response>\s*([\s\S]*?)\s*<\/suggested-response>/);
   if (suggestedMatch) {
-    result.suggestedResponse = suggestedMatch[1].trim();
+    result.suggestedResponse = (suggestedMatch[1] ?? '').trim();
   }
 
   // Extract observations content
   const observationsMatch = raw.match(/<observations>\s*([\s\S]*?)\s*<\/observations>/);
-  const observationsContent = observationsMatch ? observationsMatch[1] : raw;
+  const observationsContent = observationsMatch?.[1] ?? raw;
 
   // Split by thread headers if present
   const threadSections = observationsContent.split(/(?=Thread [a-f0-9]+:)/i);
@@ -150,7 +150,7 @@ function parseObservations(raw: string): ParsedObservations {
 
     // Check for thread header
     const threadMatch = trimmedSection.match(/^Thread ([a-f0-9]+):/i);
-    const threadId = threadMatch ? threadMatch[1] : 'default';
+    const threadId = threadMatch?.[1] ?? 'default';
     const content = threadMatch ? trimmedSection.replace(/^Thread [a-f0-9]+:\s*/i, '') : trimmedSection;
 
     const thread: ParsedThread = {
@@ -173,7 +173,7 @@ function parseObservations(raw: string): ParsedObservations {
           thread.dateBlocks.push(currentDateBlock);
         }
         currentDateBlock = {
-          date: dateMatch[1].trim(),
+          date: (dateMatch[1] ?? '').trim(),
           relativeTime: dateMatch[2]?.trim(),
           observations: [],
         };
@@ -183,7 +183,7 @@ function parseObservations(raw: string): ParsedObservations {
 
       // Check indentation for nested observations
       const indentMatch = line.match(/^(\s*)/);
-      const indent = indentMatch ? indentMatch[1].length : 0;
+      const indent = indentMatch?.[1]?.length ?? 0;
       const isNested =
         indent >= 2 && (trimmedLine.startsWith('* ->') || trimmedLine.startsWith('->') || trimmedLine.startsWith('-'));
 
@@ -242,7 +242,7 @@ function ObservationItem({
   const borderColor = observation.priority ? PRIORITY_BORDER[observation.priority] : 'border-l-transparent';
 
   return (
-    <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
+    <div className={cn('py-0.5', observation.isNested && 'border-border/50 ml-4 border-l pl-2')}>
       <div
         className={cn(
           'flex items-start gap-1.5 text-ui-sm',
@@ -260,7 +260,7 @@ function ObservationItem({
         {observation.time && (
           <span
             className={cn(
-              'shrink-0 font-mono text-ui-xs ml-2',
+              'ml-2 shrink-0 font-mono text-ui-xs',
               useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground',
             )}
           >
@@ -287,7 +287,7 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
     <div className="mb-2">
       <div
         className={cn(
-          'flex items-center gap-2 mb-1 sticky top-0 backdrop-blur-sm pt-1 pb-1',
+          'sticky top-0 mb-1 flex items-center gap-2 py-1 backdrop-blur-sm',
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
@@ -326,8 +326,8 @@ function ThreadSection({
       {showThreadId && thread.threadId !== 'default' && (
         <div
           className={cn(
-            'text-ui-xs font-mono mb-1 px-1 py-0.5 rounded inline-block',
-            useInheritedTextColor ? 'opacity-60 bg-current/10' : 'text-muted-foreground bg-muted/50',
+            'mb-1 inline-block rounded px-1 py-0.5 font-mono text-ui-xs',
+            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'text-muted-foreground bg-muted/50',
           )}
         >
           Thread {thread.threadId}
@@ -364,14 +364,14 @@ export function ObservationRenderer({
   const parsed = useMemo(() => parseObservations(observations), [observations]);
 
   const hasMultipleThreads =
-    parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0].threadId !== 'default');
+    parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0]?.threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-ui-sm text-muted-foreground italic', className)}>No observations</div>;
+    return <div className={cn('text-muted-foreground text-ui-sm italic', className)}>No observations</div>;
   }
 
   return (
-    <div className={cn('text-ui-md overflow-hidden', className)}>
+    <div className={cn('overflow-hidden text-ui-md', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
