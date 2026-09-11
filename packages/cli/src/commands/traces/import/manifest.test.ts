@@ -15,7 +15,6 @@ const source = {
   provider: 'test-provider',
   baseUrl: 'https://source.example',
   projectId: 'source-project',
-  mapperVersion: '1',
   idAlgorithmVersion: '1',
 };
 const window = {
@@ -54,23 +53,22 @@ describe('trace import manifest', () => {
     ).toThrow('Import ID');
   });
 
-  it('protects the source, target, mapping, and ID identity of prepared data', async () => {
+  it('protects the source, target, and ID identity of prepared data', async () => {
     const { manifest } = await initialize();
-    expect(() =>
-      assertTraceImportResumeCompatible(manifest, {
-        source: { ...source, mapperVersion: '2' },
-        targetProjectId: 'target-project',
-      }),
-    ).not.toThrow();
-
-    const prepared = { ...manifest, phase: 'prepared' as const };
-    expect(() =>
-      assertTraceImportResumeCompatible(prepared, {
-        source: { ...source, mapperVersion: '2' },
-        targetProjectId: 'target-project',
-      }),
-    ).toThrow('source');
-    expect(() => assertTraceImportResumeCompatible(prepared, { source, targetProjectId: 'another-target' })).toThrow(
+    for (const changedSource of [
+      { ...source, provider: 'another-provider' },
+      { ...source, baseUrl: 'https://another-source.example' },
+      { ...source, projectId: 'another-project' },
+      { ...source, idAlgorithmVersion: '2' },
+    ]) {
+      expect(() =>
+        assertTraceImportResumeCompatible(manifest, {
+          source: changedSource,
+          targetProjectId: 'target-project',
+        }),
+      ).toThrow('source');
+    }
+    expect(() => assertTraceImportResumeCompatible(manifest, { source, targetProjectId: 'another-target' })).toThrow(
       'target',
     );
   });

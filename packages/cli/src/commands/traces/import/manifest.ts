@@ -17,7 +17,6 @@ const sourceIdentitySchema = z
     provider: z.string().min(1),
     baseUrl: z.string().url(),
     projectId: z.string().min(1),
-    mapperVersion: z.string().min(1),
     idAlgorithmVersion: z.string().min(1),
   })
   .strict();
@@ -190,10 +189,9 @@ export function assertTraceImportResumeCompatible(
     manifest.source.provider !== options.source.provider ||
     manifest.source.baseUrl !== options.source.baseUrl ||
     manifest.source.projectId !== options.source.projectId ||
-    manifest.source.idAlgorithmVersion !== options.source.idAlgorithmVersion ||
-    (manifest.phase !== 'preparing' && manifest.source.mapperVersion !== options.source.mapperVersion);
+    manifest.source.idAlgorithmVersion !== options.source.idAlgorithmVersion;
   if (sourceChanged) {
-    throw new Error('Cannot resume because the source project or prepared ID/mapping strategy changed.');
+    throw new Error('Cannot resume because the source project or prepared ID strategy changed.');
   }
 }
 
