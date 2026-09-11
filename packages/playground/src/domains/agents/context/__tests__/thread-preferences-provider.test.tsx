@@ -164,6 +164,60 @@ describe('ThreadPreferencesProvider', () => {
     });
   });
 
+  describe('while the allowed-model list is loading', () => {
+    it.each([false, true])('does not apply an override until policy resolves (locked: %s)', async locked => {
+      localStorage.setItem(
+        'mastra-thread-preferences-["agent-1","thread-a"]',
+        JSON.stringify({
+          selection: { provider: 'openai', model: 'gpt-4o-mini' },
+        }),
+      );
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const requested = vi.fn();
+      const sent = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/agents/:agentId/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse('data: {"type":"finish","payload":{}}\n\n', {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        }),
+      );
+      mountSession(
+        'thread-a',
+        {
+          active: true,
+          pickerVisible: !locked,
+          allowed: [{ provider: 'openai' }],
+          default: { provider: 'openai', modelId: 'gpt-5-mini' },
+        },
+        http.get(`${BASE_URL}/api/editor/builder/models/available`, async () => {
+          requested();
+          await pending;
+          return HttpResponse.json(allowedModels);
+        }),
+      );
+      try {
+        await waitFor(() => expect(requested).toHaveBeenCalledOnce());
+        expect(screen.getByText('gpt-4o:0.9')).toBeTruthy();
+        fireEvent.click(screen.getByText('Send'));
+        await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+        expect(sent.mock.calls[0][0]).not.toHaveProperty('model');
+        await act(async () => release());
+        const expectedModel = locked ? 'gpt-5-mini' : 'gpt-4o-mini';
+        await screen.findByText(`${expectedModel}:0.9`);
+        fireEvent.click(screen.getByText('Send'));
+        await waitFor(() => expect(sent).toHaveBeenCalledTimes(2));
+        expect(sent.mock.calls[1][0]).toMatchObject({ model: `openai/${expectedModel}` });
+      } finally {
+        release();
+      }
+    });
+  });
+
   describe('when model policy restricts a saved selection', () => {
     it.each([false, true])('uses the policy default for display and requests (locked: %s)', async locked => {
       localStorage.setItem(

@@ -47,7 +47,11 @@ function ThreadPreferencesState({
 
   const { data: builderSettings, isError: policyError } = useBuilderSettings();
   const policy = builderSettings?.modelPolicy;
-  const { models: allowedModels } = useAgentBuilderAllowedModels({ enabled: policy?.active === true });
+  const { models: allowedModels, isLoading: allowedModelsLoading } = useAgentBuilderAllowedModels({
+    enabled: policy?.active === true,
+  });
+  const policyResolved =
+    Boolean(builderSettings) && !(policy?.active && policy.allowed !== undefined && allowedModelsLoading);
   const savedSelection = preferences.selection;
   const allowed =
     !policy?.active ||
@@ -59,8 +63,9 @@ function ThreadPreferencesState({
     );
   const locked = policy?.active && policy.pickerVisible === false;
   // Never send a restored override before policy resolution, or when it is no longer allowed.
-  const selection = builderSettings && !policyError && !locked && allowed ? savedSelection : undefined;
-  const policyDefault = policy?.active && (locked || (savedSelection && !allowed)) ? policy.default : undefined;
+  const selection = policyResolved && !policyError && !locked && allowed ? savedSelection : undefined;
+  const policyDefault =
+    policyResolved && policy?.active && (locked || (savedSelection && !allowed)) ? policy.default : undefined;
   const provider = selection?.provider ?? policyDefault?.provider ?? defaultProvider;
   const model = selection?.model ?? policyDefault?.modelId ?? defaultModel;
   const modelOverride = (selection || policyDefault) && provider && model ? `${provider}/${model}` : undefined;
