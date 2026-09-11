@@ -145,6 +145,8 @@ The client answered server elicitation with `mcp.elicitation.onRequest(serverNam
   });
 ```
 
+Persisted credentials changed shape too: tokens are stored per authorization-server `issuer` (the SDK's `tokens(ctx)`/`saveTokens(tokens, ctx)` context) and the provider persists OAuth discovery state so the authorization code is only exchanged with the server that issued the redirect. Custom `OAuthStorage` backends keep the same key-value contract, but a storage namespace must not be shared between providers. `createOAuthCallbackServer` now also returns the RFC 9207 `iss` parameter; pass it to the code exchange so the SDK can reject an issuer mismatch.
+
 ### `startHTTP` options
 
 `startHTTP` keeps `url`, `httpPath`, `req` and `res`. The `options` object only carries request security (`enableDnsRebindingProtection`, `allowedHosts`, `allowedOrigins`); the session and serverless flags are gone because every request is stateless.

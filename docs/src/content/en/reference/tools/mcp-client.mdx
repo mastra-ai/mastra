@@ -1105,15 +1105,19 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 
 ## OAuth authentication
 
-For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+For connecting to MCP servers that require OAuth authentication per the [MCP 2026-07-28 authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), use the `MCPOAuthClientProvider`. The provider never registers a client at runtime: give it either `clientInformation` for a client pre-registered with the authorization server, or a [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#client-id-metadata-documents) URL as `clientMetadataUrl`:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
 // Create an OAuth provider
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://localhost:3000/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1136,18 +1140,26 @@ const client = new MCPClient({
 })
 ```
 
-Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each.
+The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. The URL is sent as the `client_id`; the provider never calls a registration endpoint, so an authorization server that accepts neither the metadata document nor a pre-registered `clientInformation` fails the flow explicitly. When both are configured, `clientInformation` takes priority.
+
+Tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`, and discovery state is persisted so the code exchange is only sent to the server that issued the redirect. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK, which rejects a mismatch before exchanging the authorization code.
+
+Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each. If those providers use the same persistent backend, give each provider a separate `OAuthStorage` namespace because storage mutation ordering is coordinated only within one provider instance.
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and uses the configured client identity. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://127.0.0.1:5533/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://127.0.0.1:5533/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1184,8 +1196,8 @@ Hosts that drive the flow can capture the authorization code with the exported `
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
 
-// getCallbackUrlCandidates() lists every URL the helper may bind, so register
-// all of them as redirect_uris during client registration to cover port fallback.
+// getCallbackUrlCandidates() lists every URL the helper may bind, so list all
+// of them as redirect_uris in your pre-registration or metadata document.
 const redirectUris = getCallbackUrlCandidates('http://127.0.0.1:5533/oauth/callback').map(url =>
   url.toString(),
 )
@@ -1197,8 +1209,8 @@ const server = await createOAuthCallbackServer({
 
 // server.url reflects the port actually bound — use it as the redirect_uri.
 try {
-  const { code } = await server.waitForCode()
-  // Exchange the code here.
+  const { code, iss } = await server.waitForCode()
+  // Exchange the code here, passing `iss` so the SDK validates the issuer.
 } finally {
   await server.close()
 }
@@ -1217,6 +1229,7 @@ const provider = createSimpleTokenProvider('your-access-token', {
     redirect_uris: ['http://localhost:3000/callback'],
     client_name: 'Test Client',
   },
+  clientInformation: { client_id: 'test-client' },
 })
 
 const client = new MCPClient({
@@ -1231,7 +1244,7 @@ const client = new MCPClient({
 
 ### Custom Token Storage
 
-For persistent token storage across sessions, implement the `OAuthStorage` interface:
+For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys, so the backend only needs a key-value contract:
 
 ```typescript
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'
@@ -1268,6 +1281,7 @@ class DatabaseOAuthStorage implements OAuthStorage {
 const provider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/callback',
   clientMetadata: {/* ... */},
+  clientInformation: { client_id: 'my-registered-client' },
   storage: new DatabaseOAuthStorage(db, 'user-123'),
 })
 ```
