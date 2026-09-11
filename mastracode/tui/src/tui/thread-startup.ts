@@ -87,13 +87,13 @@ async function cloneDriftedThread(state: TUIState): Promise<boolean> {
     options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
     selectedOptionLabel: 'Clone and resume',
     allowCustomResponse: false,
-    overlay: { widthPercent: 80, maxHeight: '70%' },
+    overlay: { widthPercent: 0.8, maxHeight: '70%' },
   });
   if (answer !== 'Clone and resume') return false;
 
   const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
   progress.start('Cloning thread into the current resource...');
-  showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
+  showModalOverlay(state.ui, progress, { widthPercent: 0.7, maxHeight: '40%', minHeightPercent: 0.35 });
   state.ui.requestRender();
 
   try {

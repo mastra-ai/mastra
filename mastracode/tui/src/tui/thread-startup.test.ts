@@ -37,6 +37,7 @@ describe('resumeThreadOnStartup', () => {
 
     await resumeThreadOnStartup(state, 'thread-requested');
 
+    expect(state.session.thread.list).toHaveBeenCalledWith({ allResources: true });
     expect(setResourceId).toHaveBeenCalledWith(state.session, { resourceId: 'resource-2' });
     expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-requested' });
     expect(state.pendingNewThread).toBe(false);
