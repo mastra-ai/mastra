@@ -552,10 +552,27 @@ function parseBM25Config(
 // =============================================================================
 
 /**
- * Workspace provides agents with filesystem and execution capabilities.
+ * Provides agents with filesystem and execution capabilities through configured providers.
  *
- * At minimum, a workspace has either a filesystem or a sandbox (or both).
- * Users pass instantiated provider objects to the constructor.
+ * Supply a filesystem, a sandbox, or both. File operations require a filesystem;
+ * command execution requires a sandbox.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workspace documentation](https://mastra.ai/docs/workspace/overview)
+ * if packaged docs are unavailable.
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,

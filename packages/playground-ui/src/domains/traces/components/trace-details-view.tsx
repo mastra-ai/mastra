@@ -2,6 +2,7 @@ import type { LightSpanRecord } from '@mastra/core/storage';
 import { useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceIdButton } from './trace-id-button';
 import { TraceTimeline } from './trace-timeline';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
@@ -47,8 +48,9 @@ export function TraceDetailsView({
   return (
     <DataDetailsPanel>
       <DataDetailsPanel.Header>
-        <DataDetailsPanel.Heading>
-          Trace <b># {traceId}</b>
+        <DataDetailsPanel.Heading className="items-center">
+          Trace
+          <TraceIdButton id={traceId} />
         </DataDetailsPanel.Heading>
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
