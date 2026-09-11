@@ -8,7 +8,11 @@ export function parseResumeThreadId(args: string[]): string | undefined {
   return threadId;
 }
 
-export function shouldRunHeadless(argv: string[], resumeThreadId: string | undefined, hasHeadlessFlag: boolean): boolean {
+export function shouldRunHeadless(
+  argv: string[],
+  resumeThreadId: string | undefined,
+  hasHeadlessFlag: boolean,
+): boolean {
   return !resumeThreadId && (hasHeadlessFlag || argv.includes('--help') || argv.includes('-h'));
 }
 
