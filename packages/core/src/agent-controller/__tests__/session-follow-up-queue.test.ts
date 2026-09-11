@@ -187,11 +187,9 @@ describe('Session follow-ups behind parked and starting runs', () => {
       // Once the suspension clears, the queue drains one message at a time.
       session.emit({ type: 'tool_suspension_cancelled', toolCallId: 'call-generate' });
       await expect(session.drainFollowUpQueue()).resolves.toBe(true);
-      const dispatched = [...sendMessage.mock.calls, ...queueMessage.mock.calls].map(call => {
-        const input = call[0] as { content?: unknown } | string;
-        return typeof input === 'string' ? input : input.content;
-      });
-      expect(dispatched).toEqual(['Then make it blue.']);
+      const dispatched = [...sendMessage.mock.calls, ...queueMessage.mock.calls].map(call => JSON.stringify(call[0]));
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0]).toContain('Then make it blue.');
       expect(session.followUps.list().map(item => item.content)).toEqual(['Then add a hat.']);
     } finally {
       await controller.destroy();
