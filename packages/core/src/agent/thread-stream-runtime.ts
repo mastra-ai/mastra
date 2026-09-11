@@ -27,6 +27,7 @@ import type {
   AgentThreadPeerAdvertisement,
   AgentThreadPeerInfo,
   AgentThreadSubscription,
+  AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -872,6 +873,23 @@ export class AgentThreadStreamRuntime {
     if (displacedPeer?.unsubscribe !== displacedClaim?.unsubscribe) displacedPeer?.unsubscribe();
 
     return { claimed: true, unsubscribe };
+  }
+
+  updateThreadPeerAdvertisement(
+    agent: Agent<any, any, any, any>,
+    options: { resourceId: string; threadId: string; peer: AgentUpdateThreadPeerOptions },
+    pubsub?: PubSub,
+  ): boolean {
+    const state = this.#getState(this.#getPubSub(pubsub));
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const owner = state.claimedThreadOwners.get(key);
+    if (!owner?.peer || owner.agent.id !== agent.id) return false;
+
+    const peer = owner.peer;
+    if (Object.hasOwn(options.peer, 'label')) peer.label = options.peer.label;
+    if (Object.hasOwn(options.peer, 'title')) peer.title = options.peer.title;
+    if (Object.hasOwn(options.peer, 'metadata')) peer.metadata = options.peer.metadata;
+    return true;
   }
 
   async discoverThreadPeers(

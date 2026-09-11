@@ -301,12 +301,14 @@ The peer does not need to be currently advertised. Disconnecting is idempotent a
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer should send one signal back to this thread. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
+The target must already be saved and freshly advertise the same exact thread endpoint at send time. Use expectsReply to declare whether the peer owes one signal back to this thread; false removes that obligation but does not prevent or forbid a reply. Reuse messageId when retrying the same logical send, and set replyTo to the request messageId when replying. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
       summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
       priority: prioritySchema.default('medium'),
-      expectsReply: z.boolean().describe('Whether the peer is expected to send one signal back to this thread.'),
+      expectsReply: z
+        .boolean()
+        .describe('Whether the peer owes one signal back. False means no obligation, not no permission to reply.'),
       messageId: z
         .string()
         .min(1)
@@ -411,6 +413,7 @@ The target must already be saved and freshly advertise the same exact thread end
             attributes: {
               expectsReply,
               messageId,
+              sourcePeerId: returnPeerId,
               ...(replyTo ? { replyTo } : {}),
               ...(expectsReply ? { returnPeerId } : {}),
             },

@@ -2300,6 +2300,51 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('updates advertised peer metadata without replacing thread ownership', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerAgent = new Agent({
+      id: 'updatable-peer-agent',
+      name: 'Updatable Peer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const discoveryAgent = new Agent({
+      id: 'peer-discovery-agent',
+      name: 'Peer Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+    const target = { resourceId: 'updatable-resource', threadId: 'updatable-thread' };
+    const claim = await ownerAgent.claimThreadOwnership({
+      ...target,
+      peer: { label: 'Mastra', title: 'Initial title', metadata: { mode: 'build' } },
+    });
+
+    expect(
+      ownerAgent.updateThreadPeerAdvertisement({
+        ...target,
+        peer: { title: 'Renamed thread', metadata: { mode: 'review' } },
+      }),
+    ).toBe(true);
+    expect(discoveryAgent.updateThreadPeerAdvertisement({ ...target, peer: { title: 'Unauthorized rename' } })).toBe(
+      false,
+    );
+
+    await expect(discoveryAgent.discoverThreadPeers()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'updatable-peer-agent:updatable-resource:updatable-thread',
+        label: 'Mastra',
+        title: 'Renamed thread',
+        metadata: { mode: 'review' },
+      }),
+    ]);
+
+    claim.unsubscribe();
+    await expect(discoveryAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
+  });
+
   it('settles peer discovery without waiting for pubsub unsubscribe', async () => {
     const pubsub = new HangingUnsubscribePubSub();
     const agent = new Agent({
