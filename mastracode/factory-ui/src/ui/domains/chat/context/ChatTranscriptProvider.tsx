@@ -1,12 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
+import { useContext, useEffect, useEffectEvent } from 'react';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
-import { initialChatRuntime, runtimeReducer } from '../services/runtime';
-import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
@@ -36,14 +34,6 @@ export function ChatTranscriptProvider({
 }) {
   const viewerId = useFactoryAuth().data?.user?.userId;
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages, viewerId });
-  const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
-  const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
-    transcriptApi.onEvent(event);
-    dispatchRuntime(event);
-  };
-
-  // Merge is by id and idempotent — mount seed, grown load-more window and
-  // post-navigation revalidation all fold in through the same path.
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
     if (initialMessages === undefined) return;
@@ -57,8 +47,8 @@ export function ChatTranscriptProvider({
   };
 
   return (
-    <ChatConnectionProvider onEvent={onEvent}>
-      <ChatRuntimeValueProvider runtime={runtime}>
+    <ChatConnectionProvider onEvent={transcriptApi.onEvent}>
+      <ChatRuntimeValueProvider transcript={transcriptApi.transcript}>
         <ChatTranscriptValueProvider
           threadId={threadId}
           viewerId={viewerId}
@@ -72,19 +62,19 @@ export function ChatTranscriptProvider({
   );
 }
 
-function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; runtime: ChatRuntimeState }) {
+function ChatRuntimeValueProvider({ children, transcript }: { children: ReactNode; transcript: TranscriptState }) {
   const { state } = useChatConnection();
   return (
     <ChatRuntimeContext.Provider
       value={{
-        usage: runtime.usage ?? state?.tokenUsage,
-        followUpCount: runtime.followUpCount,
-        omProgress: runtime.omProgress ?? state?.omProgress,
-        omPhase: runtime.omPhase,
-        bufferingMessages: runtime.bufferingMessages,
-        bufferingObservations: runtime.bufferingObservations,
-        goal: runtime.goal,
-        tokensPerSec: runtime.tokensPerSec,
+        usage: transcript.usage ?? state?.tokenUsage,
+        followUpCount: transcript.followUpCount,
+        omProgress: transcript.omProgress ?? state?.omProgress,
+        omPhase: transcript.omPhase,
+        bufferingMessages: transcript.bufferingMessages,
+        bufferingObservations: transcript.bufferingObservations,
+        goal: transcript.goal,
+        tokensPerSec: transcript.tokensPerSec,
       }}
     >
       {children}

@@ -1,7 +1,17 @@
 import { createContext } from 'react';
 
-import type { ChatRuntimeState } from '../services/runtime';
+import type { TranscriptState } from '../services/transcript';
 
-export type ChatRuntimeApi = Omit<ChatRuntimeState, '_decodeStartedAt'>;
+export type ChatRuntimeApi = Pick<
+  TranscriptState,
+  | 'usage'
+  | 'followUpCount'
+  | 'omProgress'
+  | 'omPhase'
+  | 'bufferingMessages'
+  | 'bufferingObservations'
+  | 'goal'
+  | 'tokensPerSec'
+>;
 
 export const ChatRuntimeContext = createContext<ChatRuntimeApi | null>(null);

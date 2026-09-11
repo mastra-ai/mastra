@@ -1,6 +1,7 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
+import { omWork } from '../om';
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
@@ -54,6 +55,109 @@ function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
     typeof entry === 'object' && entry !== null && 'kind' in entry && entry.kind === 'message' && 'message' in entry
   );
 }
+
+describe('transcript runtime status', () => {
+  it.each(['bufferingMessages', 'bufferingObservations'] as const)(
+    'tracks %s from display state, ahead of lifecycle start events',
+    bufferingFlag => {
+      const buffering = transcriptReducer(initialTranscript, {
+        type: 'event',
+        event: { type: 'display_state_changed', displayState: { [bufferingFlag]: true } },
+      });
+      const backgroundWork =
+        bufferingFlag === 'bufferingMessages'
+          ? { messages: 'background', observations: 'idle' }
+          : { messages: 'idle', observations: 'background' };
+
+      expect(omWork(buffering)).toEqual(backgroundWork);
+
+      const started = transcriptReducer(buffering, {
+        type: 'event',
+        event: {
+          type: bufferingFlag === 'bufferingMessages' ? 'om_observation_start' : 'om_reflection_start',
+        },
+      });
+
+      expect(omWork(started)).toEqual(backgroundWork);
+
+      for (const displayState of [{ [bufferingFlag]: false }, {}]) {
+        const settled = transcriptReducer(buffering, {
+          type: 'event',
+          event: { type: 'display_state_changed', displayState },
+        });
+
+        expect(omWork(settled)).toEqual({ messages: 'idle', observations: 'idle' });
+      }
+    },
+  );
+
+  it('keeps buffering lifecycle events idle without a display-state buffering flag', () => {
+    const buffering = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'om_buffering_start' },
+    });
+
+    expect(omWork(buffering)).toEqual({ messages: 'idle', observations: 'idle' });
+  });
+
+  it('keeps display-state telemetry available until newer usage arrives', () => {
+    const displayState = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          omProgress: {
+            status: 'idle',
+            pendingTokens: 320,
+            threshold: 1000,
+            thresholdPercent: 32,
+            observationTokens: 0,
+            reflectionThreshold: 2000,
+            reflectionThresholdPercent: 0,
+            projectedMessageRemoval: 0,
+            projectedReflectionSavings: 0,
+          },
+          tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 },
+        },
+      },
+    });
+    const updated = transcriptReducer(displayState, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { promptTokens: 21, completionTokens: 55, totalTokens: 76 } },
+    });
+
+    expect(updated.omProgress?.pendingTokens).toBe(320);
+    expect(updated.usage).toMatchObject({ completionTokens: 55, totalTokens: 76 });
+  });
+
+  it('measures streamed assistant tokens and tracks queued follow-ups', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-10T15:00:00Z'));
+
+    try {
+      const streaming = transcriptReducer(initialTranscript, {
+        type: 'event',
+        event: {
+          type: 'message_update',
+          message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Working' }]),
+        },
+      });
+      vi.advanceTimersByTime(1000);
+      const measured = transcriptReducer(streaming, {
+        type: 'event',
+        event: { type: 'usage_update', usage: { promptTokens: 0, completionTokens: 42, totalTokens: 42 } },
+      });
+      const observing = transcriptReducer(measured, { type: 'event', event: { type: 'om_observation_start' } });
+      const queued = transcriptReducer(observing, { type: 'event', event: { type: 'follow_up_queued', count: 2 } });
+
+      expect(queued.tokensPerSec).toBe(42);
+      expect(omWork(queued)).toEqual({ messages: 'blocking', observations: 'idle' });
+      expect(queued.followUpCount).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('transcript reducer message entries', () => {
   it('creates initial transcript entries from MastraDBMessage history without flattening content', () => {

@@ -4,7 +4,7 @@ import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 
-import type { OMBudgets } from './runtime';
+import type { OMBudgets } from './om';
 import { sentByOther } from './message-author';
 
 /**
@@ -161,6 +161,8 @@ export interface TranscriptState {
   omProgress?: OMBudgets;
   /** Observational memory phase. */
   omPhase: OMPhase;
+  bufferingMessages: boolean;
+  bufferingObservations: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
   /** Current tokens/sec throughput (0 when idle). */
@@ -180,6 +182,8 @@ export const initialTranscript: TranscriptState = {
   tasks: [],
   followUpCount: 0,
   omPhase: 'idle',
+  bufferingMessages: false,
+  bufferingObservations: false,
   tokensPerSec: 0,
   _decodeStartedAt: 0,
 };
@@ -497,6 +501,8 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
         usage: ds.tokenUsage ?? state.usage,
+        bufferingMessages: ds.bufferingMessages ?? false,
+        bufferingObservations: ds.bufferingObservations ?? false,
       };
     }
 

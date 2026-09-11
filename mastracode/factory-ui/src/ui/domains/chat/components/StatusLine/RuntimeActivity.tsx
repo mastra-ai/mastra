@@ -2,8 +2,8 @@ import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { Brain } from 'lucide-react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
-import type { OMWorkByBudget } from '../../services/runtime';
-import { omWork } from '../../services/runtime';
+import type { OMWorkByBudget } from '../../services/om';
+import { omWork } from '../../services/om';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 
