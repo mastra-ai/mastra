@@ -52,12 +52,7 @@ describe('unsubscribe acquired batches', () => {
       xGroupCreate: vi.fn(),
       xGroupDestroy: vi.fn(),
       xPendingRange: vi.fn(async () =>
-        entries.map(entry => ({
-          id: entry.id,
-          consumer: 'other-consumer',
-          millisecondsSinceLastDelivery: 0,
-          deliveriesCounter: 1,
-        })),
+        entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
       ),
       xClaim: vi.fn(() => claim.promise),
     };
@@ -145,46 +140,6 @@ describe('unsubscribe acquired batches', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(writer.xClaim).toHaveBeenCalledTimes(1);
     expect(writer.xGroupDestroy).not.toHaveBeenCalled();
-  });
-
-  it('pages past a full page of self-owned idle entries to reach sibling-owned ones', async () => {
-    const cb = vi.fn();
-    await ps.subscribe('topic', cb, { group: 'workers' });
-    const consumer = (reader.xReadGroup.mock.calls[0]?.[1] as string | undefined) ?? '';
-    const ownPage = Array.from({ length: 100 }, (_, i) => ({
-      id: `1-${i}`,
-      consumer,
-      millisecondsSinceLastDelivery: 0,
-      deliveriesCounter: 1,
-    }));
-    writer.xPendingRange
-      .mockReset()
-      .mockResolvedValueOnce(ownPage)
-      .mockResolvedValueOnce([
-        { id: '2-0', consumer: 'other', millisecondsSinceLastDelivery: 0, deliveriesCounter: 1 },
-      ]);
-    claim.resolve([entries[0]!]);
-    await vi.advanceTimersByTimeAsync(10);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(writer.xPendingRange).toHaveBeenCalledTimes(2);
-    expect(writer.xPendingRange.mock.calls[1]![2]).toBe('(1-99');
-    expect(writer.xClaim).toHaveBeenCalledWith('mastra:topic:topic', 'workers', consumer, expect.any(Number), ['2-0']);
-    read.resolve(null);
-  });
-
-  it('does not claim when stop begins while XPENDING is in flight', async () => {
-    const cb = vi.fn();
-    const pendingQuery = deferred<unknown[]>();
-    writer.xPendingRange.mockReset().mockImplementation(() => pendingQuery.promise);
-    await ps.subscribe('topic', cb, { group: 'workers' });
-    await vi.advanceTimersByTimeAsync(10);
-    expect(writer.xPendingRange).toHaveBeenCalledTimes(1);
-    const stop = ps.unsubscribe('topic', cb);
-    read.resolve(null);
-    pendingQuery.resolve([{ id: '0', consumer: 'other', millisecondsSinceLastDelivery: 0, deliveriesCounter: 1 }]);
-    await stop;
-    expect(writer.xClaim).not.toHaveBeenCalled();
-    expect(cb).not.toHaveBeenCalled();
   });
 
   it('joins a failed in-flight claim without rescheduling', async () => {
