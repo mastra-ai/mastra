@@ -77,18 +77,29 @@ export class KnowledgeAccessEvaluator {
   readonly #instance: object;
   readonly #storage: KnowledgeStorage;
   readonly #cache: KnowledgeAccessFrontierCache;
+  readonly #resolveLiveVouchedScopeIds?: (scopeIds: readonly string[]) => Promise<string[]>;
 
-  constructor(input: { instance: object; storage: KnowledgeStorage; cache?: KnowledgeAccessFrontierCache }) {
+  constructor(input: {
+    instance: object;
+    storage: KnowledgeStorage;
+    cache?: KnowledgeAccessFrontierCache;
+    resolveLiveVouchedScopeIds?: (scopeIds: readonly string[]) => Promise<string[]>;
+  }) {
     this.#instance = input.instance;
     this.#storage = input.storage;
     this.#cache = input.cache ?? new KnowledgeAccessFrontierCache();
+    this.#resolveLiveVouchedScopeIds = input.resolveLiveVouchedScopeIds;
   }
 
   async evaluate(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
     const normalizedScopeIds = canonicalizeKnowledgeScopeIds([...vouchedScopeIds]);
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const accessEpoch = await this.#storage.getAccessEpoch();
-      const cached = this.#cache.get(this.#instance, normalizedScopeIds, accessEpoch);
+      const liveScopeIds = this.#resolveLiveVouchedScopeIds
+        ? canonicalizeKnowledgeScopeIds(await this.#resolveLiveVouchedScopeIds(normalizedScopeIds))
+        : normalizedScopeIds;
+      if (this.#resolveLiveVouchedScopeIds && (await this.#storage.getAccessEpoch()) !== accessEpoch) continue;
+      const cached = this.#cache.get(this.#instance, liveScopeIds, accessEpoch);
       if (cached) {
         if ((await this.#storage.getAccessEpoch()) === accessEpoch) return cached;
         continue;
@@ -96,7 +107,7 @@ export class KnowledgeAccessEvaluator {
 
       const grants = await this.#storage.listScopeGrants();
       const frontier = evaluateKnowledgeAccessFrontier({
-        vouchedScopeIds: normalizedScopeIds,
+        vouchedScopeIds: liveScopeIds,
         grants,
         accessEpoch,
       });

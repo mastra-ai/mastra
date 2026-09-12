@@ -1590,7 +1590,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query || scopeIds.length === 0) return [];
-    const limit = input.limit ?? 20;
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const pattern = `%${escapeLikePattern(query)}%`;
     const nodes = await this.#readExecutor.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} AND (lower(n.name) LIKE ? ESCAPE '=' OR lower(coalesce(n.kind,'')) LIKE ? ESCAPE '=' OR lower(coalesce(n.metadata::text,'')) LIKE ? ESCAPE '=') ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
