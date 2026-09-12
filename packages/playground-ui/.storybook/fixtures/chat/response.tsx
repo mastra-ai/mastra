@@ -1,3 +1,4 @@
+import type { TextPart } from '@mastra/react';
 import { editArgs, plan, reviewTools } from './data';
 import type { Phase, Turn } from './data';
 import { ReviewTool } from './tool';
@@ -7,6 +8,7 @@ import { ReasoningPartRenderer } from '@/domains/chat/messages/renderers/reasoni
 import { SignalBadge } from '@/domains/chat/messages/signal-badge';
 import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { AskUser } from '@/ds/components/ai/ask-user';
+import { useRevealedParts } from '@/ds/components/ai/message-reveal';
 import {
   Plan,
   PlanBody,
@@ -29,6 +31,11 @@ interface ConversationResponseProps {
 }
 
 export function ConversationResponse({ turn, transitionTurn }: ConversationResponseProps) {
+  const writtenParts = [{ type: 'text', text: turn.text }] satisfies TextPart[];
+  const shownParts = useRevealedParts(writtenParts, turn.phase === 'streaming');
+  const shownPart = shownParts[0];
+  const shownText = shownPart?.type === 'text' ? shownPart.text : '';
+  const isRevealing = shownParts !== writtenParts;
   const approveEdit = () => transitionTurn(turn.id, 'approval', 'streaming');
   const declineEdit = () => transitionTurn(turn.id, 'approval', 'declined');
   return (
@@ -120,7 +127,9 @@ export function ConversationResponse({ turn, transitionTurn }: ConversationRespo
           metadata={{ status: 'warning' }}
         />
       )}
-      {turn.text && <MessageText text={turn.text} metadata={undefined} streaming={turn.phase === 'streaming'} />}
+      {shownText && (
+        <MessageText text={shownText} metadata={undefined} streaming={turn.phase === 'streaming' || isRevealing} />
+      )}
       {turn.phase === 'complete' && turn.review && (
         <SignalBadge
           signal={{

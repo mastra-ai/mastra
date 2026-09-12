@@ -17,7 +17,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A complete conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Send a message or attach a local file; responses stream from a deterministic fixture. Reset restores the selected scenario. This is the shared UI reference; transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
+          'A complete conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Send a message or attach a local file; a deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text just as in Studio and Factory. Reset restores the selected scenario. This is the shared UI reference; transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
       },
     },
   },
