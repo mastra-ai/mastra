@@ -66,17 +66,13 @@ describe('PostgreSQL Storage Tests', () => {
         await fixture.memory.settled();
         const final = await fixture.memory.recall({ threadId: fixture.threadId, resourceId: fixture.resourceId });
         const finalTool = final.messages.find(message => message.id === incoming.id);
-        console.log(
-          '22573 history evidence',
-          JSON.stringify({ readOnly, incoming, prompt: fixture.actorPrompts[1], persisted: finalTool }),
-        );
         expect(JSON.stringify(fixture.beforeHistory[1])).toContain('22573-client-complete');
-        expect.soft(JSON.stringify(fixture.afterHistory[1])).toContain('22573-client-complete');
+        expect(JSON.stringify(fixture.afterHistory[1])).toContain('22573-client-complete');
         expect(fixture.observerPrompts).toHaveLength(0);
         if (readOnly) {
           expect(final.messages).toEqual(saved.messages);
         } else {
-          expect.soft(JSON.stringify(finalTool)).toContain('22573-client-complete');
+          expect(JSON.stringify(finalTool)).toContain('22573-client-complete');
         }
         expect(JSON.stringify(fixture.actorPrompts[1])).toContain('22573-client-complete');
       } finally {
@@ -305,14 +301,6 @@ describe('PostgreSQL Storage Tests', () => {
       expect(calls[0]?.toolInvocation.state).toBe('call');
       const store = await fixture.storage.getStore('memory');
       const record = await store!.getObservationalMemory(fixture.threadId, fixture.resourceId);
-      console.log(
-        '22573 idle evidence',
-        JSON.stringify({
-          calls,
-          observerCalls: fixture.observerPrompts.length,
-          buffers: record?.bufferedObservationChunks,
-        }),
-      );
       const pending = saved.messages.find(message =>
         message.content.parts?.some(part => part.type === 'tool-invocation'),
       )!;

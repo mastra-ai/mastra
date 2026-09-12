@@ -30,17 +30,17 @@ function hasPendingToolCall(message: MastraDBMessage): boolean {
  * - Split tool exchange: a `toolCallId` appears on both sides of the cut, so
  *   the observer would see half of a tool exchange.
  *
- * When the last candidate has no pending call, the input is returned unchanged.
- * An empty result means "defer this buffering attempt" — callers must skip
- * buffering entirely. Raw message persistence is unaffected and happens
- * elsewhere; the retained message becomes eligible again once its tool call
- * completes.
+ * The result is always in chronological order. When the last candidate has no
+ * pending call, every message is returned. An empty result means "defer this
+ * buffering attempt" — callers must skip buffering entirely. Raw message
+ * persistence is unaffected and happens elsewhere; the retained message becomes
+ * eligible again once its tool call completes.
  */
 export function selectSafeBufferPrefix(messages: MastraDBMessage[]): MastraDBMessage[] {
   const chronological = [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const last = chronological[chronological.length - 1];
   if (!last || !hasPendingToolCall(last)) {
-    return messages;
+    return chronological;
   }
 
   const prefix = chronological.slice(0, -1);

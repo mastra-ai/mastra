@@ -468,17 +468,18 @@ describe('22573 idle', () => {
 });
 
 describe('22573 control', () => {
-  it('preserves candidate order when no tools are pending', async () => {
+  it('buffers every candidate in chronological order when no tools are pending', async () => {
     const messages = [300, 100, 200].map((time, index) =>
       createTestMessage(`Completed ${index}`, 'user', `completed-${index}`, new Date(time)),
     );
+    const chronological = [messages[1], messages[2], messages[0]];
     const list = new MessageList({ threadId: 'idle-buffer-thread' });
     list.add(structuredClone(messages), 'input');
     const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: messages });
     const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
     await turn.start();
     await turn.end();
-    expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages }));
+    expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: chronological }));
   });
 
   it.each([

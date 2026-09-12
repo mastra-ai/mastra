@@ -174,6 +174,11 @@ export class ObservationStep {
         excludeBuffered: true,
       });
       const safeCandidates = selectSafeBufferPrefix(candidates);
+      // Deferred = there were candidates but none can be buffered yet. Skip buffer()
+      // entirely so the interval boundary isn't advanced and the next step retries.
+      // When there simply are no candidates, still call buffer() (as before) so it
+      // records the boundary and this interval doesn't re-trigger every step.
+      const deferred = candidates.length > 0 && safeCandidates.length === 0;
       if (safeCandidates.length > 0) {
         om.sealMessagesForBuffering(safeCandidates);
 
@@ -197,7 +202,9 @@ export class ObservationStep {
         for (const msg of safeCandidates) {
           messageList.add(msg, 'memory');
         }
+      }
 
+      if (!deferred) {
         void om.trackBackgroundWork(
           om
             .buffer({
