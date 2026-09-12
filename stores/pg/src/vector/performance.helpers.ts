@@ -139,15 +139,20 @@ export const groupBy = <T, K extends keyof T>(
   key: K | ((item: T) => string),
   reducer?: (group: T[]) => any,
 ): Record<string, any> => {
-  const grouped = array.reduce(
-    (acc, item) => {
-      const value = typeof key === 'function' ? key(item) : item[key];
-      if (!acc[value as any]) acc[value as any] = [];
-      acc[value as any]?.push(item);
-      return acc;
-    },
-    {} as Record<string, T[]>,
-  );
+  // Collect into a Map first so keys like '__proto__' can't pollute the
+  // result object; Object.fromEntries defines own properties safely.
+  const groups = new Map<string, T[]>();
+  for (const item of array) {
+    const value = typeof key === 'function' ? key(item) : item[key];
+    const k = String(value);
+    const group = groups.get(k);
+    if (group) {
+      group.push(item);
+    } else {
+      groups.set(k, [item]);
+    }
+  }
+  const grouped = Object.fromEntries(groups) as Record<string, T[]>;
 
   if (reducer) {
     return Object.fromEntries(Object.entries(grouped).map(([key, group]) => [key, reducer(group)]));

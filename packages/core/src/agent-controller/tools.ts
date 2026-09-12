@@ -117,6 +117,9 @@ export function createSubagentTool(opts: CreateSubagentToolOptions) {
   const { subagents, resolveModel, controllerTools, fallbackModelId, mastra } = opts;
 
   const subagentIds = subagents.map(s => s.id);
+  if (subagentIds.length === 0) {
+    throw new Error('createSubagentTool requires at least one subagent');
+  }
 
   const typeDescriptions = subagents.map(s => `- **${s.id}** (${s.name}): ${s.description}`).join('\n');
 

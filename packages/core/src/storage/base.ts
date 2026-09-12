@@ -130,8 +130,14 @@ export function normalizePerPage(perPageInput: number | false | undefined, defau
   } else if (perPageInput === 0) {
     return 0; // Return zero results
   } else if (typeof perPageInput === 'number' && perPageInput > 0) {
-    return perPageInput; // Valid positive number
+    if (!Number.isInteger(perPageInput) || !Number.isFinite(perPageInput)) {
+      throw new Error('perPage must be a positive integer');
+    }
+    return perPageInput; // Valid positive integer
   } else if (typeof perPageInput === 'number' && perPageInput < 0) {
+    throw new Error('perPage must be >= 0');
+  } else if (typeof perPageInput === 'number') {
+    // NaN reaches here (all numeric comparisons are false for NaN)
     throw new Error('perPage must be >= 0');
   }
   // For undefined, use default
@@ -152,6 +158,9 @@ export function calculatePagination(
   perPageInput: number | false | undefined,
   normalizedPerPage: number,
 ): { offset: number; perPage: number | false } {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error('page must be >= 0');
+  }
   return {
     offset: perPageInput === false ? 0 : page * normalizedPerPage,
     perPage: perPageInput === false ? false : normalizedPerPage,
