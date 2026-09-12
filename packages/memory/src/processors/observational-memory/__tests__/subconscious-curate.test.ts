@@ -18,9 +18,7 @@ const semanticInfrastructure = {
 
 function resolved(): ResolvedSubconsciousConfig {
   return {
-    observation: [],
-    reflection: [{ name: 'curate', maxSteps: 5, curatorProfile: 'subconscious', builtIn: true }],
-    learnedGuidance: true,
+    observation: [{ name: 'curate', maxSteps: 5, curatorProfile: 'subconscious', builtIn: true }],
     tools: true,
     activity: { recentUpdates: 10 },
     pins: false,
@@ -109,7 +107,7 @@ describe('Subconscious curator', () => {
             },
           }),
           experimental_subconscious: new Subconscious({
-            reflection: [{ name: 'curate', curatorProfile: 'subconscious' }],
+            observation: [{ name: 'curate', curatorProfile: 'subconscious' }],
           }),
         },
       },
@@ -166,11 +164,14 @@ describe('Subconscious curator', () => {
     });
     expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
 
-    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'thread' }, {} as any);
+    await tools.knowledge_rescope!.execute?.(
+      { recordId: record.id, expectedVersion: record.version, scope: 'thread' },
+      {} as any,
+    );
     expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[2]]);
     await expect(
       tools.knowledge_update_node!.execute?.(
-        { node: node.id, expectedVersion: node.version + 1, name: 'Atlas' },
+        { node: node.id, expectedVersion: node.version + 1, name: 'Atlas', kind: node.kind },
         {} as any,
       ),
     ).rejects.toThrow('version');
@@ -340,7 +341,7 @@ describe('Subconscious curator', () => {
         .spyOn(Agent.prototype, 'generate')
         .mockResolvedValueOnce({ text: `<curation-complete through="${item.id}" />` } as any);
       const config = resolved();
-      config.reflection[0]!.model = 'per-agent/model' as any;
+      config.observation[0]!.model = 'per-agent/model' as any;
       const handler = createCuratorHandler(memory, config, memory, { omModel: 'openai/om-model' });
       const ctx = context();
 

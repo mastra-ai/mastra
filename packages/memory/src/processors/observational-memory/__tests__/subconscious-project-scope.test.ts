@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { createPinnedTools, PinnedStateProcessor, Subconscious } from '../subconscious';
-import { SubconsciousCurateExtractor } from '../subconscious/curate';
+import { createCuratorHandler } from '../subconscious/curate';
 import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import { SubconsciousRemindExtractor } from '../subconscious/remind';
 
@@ -123,33 +123,48 @@ describe('Subconscious project scope override', () => {
     const projectScopeIds = await scopeIdsFor(memory, requestContextWith({ knowledgeResourceId: 'project-1' }));
     const sessionScopeIds = await scopeIdsFor(memory, requestContextWith());
     const subconscious = new Subconscious({
-      observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
+      observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5, curatorProfile: 'subconscious' }],
     });
-    let curatorAgent: Agent | undefined;
-    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
-      curatorAgent = this;
-      return { accepted: new Promise(() => {}), signal: {} } as any;
+    const knowledge = memory.getKnowledgeInstance()!;
+    await knowledge.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: 'resource:project-1:thread:thread-a:uncurated', role: 'owner' },
+        { scopeAddress: 'resource:project-1', role: 'owner' },
+        { scopeAddress: 'resource:project-1:thread:thread-a', role: 'owner' },
+      ],
     });
-    const curatorConfig = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
-    const curate = new SubconsciousCurateExtractor(curatorConfig, subconscious.resolved, () => memory, 'mock/model');
-
-    await curate.onExtracted?.({
-      source: 'observer',
-      extractor: curate,
-      threadId: 'thread-a',
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [projectScopeIds[4]!] });
+    const record = await store.createRecord({
+      node: node.id,
+      text: 'Project Atlas launches soon.',
+      scopeIds: [projectScopeIds[4]!],
+      source: 'thread-a',
+    });
+    const createCurator = vi.spyOn(knowledge, 'createCurator');
+    vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+      text: `<curation-complete through="${record.id}" />`,
+    } as any);
+    const curate = createCuratorHandler(memory, subconscious.resolved, memory, { omModel: 'mock/model' });
+    await curate({
+      parentThreadId: 'thread-a',
       resourceId: 'session-a',
-      current: 'Project Atlas launches soon.',
-      rawObservations: 'Project Atlas launches soon.',
-      memory,
+      observations: 'Project Atlas launches soon.',
       requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
     });
-    const tools = await curatorAgent!.listTools();
-    await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
-    expect(search).toHaveBeenCalled();
-    for (const call of search.mock.calls) {
-      expect(call[0]!.scopeIds).toContain(projectScopeIds[1]);
-      expect(call[0]!.scopeIds).not.toContain(sessionScopeIds[1]);
-    }
+    expect(createCurator).toHaveBeenCalledWith({
+      profileId: 'subconscious',
+      companionScopeId: projectScopeIds[4],
+      contextScopeId: projectScopeIds[2],
+    });
+    expect(createCurator).not.toHaveBeenCalledWith(
+      expect.objectContaining({ companionScopeId: sessionScopeIds[4] }),
+    );
 
     const remind = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true } as any);
     await Promise.resolve(

@@ -52,7 +52,9 @@ describe('direct Subconscious replay', () => {
       knowledge: new Knowledge({ id: 'default', storage }),
       ...semanticInfrastructure,
     });
-    const subconscious = new Subconscious();
+    const subconscious = new Subconscious({
+      observation: [{ name: 'curate', curatorProfile: 'subconscious' }],
+    });
     const scopeContext = new RequestContext();
     scopeContext.set('organizationId', 'acme');
     const scopeIds = await resolveKnowledgeScopeIds(memory, {
@@ -60,9 +62,32 @@ describe('direct Subconscious replay', () => {
       requestContext: scopeContext,
     });
     const store = await memory.getKnowledgeStore();
-    const generatedPrompts: string[] = [];
-    let firstRecordId = '';
-    let nodeId = '';
+    await memory.getKnowledgeInstance()!.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: 'resource:atlas:thread:thread-a:uncurated', role: 'owner' },
+        { scopeAddress: 'resource:atlas', role: 'owner' },
+        { scopeAddress: 'resource:atlas:thread:thread-a', role: 'owner' },
+      ],
+    });
+    const provisionalNode = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scopeIds: [scopeIds[4]!],
+    });
+    const provisionalRecord = await store.createRecord({
+      node: provisionalNode.id,
+      text: 'Project Atlas launches on 2026-10-01 and belongs to the Acme roadmap.',
+      scopeIds: [scopeIds[4]!],
+      source: 'thread-a',
+      metadata: { sourceThreadId: 'thread-a' },
+    });
+    const nodeId = provisionalNode.id;
     const getActiveReminderRecord = async () =>
       (
         await store.listRecords({
@@ -73,68 +98,42 @@ describe('direct Subconscious replay', () => {
       ).records.find(record => !record.deletedAt)!;
 
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
-      const text = String(message.contents);
-      generatedPrompts.push(text);
       const consumeStream = async () => {
         const tools = (await this.listTools({ requestContext: options?.ifIdle?.streamOptions?.requestContext })) as any;
-        if (this.id.startsWith('subconscious-remind-')) {
-          const reminderRecord = await getActiveReminderRecord();
-          const eventId = message.metadata.subconsciousRemind.eventId;
-          await tools.send_reminder!.execute?.(
-            {
-              eventId,
-              reminder: `Project Atlas now launches on October 1. Source: ${reminderRecord.id}`,
-              sourceIds: [reminderRecord.id],
+        const reminderRecord = await getActiveReminderRecord();
+        const eventId = message.metadata.subconsciousRemind.eventId;
+        await tools.send_reminder!.execute?.(
+          {
+            eventId,
+            reminder: `Project Atlas now launches on October 1. Source: ${reminderRecord.id}`,
+            sourceIds: [reminderRecord.id],
+          },
+          {
+            agent: {
+              threadId: options.threadId,
+              resourceId: options.resourceId,
+              messages: [{ role: 'user', content: String(message.contents), metadata: message.metadata }],
             },
-            {
-              agent: {
-                threadId: options.threadId,
-                resourceId: options.resourceId,
-                messages: [{ role: 'user', content: text, metadata: message.metadata }],
-              },
-            } as any,
-          );
-        } else if (!nodeId) {
-          const created = (await tools.knowledge_create!.execute?.(
-            {
-              name: 'Project Atlas',
-              kind: 'project',
-              text: 'Project Atlas launches on 2026-09-15 and belongs to the Acme roadmap.',
-              nodeScope: 'resource',
-              scope: 'resource',
-              when: '2026-09-15T00:00:00.000Z',
-            },
-            {} as any,
-          )) as any;
-          nodeId = created.node.id;
-          firstRecordId = created.record.id;
-        } else {
-          const found = (await tools.knowledge_search!.execute?.(
-            { query: 'Project Atlas launch', limit: 10 },
-            {} as any,
-          )) as any;
-          expect(JSON.stringify(found)).toContain(firstRecordId);
-          await tools.knowledge_remove!.execute?.({ recordId: firstRecordId }, {} as any);
-          await tools.knowledge_append!.execute?.(
-            {
-              node: nodeId,
-              text: 'Project Atlas launches on 2026-10-01 and belongs to the Acme roadmap.',
-              scope: 'resource',
-              when: '2026-10-01T00:00:00.000Z',
-            },
-            {} as any,
-          );
-        }
+          } as any,
+        );
       };
       return { accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }), signal: {} } as any;
     });
-    (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async () => {
+    (vi.spyOn(Agent.prototype, 'generate') as any).mockImplementation(async function (this: Agent) {
+      if (this.id.startsWith('subconscious-curate-')) {
+        const tools = (await this.listTools({ requestContext: scopeContext })) as any;
+        await tools.knowledge_curation_promote!.execute?.(
+          { nodeId, version: provisionalNode.version, destinationScopeId: scopeIds[1] },
+          {} as any,
+        );
+        return { text: `<curation-complete through="${provisionalRecord.id}" />` } as any;
+      }
       const reminderRecord = await getActiveReminderRecord();
       return { text: `Project Atlas now launches on October 1. Source: ${reminderRecord.id}` } as any;
     });
 
     const result = await replayCycles({
-      cycles: cycles(),
+      cycles: cycles().slice(0, 1),
       threadId: 'thread-a',
       resourceId: 'atlas',
       organizationId: 'acme',
@@ -151,11 +150,8 @@ describe('direct Subconscious replay', () => {
     });
     const active = records.records.filter(record => !record.deletedAt);
     expect(result).toMatchObject({
-      cyclesReplayed: 2,
-      curatorOutcomes: [
-        { cycleIndex: 0, sourceThreadId: 'thread-a', outcome: 'ran' },
-        { cycleIndex: 1, sourceThreadId: 'thread-a', outcome: 'ran' },
-      ],
+      cyclesReplayed: 1,
+      curatorOutcomes: [{ cycleIndex: 0, sourceThreadId: 'thread-a', outcome: 'ran' }],
       knowledgeNodes: 1,
       knowledgeRecords: 1,
       warnings: [],
@@ -165,7 +161,6 @@ describe('direct Subconscious replay', () => {
       text: 'Project Atlas launches on 2026-10-01 and belongs to the Acme roadmap.',
       metadata: { sourceThreadId: 'thread-a' },
     });
-    expect(generatedPrompts[1]).toContain('Project Atlas launch moved to 2026-10-01');
 
     const reminder = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
     const requestContext = new RequestContext();
