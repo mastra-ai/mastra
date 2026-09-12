@@ -13,6 +13,7 @@ async function createFixture() {
       { address: 'principal:suggest', name: 'Suggest principal' },
       { address: 'principal:owner', name: 'Owner principal' },
       { address: 'principal:edit', name: 'Edit principal' },
+      { address: 'principal:observer', name: 'Observer principal' },
       {
         address: 'scope:source',
         name: 'Source scope',
@@ -20,6 +21,7 @@ async function createFixture() {
           { scopeRefAddress: 'principal:suggest', role: 'readonly', canSuggest: true },
           { scopeRefAddress: 'principal:owner', role: 'owner' },
           { scopeRefAddress: 'principal:edit', role: 'edit' },
+          { scopeRefAddress: 'principal:observer', role: 'readonly' },
         ],
       },
       {
@@ -212,6 +214,44 @@ describe('Knowledge proposal lifecycle', () => {
       name: 'Proposed title',
       version: node.version + 2,
     });
+  });
+
+  it('hides conflicted proposals from target-only readers on list and single-id surfaces', async () => {
+    const { knowledge, lifecycle, node, ids } = await createFixture();
+    const proposal = await lifecycle.proposeNodeUpdate({
+      mutation: { id: node.id, version: node.version, name: 'Proposed title' },
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    await knowledge.updateNode({
+      id: node.id,
+      version: node.version,
+      name: 'Concurrent title',
+      vouchedScopeIds: [ids['principal:owner']!],
+    });
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:owner']!,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeConflictError);
+
+    // The observer reads the target scope but neither the proposer context
+    // nor any write authority: both surfaces must fail indistinguishably —
+    // and reReview must not clone the hidden payload.
+    const observerVouch = [ids['principal:observer']!];
+    await expect(knowledge.listProposals({ vouchedScopeIds: observerVouch })).resolves.toEqual({
+      proposals: [],
+      nextCursor: undefined,
+    });
+    await expect(
+      lifecycle.reReview({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:observer']!,
+        vouchedScopeIds: observerVouch,
+      }),
+    ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
   });
 
   it('atomically conflicts a proposal when the target changes after approval preflight', async () => {
