@@ -9,7 +9,8 @@ const { appDataDir, previousEnv } = vi.hoisted(() => {
   return { appDataDir: dir, previousEnv: previous };
 });
 
-import { rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MastraGateway } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
@@ -44,6 +45,76 @@ describe('getDynamicModel error branches', () => {
     expect(() => getDynamicModel({ requestContext })).toThrow(
       'No model selected. Use /models to select a model first.',
     );
+  });
+});
+
+describe('getDynamicModel fallback chain', () => {
+  function seedSettings(packFallbacks: Record<string, string>) {
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { packFallbacks },
+      }),
+      'utf-8',
+    );
+  }
+
+  function requestWithSession(modelId: string, modeId = 'build') {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId, modeId } });
+    return { requestContext };
+  }
+
+  it('returns a bare model when no fallback is configured — identical to before', () => {
+    seedSettings({});
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
+  it('returns a bare model for a manual /model selection that matches no pack', () => {
+    seedSettings({ anthropic: 'openai' });
+
+    const model = getDynamicModel(requestWithSession('openai/gpt-5.4-mini'));
+
+    expect(Array.isArray(model)).toBe(false);
+  });
+
+  it('builds the fallback array from the active pack chain, resolving each pack for the same mode', () => {
+    seedSettings({ anthropic: 'openai', openai: 'github-copilot' });
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    expect(Array.isArray(model)).toBe(true);
+    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
+    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+  });
+
+  it('gives a revisited pack a unique per-occurrence id (A→B→A chain)', () => {
+    seedSettings({ anthropic: 'openai', openai: 'anthropic' });
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+    const entries = model as Array<{ id?: string }>;
+
+    // Each pack appears at most twice (initial visit + one revisit).
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2', 'openai#2']);
+  });
+
+  it('identifies the pack through builtin overrides applied to the session model', () => {
+    seedSettings({ anthropic: 'openai' });
+    const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));
+    raw.models.modePackOverrides = { anthropic: { build: 'anthropic/claude-haiku-4-5' } };
+    writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(raw), 'utf-8');
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-haiku-4-5'));
+
+    expect(Array.isArray(model)).toBe(true);
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai']);
   });
 });
 
