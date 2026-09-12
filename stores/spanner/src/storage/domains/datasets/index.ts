@@ -621,8 +621,8 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   /** Reads the current live row for an item (validTo IS NULL, not deleted). */
-  private async loadCurrentItemRow(itemId: string): Promise<DatasetItemRow | null> {
-    const [rows] = await this.database.run({
+  private async loadCurrentItemRow(tx: Transaction, itemId: string): Promise<DatasetItemRow | null> {
+    const [rows] = await tx.run({
       sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
             WHERE ${quoteIdent('id', 'column name')} = @id
               AND ${quoteIdent('validTo', 'column name')} IS NULL
@@ -716,44 +716,53 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
-      const existing = await this.loadCurrentItemRow(args.id);
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item not found: ${args.id}`,
-          details: { id: args.id },
-        });
-      }
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
-          details: { id: args.id, datasetId: args.datasetId },
-        });
-      }
-
-      const merged = {
-        input: args.input !== undefined ? args.input : existing.input,
-        groundTruth: args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth,
-        expectedTrajectory:
-          args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory,
-        toolMocks: args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks,
-        unmockedToolPolicy:
-          args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy,
-        scorerIds: args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds,
-        requestContext: args.requestContext !== undefined ? args.requestContext : existing.requestContext,
-        metadata: args.metadata !== undefined ? args.metadata : existing.metadata,
-        source: args.source !== undefined ? args.source : existing.source,
-      };
       const now = new Date();
       let updated: DatasetItem | null = null;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const existing = await this.loadCurrentItemRow(tx, args.id);
+            if (!existing) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'NOT_FOUND'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item not found: ${args.id}`,
+                details: { id: args.id },
+              });
+            }
+            if (existing.datasetId !== args.datasetId) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'DATASET_MISMATCH'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
+                details: { id: args.id, datasetId: args.datasetId },
+              });
+            }
+            if (existing.metadata?.__purged === true) {
+              throw new MastraError({
+                id: 'DATASET_ITEM_PURGED',
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { datasetId: args.datasetId, itemId: args.id },
+                text: `Purged dataset item cannot be updated: ${args.id}`,
+              });
+            }
+
+            const merged = {
+              input: args.input !== undefined ? args.input : existing.input,
+              groundTruth: args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth,
+              expectedTrajectory:
+                args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory,
+              toolMocks: args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks,
+              unmockedToolPolicy:
+                args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy,
+              scorerIds: args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds,
+              requestContext: args.requestContext !== undefined ? args.requestContext : existing.requestContext,
+              metadata: args.metadata !== undefined ? args.metadata : existing.metadata,
+              source: args.source !== undefined ? args.source : existing.source,
+            };
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
@@ -827,21 +836,24 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doDeleteItem(args: DeleteDatasetItemInput): Promise<void> {
     try {
-      const existing = await this.loadCurrentItemRow(args.id);
-      if (!existing) return;
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'DELETE_DATASET_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
-          details: { id: args.id, datasetId: args.datasetId },
-        });
-      }
       const now = new Date();
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const existing = await this.loadCurrentItemRow(tx, args.id);
+            if (!existing) {
+              await tx.commit();
+              return;
+            }
+            if (existing.datasetId !== args.datasetId) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'DELETE_DATASET_ITEM', 'DATASET_MISMATCH'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
+                details: { id: args.id, datasetId: args.datasetId },
+              });
+            }
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
@@ -1322,18 +1334,21 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
-      // Resolve current rows up front and keep only those belonging to the dataset.
-      const current: DatasetItemRow[] = [];
-      for (const itemId of input.itemIds) {
-        const row = await this.loadCurrentItemRow(itemId);
-        if (row && row.datasetId === input.datasetId) current.push(row);
-      }
-      if (current.length === 0) return;
-
       const now = new Date();
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            // Resolve current rows up front and keep only those belonging to the dataset.
+            const current: DatasetItemRow[] = [];
+            for (const itemId of input.itemIds) {
+              const row = await this.loadCurrentItemRow(tx, itemId);
+              if (row && row.datasetId === input.datasetId) current.push(row);
+            }
+            if (current.length === 0) {
+              await tx.commit();
+              return;
+            }
+
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, input.datasetId, now);
             for (const existing of current) {
               await this.closeCurrentRow(tx, existing.id, newVersion);

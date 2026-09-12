@@ -60,7 +60,7 @@ export function LifelineRow({
       className={`group hover:bg-surface3 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
       <span
-        className="text-neutral4 group-hover:text-neutral6 w-52 shrink-0 truncate text-right text-xs"
+        className="text-neutral4 group-hover:text-neutral6 text-ui-sm w-52 shrink-0 truncate text-right"
         title={row.label}
       >
         {row.label}
@@ -112,7 +112,7 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="text-neutral3 w-9 shrink-0 font-mono text-[11px] tabular-nums">
+      <span className="text-neutral3 text-ui-sm w-9 shrink-0 font-mono tabular-nums">
         {row.points.length}/{snapshots.length}
       </span>
     </li>

@@ -53,10 +53,10 @@ export function ReferenceViewerDialog({
               <FileText className="text-neutral4 h-4 w-4" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-neutral6 text-base font-medium">
+              <h2 id="reference-viewer-title" className="text-neutral6 text-ui-lg font-medium">
                 {referencePath}
               </h2>
-              <p className="text-neutral3 text-xs">from {skillName}</p>
+              <p className="text-neutral3 text-ui-sm">from {skillName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -85,10 +85,10 @@ export function ReferenceViewerDialog({
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="mb-2 text-red-400">Failed to load reference</p>
-              <p className="text-neutral3 text-sm">{error}</p>
+              <p className="text-neutral3 text-ui-md">{error}</p>
             </div>
           ) : content ? (
-            <pre className="text-neutral5 bg-surface3 overflow-auto rounded-lg p-4 font-mono text-sm whitespace-pre-wrap">
+            <pre className="text-neutral5 bg-surface3 text-ui-md overflow-auto rounded-lg p-4 font-mono whitespace-pre-wrap">
               {content}
             </pre>
           ) : (

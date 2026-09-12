@@ -313,6 +313,32 @@ describe('Memory.summarizeThread()', () => {
     expect(doStream).not.toHaveBeenCalled();
   });
 
+  it.each([1, 100, 101, 200])('loads %i messages without totals and stops at the final page', async count => {
+    const texts = Array.from({ length: count }, (_, index) => `message-${String(index).padStart(3, '0')}`);
+    const { memory, threadId, resourceId } = await createThreadWithMessages(texts);
+    const originalRecall = memory.recall.bind(memory);
+    const recallSpy = vi.spyOn(memory, 'recall').mockImplementation(async args => {
+      const result = await originalRecall(args);
+      return { ...result, total: 0 };
+    });
+    const { model, promptText } = createPromptCapturingModel();
+
+    await memory.summarizeThread({ model: model as any, threadId, resourceId });
+
+    expect(recallSpy).toHaveBeenCalledTimes(Math.ceil(count / 100));
+    for (let page = 0; page < Math.ceil(count / 100); page++) {
+      expect(recallSpy).toHaveBeenNthCalledWith(page + 1, {
+        threadId,
+        resourceId,
+        perPage: 100,
+        page,
+        includeTotal: false,
+      });
+    }
+    expect(promptText()).toContain(texts[0]);
+    expect(promptText()).toContain(texts[count - 1]);
+  });
+
   it('paginates across storage pages and preserves chronological order', async () => {
     const texts = Array.from({ length: 120 }, (_, index) => `marker-${String(index + 1).padStart(3, '0')}`);
     const { memory, threadId, resourceId } = await createThreadWithMessages(texts);

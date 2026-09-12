@@ -1,5 +1,38 @@
 # @mastra/daytona
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- Fixed Daytona S3 mounts to forward temporary session credentials, protect credential uploads, and remove temporary staging files after launch. Added a bounded mount-access check and recovery so failed mounts can be retried. Long-lived credential files are cleaned up on unmount once the mount process has exited, including after reconnecting to a sandbox. Credentials are not automatically refreshed. ([#23519](https://github.com/mastra-ai/mastra/pull/23519))
+
+  Previously, `sessionToken` was used for host-side S3 requests but dropped by Daytona mounts. Now pass all three temporary credential values to `S3Filesystem` to authenticate the mounted filesystem too:
+
+  ```typescript
+  import { Workspace } from '@mastra/core/workspace';
+  import { DaytonaSandbox } from '@mastra/daytona';
+  import { S3Filesystem } from '@mastra/s3';
+
+  const workspace = new Workspace({
+    mounts: {
+      '/s3-data': new S3Filesystem({
+        bucket: process.env.S3_BUCKET!,
+        region: process.env.S3_REGION ?? 'us-east-1',
+        endpoint: process.env.S3_ENDPOINT,
+        accessKeyId: process.env.SCOPED_S3_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.SCOPED_S3_SECRET_ACCESS_KEY!,
+        sessionToken: process.env.SCOPED_S3_SESSION_TOKEN!,
+      }),
+    },
+    sandbox: new DaytonaSandbox({ language: 'python', ephemeral: true }),
+  });
+  ```
+
+  Obtain credentials from your storage provider with only the permissions the sandbox needs.
+
+- Updated dependencies [[`d9ef543`](https://github.com/mastra-ai/mastra/commit/d9ef54303b7f050f4e364701c3821fc61e7002f2), [`b96744d`](https://github.com/mastra-ai/mastra/commit/b96744daad8c6e181f03fdf38c732206ded428a2), [`37065ad`](https://github.com/mastra-ai/mastra/commit/37065ad6cd3f74afd16417e8d4e0839c13beca40), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`1ce03b9`](https://github.com/mastra-ai/mastra/commit/1ce03b9c04c633e815bc21cb78c29f7f19851fb2), [`2990bcc`](https://github.com/mastra-ai/mastra/commit/2990bccd1c648c8f8614da97fbb459819871f5bc), [`967ab17`](https://github.com/mastra-ai/mastra/commit/967ab179c9814e734af9c3395ff8ef795acbe06c), [`fde3ca5`](https://github.com/mastra-ai/mastra/commit/fde3ca590f7d854ff33354eff4261b907bdacde4), [`0775cde`](https://github.com/mastra-ai/mastra/commit/0775cdee12b6ad2ad6b5c97874e6248db720224c), [`44057ea`](https://github.com/mastra-ai/mastra/commit/44057eac6fd048100574bf71c6dc095f769a6d63), [`2289456`](https://github.com/mastra-ai/mastra/commit/228945659b2003633e0ebb33e7e34cc2f6efbded), [`90846f2`](https://github.com/mastra-ai/mastra/commit/90846f2bfd890de159ab7c3d4fcf8a71c6fb7125), [`d1b070c`](https://github.com/mastra-ai/mastra/commit/d1b070cd77a944e6bb2e5848052b1e8275be88a2), [`1bd31e7`](https://github.com/mastra-ai/mastra/commit/1bd31e7fd49e6de56e6e9a157a6b452cbbd86983)]:
+  - @mastra/core@1.67.0-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes

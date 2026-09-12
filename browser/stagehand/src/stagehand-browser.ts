@@ -216,6 +216,17 @@ export class StagehandBrowser extends MastraBrowser {
   }
 
   /**
+   * Whether this provider drives a browser it did not launch as a local OS
+   * process — a Browserbase cloud session, or a browser reached over `cdpUrl`.
+   * Such a browser's PID belongs to another host/namespace and must never be
+   * signalled locally.
+   */
+  private isConnectedToRemoteBrowser(): boolean {
+    const config = this.stagehandConfig;
+    return config.env === 'BROWSERBASE' || config.cdpUrl != null;
+  }
+
+  /**
    * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.
    */
@@ -228,13 +239,20 @@ export class StagehandBrowser extends MastraBrowser {
    * fire when Chrome is killed externally (SIGTERM/SIGKILL).
    */
   private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
-    const chromePid = getStagehandChromePid(stagehand);
-    // Store PID so the base class can kill the process group on disconnect/close
-    if (chromePid != null) {
-      if (threadId) {
-        this.threadBrowserPids.set(threadId, chromePid);
-      } else {
-        this.sharedBrowserPid = chromePid;
+    // Only capture the PID for browsers we launched locally. A Browserbase
+    // session or a browser reached over `cdpUrl` runs in another PID namespace
+    // (a cloud host, a container): its PID is meaningless — and dangerous — to
+    // signal from this machine, so we never store it. This leaves the base
+    // class's process-group cleanup as a no-op for remote browsers.
+    if (!this.isConnectedToRemoteBrowser()) {
+      const chromePid = getStagehandChromePid(stagehand);
+      // Store PID so the base class can kill the process group on disconnect/close
+      if (chromePid != null) {
+        if (threadId) {
+          this.threadBrowserPids.set(threadId, chromePid);
+        } else {
+          this.sharedBrowserPid = chromePid;
+        }
       }
     }
 

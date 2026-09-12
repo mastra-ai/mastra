@@ -1,10 +1,11 @@
 {
   "meta": {
     "name": "test-82c3d0a2",
-    "testFile": "packages/core/src/agent/agent-processor.e2e.test.ts",
+    "testFile": "src/agent/agent-processor.e2e.test.ts",
     "testName": "StructuredOutputProcessor Integration Tests > with real LLM > should handle fallback strategy gracefully",
     "model": "gpt-4o",
-    "createdAt": "2026-05-18T10:50:58.300Z"
+    "createdAt": "2026-05-18T10:50:58.300Z",
+    "updatedAt": "2026-09-11T01:51:56.291Z"
   },
   "recordings": [
     {
@@ -30,7 +31,7 @@
             }
           ]
         },
-        "timestamp": 1779101457373
+        "timestamp": 1789091514888
       },
       "response": {
         "status": 200,
@@ -39,35 +40,33 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fda4dcceb60b774-BRU",
+          "cf-ray": "a39307b018ceb103-LAX",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 18 May 2026 10:50:58 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "757",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Fri, 11 Sep 2026 01:51:56 GMT",
+          "openai-processing-ms": "1301",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "30000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "29824",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "352ms",
-          "x-request-id": "req_276ac1eaedaf445dbab3d59d619736ac"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "30000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "29999824",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_9759a9727bd9435fa3ac568b2cc1aba5"
         },
         "body": {
-          "id": "resp_033e6b28eea713cb006a0aef118540819094b1ef8922f8b03c",
+          "id": "resp_0792baa65b142b1f006aa35ebaf46887d08391ce9da19b5bfc",
           "object": "response",
-          "created_at": 1779101457,
+          "created_at": 1789091514,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1779101458,
+          "completed_at": 1789091516,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -78,7 +77,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_033e6b28eea713cb006a0aef11ddec8190877aa160182589af",
+              "id": "msg_0792baa65b142b1f006aa35ebbe6f887d0b458b078e5faed37",
               "type": "message",
               "status": "completed",
               "content": [
@@ -86,7 +85,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I'm sorry, but I can't provide the information you requested. However, I can share that the number is 1000."
+                  "text": "I can help with a different type of request. Let me know if there's something else I can assist you with."
                 }
               ],
               "role": "assistant"
@@ -98,6 +97,7 @@
           "prompt_cache_key": null,
           "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": null,
             "effort": null,
             "summary": null
           },
@@ -112,6 +112,24 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [],
           "top_logprobs": 0,
           "top_p": 1,
@@ -119,13 +137,14 @@
           "usage": {
             "input_tokens": 157,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 26,
+            "output_tokens": 24,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 183
+            "total_tokens": 181
           },
           "user": null,
           "metadata": {}

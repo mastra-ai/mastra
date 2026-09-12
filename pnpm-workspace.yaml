@@ -211,6 +211,10 @@ minimumReleaseAgeExclude:
   - better-auth@1.6.23
   # Renovate security update: valibot@1.4.2
   - valibot@1.4.2
+  # SEC-170/171: Fastify 5.12.4 (fast-uri fix) and @blaxel/core@0.3.20 — adopted
+  # before the 1-day minimumReleaseAge window; pinned to exact versions.
+  - fastify@5.12.4
+  - '@blaxel/core@0.3.20'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -261,7 +265,7 @@ overrides:
   ws@>=8.0.0 <8.21.0: 8.21.0
   webpack-dev-server@<5.2.5: 5.2.6
   qs@>=6.7.0 <6.15.2: 6.15.2
-  fast-uri@<3.1.5: 3.1.5
+  fast-uri@<3.1.7: 3.1.7
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 5.0.9
@@ -281,7 +285,7 @@ overrides:
   undici@>=7.0.0 <7.29.0: 7.29.0
   undici@>=8.0.0 <8.9.0: 8.9.0
   e2b>undici8: npm:undici@8.9.0
-  multer@<2.2.0: 2.2.0
+  multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
   '@opentelemetry/sdk-node@<0.217.0': 0.221.0

@@ -38,6 +38,12 @@ export interface StaticDriverArgs {
    * posts the buffered reply as `{ markdown }`; `'plain'` posts the bare string.
    */
   textFormat?: 'markdown' | 'plain';
+  /**
+   * What to do with buffered text when an `abort` chunk arrives.
+   * `'flush'` (the absent-value default) posts the partial buffered text;
+   * `'discard'` drops it and posts nothing.
+   */
+  onAbort?: 'flush' | 'discard';
 }
 
 /**
@@ -63,6 +69,7 @@ export async function runStaticDriver({
   takePendingApproval,
   formatError,
   textFormat,
+  onAbort,
 }: StaticDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -197,7 +204,11 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'abort') {
-      await flushText();
+      // Default (`'flush'`) posts the partial buffered reply; `'discard'` drops
+      // it (`resetRunState` clears the buffer) so nothing is posted on abort.
+      if (onAbort !== 'discard') {
+        await flushText();
+      }
       resetRunState();
       continue;
     }
@@ -331,7 +342,7 @@ export async function runStaticDriver({
         displayName: enr.displayName,
         argsSummary: enr.argsSummary,
         startedAt: Date.now(),
-        runId: (chunk as { runId?: string }).runId,
+        runId: chunk.runId,
         toolName: enr.toolName,
         args: (enr.args ?? {}) as Record<string, unknown>,
       });

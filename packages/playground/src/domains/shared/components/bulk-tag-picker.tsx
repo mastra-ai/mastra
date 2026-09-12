@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -11,12 +12,14 @@ export function BulkTagPicker({
   onApplyTag,
   onRemoveTag,
   onNewTag,
+  size = 'sm',
 }: {
   selectedCount: number;
   vocabulary: string[];
   onApplyTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
   onNewTag: (tag: string) => void;
+  size?: ButtonProps['size'];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -27,7 +30,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size={size}>
           <Icon size="sm">
             <Tag />
           </Icon>
@@ -50,12 +53,12 @@ export function BulkTagPicker({
             }
           }}
           placeholder="Search or create tag..."
-          className="mb-1 h-7 text-xs"
+          className="text-ui-sm mb-1 h-7"
           autoFocus
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <div key={tag} className="hover:bg-surface3 flex items-center justify-between rounded px-2 py-1 text-xs">
+            <div key={tag} className="hover:bg-surface3 text-ui-sm flex items-center justify-between rounded px-2 py-1">
               <button type="button" onClick={() => onApplyTag(tag)} className="text-neutral4 flex-1 text-left">
                 {tag}
               </button>
@@ -75,7 +78,7 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
+              className="hover:bg-surface3 text-accent1 text-ui-sm w-full rounded px-2 py-1 text-left"
             >
               Create &amp; apply &quot;{search.trim()}&quot;
             </button>

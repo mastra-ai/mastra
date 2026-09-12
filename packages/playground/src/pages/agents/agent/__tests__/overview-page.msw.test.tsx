@@ -171,31 +171,25 @@ describe('Agent overview page', () => {
       expect(screen.queryByText('Failed to load agent')).toBeNull();
     });
 
-    it('shows the Overview tab first and active', async () => {
+    it('shows the Chat tab first and the Overview tab active', async () => {
       installHandlers();
       renderAt(`/agents/${AGENT_ID}/overview`);
 
       const tabs = await screen.findAllByRole('tab');
-      expect(tabs[0].textContent).toContain('Overview');
-      await waitFor(() => expect(tabs[0].getAttribute('aria-selected')).toBe('true'));
+      expect(tabs[0].textContent).toContain('Chat');
+      const overviewTab = screen.getByRole('tab', { name: 'Overview' });
+      await waitFor(() => expect(overviewTab.getAttribute('aria-selected')).toBe('true'));
+      expect(tabs[0].getAttribute('aria-selected')).toBe('false');
     });
 
-    it('does not render a Chat tab', async () => {
+    it('opens a new chat from the Chat tab', async () => {
       installHandlers();
       renderAt(`/agents/${AGENT_ID}/overview`);
 
-      await screen.findAllByRole('tab');
-      expect(screen.queryByRole('tab', { name: 'Chat' })).toBeNull();
-    });
+      const chatTab = await screen.findByRole('tab', { name: 'Chat' });
+      expect(screen.queryByText('Open chat')).toBeNull();
 
-    it('opens a new chat from the button next to the agent header', async () => {
-      installHandlers();
-      renderAt(`/agents/${AGENT_ID}/overview`);
-
-      const newChatButton = await screen.findByTestId('agent-view-header-new-chat');
-      expect(newChatButton.getAttribute('href')).toBe(`/agents/${AGENT_ID}/threads/new`);
-
-      fireEvent.click(newChatButton);
+      fireEvent.click(chatTab);
 
       await waitFor(() =>
         expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),

@@ -5,7 +5,6 @@ import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
-import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -21,6 +20,15 @@ interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
+}
+
+function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
+  if (typeof lastMessages !== 'number') {
+    return 'Recent message history is not included in context.';
+  }
+
+  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
+  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -110,8 +118,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-neutral5 text-sm font-medium">Clone Thread</h3>
-              <p className="text-neutral3 mt-1 text-xs">Create a copy of this conversation</p>
+              <h3 className="text-neutral5 text-ui-md font-medium">Clone Thread</h3>
+              <p className="text-neutral3 text-ui-sm mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning}>
               <GitFork className="mr-2 h-4 w-4" />
@@ -122,8 +130,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       )}
 
       <div className="border-border1 border-b p-4">
-        <h3 className="text-neutral5 text-sm font-medium">Recent Messages</h3>
-        <p className="text-neutral3 mt-1 text-xs">{getRecentMessagesSettings(config?.lastMessages).description}</p>
+        <h3 className="text-neutral5 text-ui-md font-medium">Recent Messages</h3>
+        <p className="text-neutral3 text-ui-sm mt-1">{getRecentMessagesDescription(config?.lastMessages)}</p>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
@@ -138,11 +146,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
-              <h3 className="text-neutral5 text-sm font-medium">Semantic Recall</h3>
+              <h3 className="text-neutral5 text-ui-md font-medium">Semantic Recall</h3>
               {searchMemoryData?.searchScope && (
                 <span
                   className={cn(
-                    'text-xs font-medium px-2 py-0.5 rounded',
+                    'text-ui-sm font-medium px-2 py-0.5 rounded',
                     searchScope === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
                   )}
                   title={
@@ -164,14 +172,14 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
             />
           ) : (
             <div className="bg-surface3 border-border1 rounded-lg border p-4">
-              <p className="text-neutral3 mb-3 text-sm">
+              <p className="text-neutral3 text-ui-md mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </p>
               <a
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+                className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
               >
                 Learn about semantic recall
                 <ExternalLink className="h-3 w-3" />
@@ -193,10 +201,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="border-border1 border-b p-4">
           <div className="bg-surface3 border-border1 rounded-lg border p-4">
             <div className="mb-1 flex items-center gap-2">
-              <span className="rounded bg-green-500/20 px-2 py-0.5 text-xs font-medium text-green-400">Remote</span>
-              <h3 className="text-neutral5 text-sm font-medium">Gateway</h3>
+              <span className="text-ui-sm rounded bg-green-500/20 px-2 py-0.5 font-medium text-green-400">Remote</span>
+              <h3 className="text-neutral5 text-ui-md font-medium">Gateway</h3>
             </div>
-            <p className="text-neutral3 text-xs">
+            <p className="text-neutral3 text-ui-sm">
               Memory is managed by the Gateway. Threads and observations are stored remotely.
             </p>
           </div>

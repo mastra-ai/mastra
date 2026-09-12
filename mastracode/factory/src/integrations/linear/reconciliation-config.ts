@@ -1,4 +1,6 @@
-import { optionalPositiveInteger } from '../reconciliation-config.js';
+import { optionalBoolean, optionalPositiveInteger } from '../reconciliation-config.js';
+
+const RECONCILIATION_LABEL = 'Linear reconciliation';
 
 function reconciliationEnabled(
   childName: string,
@@ -6,24 +8,19 @@ function reconciliationEnabled(
   legacyName: string,
   legacyValue: string | undefined,
 ): boolean {
-  return parseBoolean(childName, childValue) ?? parseBoolean(legacyName, legacyValue) ?? true;
+  return (
+    optionalBoolean(childName, childValue, RECONCILIATION_LABEL) ??
+    optionalBoolean(legacyName, legacyValue, RECONCILIATION_LABEL) ??
+    true
+  );
 }
 
 function optionalPositiveInterval(name: string, value: string | undefined): number | undefined {
   const interval = optionalPositiveInteger(value);
   if (value?.trim() && interval === undefined) {
-    console.warn(`[Linear reconciliation] ${name} must be a positive integer; received ${JSON.stringify(value)}.`);
+    console.warn(`[${RECONCILIATION_LABEL}] ${name} must be a positive integer; received ${JSON.stringify(value)}.`);
   }
   return interval;
-}
-
-function parseBoolean(name: string, value: string | undefined): boolean | undefined {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (normalized === 'true') return true;
-  if (normalized === 'false') return false;
-  console.warn(`[Linear reconciliation] ${name} must be true or false; received ${JSON.stringify(value)}.`);
-  return undefined;
 }
 
 export function linearIssueReconciliationEnabled(): boolean {

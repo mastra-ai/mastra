@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "cline-pass/deepseek-v4.1-flash",
     "cline-pass/glm-5.3-flash",
     "cline-pass/kimi-k2.6",
     "cline-pass/kimi-k2.7-code",
@@ -12,6 +13,7 @@
   "temperature": [
     "cline-pass/deepseek-v4-flash",
     "cline-pass/deepseek-v4-pro",
+    "cline-pass/deepseek-v4.1-flash",
     "cline-pass/glm-5.2",
     "cline-pass/glm-5.3",
     "cline-pass/glm-5.3-flash",
@@ -26,6 +28,7 @@
   "structuredOutput": [
     "cline-pass/deepseek-v4-flash",
     "cline-pass/deepseek-v4-pro",
+    "cline-pass/deepseek-v4.1-flash",
     "cline-pass/glm-5.2",
     "cline-pass/glm-5.3",
     "cline-pass/glm-5.3-flash",

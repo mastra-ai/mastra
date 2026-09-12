@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RenameExperimentButton } from '../rename-experiment-button';
+import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import { experiments } from './fixtures/experiments';
 import { useDatasetExperiment } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { server } from '@/test/msw-server';
@@ -16,11 +17,13 @@ const patchCalls: Array<{ datasetId: string; experimentId: string; body: Record<
 /** Mirrors the detail page: the title comes from the experiment query so a rename must refresh it. */
 function Harness() {
   const { data } = useDatasetExperiment('dataset-1', base.id);
+  const [open, setOpen] = useState(false);
   if (!data) return null;
   return (
     <>
       <h1>{data.name || `Experiment #${data.id.slice(0, 8)}`}</h1>
-      <RenameExperimentButton experiment={data} />
+      <button onClick={() => setOpen(true)}>Rename</button>
+      {open && <RenameExperimentDialog experiment={data} open onOpenChange={setOpen} />}
     </>
   );
 }
@@ -54,7 +57,7 @@ const nameInput = () => screen.getByLabelText('Name *') as HTMLInputElement;
 const descriptionInput = () => screen.getByLabelText('Description') as HTMLInputElement;
 const saveButton = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
 
-describe('RenameExperimentButton', () => {
+describe('RenameExperimentDialog', () => {
   it('should open the dialog prefilled with the current name and description', async () => {
     await openDialog();
 

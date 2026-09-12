@@ -58,7 +58,7 @@ For ClickHouse vNext, the method records the complete predicate and waits for li
 
 ### `SpanTypeMap`
 
-Mapping of span types to their corresponding attribute interfaces.
+Mapping of span types to their corresponding attribute interfaces. The list below is abbreviated. The `SpanTypeMap` interface in `@mastra/core/observability` is the complete one.
 
 ```typescript
 interface SpanTypeMap {
@@ -66,6 +66,7 @@ interface SpanTypeMap {
   WORKFLOW_RUN: WorkflowRunAttributes
   MODEL_GENERATION: ModelGenerationAttributes
   MODEL_STEP: ModelStepAttributes
+  MODEL_INFERENCE: ModelInferenceAttributes
   MODEL_CHUNK: ModelChunkAttributes
   TOOL_CALL: ToolCallAttributes
   CLIENT_TOOL_CALL: ClientToolCallAttributes
@@ -90,6 +91,70 @@ interface SpanTypeMap {
 
 This mapping defines which attribute interface is used for each span type when creating or processing spans.
 
+### `SpanInputMap` and `SpanOutputMap`
+
+Mapping of the span types whose `input` and `output` Mastra writes itself with a fixed shape. Every other span type keeps `any`: tool arguments and workflow data are caller-defined, `MODEL_CHUNK` carries several chunk shapes on one span type, and `GENERIC` is the escape hatch for custom spans.
+
+```typescript
+interface SpanInputMap {
+  AGENT_RUN: AgentRunInput
+  MODEL_GENERATION: ModelGenerationInput
+  MODEL_STEP: ModelStepInput
+  MODEL_INFERENCE: ModelStepInput
+}
+
+interface SpanOutputMap {
+  AGENT_RUN: AgentRunOutput
+  MODEL_GENERATION: ModelGenerationOutput
+  MODEL_STEP: ModelStepOutput
+  MODEL_INFERENCE: ModelStepResult
+}
+
+/** The mapped shape when the map lists the type, otherwise `any` */
+type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap
+  ? SpanInputMap[TType]
+  : any
+type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap
+  ? SpanOutputMap[TType]
+  : any
+```
+
+Narrow a span by its type to read the typed payload. On a stored `SpanRecord`, use `isSpanRecordOfType`:
+
+```typescript
+import { SpanType, isSpanRecordOfType } from '@mastra/core/observability'
+
+if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
+  span.input?.messages // MessageListInput
+  span.attributes?.usage // UsageStats | undefined
+}
+```
+
+To pick a renderer without checking shapes yourself, describe the payload. The tag is derived at read time from `spanType` and the value's shape. Nothing is stored.
+
+```typescript
+import {
+  describeSpanError,
+  describeSpanInput,
+  describeSpanOutput,
+} from '@mastra/core/observability'
+
+const input = describeSpanInput(span)
+// { type: 'text' | 'messages' | 'agent-run-resume' | 'json'; value } | undefined
+
+const output = describeSpanOutput(span)
+// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'text' | 'json'; value } | undefined
+
+switch (output?.type) {
+  case 'interrupted':
+    return output.value.status // 'suspended' | 'aborted'
+  case 'model-generation-result':
+    return output.value.text
+}
+
+describeSpanError(span) // SpanErrorInfo | undefined
+```
+
 ### Span
 
 Span interface, used internally for tracing.
@@ -112,8 +177,8 @@ interface Span<TType extends SpanType> {
 
   attributes?: SpanTypeMap[TType]
   metadata?: Record<string, any>
-  input?: any
-  output?: any
+  input?: SpanInput<TType>
+  output?: SpanOutput<TType>
   errorInfo?: any
 
   /** Tags for categorizing traces (only present on root spans) */
@@ -433,7 +498,7 @@ interface SpanOutputProcessor {
 
 ### `SpanType`
 
-AI-specific span types with their associated metadata.
+AI-specific span types with their associated metadata. The list below is abbreviated. The `SpanType` enum in `@mastra/core/observability` is the complete one.
 
 ```typescript
 enum SpanType {
@@ -448,6 +513,9 @@ enum SpanType {
 
   /** Single model execution step within a generation (one API call) */
   MODEL_STEP = 'model_step',
+
+  /** Model provider call within a step - wraps only the inference, excluding processors and tool executions */
+  MODEL_INFERENCE = 'model_inference',
 
   /** Individual model streaming chunk/event */
   MODEL_CHUNK = 'model_chunk',
@@ -762,6 +830,125 @@ interface WorkflowStepAttributes {
 }
 ```
 
+## Span payloads
+
+### `AgentRunInput`
+
+Input recorded on `AGENT_RUN` spans: the messages the caller passed for a fresh run, or the resume data for a resumed run.
+
+```typescript
+type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput
+
+interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown
+  /** Tool the run resumes into */
+  toolName?: string
+  /** Tool call the run resumes into */
+  toolCallId?: string
+  [key: string]: unknown
+}
+```
+
+### `AgentRunOutput`
+
+Output recorded on `AGENT_RUN` spans.
+
+```typescript
+type AgentRunOutput = AgentRunResult | InterruptedSpanOutput
+
+interface AgentRunResult {
+  /** Final response text */
+  text?: string
+  /** Final structured output */
+  object?: unknown
+  /** Generated files */
+  files?: unknown[]
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData
+}
+```
+
+### `ModelGenerationInput`
+
+Input recorded on `MODEL_GENERATION` spans.
+
+Mastra's own loop records the normalized model messages, system messages first. SDK agents record the raw messages the caller passed, so `messages` keeps the full `MessageListInput` shape.
+
+```typescript
+interface ModelGenerationInput {
+  /** Messages sent to the model */
+  messages: MessageListInput
+  /** Output schema, when structured output was requested */
+  schema?: unknown
+}
+```
+
+### `ModelGenerationOutput`
+
+Output recorded on `MODEL_GENERATION` spans: a `ModelGenerationResult` when the generation finishes, or an `InterruptedSpanOutput` when the run stops first. Every field of `ModelGenerationResult` is optional: a durable run records only `text`.
+
+```typescript
+type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput
+
+interface ModelGenerationResult {
+  text?: string
+  object?: unknown
+  reasoning?: unknown
+  reasoningText?: string
+  files?: unknown[]
+  sources?: unknown[]
+  toolCalls?: unknown[]
+  warnings?: unknown[]
+}
+```
+
+### `ModelStepInput`
+
+Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow preview of what the step sent to the model.
+
+```typescript
+type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string
+
+interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string
+  /** Message text, with non-text parts summarized */
+  content: string
+}
+```
+
+### `ModelStepOutput`
+
+Output recorded on `MODEL_STEP` spans. A finished step records a `ModelStepResult`, which is the step output without `usage` (that lives on the attributes). A step cut short by a suspension or an abort records an `InterruptedSpanOutput` instead. `MODEL_INFERENCE` spans always record a `ModelStepResult`.
+
+```typescript
+type ModelStepOutput = ModelStepResult | InterruptedSpanOutput
+
+interface ModelStepResult {
+  text?: string
+  toolCalls?: unknown[]
+  steps?: unknown[]
+  object?: unknown
+}
+```
+
+### `InterruptedSpanOutput`
+
+Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, or the caller aborted. `MODEL_INFERENCE` spans never carry it.
+
+```typescript
+interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted'
+  /** Why the run stopped */
+  reason?: string
+  /** Tool that suspended the run */
+  toolName?: string
+  /** Tool call that suspended the run */
+  toolCallId?: string
+}
+```
+
 ## Options types
 
 ### `StartSpanOptions`
@@ -783,7 +970,7 @@ interface StartSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: any
+  input?: SpanInput<TType>
 
   /** Parent span */
   parent?: AnySpan
@@ -809,10 +996,10 @@ interface UpdateSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: any
+  input?: SpanInput<TType>
 
   /** Output data */
-  output?: any
+  output?: SpanOutput<TType>
 }
 ```
 
@@ -823,7 +1010,7 @@ Options for ending spans.
 ```typescript
 interface EndSpanOptions<TType extends SpanType> {
   /** Output data */
-  output?: any
+  output?: SpanOutput<TType>
 
   /** Span metadata */
   metadata?: Record<string, any>

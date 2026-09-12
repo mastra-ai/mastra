@@ -51,11 +51,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     <div className="flex flex-col gap-4 p-4">
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-neutral5 text-sm font-medium">Working Memory</h3>
+          <h3 className="text-neutral5 text-ui-md font-medium">Working Memory</h3>
           {isWorkingMemoryEnabled && workingMemorySource && (
             <span
               className={cn(
-                'text-xs font-medium px-2 py-0.5 rounded',
+                'text-ui-sm font-medium px-2 py-0.5 rounded',
                 workingMemorySource === 'resource'
                   ? 'bg-purple-500/20 text-purple-400'
                   : 'bg-blue-500/20 text-blue-400',
@@ -71,7 +71,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           )}
         </div>
         {isWorkingMemoryEnabled && !threadExists && (
-          <p className="text-neutral3 text-xs">Send a message to the agent to enable working memory.</p>
+          <p className="text-neutral3 text-ui-sm">Send a message to the agent to enable working memory.</p>
         )}
       </div>
 
@@ -86,7 +86,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       content={workingMemoryData || ''}
                       isCopied={isCopied}
                       onCopy={handleCopy}
-                      className="bg-surface3 border-border1 min-h-[150px] rounded-lg border font-mono text-sm"
+                      className="bg-surface3 border-border1 text-ui-md min-h-[150px] rounded-lg border font-mono"
                     />
                   ) : (
                     <>
@@ -117,14 +117,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   )}
                 </>
               ) : (
-                <div className="text-neutral3 font-mono text-sm">
+                <div className="text-neutral3 text-ui-md font-mono">
                   No working memory content yet. Click "Edit Working Memory" to add content.
                 </div>
               )}
             </>
           ) : (
             <textarea
-              className="border-border1 bg-surface3 text-neutral5 min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono text-sm"
+              className="border-border1 bg-surface3 text-neutral5 text-ui-md min-h-[150px] w-full resize-none rounded-lg border p-3 font-mono"
               value={editState.value}
               onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
@@ -142,7 +142,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                         type="button"
                         aria-disabled="true"
                         onClick={event => event.preventDefault()}
-                        className="cursor-not-allowed text-xs opacity-50"
+                        className="text-ui-sm cursor-not-allowed opacity-50"
                       >
                         Edit Working Memory
                       </Button>
@@ -152,7 +152,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-xs">
+                  <Button onClick={() => setIsEditing(true)} disabled={isUpdating} className="text-ui-sm">
                     Edit Working Memory
                   </Button>
                 )}
@@ -170,7 +170,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     }
                   }}
                   disabled={isUpdating}
-                  className="text-xs"
+                  className="text-ui-sm"
                 >
                   {isUpdating ? <RefreshCcwIcon className="h-3 w-3 animate-spin" /> : 'Save Changes'}
                 </Button>
@@ -180,7 +180,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     setIsEditing(false);
                   }}
                   disabled={isUpdating}
-                  className="text-xs"
+                  className="text-ui-sm"
                 >
                   Cancel
                 </Button>
@@ -190,14 +190,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
         </>
       ) : (
         <div className="bg-surface3 border-border1 rounded-lg border p-4">
-          <p className="text-neutral3 mb-3 text-sm">
+          <p className="text-neutral3 text-ui-md mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </p>
           <a
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+            className="text-ui-md inline-flex items-center gap-2 text-blue-400 transition-colors hover:text-blue-300"
           >
             Learn about working memory
             <ExternalLink className="h-3 w-3" />

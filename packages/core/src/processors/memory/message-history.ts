@@ -145,6 +145,8 @@ export class MessageHistory implements Processor {
           perPage: this.lastMessages,
           filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
           orderBy: { field: 'createdAt', direction: 'DESC' },
+          // Last-N history read only consumes `messages`; skip the COUNT(*) work.
+          includeTotal: false,
         });
         return result.messages;
       };

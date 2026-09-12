@@ -8,7 +8,7 @@ import type { ObjectRow } from '../../../shared/connection';
 import { assertJsonPath } from '../../../vector/identifiers';
 import type { OracleTxClient } from '../../db';
 import { toDate } from '../../domain-utils';
-import { THREAD_CREATED_AT, THREAD_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
+import { MESSAGE_RESOURCE_ID, THREAD_CREATED_AT, THREAD_RESOURCE_ID, THREAD_UPDATED_AT } from './schema';
 import {
   deleteSemanticRecallVectors,
   optionalStringBind,
@@ -238,6 +238,47 @@ export async function deleteThread(ctx: MemoryContext, { threadId }: { threadId:
     });
   } catch (error) {
     throw storageError('DELETE_THREAD', 'FAILED', { threadId }, error);
+  }
+}
+
+export async function updateThreadResourceId(
+  ctx: MemoryContext,
+  { threadId, resourceId }: { threadId: string; resourceId: string },
+): Promise<StorageThreadType> {
+  try {
+    return await ctx.db.tx(async client => {
+      // SELECT ... FOR UPDATE locks the thread row for the life of the transaction, so concurrent
+      // transfers of the same thread serialize here. Combined with running the thread and message
+      // updates in one transaction, this prevents the thread and its messages from ending up under
+      // different resources.
+      const row = (await client.oneOrNone(
+        `${threadSelect()} FROM ${table(ctx, TABLE_THREADS)} WHERE id = :threadId FOR UPDATE`,
+        { threadId },
+      )) as ThreadRow | null;
+
+      if (!row) {
+        throw new Error(`Thread "${threadId}" not found`);
+      }
+
+      const normalized = parseThread(row);
+      if (normalized.resourceId === resourceId) {
+        return normalized;
+      }
+
+      const updatedAt = new Date();
+      await client.none(
+        `UPDATE ${table(ctx, TABLE_THREADS)} SET ${THREAD_RESOURCE_ID} = :resourceId, ${THREAD_UPDATED_AT} = :updatedAt WHERE id = :threadId`,
+        { resourceId, updatedAt, threadId },
+      );
+      await client.none(
+        `UPDATE ${table(ctx, TABLE_MESSAGES)} SET ${MESSAGE_RESOURCE_ID} = :resourceId WHERE thread_id = :threadId`,
+        { resourceId, threadId },
+      );
+
+      return { ...normalized, resourceId, updatedAt };
+    });
+  } catch (error) {
+    throw storageError('UPDATE_THREAD_RESOURCE_ID', 'FAILED', { threadId, resourceId }, error);
   }
 }
 

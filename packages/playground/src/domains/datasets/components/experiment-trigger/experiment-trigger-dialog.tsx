@@ -67,7 +67,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
   }
 
   return (
@@ -80,13 +80,11 @@ function RequestContextForm({
 
 function PipelineStep({
   index,
-  title,
   done,
   isLast,
   children,
 }: {
   index: number;
-  title: string;
   done: boolean;
   isLast?: boolean;
   children: React.ReactNode;
@@ -105,10 +103,7 @@ function PipelineStep({
         </span>
         {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
       </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>
-        <p className="text-ui-sm font-medium">{title}</p>
-        {children}
-      </div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>{children}</div>
     </li>
   );
 }
@@ -132,7 +127,8 @@ export function ExperimentTriggerDialog({
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
   const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
+  // `null` means the user has not made an explicit choice yet, so the dataset defaults apply.
+  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
@@ -140,6 +136,9 @@ export function ExperimentTriggerDialog({
   const { data: dataset } = useDataset(datasetId);
   const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
+  const datasetDefaultScorers = dataset?.scorerIds ?? [];
+  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
@@ -154,6 +153,7 @@ export function ExperimentTriggerDialog({
   const handleDatasetChange = (nextDatasetId: string) => {
     setDatasetId(nextDatasetId);
     setVersion(null);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
   };
 
@@ -164,7 +164,7 @@ export function ExperimentTriggerDialog({
     setVersion(initialDatasetVersion ?? null);
     setTargetType(initialTargetType ?? '');
     setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? []);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
     setRequestContextRaw('');
   };
@@ -209,7 +209,7 @@ export function ExperimentTriggerDialog({
         description: description.trim() || undefined,
         targetType,
         targetId,
-        scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
+        scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
         version: version ?? undefined,
         requestContext,
       });
@@ -281,16 +281,22 @@ export function ExperimentTriggerDialog({
           </div>
 
           <ol className="list-none">
-            <PipelineStep index={1} title="Dataset" done={Boolean(datasetId)}>
+            <PipelineStep index={1} done={Boolean(datasetId)}>
               <div className="grid grid-cols-[1fr_140px] gap-3">
-                <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                <div className="grid gap-2">
+                  <Label>Dataset</Label>
+                  <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                </div>
                 {datasetId && (
-                  <DatasetVersions
-                    datasetId={datasetId}
-                    value={version}
-                    onValueChange={setVersion}
-                    container={contentRef}
-                  />
+                  <div className="grid gap-2">
+                    <Label>Version</Label>
+                    <DatasetVersions
+                      datasetId={datasetId}
+                      value={version}
+                      onValueChange={setVersion}
+                      container={contentRef}
+                    />
+                  </div>
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
@@ -300,7 +306,7 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={2} title="Target" done={Boolean(targetId)}>
+            <PipelineStep index={2} done={Boolean(targetId)}>
               <TargetSelector
                 targetType={targetType}
                 setTargetType={setTargetType}
@@ -315,14 +321,17 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={3} title="Scorers (Optional)" done={selectedScorers.length > 0} isLast>
+            <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
-                label=""
-                selectedScorers={selectedScorers}
+                selectedScorers={effectiveScorers}
                 setSelectedScorers={setSelectedScorers}
                 disabled={isRunning}
                 container={contentRef}
-                helperText="Scores are computed after each item runs."
+                helperText={
+                  usesDatasetDefaults
+                    ? "Pre-filled from the dataset's default scorers."
+                    : 'Scores are computed after each item runs.'
+                }
               />
             </PipelineStep>
           </ol>
@@ -361,7 +370,7 @@ export function ExperimentTriggerDialog({
                   Ready
                 </Badge>
                 <span className="text-ui-xs text-neutral3">
-                  {itemCount ?? 0} items · {targetType} · {selectedScorers.length} scorers
+                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>
             ) : (

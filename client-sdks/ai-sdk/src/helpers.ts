@@ -597,6 +597,16 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   | undefined {
   const partType = part?.type;
 
+  if (
+    !sendReasoning &&
+    (partType === 'text-start' || partType === 'text-delta' || partType === 'text-end') &&
+    part.providerMetadata?.openai?.itemId != null
+  ) {
+    // Replaying a stored OpenAI text item requires its reasoning item, which is hidden here.
+    const { itemId, ...openai } = { ...part.providerMetadata.openai };
+    part = { ...part, providerMetadata: { ...part.providerMetadata, openai } };
+  }
+
   switch (partType) {
     case 'text-start': {
       return {

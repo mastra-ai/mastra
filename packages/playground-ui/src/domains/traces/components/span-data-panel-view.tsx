@@ -5,12 +5,12 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
+import { TraceIdButton } from './trace-id-button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
-import { truncateString } from '@/lib/truncate-string';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -20,10 +20,10 @@ function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId:
         {sectionTitle}
       </span>
       <span>
-        › Span <b className="text-neutral3">#{span.spanId}</b>
+        › Span <b className="text-neutral3">{span.spanId}</b>
       </span>
       <span>
-        › Trace <b className="text-neutral3">#{span.traceId}</b>
+        › Trace <b className="text-neutral3">{span.traceId}</b>
       </span>
     </>
   );
@@ -45,7 +45,7 @@ export interface SpanDataPanelViewProps {
    * whatever feedback UI the consumer wants.
    */
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   /**
    * Whether this span is the displayed root of the current view (trace root or
@@ -77,8 +77,9 @@ export function SpanDataPanelView({
       {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
       <DataPanel.Header className="min-h-16 py-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <DataPanel.Heading className="whitespace-nowrap">
-            Span <b># {truncateString(spanId, 12)}</b>
+          <DataPanel.Heading className="items-center whitespace-nowrap">
+            Span
+            <TraceIdButton id={spanId} />
           </DataPanel.Heading>
           {span && <SpanSummaryDescription span={span} />}
         </div>
@@ -252,7 +253,7 @@ function SpanDataPanelContent({
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
         <TabList variant="pill-ghost" className="px-0">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
 
         <TabContent value="details">{detailsBody}</TabContent>
