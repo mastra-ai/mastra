@@ -91,6 +91,7 @@ function useIntakeHandlers({
 const jiraReadyStatus: JiraStatus = {
   enabled: true,
   configured: true,
+  mode: 'platform',
   site: 'acme.atlassian.net',
   sites: ['acme.atlassian.net', 'beta.atlassian.net'],
   connections: [
@@ -157,8 +158,8 @@ function renderIntakeSection() {
 }
 
 describe('IntakeSection', () => {
-  describe('given a config with both sources enabled', () => {
-    it('lists the GitHub repositories and Linear projects without an extra expand step', async () => {
+  describe('given a config with the default sources enabled', () => {
+    it('lists every work intake source and expands the configured pickers', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
@@ -166,6 +167,7 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync Jira issues' })).toBeInTheDocument();
 
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
@@ -381,6 +383,7 @@ describe('IntakeSection', () => {
           HttpResponse.json({
             enabled: false,
             configured: false,
+            mode: 'direct',
             site: null,
             reason: 'missing_config',
           } satisfies JiraStatus),
@@ -406,6 +409,7 @@ describe('IntakeSection', () => {
           HttpResponse.json({
             enabled: true,
             configured: false,
+            mode: 'platform',
             site: null,
             sites: [],
             connections: [],
@@ -440,6 +444,28 @@ describe('IntakeSection', () => {
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.jira.enabled).toBe(true);
       expect(saved[0]!.github.enabled).toBe(true);
+    });
+
+    it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
+      useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: true,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            reason: 'ready',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
+      expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
     });
 
     it('shows the site and persists an explicit project selection', async () => {

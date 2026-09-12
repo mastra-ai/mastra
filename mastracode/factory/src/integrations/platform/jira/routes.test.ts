@@ -123,6 +123,7 @@ describe('status route', () => {
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
+      mode: 'platform',
       site: null,
       sites: [],
       reason: 'ready',

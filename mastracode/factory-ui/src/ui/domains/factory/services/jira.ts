@@ -11,8 +11,10 @@ export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organizatio
 
 export interface JiraStatus {
   enabled: boolean;
-  /** True when the deployment has a Platform Jira connection configured. */
+  /** True when the deployment has Jira credentials or a Platform connection configured. */
   configured: boolean;
+  /** Identifies how Jira credentials are supplied without exposing a Platform connection ID. */
+  mode?: 'direct' | 'platform';
   /** First connected Jira Cloud site host, retained for older consumers. */
   site?: string | null;
   /** All connected Jira Cloud site hosts. */

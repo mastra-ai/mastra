@@ -173,6 +173,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           return c.json({
             enabled: false,
             configured: Boolean(jira),
+            mode: 'direct',
             site: null,
             reason: 'missing_config',
             diagnostics: diagnostics(),
@@ -187,6 +188,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           return c.json({
             enabled: true,
             configured: true,
+            mode: 'direct',
             organizationRequired: true,
             site,
             reason: 'organization_required',
@@ -199,6 +201,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
         return c.json({
           enabled: true,
           configured: true,
+          mode: 'direct',
           site,
           reason: 'ready',
           diagnostics: diagnostics(),

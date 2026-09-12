@@ -109,6 +109,7 @@ describe('status route', () => {
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
+      mode: 'direct',
       site: 'acme.atlassian.net',
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },

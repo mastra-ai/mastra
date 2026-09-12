@@ -185,7 +185,7 @@ function JiraIntakeSection({
   showPickers: boolean;
 }) {
   const configured = Boolean(status?.enabled && status.configured);
-  const platformManaged = status?.connections !== undefined;
+  const platformManaged = status?.mode === 'platform' || status?.connections !== undefined;
   const description = reauthRequired
     ? 'A Jira account needs to be reconnected in Mastra Platform.'
     : !configured
@@ -198,9 +198,17 @@ function JiraIntakeSection({
           : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.'
         : 'Active issues from the selected projects.';
   const sites = status?.sites ?? (status?.site ? [status.site] : []);
+  let connectionLabel = 'Jira connected';
+  if (sites.length === 1) {
+    connectionLabel = `Connected to ${sites[0]}`;
+  } else if (sites.length > 1) {
+    connectionLabel = `${sites.length} Jira sites connected`;
+  } else if (platformManaged) {
+    connectionLabel = 'Connected through Mastra Platform';
+  }
   const action = configured ? (
     <Txt as="span" variant="ui-sm" className="text-icon3">
-      {sites.length === 1 ? `Connected to ${sites[0]}` : `${sites.length} Jira sites connected`}
+      {connectionLabel}
     </Txt>
   ) : undefined;
 
