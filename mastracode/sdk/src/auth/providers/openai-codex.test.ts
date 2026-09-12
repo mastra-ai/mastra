@@ -628,3 +628,25 @@ describe('openaiCodexOAuthProvider auth modes', () => {
     );
   });
 });
+
+describe('openaiCodexOAuthProvider.getAccountLabel', () => {
+  it('returns the persisted email claim', async () => {
+    const { openaiCodexOAuthProvider } = await import('./openai-codex.js');
+    await expect(
+      openaiCodexOAuthProvider.getAccountLabel?.({
+        access: 'at',
+        refresh: 'rt',
+        expires: 0,
+        accountId: 'acct-1',
+        email: 'dev@openai.com',
+      }),
+    ).resolves.toBe('dev@openai.com');
+  });
+
+  it('returns undefined without a persisted email', async () => {
+    const { openaiCodexOAuthProvider } = await import('./openai-codex.js');
+    await expect(
+      openaiCodexOAuthProvider.getAccountLabel?.({ access: 'at', refresh: 'rt', expires: 0, accountId: 'acct-1' }),
+    ).resolves.toBeUndefined();
+  });
+});

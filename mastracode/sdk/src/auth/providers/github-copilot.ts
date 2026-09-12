@@ -547,4 +547,26 @@ export const githubCopilotOAuthProvider: OAuthProviderInterface = {
   getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
   },
+
+  /**
+   * The stored refresh token is the long-lived GitHub OAuth token — use it to
+   * resolve the account's GitHub login for the account manager. Enterprise
+   * tokens don't work against api.github.com, which just falls through to the
+   * label prompt/default.
+   */
+  async getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    try {
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${credentials.refresh}`,
+          Accept: 'application/vnd.github+json',
+        },
+      });
+      if (!response.ok) return undefined;
+      const user = (await response.json()) as { login?: unknown };
+      return typeof user.login === 'string' && user.login.length > 0 ? user.login : undefined;
+    } catch {
+      return undefined;
+    }
+  },
 };

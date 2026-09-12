@@ -98,6 +98,19 @@ If you have an Anthropic Claude Max, OpenAI ChatGPT Plus, or Kimi For Coding sub
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
+#### Multiple accounts per provider
+
+You can sign in with more than one account for the same provider — for example, two Claude Max accounts or four Kimi For Coding accounts. Run `/login` and select a provider you are already signed in to: instead of replacing your credentials, Mastra Code opens the account manager for that provider.
+
+The account manager lists every registered account with its label and marks the active one. From there you can:
+
+- **Add another account** — runs the normal sign-in flow and appends the account.
+- **Select an account** — makes it the active account used for new requests.
+- **Re-authenticate…** — picks an account and refreshes its credentials by signing in again.
+- **Remove…** — deletes an account (after confirmation).
+
+Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
+
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
 - **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
