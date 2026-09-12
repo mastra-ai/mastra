@@ -280,6 +280,72 @@ describe('KnowledgePG storage isolation', () => {
     expect(secondClaim[0]?.scopeIds).toEqual([secondScopeId]);
   });
 
+  it('keeps outbox reads bounded when stale scope stamps overlap the caller but current visibility fails', async () => {
+    const schemaName = `knowledge_stale_outbox_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    let queries = 0;
+    const countingPool = new Proxy(pool, {
+      get(target, prop) {
+        if (prop === 'query') {
+          const query = target.query.bind(target);
+          return async (...args: Parameters<typeof query>) => {
+            queries += 1;
+            return query(...args);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const store = new KnowledgePG({ pool: countingPool, schemaName });
+    await store.init();
+    const callerScopeId = crypto.randomUUID();
+    const hiddenScopeId = crypto.randomUUID();
+    await store.createNode({ id: callerScopeId, name: 'Caller scope', isScope: true, scopeIds: [] });
+    await store.createNode({ id: hiddenScopeId, name: 'Hidden scope', isScope: true, scopeIds: [] });
+
+    // Stale-overlap backlog: rows stamped with the caller scope at enqueue
+    // time whose nodes have since moved into the hidden scope — the SQL
+    // visibility predicate must exclude them inside the bounded query.
+    for (let index = 0; index < 50; index++) {
+      const node = await store.createNode({ name: `Stale subject ${index}`, scopeIds: [callerScopeId] });
+      await store.updateNode({ id: node.id, version: node.version, scopeIds: [hiddenScopeId] });
+    }
+    const mentionTarget = await store.createNode({ name: 'MentionTarget', scopeIds: [callerScopeId] });
+    const owner = await store.createNode({ name: 'Record owner', scopeIds: [callerScopeId] });
+    await store.createRecord({ node: owner.id, text: 'See [[MentionTarget]] for details.', scopeIds: [callerScopeId] });
+    await store.updateNode({ id: mentionTarget.id, version: mentionTarget.version, scopeIds: [hiddenScopeId] });
+    const visible = await store.createNode({ name: 'Visible subject', scopeIds: [callerScopeId] });
+
+    // Visible to the caller: the two live upserts plus the reindex `delete`
+    // entries (stamped with the caller scope at move time) — never a stale
+    // upsert whose current scope state is hidden.
+    queries = 0;
+    const listed = await store.listSemanticOutbox({ scopeIds: [callerScopeId], limit: 200 });
+    expect(listed).toHaveLength(53);
+    for (const entry of listed) {
+      if (entry.operation === 'upsert') {
+        expect([visible.id, owner.id].some(id => entry.documentId.includes(id))).toBe(true);
+      } else {
+        expect(entry.operation).toBe('delete');
+      }
+    }
+    expect(queries).toBe(1);
+
+    queries = 0;
+    const claimed = await store.claimSemanticOutbox({ workerId: 'stale-worker', scopeIds: [callerScopeId], limit: 5 });
+    // reindex deletes queue behind their stale (filtered) upserts, so only the
+    // two legitimate upserts are claimable — the stale backlog is never walked
+    expect(claimed).toHaveLength(2);
+    for (const entry of claimed) {
+      expect(entry.operation).toBe('upsert');
+      expect([visible.id, owner.id].some(id => entry.documentId.includes(id))).toBe(true);
+    }
+    // BEGIN, bounded SELECT, SKIP LOCKED lock, one claim UPDATE per row, COMMIT
+    expect(queries).toBeLessThanOrEqual(10);
+  });
+
   it('claims each semantic outbox entry through only one concurrent worker', async () => {
     const schemaName = `knowledge_claim_${process.pid}_${schemaCounter++}`;
     schemas.push(schemaName);
