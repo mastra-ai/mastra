@@ -6,4 +6,17 @@
 
 Behavior change: a subscription never redelivers to itself anymore, so a handler that hangs (never acks or nacks) is only recovered by a *different* consumer in the group. In a single-consumer group that message stays pending until the process restarts. Set the new `inFlightTimeoutMs` option to have the subscription nack such a message on the handler's behalf after that long; the nack republishes with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still bounds retries. It defaults to `0` (disabled).
 
+```ts
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
+
+const pubsub = new RedisStreamsPubSub({
+  url: process.env.REDIS_URL,
+  // Give up on a handler that has neither acked nor nacked after 10 minutes
+  // and retry it (bounded by maxDeliveryAttempts).
+  inFlightTimeoutMs: 10 * 60 * 1000,
+});
+```
+
+Before nacking on a handler's behalf, the timeout path checks that this consumer still owns the pending entry; if a sibling has already reclaimed it, the local marker is dropped without republishing. The reclaim loop also paginates its `XPENDING` scan so a large number of locally in-flight entries cannot hide a reclaimable one that sorts after them.
+
 The package now documents a Redis 7.0+ requirement: the reclaim loop relies on `XCLAIM` dropping trimmed entries from the pending list, which Redis 6 does not do.

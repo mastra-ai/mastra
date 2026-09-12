@@ -25,7 +25,9 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 describe('RedisStreamsPubSub reclaim loop', () => {
   let pubsubs: RedisStreamsPubSub[] = [];
 
-  function createPubSub(extra: { inFlightTimeoutMs?: number; maxDeliveryAttempts?: number } = {}): RedisStreamsPubSub {
+  function createPubSub(
+    extra: { inFlightTimeoutMs?: number; maxDeliveryAttempts?: number; reclaimIdleMs?: number } = {},
+  ): RedisStreamsPubSub {
     const ps = new RedisStreamsPubSub({
       url: REDIS_URL,
       blockMs: 200,
@@ -191,5 +193,103 @@ describe('RedisStreamsPubSub reclaim loop', () => {
 
     await sleep(2200);
     expect(deliveries).toBe(1);
+  });
+
+  it('scans past a full page of locally in-flight entries to reach a reclaimable one', async () => {
+    // Locally in-flight entries stay in the PEL by design and are listed on
+    // every tick. If more than one XPENDING page of them sort before a
+    // reclaimable entry, a single fixed-size page would never reach it.
+    const ps = createPubSub();
+    const topic = `t-${randomUUID()}`;
+    const group = `page-${randomUUID()}`;
+    const streamKey = `mastra:topic:${topic}`;
+    const IN_FLIGHT = 120;
+
+    let hung = 0;
+    let ghostDeliveries = 0;
+    const cb: EventCallback = (event, ack) => {
+      if (event.type === 'ghost') {
+        ghostDeliveries++;
+        void ack?.();
+        return;
+      }
+      hung++;
+      // intentionally never ack/nack
+    };
+    await ps.subscribe(topic, cb, { group });
+    for (let i = 0; i < IN_FLIGHT; i++) await ps.publish(topic, makeEvent({ type: 'hung' }));
+    await waitFor(() => hung === IN_FLIGHT, 10_000);
+
+    // The ghost entry sorts after all in-flight ones. Let the subscription
+    // read + ack it, then forge a pending entry for it under a consumer that
+    // no longer exists (XCLAIM FORCE re-adds an acked entry to the PEL).
+    await ps.publish(topic, makeEvent({ type: 'ghost' }));
+    await waitFor(() => ghostDeliveries === 1, 5000);
+    const raw = createClient({ url: REDIS_URL }) as RedisClientType;
+    await raw.connect();
+    try {
+      const [last] = await raw.xRevRange(streamKey, '+', '-', { COUNT: 1 });
+      await raw.xClaim(streamKey, group, 'ghost-consumer', 0, [last!.id], { FORCE: true });
+      const pendingBefore = await raw.xPendingRange(streamKey, group, '-', '+', 1000);
+      expect(pendingBefore).toHaveLength(IN_FLIGHT + 1);
+    } finally {
+      await raw.quit();
+    }
+
+    // Reclaim must find the ghost's entry behind the 120 in-flight ones and
+    // deliver it to the live handler.
+    await waitFor(() => ghostDeliveries === 2, 5000);
+    expect(hung).toBe(IN_FLIGHT);
+  });
+
+  it('does not nack on timeout once a sibling has reclaimed the entry', async () => {
+    // A's handler hangs; before A's inFlightTimeoutMs elapses, B (same
+    // group) reclaims the idle entry and starts processing it. A's timeout
+    // must notice the entry is no longer owned by A and disown it locally —
+    // NOT republish a duplicate and xAck B's pending entry out from under it.
+    //
+    // A's own reclaim threshold is set high so A cannot legitimately reclaim
+    // the entry back from B while B holds it; that path is B's concern.
+    const psA = createPubSub({ inFlightTimeoutMs: 1000, reclaimIdleMs: 5000 });
+    const psB = createPubSub();
+    const topic = `t-${randomUUID()}`;
+    const group = `owner-${randomUUID()}`;
+    const streamKey = `mastra:topic:${topic}`;
+
+    const attemptsA: number[] = [];
+    const cbA: EventCallback = event => {
+      attemptsA.push(event.deliveryAttempt ?? 1);
+      // intentionally never ack/nack
+    };
+    await psA.subscribe(topic, cbA, { group });
+    await psA.publish(topic, makeEvent({ type: 'shared' }));
+    await waitFor(() => attemptsA.length === 1, 5000);
+
+    // B joins after the entry is idle >= B's reclaimIdleMs but before A's
+    // timeout, and holds the message past A's timeout before acking.
+    await sleep(400);
+    const attemptsB: number[] = [];
+    const cbB: EventCallback = async (event, ack) => {
+      attemptsB.push(event.deliveryAttempt ?? 1);
+      await sleep(1200);
+      void ack?.();
+    };
+    await psB.subscribe(topic, cbB, { group });
+    await waitFor(() => attemptsB.length === 1, 3000);
+
+    // Cover A's timeout (t≈1000ms) and B's ack (t≈1600ms) with margin.
+    await sleep(2000);
+    expect(attemptsA).toEqual([1]);
+    expect(attemptsB).toEqual([1]);
+
+    const raw = createClient({ url: REDIS_URL }) as RedisClientType;
+    await raw.connect();
+    try {
+      // B's ack settled the only entry; nothing republished, nothing pending.
+      expect(await raw.xPendingRange(streamKey, group, '-', '+', 10)).toHaveLength(0);
+      expect(await raw.xLen(streamKey)).toBe(1);
+    } finally {
+      await raw.quit();
+    }
   });
 });

@@ -4,6 +4,9 @@ import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, Subscribe
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
+/** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
+const RECLAIM_PAGE_SIZE = 100;
+
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
  * `MultiErrorReply` whose own message is just "N commands failed…" — the real
@@ -404,10 +407,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         // entry. Filtering before the claim leaves in-flight entries untouched:
         // if the handler settles, ack/nack removes them from the PEL; if it is
         // truly hung, the idle clock keeps running and a sibling claims them.
-        const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, '-', '+', 100, {
-          IDLE: this.#reclaimIdleMs,
-        });
-        const ids = pending.map(p => String(p.id)).filter(id => !sub.inFlight.has(id));
+        //
+        // The scan is paginated: locally in-flight entries stay in the PEL
+        // (by design, above) and are listed on every tick, so with a single
+        // fixed-size page they could fill it and hide a reclaimable entry
+        // that sorts after them. Walk pages with an exclusive start id until
+        // the page comes back short or the claim batch is full.
+        const ids: string[] = [];
+        let start = '-';
+        for (;;) {
+          const page = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, start, '+', RECLAIM_PAGE_SIZE, {
+            IDLE: this.#reclaimIdleMs,
+          });
+          for (const p of page) {
+            const id = String(p.id);
+            if (!sub.inFlight.has(id)) ids.push(id);
+          }
+          if (page.length < RECLAIM_PAGE_SIZE || ids.length >= RECLAIM_PAGE_SIZE) break;
+          start = `(${String(page[page.length - 1]!.id)}`;
+        }
         // XCLAIM re-checks min-idle atomically, so if a sibling claimed an entry
         // between the XPENDING and here it is simply omitted from the reply.
         const claimed =
@@ -459,6 +477,29 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const cutoff = Date.now() - this.#inFlightTimeoutMs;
     for (const [streamId, entry] of sub.inFlight) {
       if (entry.since > cutoff) continue;
+      // The local marker is not proof of ownership: if the entry has already
+      // been idle >= reclaimIdleMs a sibling may have claimed it (and may be
+      // processing it right now), or it may have been acked outright. Nacking
+      // in that state would republish a duplicate and xAck the sibling's
+      // pending entry out from under it. So check the PEL first and, if we no
+      // longer own the entry, just disown it locally — that also flips
+      // `settled` so a late ack/nack from the hung handler becomes a no-op.
+      // XCLAIM by a sibling between this check and the nack's xAck is still
+      // possible but requires the claim to land inside a single round-trip.
+      const [pendingEntry] = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, streamId, streamId, 1);
+      if (!pendingEntry || pendingEntry.consumer !== sub.consumer) {
+        this.#logger?.warn?.(
+          'redis-streams: handler exceeded inFlightTimeoutMs but entry is no longer owned; disowning',
+          {
+            topic: sub.topic,
+            group: sub.group,
+            streamId,
+            owner: pendingEntry?.consumer ?? null,
+          },
+        );
+        entry.disown();
+        continue;
+      }
       this.#logger?.warn?.('redis-streams: handler exceeded inFlightTimeoutMs; nacking on its behalf', {
         topic: sub.topic,
         group: sub.group,
@@ -927,7 +968,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     // Mark this entry in-flight for the reclaim loop's benefit for exactly the
     // window between invoking the handler and the delivery settling (ack/nack).
-    sub.inFlight.set(streamId, { since: Date.now(), nack });
+    const disown = () => {
+      settled = true;
+      sub.inFlight.delete(streamId);
+    };
+    sub.inFlight.set(streamId, { since: Date.now(), nack, disown });
     try {
       // EventCallback is typed `=> void` but handlers commonly return a
       // promise (TS allows Promise<void> to satisfy void). If we get one
@@ -1002,5 +1047,7 @@ interface Subscription {
   // Stream entry IDs currently being processed locally by this subscription.
   // The reclaim loop consults this to avoid re-invoking the handler for a
   // message whose original delivery is still in flight (self-redelivery).
-  inFlight: Map<string, { since: number; nack: () => Promise<void> }>;
+  // `disown` marks the delivery settled locally without touching Redis, for
+  // when the timeout path finds the entry is no longer owned by this consumer.
+  inFlight: Map<string, { since: number; nack: () => Promise<void>; disown: () => void }>;
 }
