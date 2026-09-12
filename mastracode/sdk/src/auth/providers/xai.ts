@@ -47,7 +47,11 @@ function validateVerificationUri(raw: string): string {
   return parsed.toString();
 }
 
-function credentialsFromTokenResponse(data: unknown, previousRefreshToken?: string): OAuthCredentials {
+function credentialsFromTokenResponse(
+  data: unknown,
+  previousRefreshToken?: string,
+  previousIdToken?: string,
+): OAuthCredentials {
   const record = (data ?? {}) as Record<string, unknown>;
   const access = record.access_token;
   if (typeof access !== 'string' || access.length === 0) {
@@ -72,6 +76,10 @@ function credentialsFromTokenResponse(data: unknown, previousRefreshToken?: stri
     access,
     refresh,
     expires: Date.now() + expiresIn * 1000 - REFRESH_SKEW_MS,
+    // Kept so the account label can resolve the email claim later; xAI's
+    // refresh responses re-issue it, and the previous one is carried forward
+    // when they don't.
+    idToken: typeof record.id_token === 'string' && record.id_token.length > 0 ? record.id_token : previousIdToken,
   };
 }
 
@@ -228,7 +236,11 @@ export async function loginXAI(callbacks: OAuthLoginCallbacks): Promise<OAuthCre
 /**
  * Refresh xAI OAuth token
  */
-export async function refreshXAIToken(refreshToken: string, signal?: AbortSignal): Promise<OAuthCredentials> {
+export async function refreshXAIToken(
+  refreshToken: string,
+  signal?: AbortSignal,
+  previousIdToken?: string,
+): Promise<OAuthCredentials> {
   const response = await postForm(
     TOKEN_URL,
     {
@@ -244,7 +256,21 @@ export async function refreshXAIToken(refreshToken: string, signal?: AbortSignal
     throw new Error(`xAI token refresh failed: ${response.status}${text ? ` ${text}` : ''}`);
   }
 
-  return credentialsFromTokenResponse((await response.json()) as unknown, refreshToken);
+  return credentialsFromTokenResponse((await response.json()) as unknown, refreshToken, previousIdToken);
+}
+
+/** Decode the email claim out of an id_token JWT payload (no verification). */
+function emailFromIdToken(idToken: string | undefined): string | undefined {
+  if (typeof idToken !== 'string') return undefined;
+  const parts = idToken.split('.');
+  if (parts.length !== 3) return undefined;
+  try {
+    const padded = (parts[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as { email?: unknown };
+    return typeof json.email === 'string' && json.email.length > 0 ? json.email : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const xaiOAuthProvider: OAuthProviderInterface = {
@@ -256,10 +282,14 @@ export const xaiOAuthProvider: OAuthProviderInterface = {
   },
 
   async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-    return refreshXAIToken(credentials.refresh);
+    return refreshXAIToken(credentials.refresh, undefined, credentials.idToken as string | undefined);
   },
 
   getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
+  },
+
+  getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    return Promise.resolve(emailFromIdToken(credentials.idToken as string | undefined));
   },
 };

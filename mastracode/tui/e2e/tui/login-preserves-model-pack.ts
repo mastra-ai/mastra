@@ -79,6 +79,10 @@ export const loginPreservesModelPackScenario = {
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\)/i, terminal, 8_000);
     terminal.write('\r');
 
+    // The account-name prompt appears after a successful login; keep the default.
+    await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
+    terminal.write('\r');
+
     await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
     // The active model pack must survive login: the status line still shows the

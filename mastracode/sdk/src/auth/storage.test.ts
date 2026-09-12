@@ -317,6 +317,18 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
   });
 
+  it('addAccount labels the account from the provider hook when available', async () => {
+    const { storage } = makeStorage();
+    const account = await storage.addAccount('openai-codex', {
+      refresh: 'cr1',
+      access: 'ca1',
+      expires: FUTURE,
+      accountId: 'acct-1',
+      email: 'dev@openai.com',
+    });
+    expect(account.label).toBe('dev@openai.com');
+  });
+
   it('multi-account kimi auth.json satisfies the startup availability check', async () => {
     const KIMI = 'kimi-for-coding';
     const device1 = 'aa'.repeat(16);

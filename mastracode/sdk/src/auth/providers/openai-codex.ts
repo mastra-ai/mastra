@@ -89,8 +89,10 @@ type TokenResult = TokenSuccess | TokenFailure;
 
 type JwtPayload = {
   chatgpt_account_id?: string;
+  email?: string;
   [JWT_CLAIM_PATH]?: {
     chatgpt_account_id?: string;
+    email?: string;
   };
   [key: string]: unknown;
 };
@@ -138,6 +140,18 @@ function requireAccountId(tokens: { idToken?: string; access: string }, fallback
     throw new Error('Failed to extract ChatGPT account id from OpenAI Codex token');
   }
   return accountId;
+}
+
+function extractEmailFromClaims(payload: JwtPayload): string | null {
+  const email = payload.email ?? payload[JWT_CLAIM_PATH]?.email;
+  return typeof email === 'string' && email.length > 0 ? email : null;
+}
+
+function getEmailFromTokens(tokens: { idToken?: string; access: string }): string | undefined {
+  const fromIdToken = tokens.idToken ? extractEmailFromClaims(decodeJwt(tokens.idToken) ?? {}) : null;
+  if (fromIdToken) return fromIdToken;
+  const fromAccessToken = extractEmailFromClaims(decodeJwt(tokens.access) ?? {});
+  return fromAccessToken ?? undefined;
 }
 
 type TokenResponseJson = {
@@ -512,6 +526,7 @@ export async function pollCodexDeviceLogin(
         refresh: tokenResult.refresh,
         expires: tokenResult.expires,
         accountId,
+        email: getEmailFromTokens(tokenResult),
       },
     };
   }
@@ -698,6 +713,7 @@ export async function loginOpenAICodex(options: {
       refresh: tokenResult.refresh,
       expires: tokenResult.expires,
       accountId,
+      email: getEmailFromTokens(tokenResult),
     };
   } finally {
     server.close();
@@ -720,6 +736,7 @@ export const __testing = {
 export async function refreshOpenAICodexToken(
   refreshToken: string,
   previousAccountId?: string,
+  previousEmail?: string,
 ): Promise<OAuthCredentials> {
   const result = await refreshAccessToken(refreshToken);
   if (result.type !== 'success') {
@@ -733,6 +750,7 @@ export async function refreshOpenAICodexToken(
     refresh: result.refresh,
     expires: result.expires,
     accountId,
+    email: getEmailFromTokens(result) ?? previousEmail,
   };
 }
 
@@ -755,10 +773,19 @@ export const openaiCodexOAuthProvider: OAuthProviderInterface = {
   },
 
   async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-    return refreshOpenAICodexToken(credentials.refresh, credentials.accountId as string | undefined);
+    return refreshOpenAICodexToken(
+      credentials.refresh,
+      credentials.accountId as string | undefined,
+      credentials.email as string | undefined,
+    );
   },
 
   getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
+  },
+
+  getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    const email = credentials.email;
+    return Promise.resolve(typeof email === 'string' && email.length > 0 ? email : undefined);
   },
 };
