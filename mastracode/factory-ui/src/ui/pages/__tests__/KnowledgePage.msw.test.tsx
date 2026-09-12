@@ -120,11 +120,35 @@ function stubKnowledgeRoute(
       const threadId = new URL(request.url).searchParams.get('threadId');
       if (threadId === 'gone-thread')
         return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
+      // Post-vouch shape: the identity chain exists as membership-linked scope
+      // nodes, so each rung merges with its node (scopeNodeId + name).
       return HttpResponse.json({
         roots: [
-          { level: 'org', id: 'org-1', available: true },
-          { level: 'resource', id: FACTORY_ID, available: true },
-          ...(threadId ? [{ level: 'thread', id: threadId, available: true }] : []),
+          {
+            level: 'org',
+            id: 'org-1',
+            available: true,
+            scopeNodeId: '11111111-1111-4111-8111-111111111111',
+            name: 'mastra',
+          },
+          {
+            level: 'resource',
+            id: FACTORY_ID,
+            available: true,
+            scopeNodeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            name: FACTORY_ID,
+          },
+          ...(threadId
+            ? [
+                {
+                  level: 'thread',
+                  id: threadId,
+                  available: true,
+                  scopeNodeId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  name: threadId,
+                },
+              ]
+            : []),
         ],
         defaultLevel: 'resource',
         scopeNodes: [
@@ -135,6 +159,22 @@ function stubKnowledgeRoute(
             kind: 'org',
             parentIds: [],
           },
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            address: `resource:${FACTORY_ID}`,
+            name: FACTORY_ID,
+            parentIds: ['11111111-1111-4111-8111-111111111111'],
+          },
+          ...(threadId
+            ? [
+                {
+                  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  address: `thread:${threadId}`,
+                  name: threadId,
+                  parentIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+                },
+              ]
+            : []),
           {
             id: '22222222-2222-4222-8222-222222222222',
             address: 'features',
@@ -233,7 +273,7 @@ describe('KnowledgePage', () => {
 
     expect(await screen.findByText('Select a scope to explore its knowledge.')).toBeVisible();
     expect(subgraphReads).toBe(0);
-    await user.click(screen.getByRole('button', { name: /Project/ }));
+    await user.click(screen.getByRole('button', { name: /fp-1 · your project/ }));
     expect(await screen.findByText('Payments Service')).toBeVisible();
     expect(subgraphReads).toBe(1);
   });
@@ -360,12 +400,16 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
-    // The reconciled hierarchy renders nested under the identity rungs, with
-    // section labels separating tenant access from the knowledge structure.
+    // ONE unified tree built from the scope nodes that exist: the identity
+    // chain renders as merged entries (structural name + identity marker) and
+    // declared structure nests beneath via membership edges — no section split.
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    expect(within(scopes).getByText('Your access')).toBeInTheDocument();
-    expect(await within(scopes).findByText('Knowledge structure')).toBeInTheDocument();
-    expect(await within(scopes).findByRole('button', { name: 'mastra' })).toBeInTheDocument();
+    expect(within(scopes).queryByText('Your access')).not.toBeInTheDocument();
+    expect(within(scopes).queryByText('Knowledge structure')).not.toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /mastra · your org/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /fp-1 · your project/ })).toBeInTheDocument();
+    expect(within(scopes).queryByRole('button', { name: /Organization/ })).not.toBeInTheDocument();
+    expect(within(scopes).queryByRole('button', { name: /Project fp-1/ })).not.toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: 'features' })).toBeInTheDocument();
     expect(within(scopes).getByRole('button', { name: 'memory' })).toBeInTheDocument();
 
@@ -384,7 +428,7 @@ describe('KnowledgePage', () => {
     expect(features).toHaveAttribute('aria-pressed', 'true');
     expect(features).toHaveClass('bg-surface4');
     expect(features).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: 'mastra' })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: /mastra · your org/ })).not.toHaveClass('bg-surface4');
 
     // Clicking a member scope node inside the structural lens drills down —
     // no record flyout opens for structural members.
@@ -399,41 +443,10 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
   });
 
-  it('merges an identity rung with its structural scope node into one entry', async () => {
+  it('merged identity entries open the structural lens of the scope node they name', async () => {
     stubKnowledgeRoute();
     const subgraphParams: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, () =>
-        HttpResponse.json({
-          roots: [
-            {
-              level: 'org',
-              id: 'org-1',
-              available: true,
-              scopeNodeId: '11111111-1111-4111-8111-111111111111',
-              name: 'mastra',
-            },
-            { level: 'resource', id: FACTORY_ID, available: true },
-          ],
-          defaultLevel: 'resource',
-          scopeNodes: [
-            {
-              id: '11111111-1111-4111-8111-111111111111',
-              address: 'org:org-1',
-              name: 'mastra',
-              kind: 'org',
-              parentIds: [],
-            },
-            {
-              id: '22222222-2222-4222-8222-222222222222',
-              address: 'features',
-              name: 'features',
-              kind: 'feature',
-              parentIds: ['11111111-1111-4111-8111-111111111111'],
-            },
-          ],
-        }),
-      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
         const scopeNodeId = new URL(request.url).searchParams.get('scopeNodeId');
         if (scopeNodeId) subgraphParams.push(scopeNodeId);
@@ -441,22 +454,55 @@ describe('KnowledgePage', () => {
       }),
     );
     const user = userEvent.setup();
-    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    // One entry for org:org-1 — structural name with an identity marker, not
-    // two labels for the same scope.
+    // One entry per scope: structural name with identity marker, never two
+    // labels for the same scope.
     const merged = await within(scopes).findByRole('button', { name: /mastra · your org/ });
-    expect(within(scopes).queryByRole('button', { name: /Organization/ })).not.toBeInTheDocument();
     expect(within(scopes).queryByRole('button', { name: 'mastra' })).not.toBeInTheDocument();
-    // The matched node leaves the structural tree; its children re-root there.
-    expect(await within(scopes).findByRole('button', { name: 'features' })).toBeInTheDocument();
 
     // The merged entry opens the structural lens for the matched scope node.
     await user.click(merged);
+    expect(router.state.location.search).toContain('scope=11111111-1111-4111-8111-111111111111');
     await waitFor(() => expect(subgraphParams).toContain('11111111-1111-4111-8111-111111111111'));
     expect(merged).toHaveAttribute('aria-pressed', 'true');
     expect(merged).toHaveClass('bg-surface4');
+
+    // The merged project entry behaves the same way.
+    const project = within(scopes).getByRole('button', { name: /fp-1 · your project/ });
+    await user.click(project);
+    await waitFor(() => expect(subgraphParams).toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
+    expect(project).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('falls back to plain identity rung entries when the adapter exposes no scope nodes', async () => {
+    stubKnowledgeRoute();
+    const subgraphParams: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, () =>
+        HttpResponse.json({
+          roots: [
+            { level: 'org', id: 'org-1', available: true },
+            { level: 'resource', id: FACTORY_ID, available: true },
+          ],
+          defaultLevel: 'resource',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        subgraphParams.push(new URL(request.url).searchParams.get('scopeLevel') ?? 'none');
+        return HttpResponse.json(graphFixture);
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    const org = await within(scopes).findByRole('button', { name: /Organization org-1/ });
+    expect(within(scopes).getByRole('button', { name: /Project fp-1/ })).toBeInTheDocument();
+    await user.click(org);
+    expect(org).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(subgraphParams).toContain('org'));
   });
 
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
@@ -513,16 +559,16 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    expect(await within(scopes).findByRole('button', { name: /Organization/ })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /Project/ })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /mastra · your org/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /fp-1 · your project/ })).toBeInTheDocument();
 
-    // Identity rung selections get a filled active pill matching aria-pressed.
-    const project = within(scopes).getByRole('button', { name: /Project/ });
+    // Merged entries get a filled active pill matching aria-pressed.
+    const project = within(scopes).getByRole('button', { name: /fp-1 · your project/ });
     await user.click(project);
     expect(project).toHaveAttribute('aria-pressed', 'true');
     expect(project).toHaveClass('bg-surface4');
     expect(project).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: /Organization/ })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: /mastra · your org/ })).not.toHaveClass('bg-surface4');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();

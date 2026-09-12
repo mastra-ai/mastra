@@ -98,11 +98,18 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               scopeNodeId: '11111111-1111-4111-8111-111111111111',
               name: 'mastra',
             },
-            { level: 'resource', id: projectId, available: true },
+            {
+              level: 'resource',
+              id: projectId,
+              available: true,
+              scopeNodeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              name: projectId,
+            },
           ],
           defaultLevel: 'resource',
-          // The reconciled structural tree rides along — identity rungs stay
-          // server-derived, scope nodes come from host reconciliation.
+          // The unified tree rides along: the host-vouched identity chain
+          // (org → project) and the declared structure are all scope nodes
+          // linked by membership edges.
           scopeNodes: [
             {
               id: '11111111-1111-4111-8111-111111111111',
@@ -110,6 +117,12 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               name: 'mastra',
               kind: 'org',
               parentIds: [],
+            },
+            {
+              id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              address: `resource:${projectId}`,
+              name: projectId,
+              parentIds: ['11111111-1111-4111-8111-111111111111'],
             },
             {
               id: '22222222-2222-4222-8222-222222222222',
@@ -125,6 +138,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     }
     if (url.pathname.endsWith('/knowledge/subgraph')) {
       const scopeNodeId = url.searchParams.get('scopeNodeId');
+      // The merged project entry's lens is the project graph itself.
+      if (scopeNodeId === 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') {
+        return route.fulfill({ json: graph });
+      }
       if (scopeNodeId) {
         return route.fulfill({
           json: {
@@ -231,7 +248,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByRole('heading', { name: 'Knowledge' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Knowledge scopes' })).toBeVisible();
   await expect(page.getByText('Select a scope to explore its knowledge.')).toBeVisible();
-  await page.getByRole('button', { name: /Project/ }).click();
+  await page.getByRole('button', { name: new RegExp(`${projectId} · your project`) }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
   // The graph pane must actually have height — a broken flex chain renders
@@ -245,12 +262,15 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await page.getByRole('tab', { name: 'activity' }).click();
   await expect(page.getByText('knowledge-appended')).toBeVisible();
 
-  // Structural scopes render under the identity rungs and drive the bounded
-  // member subgraph by scope node id. The org rung merged with its structural
-  // scope node: one entry, structural name, identity marker.
+  // The sidebar is ONE unified tree built from the scope nodes that exist:
+  // merged identity entries (structural name + marker) with declared structure
+  // nested via membership edges — no "Your access" / "Knowledge structure" split.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
+  await expect(scopeTree.getByText('Your access')).toBeHidden();
+  await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
   await expect(scopeTree.getByRole('button', { name: /mastra · your org/ })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: new RegExp(`${projectId} · your project`) })).toBeVisible();
   await expect(scopeTree.getByRole('button', { name: /Organization/ })).toBeHidden();
   await expect(scopeTree.getByRole('button', { name: 'mastra', exact: true })).toBeHidden();
 
@@ -258,7 +278,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await scopeTree.getByRole('button', { name: /mastra · your org/ }).click();
   await expect(page).toHaveURL(/scope=11111111-1111-4111-8111-111111111111/);
 
-  // The matched node left the structural tree; its children re-rooted there.
+  // Declared structure nests under the merged org entry via membership edges.
   await scopeTree.getByRole('button', { name: 'features' }).click();
   await expect(page).toHaveURL(/scope=22222222-2222-4222-8222-222222222222/);
   await expect(page.getByText('subconscious')).toBeVisible();
