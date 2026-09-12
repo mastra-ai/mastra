@@ -673,6 +673,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const requestStepResult = await requestStepRunner.runProcessLLMRequest({
                   prompt: inputMessages,
                   model: currentModel,
+                  messageList,
                   stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: (inputData as any).processorRetryCount ?? 0,

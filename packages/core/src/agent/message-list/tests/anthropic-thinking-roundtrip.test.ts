@@ -147,8 +147,21 @@ describe('Anthropic signed thinking round-trip', () => {
     list.add(anthropicDbMessage, 'memory');
     list.add({ role: 'user', content: 'Continue.' }, 'input');
 
-    const prompt = await list.get.all.aiV5.llmPrompt({ targetProvider: 'anthropic.messages' });
-    const signatures = prompt.flatMap(message =>
+    const prompt = list.get.all.aiV5.prompt();
+    const result = await new ProviderHistoryCompat().processLLMRequest({
+      prompt,
+      model: { provider: 'anthropic.messages' },
+      messageList: list,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    });
+
+    const signatures = (result?.prompt ?? prompt).flatMap(message =>
       Array.isArray(message.content)
         ? message.content
             .filter(part => part.type === 'reasoning')

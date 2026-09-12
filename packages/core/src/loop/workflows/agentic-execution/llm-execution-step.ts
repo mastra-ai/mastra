@@ -1640,6 +1640,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const requestStepResult = await requestStepRunner.runProcessLLMRequest({
             prompt: inputMessages,
             model: currentStep.model,
+            messageList,
             stepNumber: inputData.output?.steps?.length || 0,
             steps: inputData.output?.steps || [],
             retryCount: inputData.processorRetryCount || 0,

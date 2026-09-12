@@ -341,6 +341,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
+  /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
+  messageList?: MessageList;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */

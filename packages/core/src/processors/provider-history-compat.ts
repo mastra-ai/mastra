@@ -1,7 +1,7 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
-import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart, MessageList } from '../agent/message-list';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -44,10 +44,16 @@ export interface CompatRule {
   fix?: (messages: MastraDBMessage[]) => boolean;
   /**
    * Rewrite the outbound LLM request preemptively. Receives the resolved model
-   * so rules can scope themselves to specific providers. Return a new prompt
-   * to forward, or `undefined` to leave the prompt unchanged.
+   * so rules can scope themselves to specific providers, and — when the caller
+   * has it — the message list the prompt was built from, for provenance the
+   * converted prompt no longer carries. Return a new prompt to forward, or
+   * `undefined` to leave the prompt unchanged.
    */
-  applyToPrompt?: (args: { prompt: LanguageModelV2Prompt; model: unknown }) => LanguageModelV2Prompt | undefined;
+  applyToPrompt?: (args: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+    messageList?: MessageList;
+  }) => LanguageModelV2Prompt | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +203,31 @@ function matchesProviderPrefix(model: unknown, providerPrefix: string): boolean 
   }
 
   return false;
+}
+
+/**
+ * Extract the exact provider id from a resolved model — the same value
+ * `buildResponseModelMetadata` stamps onto each persisted assistant turn.
+ * Returns `undefined` for unresolved string ids and dynamic functions, where
+ * no reliable provider identity exists.
+ */
+function getModelProviderId(model: unknown): string | undefined {
+  if (model == null || typeof model === 'function' || typeof model === 'string') return undefined;
+
+  if (Array.isArray(model)) {
+    for (const entry of model) {
+      const provider = getModelProviderId((entry as { model?: unknown }).model ?? entry);
+      if (provider) return provider;
+    }
+    return undefined;
+  }
+
+  if (typeof model === 'object') {
+    const provider = (model as { provider?: unknown }).provider;
+    return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
+  }
+
+  return undefined;
 }
 
 export function isMaybeCerebras(
@@ -523,28 +554,80 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  * provenance is the `provider` each assistant turn was stamped with by
  * `buildResponseModelMetadata`, which only the persisted message list carries.
  *
- * `dropCrossProviderSignedReasoning` already removes foreign signed reasoning
- * preemptively at the message-list seam. This rule is the reactive backstop:
- * it strips the signature (and redacted payload) off the *persisted* turn that
- * provoked the rejection, so a retry succeeds and the thread stays repaired on
- * later turns.
+ * The rule works in two passes:
  *
- * `ProcessAPIErrorArgs` does not carry the model, so the true target provider
- * is unavailable here. What *is* provable from the stamps is the signer: the
- * most recent assistant turn is the one the failing request was continuing, and
- * the rejection is itself proof that its signatures are not valid for whoever
- * rejected it. So the rule strips the signature off that turn only, and never
- * touches any other turn — it cannot guess at (and must not destroy) the
- * signatures that belong to the provider the request is actually going to.
+ * - **Preemptively** (`applyToPrompt`): reasoning parts whose signature came
+ *   from a turn stamped with a provider different from the current target are
+ *   dropped from the outbound prompt, so the rejection never happens.
+ *   Unstamped history is left untouched.
  *
- * Scope: this repairs the "replayed foreign signature" rejection. It does not
- * recover the trailing `tool_use`-first continuation shape (where the seam has
- * already dropped the thinking and Anthropic then rejects the modified
- * continuation) — stripping a signature cannot put a thinking block back.
+ * - **Reactively** (`fix`): as a backstop for anything the preemptive pass
+ *   could not see (e.g. no message list on the call path), the signature is
+ *   stripped off the *persisted* turn that provoked the rejection, so the
+ *   retry succeeds and the thread stays repaired on later turns.
+ *   `ProcessAPIErrorArgs` does not carry the model, so the true target
+ *   provider is unavailable there. What *is* provable from the stamps is the
+ *   signer: the most recent assistant turn is the one the failing request was
+ *   continuing, and the rejection is itself proof that its signatures are not
+ *   valid for whoever rejected it. So the reactive pass strips the signature
+ *   off that turn only, and never touches any other turn — it cannot guess at
+ *   (and must not destroy) the signatures that belong to the provider the
+ *   request is actually going to.
+ *
+ * Scope: this prevents and repairs the "replayed foreign signature"
+ * rejection. It does not recover the trailing `tool_use`-first continuation
+ * shape (where the thinking was already dropped and Anthropic then rejects
+ * the modified continuation) — stripping a signature cannot put a thinking
+ * block back.
  */
 export const anthropicStripForeignSignedReasoning: CompatRule = {
   name: 'anthropic-strip-foreign-signed-reasoning',
   errorPatterns: [/signature.*thinking/i, /thinking.*cannot be modified/i],
+  applyToPrompt({ prompt, model, messageList }) {
+    if (!messageList) return undefined;
+    const targetProvider = getModelProviderId(model);
+    if (!targetProvider) return undefined;
+
+    // Collect the signatures of every signed reasoning block whose origin
+    // turn was stamped with a provider different from this request's target.
+    const foreign = new Map<string, string>(); // signature -> origin provider
+    for (const dbMessage of messageList.get.all.db()) {
+      if (dbMessage.role !== 'assistant') continue;
+      if (dbMessage.content?.format !== 2) continue;
+      const origin = dbMessage.content.metadata?.provider;
+      if (typeof origin !== 'string' || origin === targetProvider) continue;
+      for (const part of dbMessage.content.parts ?? []) {
+        if (part.type !== 'reasoning') continue;
+        const anthropic = part.providerMetadata?.anthropic as
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
+        for (const value of [anthropic?.signature, anthropic?.redactedData]) {
+          if (typeof value === 'string' && value && !foreign.has(value)) foreign.set(value, origin);
+        }
+      }
+    }
+    if (foreign.size === 0) return undefined;
+
+    let dropped = 0;
+    const next = prompt.map(message => {
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
+      const content = message.content.filter(part => {
+        if (part.type !== 'reasoning') return true;
+        const anthropic = part.providerOptions?.anthropic as
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined;
+        const signature = anthropic?.signature ?? anthropic?.redactedData;
+        if (typeof signature === 'string' && foreign.has(signature)) {
+          dropped++;
+          return false;
+        }
+        return true;
+      });
+      return content.length === message.content.length ? message : { ...message, content };
+    });
+
+    return dropped > 0 ? next : undefined;
+  },
   fix(messages) {
     // The most recent assistant turn is the one that provoked the error; its
     // stamp names the signer, which is provably foreign to whoever rejected it.
@@ -671,12 +754,15 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
- * - **anthropic-strip-foreign-signed-reasoning** — reactive backstop that
- *   strips the signature / redacted payload off the persisted turn that
- *   provoked a replayed-signature rejection (`Invalid \`signature\` in
+ * - **anthropic-strip-foreign-signed-reasoning** — drops signed thinking
+ *   blocks from the outbound prompt when their origin turn was stamped with a
+ *   provider different from the current target (preemptive), and as a reactive
+ *   backstop strips the signature / redacted payload off the persisted turn
+ *   that provoked a replayed-signature rejection (`Invalid \`signature\` in
  *   \`thinking\` block`), so the retry succeeds. Only the offending (most
- *   recent assistant) turn is touched; other turns' signatures are kept. It
- *   does not recover the trailing `tool_use`-first continuation shape.
+ *   recent assistant) turn is touched reactively; other turns' signatures are
+ *   kept. It does not recover the trailing `tool_use`-first continuation
+ *   shape.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
@@ -695,12 +781,12 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
   }
 
-  processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+  processLLMRequest({ prompt, model, messageList }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
     let current = prompt;
     let mutated = false;
     for (const rule of this.rules) {
       if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model });
+      const next = rule.applyToPrompt({ prompt: current, model, messageList });
       if (next) {
         current = next;
         mutated = true;
