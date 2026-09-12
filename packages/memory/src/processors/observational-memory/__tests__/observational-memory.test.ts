@@ -11385,7 +11385,7 @@ describe('Full Async Buffering Flow', () => {
     expect(record?.activeObservations).toBeTruthy();
   });
 
-  it('should defer async buffering when messages contain pending tool calls (state: call)', async () => {
+  it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
