@@ -237,8 +237,44 @@ function getForcedRefreshProviders(state: Record<string, unknown>): Set<string> 
   return created;
 }
 
+/** Friendly names for the part/notice copy (display only — never auth data). */
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  anthropic: 'Anthropic',
+  'kimi-for-coding': 'Kimi',
+  'openai-codex': 'Codex',
+  'github-copilot': 'GitHub Copilot',
+  xai: 'xAI',
+};
+
+const REASON_TEXT: Record<string, string> = {
+  'rate-limit': 'rate limit',
+  'quota-exhausted': 'quota exhausted',
+  'auth-failed': 'auth failed',
+  'pool-exhausted': 'pool exhausted',
+  'persistent-outage': 'persistent outage',
+};
+
+/**
+ * One-line transcript copy for a switch part. Shared by the live `info`
+ * controller event (the TUI shows controller `info` events as transcript
+ * lines, and no message event carries data parts mid-run) and by the TUI's
+ * history rendering of the persisted part — one formatter, identical text.
+ */
+export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
+  const provider = PROVIDER_DISPLAY_NAMES[data.provider] ?? data.provider;
+  const reason = REASON_TEXT[data.reason] ?? data.reason;
+  if (data.reason === 'starting-on-account' && data.to) {
+    return `Starting on ${provider} account: ${data.to.label}`;
+  }
+  if (data.to === null) {
+    return `All ${provider} accounts unavailable (${reason})`;
+  }
+  const from = data.from?.label ?? 'unknown';
+  return `Switched ${provider} account: ${from} → ${data.to.label} (${reason})`;
+}
+
 async function emitAccountSwitchPart(
-  args: Pick<ProcessAPIErrorArgs, 'writer'> | Pick<ProcessInputArgs, 'writer'>,
+  args: Pick<ProcessAPIErrorArgs, 'writer' | 'requestContext'> | Pick<ProcessInputArgs, 'writer' | 'requestContext'>,
   data: AccountSwitchPartData,
 ): Promise<void> {
   // Non-transient on purpose (contrast the transient tool-progress parts):
@@ -247,6 +283,13 @@ async function emitAccountSwitchPart(
     type: ACCOUNT_SWITCH_PART_TYPE,
     data,
   });
+  // Data parts surface in the TUI only on history reload; emit the same line
+  // as a controller `info` event so the switch is visible live (precedent:
+  // emitTransientRetry emits controller events from the retry matcher).
+  const controllerContext = args.requestContext?.get('controller') as
+    | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+    | undefined;
+  controllerContext?.emitEvent?.({ type: 'info', message: accountSwitchNoticeText(data) });
 }
 
 /**
