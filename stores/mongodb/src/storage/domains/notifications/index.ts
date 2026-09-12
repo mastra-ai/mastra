@@ -14,6 +14,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from '@mastra/core/storage';
 import type { Collection, Filter, UpdateFilter } from 'mongodb';
 
@@ -352,6 +353,20 @@ export class NotificationsMongoDB extends NotificationsStorage {
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     return updated;
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    if (input.ids.length === 0) return [];
+
+    const now = new Date();
+    const filter = { threadId: input.threadId, id: { $in: input.ids } };
+    const collection = await this.getCollection();
+    await collection.updateMany(filter, {
+      $set: { status: input.status, ...statusTimestamp(input.status, now), updatedAt: now },
+    });
+    // updateMany reports counts only; re-read the matched rows so callers get the updated records.
+    const rows = await collection.find({ ...filter, status: input.status }).toArray();
+    return rows.map(rowToNotification);
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
