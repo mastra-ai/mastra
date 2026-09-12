@@ -55,7 +55,7 @@ export const AgentProfileReadyStep = () => {
         </div>
       }
     >
-      <div className="flex h-full w-full flex-col items-center justify-center px-6 py-6 text-center">
+      <div className="flex h-full w-full flex-col items-center justify-center px-4 py-4 text-center">
         <div className="ready-stage-content flex flex-col items-center gap-4">
           <h2 className="text-neutral6 text-header-xl font-semibold" data-testid="agent-builder-ready-heading">
             Your agent is ready

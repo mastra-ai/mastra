@@ -218,7 +218,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           <SideDialog.Heading>Add Item</SideDialog.Heading>
         </SideDialog.Header>
 
-        <form onSubmit={handleSubmit} className="grid gap-6">
+        <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
             <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[240px]" />

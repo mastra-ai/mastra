@@ -25,11 +25,8 @@ export function SettingsLayout({
     return variant === 'header' ? (
       children
     ) : (
-      <div
-        data-slot="settings-layout-content"
-        className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
-      >
-        <div className="min-w-0 space-y-14">{children}</div>
+      <div data-slot="settings-layout-content" className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5">
+        <div className="min-w-0 space-y-8">{children}</div>
       </div>
     );
   }
@@ -38,7 +35,7 @@ export function SettingsLayout({
     <>
       <div
         data-slot="settings-page-header"
-        className="mx-auto w-full max-w-5xl min-w-0 overflow-x-clip px-4 pt-6 pb-0 sm:px-6 sm:pt-12"
+        className="mx-auto w-full max-w-5xl min-w-0 overflow-x-clip px-4 pt-5 pb-0 sm:pt-6"
       >
         <div className={cn('flex min-w-0 flex-wrap items-start justify-between gap-4', inset && 'pl-4')}>
           <div className="grid min-w-0 gap-2">
@@ -68,9 +65,9 @@ export function SettingsLayout({
       ) : (
         <div
           data-slot="settings-layout-content"
-          className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
+          className="mx-auto w-full max-w-5xl min-w-0 overflow-x-hidden px-4 py-5"
         >
-          <div className="min-w-0 space-y-8">{children}</div>
+          <div className="min-w-0 space-y-6">{children}</div>
         </div>
       )}
     </>

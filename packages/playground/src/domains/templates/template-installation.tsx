@@ -69,7 +69,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="text-neutral3 mb-8 content-center space-y-6">
+    <Container className="text-neutral3 mb-5 content-center space-y-6">
       {/* Header */}
       <div className="text-center">
         <h3 className="text-neutral5 text-header-sm font-semibold">{getPhaseMessage()}</h3>
@@ -80,7 +80,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Progress Bar */}
       {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
-        <div className="mx-auto w-full max-w-[30rem] px-6">
+        <div className="mx-auto w-full max-w-[30rem] px-4">
           <ProcessStepProgressBar steps={steps} />
         </div>
       )}
@@ -89,7 +89,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-neutral5 p-6 flex items-center gap-3 text-ui-md bg-red-500/10',
+            'rounded-lg text-neutral5 p-4 flex items-center gap-3 text-ui-md bg-red-500/10',
             '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
           )}
         >

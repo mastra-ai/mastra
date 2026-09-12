@@ -160,7 +160,7 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
             )}
           </div>
         </DialogBody>
-        <DialogFooter className="px-6">
+        <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
             <Button onClick={() => handleClose(false)}>Cancel</Button>
             <Button variant="primary" onClick={handleGenerate} disabled={!modelId}>
@@ -340,7 +340,7 @@ export function GenerateReviewDialog({
             </ScrollArea>
           </div>
         </DialogBody>
-        <DialogFooter className="px-6">
+        <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
             <Button onClick={() => handleClose(false)}>Cancel</Button>
             <Button

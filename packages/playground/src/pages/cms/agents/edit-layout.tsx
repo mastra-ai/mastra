@@ -112,7 +112,7 @@ function EditFormContent({
       rightPanel={rightPanel}
     >
       {isEditorLocked ? (
-        <div className="p-6">
+        <div className="p-4">
           <Notice variant="info" title="Editing disabled">
             <Notice.Message>This code-defined agent has disabled Studio editing.</Notice.Message>
           </Notice>

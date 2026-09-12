@@ -635,7 +635,7 @@ export function DatasetReview({
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-12">
+            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
               <EmptyState
                 iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}

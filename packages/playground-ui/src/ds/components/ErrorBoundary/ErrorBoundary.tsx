@@ -159,12 +159,12 @@ function DefaultErrorFallback({
         <h3
           className={cn(
             'font-medium text-neutral6',
-            isInline ? 'text-ui-md' : 'text-ui-lg @md:text-header-md @lg:text-header-lg',
+            isInline ? 'text-ui-md' : 'text-ui-md @md:text-header-md @lg:text-header-lg',
           )}
         >
           {title ?? 'Something went wrong'}
         </h3>
-        <p className={cn('text-neutral3', isInline ? 'text-ui-sm' : 'text-ui-md @lg:text-ui-lg')}>
+        <p className={cn('text-neutral3', isInline ? 'text-ui-sm' : 'text-ui-md')}>
           {description ?? 'An unexpected error occurred while rendering this part of the page.'}
         </p>
         <p

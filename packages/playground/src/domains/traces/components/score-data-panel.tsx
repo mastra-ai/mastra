@@ -113,7 +113,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
           <div className="text-neutral4 mb-6">
             <div
               className={cn(
-                'text-neutral2 text-ui-lg flex gap-2 items-baseline',
+                'text-neutral2 text-ui-md flex gap-2 items-baseline',
                 '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
               )}
             >

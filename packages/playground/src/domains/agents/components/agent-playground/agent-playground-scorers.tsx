@@ -87,11 +87,11 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
       <ScrollArea className="flex-1">
         <div className="space-y-2 p-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <Loader2 className="text-neutral3 h-5 w-5 animate-spin" />
             </div>
           ) : filteredScorers.length === 0 ? (
-            <div className="space-y-3 py-12 text-center">
+            <div className="space-y-3 py-8 text-center">
               <Icon size="lg" className="text-neutral3 mx-auto">
                 <Calculator />
               </Icon>

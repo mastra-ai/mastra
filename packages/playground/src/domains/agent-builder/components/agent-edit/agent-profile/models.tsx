@@ -25,7 +25,7 @@ export const Models = ({ editable = true }: Modelprops) => {
     const policyModelId = policy.default?.modelId;
 
     return (
-      <div className="px-6 py-6">
+      <div className="px-4 py-4">
         <LockedModelChip provider={policyProvider} modelId={policyModelId} />
       </div>
     );
@@ -135,9 +135,9 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
           />
         )}
 
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
           <div data-testid="model-card-picker-search" className="bg-surface3 max-w-[30ch] shrink-0 rounded-full">
-            <InputGroup variant="outline" size="lg">
+            <InputGroup variant="outline" size="default">
               <InputGroupAddon align="inline-start">
                 <SearchIcon />
               </InputGroupAddon>
@@ -193,7 +193,7 @@ interface ModelGroupsProps {
 
 const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChange }: ModelGroupsProps) => {
   return (
-    <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+    <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
       {groups.map(group => (
         <section
           key={group.providerId}
@@ -208,7 +208,7 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2 lg:gap-6 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -242,7 +242,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="border-accent6 bg-accent6Dark/40 text-accent6 mx-6 mb-6 flex items-start gap-2 rounded-md border px-3 py-2"
+      className="border-accent6 bg-accent6Dark/40 text-accent6 mx-4 mb-4 flex items-start gap-2 rounded-md border px-3 py-2"
       data-testid="model-detail-stale-warning"
       role="alert"
     >

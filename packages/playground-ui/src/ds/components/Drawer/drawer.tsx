@@ -35,8 +35,8 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
     },
     layout: {
       default: 'inset-0',
-      floating: 'p-3 sm:p-4',
-      floatingOverlay: 'inset-0 p-3 sm:p-4',
+      floating: 'p-2 sm:p-3',
+      floatingOverlay: 'inset-0 p-2 sm:p-3',
     },
   },
   compoundVariants: [
@@ -431,7 +431,7 @@ DrawerDefaultCloseButton.displayName = 'DrawerDefaultCloseButton';
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     data-slot="drawer-header"
-    className={cn('flex flex-col gap-0.5 px-4 py-3 pr-12 text-left', className)}
+    className={cn('flex flex-col gap-0.5 px-3 py-2.5 pr-12 text-left', className)}
     {...props}
   />
 );
@@ -440,14 +440,14 @@ DrawerHeader.displayName = 'DrawerHeader';
 const DrawerFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     data-slot="drawer-footer"
-    className={cn('mt-auto flex flex-col-reverse gap-1.5 px-4 py-3 sm:flex-row sm:justify-end', className)}
+    className={cn('mt-auto flex flex-col-reverse gap-1.5 px-3 py-2.5 sm:flex-row sm:justify-end', className)}
     {...props}
   />
 );
 DrawerFooter.displayName = 'DrawerFooter';
 
 const DrawerBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div data-slot="drawer-body" className={cn('flex-1 px-4 py-3', className)} {...props} />
+  <div data-slot="drawer-body" className={cn('flex-1 px-3 py-2.5', className)} {...props} />
 );
 DrawerBody.displayName = 'DrawerBody';
 

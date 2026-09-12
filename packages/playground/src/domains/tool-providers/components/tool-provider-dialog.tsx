@@ -68,7 +68,7 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
       dialogDescription={provider?.description ?? 'Browse tools from this provider'}
       level={1}
     >
-      <SideDialog.Header className="px-9 pt-6">
+      <SideDialog.Header className="px-9 pt-4">
         <SideDialog.Heading>{provider?.name}</SideDialog.Heading>
         {onSubmit && (
           <Button variant="primary" size="sm" onClick={handleSubmit}>

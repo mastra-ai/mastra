@@ -601,7 +601,7 @@ function ReadOnlyConfigWithDiff({
 
   if (isLoadingCompare) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex items-center justify-center py-5">
         <Spinner className="h-5 w-5" />
       </div>
     );

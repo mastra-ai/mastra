@@ -164,7 +164,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
           return (
             <EntityList.RowWrapper key={`workflow-${row.pathKey}`}>
               <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-8 px-5">
+              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-5 px-5">
                 <EntityList.NameCell>
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />

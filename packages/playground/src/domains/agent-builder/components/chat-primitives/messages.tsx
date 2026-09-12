@@ -372,7 +372,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
 
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
-    <div className="flex flex-col gap-6" data-testid={testId}>
+    <div className="flex flex-col gap-4" data-testid={testId}>
       <div className="flex justify-end">
         <Skeleton className="h-10 w-56 rounded-2xl" />
       </div>

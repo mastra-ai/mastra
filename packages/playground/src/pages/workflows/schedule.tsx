@@ -105,7 +105,7 @@ export default function SchedulePage() {
       </PageLayout.TopArea>
 
       {schedule ? (
-        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-6 overflow-hidden">
+        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
           <div className="border-border1 flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
