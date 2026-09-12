@@ -1804,35 +1804,18 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push(`EXISTS (SELECT 1 FROM json_each(scopeIds) WHERE value IN (${scopeIds.map(() => '?').join(',')}))`);
       args.push(...scopeIds);
     }
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const batchSize = Math.max(limit, Math.min(100, limit * 2));
-    const entries: KnowledgeSemanticOutboxEntry[] = [];
-    let cursor: { createdAt: string; id: string } | undefined;
-    let scanned = 0;
-    while (entries.length < limit && scanned < 1_000) {
-      const pageClauses = [...clauses];
-      const pageArgs = [...args];
-      if (cursor) {
-        pageClauses.push('(createdAt > ? OR (createdAt = ? AND id > ?))');
-        pageArgs.push(cursor.createdAt, cursor.createdAt, cursor.id);
-      }
-      pageArgs.push(Math.min(batchSize, 1_000 - scanned));
-      const result = await this.#client.execute({
-        sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${pageClauses.length ? ` WHERE ${pageClauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
-        args: pageArgs,
-      });
-      scanned += result.rows.length;
-      for (const row of result.rows) {
-        const entry = parseOutbox(row);
-        if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(this.#client, entry, scopeIds))) continue;
-        entries.push(entry);
-        if (entries.length >= limit) break;
-      }
-      const last = result.rows.at(-1);
-      if (!last || result.rows.length < batchSize) break;
-      cursor = { createdAt: toDate(last.createdAt).toISOString(), id: String(last.id) };
+    if (scopeIds) {
+      const visibility = this.#semanticOutboxVisibilityPredicate(scopeIds, '');
+      clauses.push(visibility.sql);
+      args.push(...visibility.args);
     }
-    return entries;
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    args.push(limit);
+    const result = await this.#client.execute({
+      sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
+      args,
+    });
+    return result.rows.map(parseOutbox);
   }
 
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
@@ -1845,34 +1828,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         ? ` AND EXISTS (SELECT 1 FROM json_each(o.scopeIds) WHERE value IN (${scopeIds.map(() => '?').join(',')}))`
         : '';
       const predecessorClause = ` AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" earlier WHERE earlier.documentId=o.documentId AND earlier.status!='completed' AND (earlier.createdAt < o.createdAt OR (earlier.createdAt = o.createdAt AND earlier.id < o.id)))`;
+      const visibilityClause = scopeIds ? ` AND ${this.#semanticOutboxVisibilityPredicate(scopeIds, 'o.').sql}` : '';
+      const visibilityArgs = scopeIds ? this.#semanticOutboxVisibilityPredicate(scopeIds, 'o.').args : [];
       const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-      const batchSize = Math.max(limit, Math.min(100, limit * 2));
-      const entries: KnowledgeSemanticOutboxEntry[] = [];
-      let cursor: { createdAt: string; id: string } | undefined;
-      let scanned = 0;
-      while (entries.length < limit && scanned < 1_000) {
-        const cursorClause = cursor ? ' AND (o.createdAt > ? OR (o.createdAt = ? AND o.id > ?))' : '';
-        const selected = await tx.execute({
-          sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause}${predecessorClause}${cursorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ?`,
-          args: [
-            now.toISOString(),
-            stale.toISOString(),
-            ...(scopeIds ?? []),
-            ...(cursor ? [cursor.createdAt, cursor.createdAt, cursor.id] : []),
-            Math.min(batchSize, 1_000 - scanned),
-          ],
-        });
-        scanned += selected.rows.length;
-        for (const row of selected.rows) {
-          const entry = parseOutbox(row);
-          if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
-          entries.push(entry);
-          if (entries.length >= limit) break;
-        }
-        const last = selected.rows.at(-1);
-        if (!last || selected.rows.length < batchSize) break;
-        cursor = { createdAt: toDate(last.createdAt).toISOString(), id: String(last.id) };
-      }
+      const selected = await tx.execute({
+        sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause}${visibilityClause}${predecessorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ?`,
+        args: [now.toISOString(), stale.toISOString(), ...(scopeIds ?? []), ...visibilityArgs, limit],
+      });
+      const entries: KnowledgeSemanticOutboxEntry[] = selected.rows.map(parseOutbox);
       const claimed: KnowledgeSemanticOutboxEntry[] = [];
       for (const entry of entries) {
         const updated = await tx.execute({
@@ -2086,37 +2049,65 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return true;
   }
 
-  async #isSemanticOutboxEntryVisible(
-    executor: Executor,
-    entry: KnowledgeSemanticOutboxEntry,
-    visibleScopeIds: KnowledgeScopeIds,
-  ): Promise<boolean> {
-    const scopesVisible =
-      entry.documentType === 'record'
-        ? isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)
-        : isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds);
-    if (!scopesVisible) return false;
-    const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
-    if (entry.documentType === 'node') {
-      if (entry.operation === 'delete') return true;
-      const node = await this.#getNode(executor, id);
-      return Boolean(node && isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, id), visibleScopeIds));
-    }
-    const record = await this.#getRecord(executor, id, true);
-    if (!record) return entry.operation === 'delete';
-    if (entry.operation === 'delete') {
-      const mentions = await executor.execute({
-        sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
-        args: [record.id],
-      });
-      for (const nodeId of [record.nodeId, ...mentions.rows.map(row => String(row.targetNodeId))]) {
-        const node = await this.#getNode(executor, nodeId);
-        if (!node || !isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, nodeId), visibleScopeIds))
-          return false;
-      }
-      return true;
-    }
-    return !record.deletedAt && (await this.#isRecordVisible(executor, record, visibleScopeIds));
+  #semanticOutboxVisibilityPredicate(
+    scopeIds: KnowledgeScopeIds,
+    aliasPrefix: string,
+  ): {
+    sql: string;
+    args: InValue[];
+  } {
+    const o = aliasPrefix;
+    const inList = scopeIds.map(() => '?').join(',');
+    const sql = `(
+      (${o}documentType='node' AND ${o}operation='delete')
+      OR (
+        ${o}documentType='node'
+        AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" n
+          WHERE n.id=substr(${o}documentId,16) AND n.deletedAt IS NULL
+            AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns.nodeId=n.id AND ns.scopeNodeId IN (${inList}))
+        )
+      )
+      OR (
+        ${o}documentType='record' AND ${o}operation='delete'
+        AND (
+          NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" rd WHERE rd.id=substr(${o}documentId,18))
+          OR (
+            EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" own
+              WHERE own.id=(SELECT nodeId FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=substr(${o}documentId,18))
+                AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nso WHERE nso.nodeId=own.id AND nso.scopeNodeId IN (${inList}))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" md LEFT JOIN "${TABLE_KNOWLEDGE_NODES}" tnd ON tnd.id=md.targetNodeId
+              WHERE md.recordId=substr(${o}documentId,18)
+                AND (tnd.id IS NULL OR tnd.deletedAt IS NOT NULL
+                  OR NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nsd WHERE nsd.nodeId=md.targetNodeId AND nsd.scopeNodeId IN (${inList})))
+            )
+          )
+        )
+      )
+      OR (
+        ${o}documentType='record' AND ${o}operation!='delete'
+        AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" r
+          WHERE r.id=substr(${o}documentId,18) AND r.deletedAt IS NULL
+            AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${inList}))
+            AND EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" own
+              WHERE own.id=r.nodeId AND own.deletedAt IS NULL
+                AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nso WHERE nso.nodeId=own.id AND nso.scopeNodeId IN (${inList}))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_NODES}" tn ON tn.id=m.targetNodeId
+              WHERE m.recordId=r.id
+                AND (tn.id IS NULL OR tn.deletedAt IS NOT NULL
+                  OR NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nsm WHERE nsm.nodeId=m.targetNodeId AND nsm.scopeNodeId IN (${inList})))
+            )
+        )
+      )
+    )`;
+    return { sql, args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds] };
   }
 
   async #queryKnowledge(
