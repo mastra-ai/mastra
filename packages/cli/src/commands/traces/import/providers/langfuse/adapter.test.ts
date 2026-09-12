@@ -105,6 +105,39 @@ describe('mapLangfuseSourceTrace', () => {
     expect(record.trace.spans[1]?.tags).toBeUndefined();
   });
 
+  it('orders siblings by their actual time and uses the observation ID to break ties', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({
+          id: 'later',
+          parentObservationId: 'root',
+          startTime: '2026-08-20T05:00:02.000-05:00',
+          endTime: '2026-08-20T05:00:03.000-05:00',
+        }),
+        observation({
+          id: 'same-time-b',
+          parentObservationId: 'root',
+          startTime: '2026-08-20T10:00:01.000Z',
+          endTime: '2026-08-20T10:00:02.000Z',
+        }),
+        observation(),
+        observation({
+          id: 'same-time-a',
+          parentObservationId: 'root',
+          startTime: '2026-08-20T11:00:01.000+01:00',
+          endTime: '2026-08-20T11:00:02.000+01:00',
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans.map(span => span.spanId)).toEqual(
+      ['root', 'same-time-a', 'same-time-b', 'later'].map(id => createLangfuseSpanImportId('project-1', id)),
+    );
+  });
+
   it('falls back to valid usage details when direct usage values are malformed', () => {
     const record = mapLangfuseSourceTrace(
       sourceTrace([

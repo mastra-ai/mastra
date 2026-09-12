@@ -193,6 +193,7 @@ function validateAndOrderTrace(
 
   const normalizedObservations = deriveVirtualRootEndTime(sourceTrace.traceId, observations, roots[0]!);
   const normalizedById = new Map(normalizedObservations.map(observation => [observation.id, observation]));
+  const startTimesById = new Map<string, number>();
   const root = normalizedById.get(roots[0]!.id)!;
 
   for (const observation of normalizedObservations) {
@@ -217,6 +218,7 @@ function validateAndOrderTrace(
         skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
       };
     }
+    startTimesById.set(observation.id, startMs);
 
     if (observation.type === 'EVENT') {
       if (startMs > options.snapshotMs) {
@@ -269,7 +271,7 @@ function validateAndOrderTrace(
   }
 
   for (const siblings of children.values()) {
-    siblings.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
+    siblings.sort((a, b) => startTimesById.get(a.id)! - startTimesById.get(b.id)! || a.id.localeCompare(b.id));
   }
 
   const ordered: TimestampedObservation[] = [];
