@@ -1673,6 +1673,11 @@ export class Workspace<
    * Called by Mastra when the logger is set.
    * @internal
    */
+  /** Logger set by Mastra, if any. */
+  get logger(): IMastraLogger | undefined {
+    return this._logger;
+  }
+
   __setLogger(logger: IMastraLogger): void {
     this._logger = logger;
 

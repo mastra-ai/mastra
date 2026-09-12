@@ -1,5 +1,29 @@
 # @mastra/redis-streams
 
+## 0.5.2-alpha.0
+
+### Patch Changes
+
+- `close()` now waits for in-flight publishes to reach the stream before quitting the writer, including publishes that were still connecting. A workflow's terminal event published right as `mastra.shutdown()` closed the pub/sub used to be dropped and reject the publisher with a `ClosingError`. ([#23168](https://github.com/mastra-ai/mastra/pull/23168))
+
+- Fixed `ValkeyStreamsPubSub` consumer-group reclaim so an idle unacknowledged message is redelivered to another live consumer in the group instead of back to the consumer whose handler is still processing it. Previously a handler running longer than `reclaimIdleMs` was invoked again, concurrently, for the same event on every reclaim tick with no `deliveryAttempt` increment, so `maxDeliveryAttempts` never applied; and because each self-reclaim reset the entry's idle clock, a genuinely hung handler's entry was never released to a sibling. `unsubscribe()` now also waits for an in-flight reclaim pass before tearing down. This brings `@mastra/valkey-streams` in line with `@mastra/redis-streams`. ([#23697](https://github.com/mastra-ai/mastra/pull/23697))
+
+  Behavior change: a subscription never redelivers to itself anymore, so a handler that hangs (never acks or nacks) is only recovered by a _different_ consumer in the group. In a single-consumer group that message stays pending until the process restarts. Set the new `inFlightTimeoutMs` option to have the subscription nack such a message on the handler's behalf after that long; the nack republishes with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still bounds retries. It defaults to `0` (disabled). The timeout settlement verifies ownership and settles in one atomic server-side step, so a sibling that has already reclaimed the entry is never acked out from under it.
+
+  ```ts
+  import { ValkeyStreamsPubSub } from '@mastra/valkey-streams';
+
+  const pubsub = new ValkeyStreamsPubSub({
+    url: process.env.VALKEY_URL,
+    // Give up on a handler that has neither acked nor nacked after 10 minutes
+    // and retry it (bounded by maxDeliveryAttempts).
+    inFlightTimeoutMs: 10 * 60 * 1000,
+  });
+  ```
+
+- Updated dependencies [[`492c0ae`](https://github.com/mastra-ai/mastra/commit/492c0aedcee3fde9555111a660b6c975c160a0db), [`ddbd352`](https://github.com/mastra-ai/mastra/commit/ddbd3527654a058ed413ae164a1246003dcc9030), [`4112ecd`](https://github.com/mastra-ai/mastra/commit/4112ecdec76827384d3a7ab4e8db3ccf90ae7ed1), [`617c1b3`](https://github.com/mastra-ai/mastra/commit/617c1b30e7e794bbb77feaced1848fde291fc240), [`422e798`](https://github.com/mastra-ai/mastra/commit/422e798ab1a4b14302c5b49fed2f6c818a82706e), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`b95aabb`](https://github.com/mastra-ai/mastra/commit/b95aabba261a39b73430d95f3ed051634117d517), [`055057c`](https://github.com/mastra-ai/mastra/commit/055057ca2102e35008fe30871f7c8f422ae25ec2), [`7290151`](https://github.com/mastra-ai/mastra/commit/7290151bdb3bfe518653b0a66a19d6790925e4a0), [`9bc7895`](https://github.com/mastra-ai/mastra/commit/9bc789591ad683f304c63bd01e554fbba2df9cf6), [`47868b2`](https://github.com/mastra-ai/mastra/commit/47868b2dde360b038d829c9f88e15061acf3efb5), [`6902f94`](https://github.com/mastra-ai/mastra/commit/6902f940f1879955a90faa0a0ac871667b59d428), [`7148bf5`](https://github.com/mastra-ai/mastra/commit/7148bf55b147e3fae90b3ba0c9517adb0af5f2a4), [`6bdb944`](https://github.com/mastra-ai/mastra/commit/6bdb944acb3f39bccad59ee140d7614420948f6b), [`a54766a`](https://github.com/mastra-ai/mastra/commit/a54766a10381295583144847b856d18e8f924d30), [`ff45065`](https://github.com/mastra-ai/mastra/commit/ff45065d42132075c4efb064d96169c4eadbab58)]:
+  - @mastra/core@1.67.0-alpha.3
+
 ## 0.5.1
 
 ### Patch Changes

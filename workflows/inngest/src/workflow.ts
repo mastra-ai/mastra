@@ -350,6 +350,7 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
+          parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
         const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
@@ -428,7 +429,7 @@ export class InngestWorkflow<
           return span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -468,6 +469,15 @@ export class InngestWorkflow<
                 });
               } catch (err) {
                 this.logger.debug?.('Failed to publish watch event:', err);
+              }
+              // Nested functions have workflow-local channels; send writer chunks
+              // directly to the outermost run without forwarding lifecycle events.
+              if (parentStream) {
+                try {
+                  await defaultPubsub.publishWorkflowWatchTo(parentStream.workflowId, parentStream.runId, chunk);
+                } catch (err) {
+                  this.logger.debug?.('Failed to publish parent watch event:', err);
+                }
               }
             },
           });

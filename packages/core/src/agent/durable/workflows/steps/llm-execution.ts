@@ -500,6 +500,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                         undefined,
                         execOptions.autoResumeSuspendedTools,
+                        Boolean(registryEntry?.backgroundTaskManager),
                       );
                     } else {
                       convertedTools[name] = tool as CoreTool;
@@ -1693,6 +1694,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ...deferredStepFinishChunk,
                   payload: {
                     ...deferredStepFinishChunk.payload,
+                    // The regular loop stamps isContinued on every step-finish chunk it emits
+                    // (loop/workflows/agentic-loop/index.ts). Output processors depend on it:
+                    // ChatChannelOutputProcessor closes its render queue on the first chunk where the
+                    // flag is not `true`, so a durable chunk that omits it ends channel rendering at
+                    // the tool step and drops everything after it (#23341).
+                    stepResult: {
+                      ...deferredStepFinishChunk.payload?.stepResult,
+                      isContinued,
+                    },
                     _durableStepContent: stepContent,
                   },
                 };

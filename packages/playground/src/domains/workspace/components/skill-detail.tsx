@@ -73,8 +73,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
           <SkillIcon className="text-neutral4 h-6 w-6" />
         </div>
         <div className="flex-1">
-          <h1 className="text-neutral6 text-xl font-semibold">{skill.name}</h1>
-          <p className="text-neutral4 mt-1 text-sm">{skill.description}</p>
+          <h1 className="text-neutral6 text-header-md font-semibold">{skill.name}</h1>
+          <p className="text-neutral4 text-ui-md mt-1">{skill.description}</p>
         </div>
       </div>
 
@@ -102,7 +102,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
+            className="text-neutral4 hover:text-neutral5 hover:bg-surface4 text-ui-sm flex items-center gap-1.5 rounded px-2 py-1 transition-colors"
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
             {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
@@ -119,7 +119,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 margin: 0,
                 padding: '1rem',
                 backgroundColor: 'transparent',
-                fontSize: '0.875rem',
+                fontSize: 'var(--text-ui-md)',
               }}
             >
               {rawSkillMd ?? skill.instructions}
@@ -145,7 +145,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
                 className="hover:bg-surface4 flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors"
               >
                 <FileText className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{ref}</span>
+                <span className="text-neutral5 text-ui-md">{ref}</span>
               </button>
             ))}
           </div>
@@ -163,7 +163,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.scripts.map(script => (
               <div key={script} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
                 <Code className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{script}</span>
+                <span className="text-neutral5 text-ui-md">{script}</span>
               </div>
             ))}
           </div>
@@ -181,7 +181,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
             {skill.assets.map(asset => (
               <div key={asset} className="bg-surface3 flex items-center gap-2 rounded px-3 py-2">
                 <Image className="text-neutral3 h-4 w-4" />
-                <span className="text-neutral5 text-sm">{asset}</span>
+                <span className="text-neutral5 text-ui-md">{asset}</span>
               </div>
             ))}
           </div>
@@ -190,7 +190,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
 
       {/* Path */}
       <div className="border-border1 border-t pt-4">
-        <p className="text-neutral3 text-xs">
+        <p className="text-neutral3 text-ui-sm">
           Path: <code className="bg-surface4 rounded px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
@@ -232,10 +232,10 @@ function MetadataCard({ label, value, icon }: { label: string; value: unknown; i
   const displayValue = formatDisplayValue(value);
   return (
     <div className="bg-surface3 rounded-lg p-3">
-      <p className="text-neutral3 mb-1 text-xs">{label}</p>
+      <p className="text-neutral3 text-ui-sm mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-neutral5 truncate text-sm font-medium" title={displayValue}>
+        <p className="text-neutral5 text-ui-md truncate font-medium" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -265,7 +265,7 @@ function CollapsibleSection({
           ) : (
             <ChevronRight className="text-neutral3 h-4 w-4" />
           )}
-          <span className="text-neutral5 text-sm font-medium">{title}</span>
+          <span className="text-neutral5 text-ui-md font-medium">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>

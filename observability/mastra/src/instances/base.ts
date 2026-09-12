@@ -44,6 +44,7 @@ import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -113,12 +114,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
+    const exporters = config.exporters ?? [];
+    const effectiveExporters = isMastraPlatformDeployment()
+      ? exporters.filter(exporter => !isMastraBuiltInStorageExporter(exporter))
+      : exporters;
+
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
-      exporters: config.exporters ?? [],
+      exporters: effectiveExporters,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -398,6 +404,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
+    if (isMastraPlatformDeployment() && isMastraBuiltInStorageExporter(exporter)) {
+      this.logger.warn('Storage exporter registration skipped on Mastra Platform', {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      });
+      return;
+    }
+
     this.observabilityBus.registerExporter(exporter);
     this.config.exporters ??= [];
     if (this.config.exporters.includes(exporter)) {

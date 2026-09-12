@@ -47,7 +47,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="text-neutral4 w-20 bg-transparent py-0.5 text-xs outline-hidden"
+          className="text-neutral4 text-ui-sm w-20 bg-transparent py-0.5 outline-hidden"
         />
         <button
           type="button"
@@ -64,7 +64,7 @@ export function ProposalTag({
   }
 
   return (
-    <span className="bg-surface3 border-border1 text-neutral4 group inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs">
+    <span className="bg-surface3 border-border1 text-neutral4 group text-ui-sm inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5">
       {tag}
       <button
         type="button"

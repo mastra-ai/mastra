@@ -7,7 +7,7 @@ description: "Browse ClinePass model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/cline-pass.svg" alt="ClinePass logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ClinePass
 
-Access 14 ClinePass models through Mastra's model router. Authentication is handled automatically using the `CLINE_API_KEY` environment variable.
+Access 15 ClinePass models through Mastra's model router. Authentication is handled automatically using the `CLINE_API_KEY` environment variable.
 
 Learn more in the [ClinePass documentation](https://docs.cline.bot/getting-started/clinepass).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 1.74,
     "outputCost": 3.48
+  },
+  {
+    "model": "cline-pass/cline-pass/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "cline-pass/cline-pass/glm-5.2",

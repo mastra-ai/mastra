@@ -23,7 +23,7 @@ export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCo
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className={cn(
-            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-ui-sm bg-surface4! whitespace-pre-wrap wrap-break-word',
             className,
           )}
           onClick={onOpen}
@@ -62,7 +62,7 @@ export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: Workf
             <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                 <pre
-                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
+                  className={`${className} text-ui-md relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono dark:bg-zinc-800`}
                   style={{
                     ...style,
                     backgroundColor: '#121212',

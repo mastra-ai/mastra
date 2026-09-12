@@ -1,4 +1,11 @@
-import { Batch, Decoder, GlideClient, type GlideClientConfiguration, type GlideString } from '@valkey/valkey-glide';
+import {
+  Batch,
+  Decoder,
+  GlideClient,
+  InfBoundary,
+  type GlideClientConfiguration,
+  type GlideString,
+} from '@valkey/valkey-glide';
 
 export type ValkeyClientOptions = Omit<Partial<GlideClientConfiguration>, 'addresses'> & {
   url?: string;
@@ -99,24 +106,34 @@ export class ValkeyStreamsClient {
       })) ?? null
     );
   }
-  async xAutoClaim(
-    key: string,
-    group: string,
-    consumer: string,
-    minIdle: number,
-    start: string,
-    options: { COUNT?: number } = {},
-  ) {
+  /**
+   * XPENDING <key> <group> [IDLE ms] <start> + <count>. `afterId` makes the
+   * range exclusive so callers can page past entries they've already seen.
+   */
+  async xPendingRange(key: string, group: string, count: number, options: { IDLE?: number; afterId?: string } = {}) {
     const result = await (
       await this.getClient()
-    ).xautoclaim(key, group, consumer, minIdle, start, { count: options.COUNT, decoder: Decoder.String });
-    return {
-      nextId: text(result[0]),
-      messages: Object.entries(result[1] ?? {}).map(([id, fields]) => ({
-        id,
-        message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
-      })),
-    };
+    ).xpendingWithOptions(key, group, {
+      start: options.afterId ? { value: options.afterId, isInclusive: false } : InfBoundary.NegativeInfinity,
+      end: InfBoundary.PositiveInfinity,
+      count,
+      minIdleTime: options.IDLE,
+    });
+    return result.map(([id, consumer, millisecondsSinceLastDelivery, deliveriesCounter]) => ({
+      id: text(id),
+      consumer: text(consumer),
+      millisecondsSinceLastDelivery,
+      deliveriesCounter,
+    }));
+  }
+  async xClaim(key: string, group: string, consumer: string, minIdle: number, ids: string[]) {
+    const result = await (
+      await this.getClient()
+    ).xclaim(key, group, consumer, minIdle, ids, { decoder: Decoder.String });
+    return Object.entries(result ?? {}).map(([id, fields]) => ({
+      id,
+      message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
+    }));
   }
   async xAck(key: string, group: string, id: string) {
     return (await this.getClient()).xack(key, group, [id]);

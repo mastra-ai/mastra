@@ -1,10 +1,5 @@
 {
-  "attachment": [
-    "google/gemma-4-31b-it",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "moonshotai/Kimi-K2.6",
-    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B"
-  ],
+  "attachment": ["google/gemma-4-31b-it", "moonshotai/Kimi-K2.6", "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B"],
   "temperature": [
     "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "deepseek-ai/DeepSeek-V3-0324",

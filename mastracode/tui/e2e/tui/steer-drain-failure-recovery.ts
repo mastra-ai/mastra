@@ -93,9 +93,22 @@ export const steerDrainFailureRecoveryScenario = {
         // rejects exactly once.
         onCreated(result) {
           const agent = (result.controller as unknown as { config: { agent: object } }).config.agent;
-          const proto = Object.getPrototypeOf(agent) as { stream: (...a: unknown[]) => unknown };
+          const proto = Object.getPrototypeOf(agent) as {
+            sendSignal: (...a: unknown[]) => { accepted: Promise<unknown> };
+            stream: (...a: unknown[]) => unknown;
+          };
+          const originalSendSignal = proto.sendSignal;
           const originalStream = proto.stream;
           let failedSteerStream = false;
+          let observedQueuedSteer = false;
+          patches.setProperty(proto, 'sendSignal', function patchedSendSignal(this: unknown, ...args: unknown[]) {
+            const signalResult = originalSendSignal.apply(this, args);
+            if (!observedQueuedSteer && JSON.stringify(args[0])?.includes(STEER_TEXT)) {
+              observedQueuedSteer = true;
+              void signalResult.accepted.then(resolveSteerSubmitted);
+            }
+            return signalResult;
+          });
           patches.setProperty(proto, 'stream', function patchedStream(this: unknown, ...args: unknown[]) {
             if (!failedSteerStream && JSON.stringify(args[0])?.includes(STEER_TEXT)) {
               failedSteerStream = true;
@@ -121,11 +134,10 @@ export const steerDrainFailureRecoveryScenario = {
     await runtime.waitForScreenText(/Start a slow steer recovery run\./i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Created thread:/i, terminal, 15_000);
+    await runtime.waitForScreenText(/Initial recovery run streaming\./i, terminal, 15_000);
 
     terminal.submit(STEER_TEXT);
-    await runtime.waitForScreenText(/Steer while active\./i, terminal);
     runtime.printScreen('after steer submit', terminal);
-    resolveSteerSubmitted();
 
     await runtime.waitForScreenText(/failed to start follow-up run for queued message/i, terminal, 30_000);
     runtime.printScreen('after drain failure error', terminal);

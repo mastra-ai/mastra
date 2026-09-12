@@ -14,6 +14,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
@@ -3229,6 +3230,15 @@ describe('writeFiles()', () => {
     const { Sandbox } = await import('e2b');
     expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
     expect(mockSandbox.files.write).toHaveBeenCalled();
+  });
+
+  it('rejects an explicit per-file mode without uploading', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await expect(sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+      SandboxUnsupportedFeatureError,
+    );
+    expect(mockSandbox.files.write).not.toHaveBeenCalled();
   });
 });
 

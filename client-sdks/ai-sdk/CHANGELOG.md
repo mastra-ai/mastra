@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.10.3-alpha.1
+
+### Patch Changes
+
+- Fixed a nested agent's tool failure being invisible to AI SDK hosts. `transformAgent` had no case for `tool-error`, so a sub-agent whose tool threw emitted the same `data-tool-agent` parts as one whose tool succeeded and a host could not tell a failed delegated step apart from a successful one. Failures now appear in `data.toolErrors` as `{ toolCallId, toolName, args?, errorText, providerExecuted? }`, where `errorText` is a JSON-safe string (a raw `Error` serializes to `{}` over the wire), and they are also carried on the finished `data-tool-agent-step` payload. Runs where no tool throws are unchanged. Fixes #23022. ([#23616](https://github.com/mastra-ai/mastra/pull/23616))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+
 ## 1.10.3-alpha.0
 
 ### Patch Changes

@@ -943,6 +943,7 @@ export class AgentController<TState = {}> {
       this.#internalMastra = new Mastra({
         logger: false,
         ...(this.config.storage ? { storage: this.config.storage } : {}),
+        ...(this.config.backgroundTasks ? { backgroundTasks: this.config.backgroundTasks } : {}),
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
         ...(gateways ? { gateways } : {}),
@@ -1919,11 +1920,13 @@ export class AgentController<TState = {}> {
     requestContext: requestContextInput,
     tracingContext,
     tracingOptions,
+    untilIdle,
   }: {
     session: Session<TState>;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<Record<string, unknown>> {
     const runThreadId = session.thread.getId();
     if (!runThreadId) {
@@ -1982,6 +1985,7 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
+      ...(untilIdle !== undefined && { untilIdle }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
@@ -2203,7 +2207,9 @@ export class AgentController<TState = {}> {
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title }) => {
               const memory = await this.resolveMemory(session);
-              const result = await memory.cloneThread({
+              // The fork only needs the new thread id, so copy without loading
+              // the message payloads into the Node heap.
+              const result = await memory.copyThread({
                 sourceThreadId,
                 resourceId: resourceId ?? session.identity.getResourceId(),
                 title,
@@ -2211,10 +2217,6 @@ export class AgentController<TState = {}> {
                   forkedSubagent: true,
                   parentThreadId: sourceThreadId,
                 },
-                // The fork only needs the new thread id; skip hydrating message payloads
-                // into the Node heap. Memory.cloneThread re-enables hydration when semantic
-                // recall is active so embeddings still work.
-                options: { hydrateMessages: false },
               });
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }

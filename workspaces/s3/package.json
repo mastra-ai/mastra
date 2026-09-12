@@ -24,7 +24,7 @@
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
-    "pretest": "docker compose up -d && sleep 3",
+    "pretest": "docker compose up -d --wait --wait-timeout 180 && n=0; until [ \"$(docker compose ps -a -q minio-setup | xargs docker inspect -f '{{.State.Status}}-{{.State.ExitCode}}' 2>/dev/null)\" = 'exited-0' ] || [ \"$n\" -ge 60 ]; do sleep 1; n=$((n+1)); done; [ \"$(docker compose ps -a -q minio-setup | xargs docker inspect -f '{{.State.Status}}-{{.State.ExitCode}}' 2>/dev/null)\" = 'exited-0' ]",
     "test": "S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin S3_BUCKET=test-bucket S3_REGION=us-east-1 vitest run ./src/**/*.integration.test.ts",
     "posttest": "docker compose down -v",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
