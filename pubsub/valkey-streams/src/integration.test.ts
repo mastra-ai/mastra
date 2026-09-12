@@ -47,19 +47,25 @@ it('reclaims idle pending entries to a sibling consumer, never back to their stu
     while (seenA.length === 0 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
     expect(seenA).toHaveLength(1);
 
+    const acked: Promise<void>[] = [];
     await pubsub.subscribe(
       topic,
       (event, ack) => {
         seenB.push(event);
-        void ack?.();
+        acked.push(ack?.() ?? Promise.resolve());
       },
       { group },
     );
     deadline = Date.now() + 6_000;
     while (seenB.length === 0 && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
     expect(seenB[0]).toMatchObject({ type: 'sticky' });
+    await Promise.all(acked);
     // A's own reclaim loop must not have handed the entry back to A: that
     // would reset the idle clock and starve B forever.
+    expect(seenA).toHaveLength(1);
+    // Once B acks, nothing is pending, so another reclaim window delivers nothing new.
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    expect(seenB).toHaveLength(1);
     expect(seenA).toHaveLength(1);
   } finally {
     await pubsub.clearTopic(topic);

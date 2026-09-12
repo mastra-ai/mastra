@@ -4,6 +4,11 @@ import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, Subscribe
 import { createClient } from './client.js';
 import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 
+/** Idle pending entries fetched per XPENDING page in the reclaim loop. */
+const RECLAIM_PAGE_SIZE = 100;
+/** Bound on XPENDING pages walked per reclaim tick when the leading pages are all self-owned. */
+const RECLAIM_MAX_PAGES = 10;
+
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
  * `MultiErrorReply` whose own message is just "N commands failed…" — the real
@@ -381,13 +386,12 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, 100, {
-          IDLE: this.#reclaimIdleMs,
-        });
-        const ids = pending.filter(entry => entry.consumer !== sub.consumer).map(entry => entry.id);
-        if (ids.length === 0) {
+        const ids = await this.#findClaimableIds(sub);
+        // Stop may have started while XPENDING was in flight; claiming now would
+        // move entries onto a consumer that is about to go away.
+        if (ids.length === 0 || sub.stopped || this.#closed) {
           if (sub.stopped || this.#closed) return;
-          sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+          sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
           return;
         }
         const messages = await this.#writeClient.xClaim(
@@ -398,7 +402,9 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           ids,
         );
         for (const entry of messages) {
-          if (sub.stopped || this.#closed) return;
+          // A successful claim already transferred ownership; drain its full batch
+          // even if stop started meanwhile, otherwise the entries sit pending under
+          // this consumer until a sibling's idle window elapses again.
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
       } catch (err) {
@@ -409,10 +415,35 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         });
       }
       if (sub.stopped || this.#closed) return;
-      sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+      sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
     };
 
-    sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+    const runTick = () => {
+      sub.reclaimLoop = tick().finally(() => {
+        sub.reclaimLoop = undefined;
+      });
+    };
+    sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+  }
+
+  /**
+   * Page through idle pending entries (ascending stream ID) until a batch owned
+   * by other consumers is found or the range is exhausted. Without paging, a
+   * consumer sitting on a full page of its own idle entries would never see the
+   * sibling-owned entries behind them.
+   */
+  async #findClaimableIds(sub: Subscription): Promise<string[]> {
+    let afterId: string | undefined;
+    for (let page = 0; page < RECLAIM_MAX_PAGES; page++) {
+      const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, RECLAIM_PAGE_SIZE, {
+        IDLE: this.#reclaimIdleMs,
+        afterId,
+      });
+      const ids = pending.filter(entry => entry.consumer !== sub.consumer).map(entry => entry.id);
+      if (ids.length > 0 || pending.length < RECLAIM_PAGE_SIZE) return ids;
+      afterId = pending[pending.length - 1]!.id;
+    }
+    return [];
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -453,6 +484,9 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         });
       }
     }
+
+    // Clearing the timer prevents future claims, but an issued claim still owns work.
+    await sub.reclaimLoop;
 
     // For fan-out, drop the private group entirely so the stream can be reclaimed.
     if (!sub.isGrouped) {
@@ -915,4 +949,5 @@ interface Subscription {
   stopped: boolean;
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
+  reclaimLoop?: Promise<void>;
 }

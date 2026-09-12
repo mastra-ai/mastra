@@ -4,6 +4,11 @@ import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, Subscribe
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
+/** Idle pending entries fetched per XPENDING page in the reclaim loop. */
+const RECLAIM_PAGE_SIZE = 100;
+/** Bound on XPENDING pages walked per reclaim tick when the leading pages are all self-owned. */
+const RECLAIM_MAX_PAGES = 10;
+
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
  * `MultiErrorReply` whose own message is just "N commands failed…" — the real
@@ -381,11 +386,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, '-', '+', 100, {
-          IDLE: this.#reclaimIdleMs,
-        });
-        const ids = pending.filter(entry => String(entry.consumer) !== sub.consumer).map(entry => String(entry.id));
-        if (ids.length === 0) {
+        const ids = await this.#findClaimableIds(sub);
+        // Stop may have started while XPENDING was in flight; claiming now would
+        // move entries onto a consumer that is about to go away.
+        if (ids.length === 0 || sub.stopped || this.#closed) {
           if (sub.stopped || this.#closed) return;
           sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
           return;
@@ -420,6 +424,26 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       });
     };
     sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
+  }
+
+  /**
+   * Page through idle pending entries (ascending stream ID) until a batch owned
+   * by other consumers is found or the range is exhausted. Without paging, a
+   * consumer sitting on a full page of its own idle entries would never see the
+   * sibling-owned entries behind them.
+   */
+  async #findClaimableIds(sub: Subscription): Promise<string[]> {
+    let start = '-';
+    for (let page = 0; page < RECLAIM_MAX_PAGES; page++) {
+      const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, start, '+', RECLAIM_PAGE_SIZE, {
+        IDLE: this.#reclaimIdleMs,
+      });
+      const ids = pending.filter(entry => String(entry.consumer) !== sub.consumer).map(entry => String(entry.id));
+      if (ids.length > 0 || pending.length < RECLAIM_PAGE_SIZE) return ids;
+      // Exclusive range start so the next page begins after the last ID seen.
+      start = `(${String(pending[pending.length - 1]!.id)}`;
+    }
+    return [];
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {

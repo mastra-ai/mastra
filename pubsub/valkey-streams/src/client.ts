@@ -106,11 +106,15 @@ export class ValkeyStreamsClient {
       })) ?? null
     );
   }
-  async xPendingRange(key: string, group: string, count: number, options: { IDLE?: number } = {}) {
+  /**
+   * XPENDING <key> <group> [IDLE ms] <start> + <count>. `afterId` makes the
+   * range exclusive so callers can page past entries they've already seen.
+   */
+  async xPendingRange(key: string, group: string, count: number, options: { IDLE?: number; afterId?: string } = {}) {
     const result = await (
       await this.getClient()
     ).xpendingWithOptions(key, group, {
-      start: InfBoundary.NegativeInfinity,
+      start: options.afterId ? { value: options.afterId, isInclusive: false } : InfBoundary.NegativeInfinity,
       end: InfBoundary.PositiveInfinity,
       count,
       minIdleTime: options.IDLE,
