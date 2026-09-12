@@ -109,6 +109,59 @@ export function getBuiltinModePack(packId: string): (ModePack & { providerId: st
   };
 }
 
+/** A pack id is known when it is a builtin mode pack or a saved custom pack. */
+export function isKnownModePackId(packId: string, savedCustomPacks: Array<{ name: string }> = []): boolean {
+  if (BUILTIN_MODE_PACKS.some(pack => pack.id === packId)) return true;
+  return packId.startsWith('custom:') && savedCustomPacks.some(pack => `custom:${pack.name}` === packId);
+}
+
+/**
+ * Drop pack-fallback entries whose source or target pack no longer exists
+ * (e.g. a deleted custom pack). Shape validation happens before this; here we
+ * only prune dangling references, with the same tolerance the rest of settings
+ * parsing uses.
+ */
+export function pruneUnknownModePackFallbacks(
+  fallbacks: Record<string, string>,
+  savedCustomPacks: Array<{ name: string }> = [],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(fallbacks)) {
+    if (isKnownModePackId(packId, savedCustomPacks) && isKnownModePackId(fallbackId, savedCustomPacks)) {
+      result[packId] = fallbackId;
+    }
+  }
+  return result;
+}
+
+/**
+ * Walk `settings.models.packFallbacks` from `startPackId`, returning the pack
+ * ids in cascade order starting with the pack itself. Cycles are allowed but
+ * each pack id appears at most twice (initial visit + one revisit); the walk
+ * stops when the next link would add a third appearance or when a link
+ * dangles at an unknown pack. This cap is the cycle handling for both the
+ * fallback model chain (request time) and the /models picker's chain display.
+ */
+export function resolveModePackFallbackChain(
+  fallbacks: Record<string, string>,
+  startPackId: string,
+  savedCustomPacks: Array<{ name: string }> = [],
+): string[] {
+  const chain = [startPackId];
+  const appearances = new Map<string, number>([[startPackId, 1]]);
+  let current = startPackId;
+  while (true) {
+    const next = fallbacks[current];
+    if (!next || !isKnownModePackId(next, savedCustomPacks)) break;
+    const seen = (appearances.get(next) ?? 0) + 1;
+    if (seen > 2) break;
+    appearances.set(next, seen);
+    chain.push(next);
+    current = next;
+  }
+  return chain;
+}
+
 /**
  * Build the list of available mode packs based on which providers the user
  * can actually reach (API key or OAuth login).
