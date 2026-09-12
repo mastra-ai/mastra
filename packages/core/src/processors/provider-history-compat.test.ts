@@ -1159,6 +1159,14 @@ describe('anthropicStripForeignSignedReasoning', () => {
       | undefined;
   };
 
+  /** A persisted assistant turn that holds ONLY signed thinking (no visible text). */
+  const thinkingOnlyAssistant = (provider: string, signature: string) => {
+    const message = stampedSignedAssistant(provider, { signature }) as any;
+    message.id = `msg-${provider}-thinking-only-${signature}`;
+    message.content.parts = message.content.parts.filter((p: any) => p.type === 'reasoning');
+    return message;
+  };
+
   it('strips the signature off the turn that provoked the rejection and retries', async () => {
     const handler = new ProviderHistoryCompat();
     const messageList = new MessageList({ threadId: 'test-thread' });
@@ -1192,7 +1200,7 @@ describe('anthropicStripForeignSignedReasoning', () => {
 
     expect(changed).toBe(true);
     const kimiPart = messages[2].content.parts.find((p: any) => p.type === 'reasoning');
-    expect(kimiPart.providerMetadata.anthropic.signature).toBeUndefined();
+    expect(kimiPart.providerMetadata.anthropic).toBeUndefined();
     const anthropicPart = messages[0].content.parts.find((p: any) => p.type === 'reasoning');
     expect(anthropicPart.providerMetadata.anthropic.signature).toBe('anthropic-sig');
   });
@@ -1206,8 +1214,25 @@ describe('anthropicStripForeignSignedReasoning', () => {
     const changed = anthropicStripForeignSignedReasoning.fix!(messages);
 
     expect(changed).toBe(true);
-    expect(messages[1].content.parts[0].providerMetadata.anthropic.redactedData).toBeUndefined();
+    // The emptied anthropic key is removed along with the redacted payload.
+    expect(messages[1].content.parts[0].providerMetadata.anthropic).toBeUndefined();
     expect(messages[0].content.parts[0].providerMetadata.anthropic.signature).toBe('anthropic-sig');
+  });
+
+  it('declines to strip when the offending turn carries tool invocations (unrecoverable continuation shape)', () => {
+    // The turn's thinking was already dropped from the outbound prompt, so the
+    // tool_use-first continuation is what Anthropic rejected — stripping the
+    // persisted signature cannot put a thinking block back and would destroy
+    // it for a futile retry. The rule must return false and leave it intact.
+    const message = stampedSignedAssistant(KIMI, { signature: 'kimi-sig' }) as any;
+    message.content.parts.push({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 'call_1', toolName: 'some_tool', args: {} },
+    });
+    const messages = [message];
+
+    expect(anthropicStripForeignSignedReasoning.fix!(messages)).toBe(false);
+    expect(message.content.parts[0].providerMetadata.anthropic.signature).toBe('kimi-sig');
   });
 
   it('returns false when the most recent turn has no signed reasoning (same-provider replay)', () => {
@@ -1361,6 +1386,20 @@ describe('anthropicStripForeignSignedReasoning', () => {
       const result = await runRequest(handler, messageList, ANTHROPIC);
 
       expect(promptSignatures((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual([]);
+    });
+
+    it('removes a turn emptied of all content by the drop (Anthropic rejects empty assistant content)', async () => {
+      const handler = new ProviderHistoryCompat();
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([thinkingOnlyAssistant(KIMI, 'kimi-sig')], 'response');
+      messageList.add([createUserMessage('continue on claude')], 'input');
+
+      const result = await runRequest(handler, messageList, ANTHROPIC);
+
+      const prompt = (result as { prompt: LanguageModelV2Prompt }).prompt;
+      // The thinking-only foreign turn loses its only part; the message itself
+      // must be removed rather than sent with `content: []`.
+      expect(prompt.filter(message => message.role === 'assistant')).toEqual([]);
     });
 
     it('leaves unstamped history untouched', async () => {

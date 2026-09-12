@@ -572,7 +572,9 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  *   valid for whoever rejected it. So the reactive pass strips the signature
  *   off that turn only, and never touches any other turn — it cannot guess at
  *   (and must not destroy) the signatures that belong to the provider the
- *   request is actually going to.
+ *   request is actually going to. When that turn carries tool invocations,
+ *   the rejection is the unrecoverable continuation shape below and `fix`
+ *   declines rather than destroy the signature for a retry that cannot help.
  *
  * Scope: this prevents and repairs the "replayed foreign signature"
  * rejection. It does not recover the trailing `tool_use`-first continuation
@@ -609,8 +611,12 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
     if (foreign.size === 0) return undefined;
 
     let dropped = 0;
-    const next = prompt.map(message => {
-      if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
+    const next: LanguageModelV2Prompt = [];
+    for (const message of prompt) {
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+        next.push(message);
+        continue;
+      }
       const content = message.content.filter(part => {
         if (part.type !== 'reasoning') return true;
         const anthropic = part.providerOptions?.anthropic as
@@ -623,8 +629,17 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
         }
         return true;
       });
-      return content.length === message.content.length ? message : { ...message, content };
-    });
+      if (content.length === message.content.length) {
+        next.push(message);
+        continue;
+      }
+      // A turn that held only foreign signed thinking is emptied by the drop.
+      // Processors run after conversion, so the empty-content filter in
+      // MessageList no longer applies — Anthropic rejects empty assistant
+      // content, so drop the message itself (same idiom as
+      // stripForeignProviderExecutedTools).
+      if (content.length > 0) next.push({ ...message, content });
+    }
 
     return dropped > 0 ? next : undefined;
   },
@@ -634,6 +649,13 @@ export const anthropicStripForeignSignedReasoning: CompatRule = {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i]!;
       if (message.role !== 'assistant') continue;
+
+      // If the turn carries tool invocations, the failure is the
+      // tool_use-first continuation shape — stripping a signature cannot put
+      // a thinking block back, so the retry would fail identically while
+      // permanently destroying the signature the origin provider needs.
+      // Decline instead of mutating.
+      if (message.content.parts?.some(part => part.type === 'tool-invocation')) return false;
 
       let changed = false;
       for (const part of message.content.parts ?? []) {
@@ -658,6 +680,9 @@ function stripReasoningSignature(part: MastraMessagePart): boolean {
   if (anthropic.signature === undefined && anthropic.redactedData === undefined) return false;
   delete anthropic.signature;
   delete anthropic.redactedData;
+  if (Object.keys(anthropic).length === 0) {
+    delete (part.providerMetadata as Record<string, unknown>).anthropic;
+  }
   return true;
 }
 
@@ -761,8 +786,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   that provoked a replayed-signature rejection (`Invalid \`signature\` in
  *   \`thinking\` block`), so the retry succeeds. Only the offending (most
  *   recent assistant) turn is touched reactively; other turns' signatures are
- *   kept. It does not recover the trailing `tool_use`-first continuation
- *   shape.
+ *   kept. Turns emptied of all content by the preemptive drop are removed
+ *   from the prompt, and the trailing `tool_use`-first continuation shape is
+ *   declined rather than repaired (a strip cannot put a thinking block back).
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
