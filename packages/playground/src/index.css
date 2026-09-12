@@ -13,19 +13,18 @@
 
     /*
      * Override playground-ui semantic font tokens with locally-bundled fonts.
-     * Studio uses Mona Sans for both display and body.
+     * Studio uses Mona Sans for display and Inter for body/sans.
      */
     --font-display:
-      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-      'Noto Color Emoji';
+      'Mona Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui,
+      sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body:
-      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-      'Noto Color Emoji';
+      Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif,
+      'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     --font-mono:
       'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
-    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
