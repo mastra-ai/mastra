@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Removed redundant type assertions from A2A handlers without changing request handling.
+Simplified A2A handler maintenance without changing discovery, validation, or execution behavior.
