@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -11,11 +11,6 @@ import { useIntakeLabelRoutesQuery, useSaveIntakeLabelRouteMutation } from '../.
 
 const NO_BOARD = '__no_board__';
 
-/**
- * GitHub label routing for one Factory. Issues carrying a routed label file
- * onto that board; everything else stays on Work. Only custom boards are
- * offered — Work is the default and Review takes pull requests.
- */
 export function GithubLabelRouting({
   factoryProjectId,
   name,
@@ -34,7 +29,7 @@ export function GithubLabelRouting({
   const routes = (routesQuery.data ?? []).filter(route => route.integrationId === 'github');
   const boards = (catalog.data ?? []).filter(board => board.id !== 'work' && board.id !== 'review');
   const busy = save.isPending;
-  // Routes are per Factory and apply to every repository linked to it.
+
   const scope = `Applies to issues from ${repositories.join(', ')}`;
 
   const route = (label: string, board: string | null, onDone?: () => void) => {
@@ -51,20 +46,12 @@ export function GithubLabelRouting({
   };
 
   if (routesQuery.isError) {
-    return (
-      <SettingsRow
-        variant="factory"
-        label={name}
-        description={`${scope}. GitHub label routes are unavailable right now.`}
-      />
-    );
+    return <SettingsRow label={name} description={`${scope}. GitHub label routes are unavailable right now.`} />;
   }
-  // A failed catalog is not an empty one: existing routes stay listed (and
-  // removable) so a transient error never reads as "nothing is installed".
+
   if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {
     return (
       <SettingsRow
-        variant="factory"
         label={name}
         description={`${scope}. No custom boards are installed, so every issue files onto Work.`}
       />
@@ -77,7 +64,6 @@ export function GithubLabelRouting({
   return (
     <div className="flex flex-col">
       <SettingsRow
-        variant="factory"
         label={name}
         description={catalog.isError ? `${scope}. Installed boards are unavailable right now.` : scope}
       />
@@ -85,7 +71,6 @@ export function GithubLabelRouting({
         const current = boards.find(board => board.id === existing.board);
         return (
           <SettingsRow
-            variant="factory"
             key={existing.label}
             label={existing.label}
             description={
@@ -119,7 +104,6 @@ export function GithubLabelRouting({
         );
       })}
       <SettingsRow
-        variant="factory"
         label="Add label route"
         description={duplicate ? 'That label is already routed — change its board above.' : undefined}
       >

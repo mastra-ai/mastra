@@ -11,16 +11,19 @@ export type HeaderListFormItem = {
 
 export interface HeaderListFormProps {
   headers: Array<HeaderListFormItem>;
+  showHeading?: boolean;
   onAddHeader: (header: HeaderListFormItem) => void;
   onRemoveHeader: (index: number) => void;
 }
 
-export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
+export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeading = true }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      <Txt as="h2" variant="header-xs" className="text-neutral6">
-        Headers
-      </Txt>
+      {showHeading && (
+        <Txt as="h2" variant="header-xs" className="text-neutral6">
+          Headers
+        </Txt>
+      )}
 
       <div className="space-y-6">
         {headers.length > 0 && (
@@ -39,7 +42,6 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
             type="button"
             onClick={() => onAddHeader({ name: '', value: '' })}
             size={headers.length === 0 ? 'md' : 'sm'}
-            className=""
           >
             <Plus />
             {headers.length === 0 ? 'Add Header' : 'Add Another Header'}

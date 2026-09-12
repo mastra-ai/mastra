@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -16,14 +16,9 @@ import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { LinearRouting } from './LinearRouting';
-import { SettingsCard } from './SettingsCard';
+
 import { SettingsSubsection } from './SettingsSubsection';
 
-/**
- * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
- * syncs) — the first pick starts from an empty list, and clearing the last
- * pick returns to `null`.
- */
 function toggleId(ids: string[] | null, id: string): string[] | null {
   const current = ids ?? [];
   const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
@@ -43,8 +38,8 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
       title="GitHub issues"
       description="Open issues from the repositories you select. Teammates choose their own. Pull requests always appear in Review."
     >
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync GitHub issues">
+      <SettingsContainer>
+        <SettingsRow label="Sync GitHub issues">
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
@@ -78,16 +73,11 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
               }
             />
           ))}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
 
-/**
- * Linear needs an OAuth workspace before anything can sync, so the connection
- * state is the section header: the description says what is missing and the
- * action connects or reconnects.
- */
 function LinearIntakeSection({
   config,
   busy,
@@ -103,7 +93,7 @@ function LinearIntakeSection({
   connected: boolean;
   projects: LinearProject[];
   reauthRequired: boolean;
-  /** Projects can only be picked — and routed — once Linear answers with them. */
+
   showPickers: boolean;
   baseUrl: string;
 }) {
@@ -137,8 +127,8 @@ function LinearIntakeSection({
 
   return (
     <SettingsSubsection scope="personal" title="Linear issues" description={description} action={action}>
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync Linear issues">
+      <SettingsContainer>
+        <SettingsRow label="Sync Linear issues">
           <Switch
             aria-label="Sync Linear issues"
             checked={config.linear.enabled}
@@ -162,7 +152,7 @@ function LinearIntakeSection({
             }
           />
         )}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -179,7 +169,7 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  // The same repository can be linked to several factories; Intake picks it once.
+
   const linkedSlugs = [
     ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
   ];
@@ -219,13 +209,13 @@ export function IntakeSection() {
           {(factoriesQuery.data ?? [])
             .filter(factory => factory.repositories.length > 0)
             .map(factory => (
-              <SettingsCard key={factory.id}>
+              <SettingsContainer key={factory.id}>
                 <GithubLabelRouting
                   factoryProjectId={factory.id}
                   name={factory.name}
                   repositories={factory.repositories.map(r => r.slug)}
                 />
-              </SettingsCard>
+              </SettingsContainer>
             ))}
         </SettingsSubsection>
       )}
@@ -246,23 +236,19 @@ export function IntakeSection() {
           title="Linear routing"
           description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
         >
-          <SettingsCard>
+          <SettingsContainer>
             <LinearRouting
               sourceIds={routedProjectIds}
               projects={linearProjects}
               factories={factoriesQuery.data ?? []}
             />
-          </SettingsCard>
+          </SettingsContainer>
         </SettingsSubsection>
       )}
     </div>
   );
 }
-/**
- * Group Linear projects under each team they belong to (shared projects appear
- * in every team), sorted by team name. Team-less projects land in a trailing
- * "No team" group.
- */
+
 function groupLinearProjectsByTeam(projects: LinearProject[]): SourcePickerGroup[] {
   const byTeam = new Map<string, SourcePickerGroup>();
   const orphans: LinearProject[] = [];

@@ -111,7 +111,13 @@
         "default": "./dist/components/*.es.js"
       }
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./new/settings": {
+      "import": {
+        "types": "./dist/new/settings.d.ts",
+        "default": "./dist/new/settings.es.js"
+      }
+    }
   },
   "scripts": {
     "build": "vite build",

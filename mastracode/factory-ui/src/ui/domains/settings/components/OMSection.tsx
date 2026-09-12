@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -71,12 +71,6 @@ function ThresholdInput({
   );
 }
 
-/**
- * Persisted observational-memory settings, optionally synchronized to an
- * active session. With `factoryId` set, the section edits the factory
- * project's shared settings (used by board runs and channel sessions) instead
- * of the caller's personal row.
- */
 export function OMSection({
   resourceId,
   scope,
@@ -147,7 +141,7 @@ export function OMSection({
         </div>
       )}
 
-      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
+      <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <div className="w-full max-w-72">
           <ModelCombobox
             models={models}
@@ -159,11 +153,7 @@ export function OMSection({
         </div>
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Reflector model"
-        description="Distills observations into longer-term memory"
-      >
+      <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
         <div className="w-full max-w-72">
           <ModelCombobox
             models={models}
@@ -175,11 +165,7 @@ export function OMSection({
         </div>
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Messages before observation"
-        description="Message tokens processed before the observer runs."
-      >
+      <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
         {config && (
           <div className="w-full max-w-40">
             <ThresholdInput
@@ -195,7 +181,6 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow
-        variant="factory"
         label="Observations before reflection"
         description="Observation tokens accumulated before the reflector runs."
       >
@@ -213,11 +198,7 @@ export function OMSection({
         )}
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Observe attachments"
-        description="Whether attached files are included in observations"
-      >
+      <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
         <Segmented
           ariaLabel="Observe attachments"
           value={attachmentChoice}
