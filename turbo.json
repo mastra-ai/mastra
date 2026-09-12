@@ -10,6 +10,11 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
       "outputLogs": "new-only"
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": [".vitest-reports/**"],
+      "outputLogs": "errors-only"
+    },
     "lint": {
       "dependsOn": []
     },

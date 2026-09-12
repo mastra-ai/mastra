@@ -10,6 +10,7 @@ const EXCLUDED_DIRS = new Set([
   'packages/_types-builder',
   'packages/_vendored',
   'server-adapters/_test-utils',
+  'browser/_test-utils',
   'observability/_examples',
 ]);
 
@@ -27,6 +28,11 @@ const PROJECT_GLOBS = [
   'signals/*/vitest.config.ts',
   'workflows/*/vitest.config.ts',
   'code-mode/*/vitest.config.ts',
+  'integrations/*/vitest.config.ts',
+  'channels/*/vitest.config.ts',
+  'browser/*/vitest.config.ts',
+  'workspaces/*/vitest.config.ts',
+  'agent-sdks/*/vitest.config.ts',
   'mastracode/vitest.config.ts',
 ];
 
