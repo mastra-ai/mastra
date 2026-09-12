@@ -144,12 +144,22 @@ async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string)
   });
 }
 
+/** Detail line for the "Set fallback…" row of a pack's action menu. */
+function fallbackActionDetail(packs: ModePack[], packId: string): string {
+  const chain = formatPackFallbackChain(loadSettings(), packs, packId);
+  return chain
+    ? theme.fg('dim', `  When every account is unavailable, hop to: ${chain}`)
+    : theme.fg('dim', '  No fallback — when this pack is unavailable the error surfaces.');
+}
+
 async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'activate' | 'edit' | 'share' | 'delete' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
@@ -169,6 +179,7 @@ async function askCustomPackAction(
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
       activate: getPackDetail(pack),
+      fallback: fallbackActionDetail(packs, pack.id),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
@@ -186,7 +197,7 @@ async function askCustomPackAction(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'edit' | 'share' | 'delete');
+      resolve(item.value as 'activate' | 'fallback' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -207,14 +218,77 @@ async function askCustomPackAction(
   });
 }
 
+/**
+ * Action menu for an unmodified built-in pack — the "view" of the pack you
+ * land on when picking it from the /models list.
+ */
+async function askBuiltinPackAction(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<'activate' | 'fallback' | null> {
+  const actions = [
+    { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Pack: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(action => ({
+      value: action.id,
+      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+    }));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+    const detailById: Record<string, string> = {
+      activate: getPackDetail(pack),
+      fallback: fallbackActionDetail(packs, pack.id),
+    };
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(detailById[item.value] ?? '');
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'activate' | 'fallback');
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    detailText.setText(detailById.activate!);
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
 async function askModifiedBuiltinPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   builtinPack: ModePack,
-): Promise<'activate' | 'reset' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'reset' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
   return new Promise(resolve => {
@@ -231,6 +305,7 @@ async function askModifiedBuiltinPackAction(
     const detailById: Record<string, string> = {
       activate: `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
+      fallback: fallbackActionDetail(packs, pack.id),
     };
 
     const closeOverlay = () => {
@@ -244,7 +319,7 @@ async function askModifiedBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'reset');
+      resolve(item.value as 'activate' | 'reset' | 'fallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -764,65 +839,7 @@ async function askFallbackTarget(
   });
 }
 
-async function runSetFallbackFlow(ctx: SlashCommandContext, packs: ModePack[]): Promise<void> {
-  const configurable = packs.filter(p => p.id !== 'custom');
-  const settings = loadSettings();
-
-  const packId = await new Promise<string | null>(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Set fallback pack')), 0, 0));
-    container.addChild(new Spacer(1));
-
-    const items: SelectItem[] = configurable.map(p => ({
-      value: p.id,
-      label: `  ${p.name}  ${theme.fg('dim', p.description)}`,
-    }));
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
-    const detailText = new Text('', 0, 0);
-
-    const closeOverlay = () => {
-      ctx.state.ui.hideOverlay();
-      ctx.state.ui.requestRender();
-    };
-
-    selectList.onSelectionChange = item => {
-      const chain = formatPackFallbackChain(settings, packs, item.value);
-      detailText.setText(
-        chain
-          ? theme.fg('dim', `  Current fallback: ${chain}`)
-          : theme.fg('dim', '  No fallback configured for this pack.'),
-      );
-      ctx.state.ui.requestRender();
-    };
-    selectList.onSelect = item => {
-      closeOverlay();
-      resolve(item.value);
-    };
-    selectList.onCancel = () => {
-      closeOverlay();
-      resolve(null);
-    };
-
-    detailText.setText(
-      formatPackFallbackChain(settings, packs, configurable[0]?.id ?? '')
-        ? theme.fg('dim', `  Current fallback: ${formatPackFallbackChain(settings, packs, configurable[0]!.id)}`)
-        : theme.fg('dim', '  No fallback configured for this pack.'),
-    );
-    container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(detailText);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
-      selectList.handleInput(data);
-
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
-  });
-
-  if (!packId) return;
-  const pack = packs.find(p => p.id === packId);
-  if (!pack) return;
-
+async function runSetFallbackForPack(ctx: SlashCommandContext, pack: ModePack, packs: ModePack[]): Promise<void> {
   const fallbackId = await askFallbackTarget(ctx, pack, packs);
   if (fallbackId === undefined) return;
 
@@ -898,10 +915,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     value: '__import__',
     label: `  Import Pack  ${theme.fg('dim', 'Paste a shared pack config')}`,
   });
-  items.push({
-    value: '__fallback__',
-    label: `  Set fallback pack…  ${theme.fg('dim', 'Hop to another pack when one is unavailable')}`,
-  });
 
   return new Promise<void>(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
@@ -922,16 +935,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         ctx.state.ui.requestRender();
         return;
       }
-      if (packId === '__fallback__') {
-        detailText.setText(
-          theme.fg(
-            'dim',
-            '  When every account serving a pack is unavailable, the turn hops to its fallback pack. Chains are allowed.',
-          ),
-        );
-        ctx.state.ui.requestRender();
-        return;
-      }
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
       const fallbackChain = formatPackFallbackChain(settings, packs, packId);
@@ -943,12 +946,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
     selectList.onSelect = async (item: SelectItem) => {
       closeOverlay();
-
-      if (item.value === '__fallback__') {
-        await runSetFallbackFlow(ctx, packs);
-        resolve();
-        return;
-      }
 
       if (item.value === '__import__') {
         const importStr = await askImportPackString(ctx);
@@ -1016,32 +1013,18 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
       if (pack.id === 'custom') {
         pack = await runCustomFlow(ctx);
-      } else if (modifiedPackIds.has(pack.id)) {
-        const builtinPack = getBuiltinModePack(pack.id);
-        if (!builtinPack) {
-          resolve();
-          return;
-        }
-        const action = await askModifiedBuiltinPackAction(ctx, pack, builtinPack);
-        if (action === null) {
-          await handleModelsPackCommand(ctx);
-          resolve();
-          return;
-        }
-        if (action === 'reset') {
-          const nextSettings = loadSettings();
-          resetBuiltinPackOverrides(nextSettings, pack.id);
-          saveSettings(nextSettings);
-          pack = builtinPack;
-          resetBuiltinPack = true;
-        }
       } else if (pack.id.startsWith('custom:')) {
         while (true) {
-          const action = await askCustomPackAction(ctx, pack);
+          const action = await askCustomPackAction(ctx, pack, packs);
           if (action === null) {
             await handleModelsPackCommand(ctx);
             resolve();
             return;
+          }
+
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
           }
 
           if (action === 'delete') {
@@ -1070,6 +1053,37 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           await saveCustomPackEdits(ctx, pack, previousPackId);
           previousPackId = undefined;
           ctx.showInfo(`Updated custom pack: ${pack.name}`);
+        }
+      } else {
+        // Built-in pack: land on the pack's action view. Modified built-ins
+        // also offer a reset; every pack offers fallback configuration.
+        while (true) {
+          const modified = modifiedPackIds.has(pack.id);
+          const builtinPack = modified ? getBuiltinModePack(pack.id) : undefined;
+          if (modified && !builtinPack) {
+            resolve();
+            return;
+          }
+          const action = modified
+            ? await askModifiedBuiltinPackAction(ctx, pack, builtinPack!, packs)
+            : await askBuiltinPackAction(ctx, pack, packs);
+          if (action === null) {
+            await handleModelsPackCommand(ctx);
+            resolve();
+            return;
+          }
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
+          }
+          if (action === 'reset') {
+            const nextSettings = loadSettings();
+            resetBuiltinPackOverrides(nextSettings, pack.id);
+            saveSettings(nextSettings);
+            pack = builtinPack!;
+            resetBuiltinPack = true;
+          }
+          break;
         }
       }
 

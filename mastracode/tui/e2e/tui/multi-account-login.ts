@@ -101,19 +101,40 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
     terminal.write('Account B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
-    // Both accounts listed, B active.
+    // The manager reopens after the add — and the new account is NOT
+    // activated: Account A keeps the active marker.
+    await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) accounts/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account B/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Add another account/i, terminal, 8_000);
+
+    // On disk: two accounts, A still active, slot still holds A's tokens.
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); console.log("ADD_COUNT="+keys.length); console.log("ADD_ACTIVE="+keys.map(k=>a[k].label+":"+a[k].active).join(",")); console.log("ADD_SLOT_ACCESS="+(a.anthropic&&a.anthropic.access));'`,
+    );
+    await runtime.waitForScreenText(/ADD_COUNT=2/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_ACTIVE=Account A:true,Account B:false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_SLOT_ACCESS=mc-multi-a-access/i, terminal, 8_000);
+
+    // Activate Account B from the manager.
     terminal.submit('/login');
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Account A/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
+    terminal.write('\x1b[B');
+    await runtime.waitForScreenText(/→ Account B/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Switched Anthropic \(Claude Pro\/Max\) to Account B/i, terminal, 8_000);
 
     // Re-authenticate account A in place: fresh tokens (rotated refresh
-    // token) must replace A's entry — same label, same position, still
-    // inactive because B holds the active slot — without appending a third
-    // account.
+    // token) must replace A's entry — same label, same position, now active —
+    // without appending a third account.
+    terminal.submit('/login');
+    await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
     // Rows: [Account A, Account B, Add another, Re-authenticate…, Remove…, Back].
     terminal.write('\x1b[B');
     terminal.write('\x1b[B');
@@ -123,32 +144,27 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/Select the account to re-authenticate:/i, terminal, 8_000);
     terminal.write('\r'); // Account A is the first row
     await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
-    // The placeholder names the picked account (A), not the active one (B), and
-    // a rename here must target A — otherwise re-authenticating an inactive
-    // account renames the active account's entry.
+    // The placeholder names Account A — the picked account, not a fresh append.
     await runtime.waitForScreenText(/Enter to keep "Account A"/i, terminal, 8_000);
     terminal.write('\r'); // keep the "Account A" label
     await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
     // Registry on disk after re-auth: two entries, A re-keyed to the new
-    // refresh token with its label preserved. A was inactive (B holds the
-    // active slot), so re-authenticating it must not hijack the slot — B
-    // stays active and keeps its tokens there.
+    // refresh token and active with its label preserved, slot holds A's new
+    // tokens.
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const recs=keys.map(k=>a[k]); const reAuth=recs.find(r=>r.label==="Account A"); const active=recs.find(r=>r.active); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_LABELS="+recs.map(r=>r.label).join("|")); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&reAuth.refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+(reAuth?reAuth.active:"missing")); console.log("REAUTH_ACTIVE_LABEL="+(active?active.label:"none")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-b-access"));'`,
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Account A"); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH_OK="+Boolean(reAuth&&a[reAuth].refresh==="mc-multi-a2-refresh")); console.log("REAUTH_ACTIVE="+(reAuth?a[reAuth].active:"missing")); console.log("REAUTH_SLOT_OK="+Boolean(a.anthropic&&a.anthropic.access==="mc-multi-a2-access"));'`,
     );
     await runtime.waitForScreenText(/REAUTH_COUNT=2/i, terminal, 8_000);
-    await runtime.waitForScreenText(/REAUTH_LABELS=Account A\|Account B/i, terminal, 8_000);
     await runtime.waitForScreenText(/REAUTH_REFRESH_OK=true/i, terminal, 8_000);
-    await runtime.waitForScreenText(/REAUTH_ACTIVE=false/i, terminal, 8_000);
-    await runtime.waitForScreenText(/REAUTH_ACTIVE_LABEL=Account B/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_ACTIVE=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/REAUTH_SLOT_OK=true/i, terminal, 8_000);
 
     // Remove the re-authenticated account A.
     terminal.submit('/login');
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
 
     // Rows: [Account A, Account B, Add another, Re-authenticate…, Remove…, Back].
     terminal.write('\x1b[B');
