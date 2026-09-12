@@ -89,8 +89,9 @@ function completionResponse(): Response {
 export const packFallbackScenario: McE2eScenario = {
   name: 'pack-fallback',
   description:
-    'Exhausts a single-account Kimi pack and asserts the turn hops to the Anthropic fallback pack, ' +
-    'renders both notices, and the thread sticks to the landed pack across restart.',
+    'Asserts the /models fallback picker recomputes its full-chain preview as the cursor moves across ' +
+    'candidates, then exhausts a single-account Kimi pack and asserts the turn hops to the Anthropic ' +
+    'fallback pack, renders both notices, and the thread sticks to the landed pack across restart.',
   testName: 'hops to the fallback pack on pool exhaustion and sticks to it across restart',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -111,7 +112,13 @@ export const packFallbackScenario: McE2eScenario = {
     };
     settings.customModelPacks = [
       { name: PACK_NAME, models: { build: KIMI_MODEL_ID }, createdAt: new Date().toISOString() },
+      // Two extra packs so the fallback picker has candidates to move across:
+      // chain-b itself falls back to chain-c, so hovering chain-b previews a
+      // two-hop chain while hovering chain-c previews a single hop.
+      { name: 'chain-b', models: { build: 'chain-b/build-model' }, createdAt: new Date().toISOString() },
+      { name: 'chain-c', models: { build: 'chain-c/build-model' }, createdAt: new Date().toISOString() },
     ];
+    settings.models.packFallbacks = { ...settings.models.packFallbacks, 'custom:chain-b': 'custom:chain-c' };
     settings.customProviders = [];
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
@@ -184,6 +191,40 @@ export const packFallbackScenario: McE2eScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
+
+    // Fallback picker UI pass: the chain line at the bottom of the picker
+    // shows the full implied chain for the highlighted candidate and
+    // recomputes on every cursor move, without mutating settings.
+    terminal.submit('/models');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+    await runtime.waitForScreenText(/hop-kimi/i, terminal, 8_000);
+
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Custom pack: hop-kimi/i, terminal, 8_000);
+
+    // Rows: [Activate, Edit, Share, Set fallback…, Delete].
+    terminal.write('\x1b[B\x1b[B\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Fallback for hop-kimi/i, terminal, 8_000);
+
+    // Initial line previews the configured fallback (Anthropic isn't an
+    // accessible pack here, so its name falls back to the raw id).
+    await runtime.waitForScreenText(/When hop-kimi is unavailable: hop-kimi → anthropic/i, terminal, 8_000);
+
+    // Rows: [Clear fallback, chain-b, chain-c]. Moving the cursor recomputes
+    // the line: chain-b previews its full two-hop chain, chain-c a single hop.
+    terminal.write('\x1b[B');
+    await runtime.waitForScreenText(/When hop-kimi is unavailable: hop-kimi → chain-b → chain-c/i, terminal, 8_000);
+    terminal.write('\x1b[B');
+    await runtime.waitForScreenText(/When hop-kimi is unavailable: hop-kimi → chain-c/i, terminal, 8_000);
+
+    // Cancel out without saving; the seeded fallback must be untouched.
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Fallback for hop-kimi/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(PROMPT);
 
