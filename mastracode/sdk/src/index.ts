@@ -1027,6 +1027,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Same budget core enforces (maxProcessorRetries below): past it, core
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
+        // Same settings file getDynamicModel reads (model: above) so the pack
+        // cascade the processor announces matches the chain core will walk.
+        settingsPath: config?.settingsPath,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive
