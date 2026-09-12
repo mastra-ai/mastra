@@ -42,7 +42,20 @@ test('renders an agentic import journey from sanitized network fixtures', async 
     if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
-    if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
+    if (url.pathname.endsWith('/attention')) return route.fulfill({
+      json: {
+        items: [],
+        kinds: {
+          'automation-failed': { open: 0, unread: 0, latest: null },
+          'supervisor-finding': { open: 0, unread: 0, latest: null },
+          'agent-waiting': { open: 0, unread: 0, latest: null },
+          mention: { open: 0, unread: 0, latest: null },
+          'automation-proposed': { open: 0, unread: 0, latest: null },
+          activity: { open: 0, unread: 0, latest: null },
+        },
+        hasMore: false,
+      },
+    });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
     if (url.pathname.endsWith('/knowledge/scopes')) {
@@ -127,7 +140,8 @@ test('renders an agentic import journey from sanitized network fixtures', async 
 
   await page.getByText('repo:mastra').click();
   await expect(page.getByRole('heading', { name: 'Knowledge activity' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toBeVisible();
+  await expect(page.getByText('Integrated the merged pull request into feature history.')).toBeVisible();
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });
