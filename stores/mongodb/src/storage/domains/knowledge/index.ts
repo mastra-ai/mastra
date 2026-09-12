@@ -41,6 +41,7 @@ import type {
   ClaimKnowledgeImportRunInput,
   CreateKnowledgeProposalInput,
   KnowledgeProposal,
+  KnowledgeProposalApprovalScopeIds,
   ListKnowledgeProposalsInput,
   ListKnowledgeProposalsOutput,
   ReviewKnowledgeProposalInput,
@@ -385,18 +386,23 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return canonical;
   }
 
-  async listScopeGrants(input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
+  async listScopeGrants(
+    input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
+  ): Promise<KnowledgeScopeGrant[]> {
+    const filter: Filter<Document> = {};
+    if (input.scopeNodeId) filter.scopeNodeId = input.scopeNodeId;
+    if (!input.includeDeleted) filter.deletedAt = { $exists: false };
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_SCOPE_GRANTS)
     )
-      .find(input.includeDeleted ? {} : { deletedAt: { $exists: false } })
+      .find(filter)
       .sort({ scopeNodeId: 1, scopeRefId: 1 })
       .toArray();
     return rows.map(row => ({
       scopeNodeId: String(row.scopeNodeId),
       scopeRefId: String(row.scopeRefId),
       role: row.role,
-      canSuggest: row.canSuggest ? true : undefined,
+      ...(row.canSuggest ? { canSuggest: true } : {}),
     }));
   }
 
@@ -563,26 +569,19 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           await this.#replaceNodeScopes(scopeNodeId, parentIds, session);
           changed = true;
         }
-        const desiredGrants = [];
-        for (const grant of declaration.grants ?? []) {
-          const scopeRefId = scopes[grant.scopeRefAddress];
-          if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
-            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+        if (createdScopeIds.includes(scopeNodeId)) {
+          const desiredGrants = [];
+          for (const grant of declaration.grants ?? []) {
+            const scopeRefId = scopes[grant.scopeRefAddress];
+            if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
+              throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+            }
+            desiredGrants.push({ scopeNodeId, scopeRefId, role: grant.role, canSuggest: grant.canSuggest });
           }
-          desiredGrants.push({ scopeNodeId, scopeRefId, role: grant.role, canSuggest: grant.canSuggest });
-        }
-        const grants = await this.#collection(TABLE_KNOWLEDGE_SCOPE_GRANTS);
-        const existingGrants = await grants.find({ scopeNodeId }, sessionOptions(session)).toArray();
-        const oldKey = JSON.stringify(
-          existingGrants.map(row => [row.scopeRefId, row.role, Boolean(row.canSuggest)]).sort(),
-        );
-        const newKey = JSON.stringify(
-          desiredGrants.map(grant => [grant.scopeRefId, grant.role, Boolean(grant.canSuggest)]).sort(),
-        );
-        if (oldKey !== newKey) {
-          await grants.deleteMany({ scopeNodeId }, sessionOptions(session));
-          if (desiredGrants.length) await grants.insertMany(desiredGrants, sessionOptions(session));
-          changed = true;
+          if (desiredGrants.length) {
+            const grants = await this.#collection(TABLE_KNOWLEDGE_SCOPE_GRANTS);
+            await grants.insertMany(desiredGrants, sessionOptions(session));
+          }
         }
       }
       const accessEpoch = changed ? await this.#bumpAccessEpoch(session) : await this.getAccessEpoch();
@@ -1089,98 +1088,102 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
-      const existing = await (
+      return this.#updateNode(input, session);
+    });
+  }
+
+  async #updateNode(input: UpdateKnowledgeNodeInput, session: ClientSession): Promise<KnowledgeNode> {
+    const existing = await (
+      await this.#collection(TABLE_KNOWLEDGE_NODES)
+    ).findOne({ id: input.id }, sessionOptions(session));
+    if (!existing || existing.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+    if (Number(existing.version) !== input.version) throw new KnowledgeConflictError(input.id);
+    const nextName = input.name?.trim() ?? String(existing.name);
+    const currentScopes = await this.#getNodeScopeIds(input.id, session);
+    const nextScopes = input.scopeIds ? await this.#assertScopeNodes(input.scopeIds, session) : currentScopes;
+    if (existing.isScope && input.isScope === false) await this.#assertScopeHasNoDependents(input.id, session);
+    if (input.name !== undefined || input.scopeIds !== undefined) {
+      const normalizedName = canonicalName(nextName);
+      await (
+        await this.#collection(TABLE_KNOWLEDGE_ACCESS_STATE)
+      ).updateOne(
+        { id: `name-lock:${normalizedName}` },
+        { $inc: { revision: 1 } },
+        { ...sessionOptions(session), upsert: true },
+      );
+      const sameName = await (
         await this.#collection(TABLE_KNOWLEDGE_NODES)
-      ).findOne({ id: input.id }, sessionOptions(session));
-      if (!existing || existing.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
-      if (Number(existing.version) !== input.version) throw new KnowledgeConflictError(input.id);
-      const nextName = input.name?.trim() ?? String(existing.name);
-      const currentScopes = await this.#getNodeScopeIds(input.id, session);
-      const nextScopes = input.scopeIds ? await this.#assertScopeNodes(input.scopeIds, session) : currentScopes;
-      if (existing.isScope && input.isScope === false) await this.#assertScopeHasNoDependents(input.id, session);
-      if (input.name !== undefined || input.scopeIds !== undefined) {
-        const normalizedName = canonicalName(nextName);
-        await (
-          await this.#collection(TABLE_KNOWLEDGE_ACCESS_STATE)
-        ).updateOne(
-          { id: `name-lock:${normalizedName}` },
-          { $inc: { revision: 1 } },
-          { ...sessionOptions(session), upsert: true },
-        );
-        const sameName = await (
-          await this.#collection(TABLE_KNOWLEDGE_NODES)
+      )
+        .find(
+          { canonicalName: normalizedName, id: { $ne: input.id }, deletedAt: { $exists: false } },
+          sessionOptions(session),
         )
-          .find(
-            { canonicalName: normalizedName, id: { $ne: input.id }, deletedAt: { $exists: false } },
-            sessionOptions(session),
-          )
-          .toArray();
-        for (const row of sameName) {
-          const collisionScopes = await this.#getNodeScopeIds(String(row.id), session);
-          if (collisionScopes.some(scopeId => nextScopes.includes(scopeId))) {
-            throw new KnowledgeConflictError(String(row.id));
-          }
+        .toArray();
+      for (const row of sameName) {
+        const collisionScopes = await this.#getNodeScopeIds(String(row.id), session);
+        if (collisionScopes.some(scopeId => nextScopes.includes(scopeId))) {
+          throw new KnowledgeConflictError(String(row.id));
         }
       }
-      const updatedAt = new Date();
-      const result = await (
-        await this.#collection(TABLE_KNOWLEDGE_NODES)
-      ).findOneAndUpdate(
-        { id: input.id, version: input.version, deletedAt: { $exists: false } },
-        {
-          $set: {
-            name: nextName,
-            canonicalName: canonicalName(nextName),
-            activeNameScopeKey: `${canonicalName(nextName)}\u0000${knowledgeScopeIdsKey(nextScopes)}`,
-            kind: input.kind ?? existing.kind,
-            metadata: input.metadata ?? existing.metadata,
-            updatedAt,
-          },
-          $inc: { version: 1 },
+    }
+    const updatedAt = new Date();
+    const result = await (
+      await this.#collection(TABLE_KNOWLEDGE_NODES)
+    ).findOneAndUpdate(
+      { id: input.id, version: input.version, deletedAt: { $exists: false } },
+      {
+        $set: {
+          name: nextName,
+          canonicalName: canonicalName(nextName),
+          activeNameScopeKey: `${canonicalName(nextName)}\u0000${knowledgeScopeIdsKey(nextScopes)}`,
+          kind: input.kind ?? existing.kind,
+          metadata: input.metadata ?? existing.metadata,
+          updatedAt,
         },
-        { ...sessionOptions(session), returnDocument: 'after' },
+        $inc: { version: 1 },
+      },
+      { ...sessionOptions(session), returnDocument: 'after' },
+    );
+    if (!result) throw new KnowledgeConflictError(input.id);
+    const node = nodeFromDocument(result);
+    await this.#replaceNodeScopes(node.id, nextScopes, session);
+    await this.#activity(
+      input.scopeIds ? 'move' : 'edit',
+      'node',
+      node.id,
+      input.contextScopeId,
+      input.importRunId,
+      { scopeIds: nextScopes },
+      session,
+    );
+    if (knowledgeScopeIdsKey(currentScopes) !== knowledgeScopeIdsKey(nextScopes)) {
+      await this.#outbox('node', node.id, 'delete', currentScopes, node.version, session);
+    }
+    await this.#outbox('node', node.id, 'upsert', nextScopes, node.version, session);
+    const records = await (
+      await this.#collection(TABLE_KNOWLEDGE_RECORDS)
+    )
+      .find({ nodeId: node.id }, sessionOptions(session))
+      .toArray();
+    for (const recordDocument of records) {
+      const record = recordFromDocument(recordDocument);
+      await (
+        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
+      ).updateOne(
+        { id: record.id, version: record.version },
+        { $set: { updatedAt }, $inc: { version: 1 } },
+        sessionOptions(session),
       );
-      if (!result) throw new KnowledgeConflictError(input.id);
-      const node = nodeFromDocument(result);
-      await this.#replaceNodeScopes(node.id, nextScopes, session);
-      await this.#activity(
-        input.scopeIds ? 'move' : 'edit',
-        'node',
-        node.id,
-        input.contextScopeId,
-        input.importRunId,
-        { scopeIds: nextScopes },
+      await this.#outbox(
+        'record',
+        record.id,
+        record.deletedAt ? 'delete' : 'upsert',
+        await this.#getRecordScopeIds(record.id, session),
+        record.version + 1,
         session,
       );
-      if (knowledgeScopeIdsKey(currentScopes) !== knowledgeScopeIdsKey(nextScopes)) {
-        await this.#outbox('node', node.id, 'delete', currentScopes, node.version, session);
-      }
-      await this.#outbox('node', node.id, 'upsert', nextScopes, node.version, session);
-      const records = await (
-        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-      )
-        .find({ nodeId: node.id }, sessionOptions(session))
-        .toArray();
-      for (const recordDocument of records) {
-        const record = recordFromDocument(recordDocument);
-        await (
-          await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-        ).updateOne(
-          { id: record.id, version: record.version },
-          { $set: { updatedAt }, $inc: { version: 1 } },
-          sessionOptions(session),
-        );
-        await this.#outbox(
-          'record',
-          record.id,
-          record.deletedAt ? 'delete' : 'upsert',
-          await this.#getRecordScopeIds(record.id, session),
-          record.version + 1,
-          session,
-        );
-      }
-      return node;
-    });
+    }
+    return node;
   }
 
   async deleteNode(input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -1210,6 +1213,25 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       await this.#activity('delete', 'node', node.id, undefined, undefined, { scopeIds: memberships }, session);
       await this.#outbox('node', node.id, 'delete', memberships, node.version, session);
       if (node.isScope) await this.#bumpAccessEpoch(session);
+      const records = await this.#collection(TABLE_KNOWLEDGE_RECORDS);
+      await records.updateMany(
+        { nodeId: node.id, deletedAt: { $exists: false } },
+        { $set: { updatedAt }, $inc: { version: 1 } },
+        sessionOptions(session),
+      );
+      for (const document of await records
+        .find({ nodeId: node.id, deletedAt: { $exists: false } }, sessionOptions(session))
+        .toArray()) {
+        const record = recordFromDocument(document);
+        await this.#outbox(
+          'record',
+          record.id,
+          'delete',
+          await this.#getRecordScopeIds(record.id, session),
+          record.version,
+          session,
+        );
+      }
       return node;
     });
   }
@@ -1266,6 +1288,25 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       await this.#activity('restore', 'node', node.id, undefined, undefined, { scopeIds: memberships }, session);
       await this.#outbox('node', node.id, 'upsert', memberships, node.version, session);
       if (node.isScope) await this.#bumpAccessEpoch(session);
+      const records = await this.#collection(TABLE_KNOWLEDGE_RECORDS);
+      await records.updateMany(
+        { nodeId: node.id, deletedAt: { $exists: false } },
+        { $set: { updatedAt }, $inc: { version: 1 } },
+        sessionOptions(session),
+      );
+      for (const document of await records
+        .find({ nodeId: node.id, deletedAt: { $exists: false } }, sessionOptions(session))
+        .toArray()) {
+        const record = recordFromDocument(document);
+        await this.#outbox(
+          'record',
+          record.id,
+          'upsert',
+          await this.#getRecordScopeIds(record.id, session),
+          record.version,
+          session,
+        );
+      }
       return { ...node, deletedAt: undefined, deletedBy: undefined };
     });
   }
@@ -1454,43 +1495,97 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     });
   }
 
+  async replaceNodeRecords(input: {
+    node: UpdateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
+    visibilityScopeIds: KnowledgeScopeIds;
+  }): Promise<KnowledgeRecord> {
+    return this.#transaction(async session => {
+      await this.#assertExpectedAccessEpoch(session, input.node.expectedAccessEpoch);
+      const visibilityScopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
+      const records = await (
+        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
+      )
+        .find(
+          { nodeId: input.node.id, source: input.record.source, deletedAt: { $exists: false } },
+          sessionOptions(session),
+        )
+        .toArray();
+      for (const document of records) {
+        const record = recordFromDocument(document);
+        if (!(await this.#isRecordVisible(record, visibilityScopeIds, session))) continue;
+        const scopeIds = await this.#getRecordScopeIds(record.id, session);
+        const updatedAt = new Date();
+        const result = await (
+          await this.#collection(TABLE_KNOWLEDGE_RECORDS)
+        ).findOneAndUpdate(
+          { id: record.id, version: record.version, deletedAt: { $exists: false } },
+          { $set: { deletedAt: updatedAt, deletedBy: input.record.source, updatedAt }, $inc: { version: 1 } },
+          { ...sessionOptions(session), returnDocument: 'after' },
+        );
+        if (!result) throw new KnowledgeConflictError(record.id);
+        const deleted = recordFromDocument(result);
+        await this.#activity(
+          'delete',
+          'record',
+          deleted.id,
+          input.record.contextScopeId,
+          input.record.importRunId,
+          { scopeIds },
+          session,
+        );
+        await this.#outbox('record', deleted.id, 'delete', scopeIds, deleted.version, session);
+      }
+      const node = await this.#updateNode(input.node, session);
+      return this.#createRecord({ ...input.record, node }, session);
+    });
+  }
+
+  async createNodeWithRecord(input: {
+    node: CreateKnowledgeNodeInput;
+    record: Omit<CreateKnowledgeRecordInput, 'node'>;
+  }): Promise<{ node: KnowledgeNode; record: KnowledgeRecord }> {
+    return this.#transaction(async session => {
+      await this.#assertExpectedAccessEpoch(session, input.node.expectedAccessEpoch);
+      const node = await this.#createNode(input.node, session);
+      const record = await this.#createRecord({ ...input.record, node }, session);
+      return { node, record };
+    });
+  }
+
   async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
-      const nodeId = nodeReferenceId(input.node);
-      const owner = await (
-        await this.#collection(TABLE_KNOWLEDGE_NODES)
-      ).findOne({ id: nodeId, deletedAt: { $exists: false } }, sessionOptions(session));
-      if (!owner) throw new KnowledgeNotFoundError('node', nodeId);
-      const scopeIds = await this.#assertScopeNodes(input.scopeIds, session);
-      if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', '');
-      const now = new Date();
-      const record: KnowledgeRecord = {
-        id: input.id ?? createKnowledgeUlid(),
-        nodeId,
-        text: input.text,
-        metadata: input.metadata,
-        source: input.source,
-        version: 1,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await (await this.#collection(TABLE_KNOWLEDGE_RECORDS)).insertOne({ ...record }, sessionOptions(session));
-      await this.#replaceRecordScopes(record.id, scopeIds, session);
-      const resolutionScopeIds = await this.#assertScopeNodes(input.resolutionScopeIds ?? scopeIds, session);
-      await this.#replaceMentions(record, resolutionScopeIds, session, scopeIds, input.importRunId);
-      await this.#activity(
-        'create',
-        'record',
-        record.id,
-        input.contextScopeId,
-        input.importRunId,
-        { scopeIds },
-        session,
-      );
-      await this.#outbox('record', record.id, 'upsert', scopeIds, record.version, session);
-      return record;
+      return this.#createRecord(input, session);
     });
+  }
+
+  async #createRecord(input: CreateKnowledgeRecordInput, session: ClientSession): Promise<KnowledgeRecord> {
+    const nodeId = nodeReferenceId(input.node);
+    const owner = await (
+      await this.#collection(TABLE_KNOWLEDGE_NODES)
+    ).findOne({ id: nodeId, deletedAt: { $exists: false } }, sessionOptions(session));
+    if (!owner) throw new KnowledgeNotFoundError('node', nodeId);
+    const scopeIds = await this.#assertScopeNodes(input.scopeIds, session);
+    if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', '');
+    const now = new Date();
+    const record: KnowledgeRecord = {
+      id: input.id ?? createKnowledgeUlid(),
+      nodeId,
+      text: input.text,
+      metadata: input.metadata,
+      source: input.source,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await (await this.#collection(TABLE_KNOWLEDGE_RECORDS)).insertOne({ ...record }, sessionOptions(session));
+    await this.#replaceRecordScopes(record.id, scopeIds, session);
+    const resolutionScopeIds = await this.#assertScopeNodes(input.resolutionScopeIds ?? scopeIds, session);
+    await this.#replaceMentions(record, resolutionScopeIds, session, scopeIds, input.importRunId);
+    await this.#activity('create', 'record', record.id, input.contextScopeId, input.importRunId, { scopeIds }, session);
+    await this.#outbox('record', record.id, 'upsert', scopeIds, record.version, session);
+    return record;
   }
 
   async getRecord(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
@@ -1510,13 +1605,25 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return (await this.#isRecordVisible(record, canonicalizeKnowledgeScopeIds(input.scopeIds))) ? record : null;
   }
 
-  async #isRecordVisible(record: KnowledgeRecord, scopeIds: KnowledgeScopeIds): Promise<boolean> {
-    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(record.id), scopeIds)) return false;
-    const mentions = await (await this.#collection(TABLE_KNOWLEDGE_MENTIONS)).find({ recordId: record.id }).toArray();
+  async #isRecordVisible(
+    record: KnowledgeRecord,
+    scopeIds: KnowledgeScopeIds,
+    session?: ClientSession,
+  ): Promise<boolean> {
+    if (!isKnowledgeScopeVisible(await this.#getRecordScopeIds(record.id, session), scopeIds)) return false;
+    const mentions = await (
+      await this.#collection(TABLE_KNOWLEDGE_MENTIONS)
+    )
+      .find({ recordId: record.id }, sessionOptions(session))
+      .toArray();
     const nodeIds = [record.nodeId, ...mentions.map(mention => String(mention.targetNodeId))];
     for (const nodeId of nodeIds) {
-      const node = await this.getNode(nodeId);
-      if (!node || !isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(node.id), scopeIds)) return false;
+      const row = await (
+        await this.#collection(TABLE_KNOWLEDGE_NODES)
+      ).findOne({ id: nodeId, deletedAt: { $exists: false } }, sessionOptions(session));
+      if (!row) return false;
+      const node = nodeFromDocument(row);
+      if (!isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(node.id, session), scopeIds)) return false;
     }
     return true;
   }
@@ -1768,53 +1875,54 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return row ? proposalFromDocument(row) : null;
   }
 
-  async #isProposalVisible(proposal: KnowledgeProposal, visibleScopeIds: KnowledgeScopeIds): Promise<boolean> {
+  async #isProposalVisible(
+    proposal: KnowledgeProposal,
+    input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
+  ): Promise<boolean> {
+    const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const proposerContextScopeId = proposal.proposerContextScopeId;
+    const readBranch =
+      proposerContextScopeId !== undefined &&
+      (readable.includes(proposerContextScopeId) ||
+        (await this.#getNodeScopeIds(proposerContextScopeId)).some(scopeId => readable.includes(scopeId)));
+    let everyTargetReadable = readBranch;
+    let everyTargetWritable = true;
     for (const target of proposal.targets) {
+      let currentScopeIds: KnowledgeScopeIds;
       if (target.type === 'node') {
         const node = await this.getNodeIncludingDeleted(target.id);
         if (!node || node.deletedAt) return false;
-        const scopes = node.isScope ? [node.id] : await this.#getNodeScopeIds(node.id);
-        if (!isKnowledgeScopeVisible(scopes, visibleScopeIds)) return false;
+        currentScopeIds = node.isScope ? [node.id] : await this.#getNodeScopeIds(node.id);
+        if (readBranch && !isKnowledgeScopeVisible(currentScopeIds, readable)) everyTargetReadable = false;
       } else {
-        const record = await this.getVisibleRecord({ id: target.id, scopeIds: visibleScopeIds, includeDeleted: true });
+        const record = await this.getRecord({ id: target.id, includeDeleted: true });
         if (!record || record.deletedAt) return false;
+        currentScopeIds = await this.#getRecordScopeIds(target.id);
+        if (readBranch && !(await this.#isRecordVisible(record, readable))) everyTargetReadable = false;
       }
+      const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
+      if (!authorizedScopeIds?.some(scopeId => currentScopeIds.includes(scopeId))) everyTargetWritable = false;
     }
-    return true;
+    return everyTargetReadable || everyTargetWritable;
   }
 
-  async getVisibleProposal(input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+  async getVisibleProposal(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
+  }): Promise<KnowledgeProposal | null> {
     const proposal = await this.getProposal(input.id);
-    return proposal && (await this.#isProposalVisible(proposal, canonicalizeKnowledgeScopeIds(input.scopeIds)))
-      ? proposal
-      : null;
+    return proposal && (await this.#isProposalVisible(proposal, input)) ? proposal : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    if (!scopeIds.length) return { proposals: [] };
-    if (input.cursor && !(await this.getVisibleProposal({ id: input.cursor, scopeIds }))) return { proposals: [] };
-    const nodeMemberships = await (
-      await this.#collection(TABLE_KNOWLEDGE_NODE_SCOPES)
+    if (
+      input.cursor &&
+      !(await this.getVisibleProposal({ id: input.cursor, scopeIds, approvalScopeIds: input.approvalScopeIds }))
     )
-      .find({ scopeNodeId: { $in: scopeIds } })
-      .project({ nodeId: 1 })
-      .toArray();
-    const visibleNodeIds = [...new Set([...scopeIds, ...nodeMemberships.map(row => String(row.nodeId))])];
-    const recordMemberships = await (
-      await this.#collection(TABLE_KNOWLEDGE_RECORD_SCOPES)
-    )
-      .find({ scopeNodeId: { $in: scopeIds } })
-      .project({ recordId: 1 })
-      .toArray();
-    const visibleRecordIds = [...new Set(recordMemberships.map(row => String(row.recordId)))];
-    const visibilityFilter: Filter<Document> = {
-      $or: [
-        { targetType: 'node', targetId: { $in: visibleNodeIds } },
-        { targetType: 'record', targetId: { $in: visibleRecordIds } },
-      ],
-    };
-    const constraints: Filter<Document>[] = [visibilityFilter];
+      return { proposals: [] };
+    const constraints: Filter<Document>[] = [];
     if (input.status) constraints.push({ status: input.status });
     if (input.cursor) {
       const cursor = await (await this.#collection(TABLE_KNOWLEDGE_PROPOSALS)).findOne({ id: input.cursor });
@@ -1826,15 +1934,16 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_PROPOSALS)
     )
-      .find({ $and: constraints })
+      .find(constraints.length ? { $and: constraints } : {})
       .sort({ createdAt: -1, id: -1 })
-      .limit(1000)
       .toArray();
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     const proposals: KnowledgeProposal[] = [];
     for (const row of rows) {
       const proposal = proposalFromDocument(row);
-      if (await this.#isProposalVisible(proposal, scopeIds)) proposals.push(proposal);
+      if (await this.#isProposalVisible(proposal, { scopeIds, approvalScopeIds: input.approvalScopeIds })) {
+        proposals.push(proposal);
+      }
       if (proposals.length > limit) break;
     }
     return {
@@ -2691,7 +2800,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     for (const nodeId of nodeIds) {
       const node = await (
         await this.#collection(TABLE_KNOWLEDGE_NODES)
-      ).findOne({ id: nodeId, deletedAt: { $exists: false } }, sessionOptions(session));
+      ).findOne(
+        entry.operation === 'delete' ? { id: nodeId } : { id: nodeId, deletedAt: { $exists: false } },
+        sessionOptions(session),
+      );
       if (
         !node ||
         !isKnowledgeNodeVisible(nodeFromDocument(node), await this.#getNodeScopeIds(nodeId, session), visibleScopeIds)
@@ -2790,6 +2902,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     details: Record<string, unknown> | undefined,
     session: ClientSession,
   ): Promise<void> {
+    if (importRunId) {
+      const importRun = await (
+        await this.#collection(TABLE_KNOWLEDGE_IMPORT_RUNS)
+      ).findOne({ id: importRunId }, sessionOptions(session));
+      if (!importRun) throw new KnowledgeNotFoundError('import run', importRunId);
+    }
     const event: KnowledgeActivityEvent = {
       id: createKnowledgeUlid(),
       action,
