@@ -631,7 +631,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               recordWindow.length = limits.maxRecords;
             }
 
-            const resolver = new WikilinkResolver(store, members, limits.maxFallbackLookups);
+            const resolver = new WikilinkResolver(store, contentMembers, limits.maxFallbackLookups);
             const edges: KnowledgeGraphEdge[] = [];
             const graphRecords: KnowledgeGraphRecord[] = [];
             const edgeSeen = new Set<string>();
