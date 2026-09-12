@@ -293,6 +293,20 @@ async function emitAccountSwitchPart(
 }
 
 /**
+ * Provider of the model the controller session is currently running — the
+ * fallback identification path for errors that carry neither a request URL
+ * nor a model id (e.g. `ProviderAuthRequiredError` thrown by a fetch wrapper
+ * before any HTTP request exists).
+ */
+function providerFromSession(
+  args: Pick<ProcessAPIErrorArgs, 'requestContext'> | Pick<ProcessInputArgs, 'requestContext'>,
+): string | undefined {
+  const controller = args.requestContext?.get('controller') as { session?: { modelId?: unknown } } | undefined;
+  const modelId = controller?.session?.modelId;
+  return typeof modelId === 'string' ? providerFromModelId(modelId) : undefined;
+}
+
+/**
  * Rotates the active OAuth account on classified API errors.
  *
  * Registered in `errorProcessors` AFTER `StreamErrorRetryProcessor` — a
@@ -303,12 +317,20 @@ async function emitAccountSwitchPart(
 export class AccountRotationProcessor implements Processor {
   readonly id = 'mastracode-account-rotation' as const;
 
-  constructor(private readonly options: { credentialStore: RotationCredentialStore }) {}
+  constructor(private readonly options: { credentialStore: RotationCredentialStore; maxProcessorRetries: number }) {}
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<{ retry: boolean }> {
+    // Core runs error processors even after the shared retry budget is spent
+    // and silently discards `retry: true` then (llm-execution-step.ts
+    // canRetryError) — rotating the cursor or emitting a switch part for a
+    // retry that will never run would lie to both auth.json and the
+    // transcript. `retry: false` still lets core advance a model fallback
+    // chain, which is the honest outcome at budget exhaustion.
+    if (args.retryCount >= this.options.maxProcessorRetries) return { retry: false };
+
     const { error, state } = args;
 
-    const providerId = providerFromError(error);
+    const providerId = providerFromError(error) ?? providerFromSession(args);
     if (!providerId) return { retry: false };
 
     const classification = classifyRotationError(error);
@@ -417,11 +439,7 @@ export class AccountStartNoticeProcessor implements Processor {
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     if (args.state.startNoticeEmitted) return args.messageList;
 
-    const controller = args.requestContext?.get('controller') as { session?: { modelId?: unknown } } | undefined;
-    const modelId = controller?.session?.modelId;
-    if (typeof modelId !== 'string') return args.messageList;
-
-    const providerId = providerFromModelId(modelId);
+    const providerId = providerFromSession(args);
     if (!providerId) return args.messageList;
 
     const accounts = this.options.credentialStore.listAccounts?.(providerId) ?? [];
