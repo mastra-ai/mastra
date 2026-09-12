@@ -101,9 +101,7 @@ export const InlineVercelStyle: Story = {
         <CommandInput
           placeholder="Find..."
           rightSlot={
-            <Kbd className="border-border1 bg-surface4 text-neutral4 min-w-0 rounded px-1.5 py-0 text-[10px] leading-4">
-              Esc
-            </Kbd>
+            <Kbd className="border-border1 bg-surface4 text-ui-xs text-neutral4 min-w-0 rounded px-1.5 py-0">Esc</Kbd>
           }
         />
         <CommandList
@@ -177,10 +175,10 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-neutral3 mb-4 text-sm">
+        <p className="text-ui-md text-neutral3 mb-4">
           Press{' '}
-          <kbd className="border-border1 bg-surface4 text-neutral5 pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none">
-            <span className="text-xs">⌘</span>K
+          <kbd className="border-border1 bg-surface4 text-ui-xs text-neutral5 pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono font-medium select-none">
+            <span className="text-ui-sm">⌘</span>K
           </kbd>{' '}
           or click the button below
         </p>

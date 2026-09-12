@@ -27,7 +27,7 @@ function buildDarkTheme(): Extension {
   const baseTheme = draculaInit({
     settings: {
       fontFamily: 'var(--font-mono)',
-      fontSize: '0.8rem',
+      fontSize: 'var(--text-ui-smd)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
       gutterForeground: 'var(--neutral2)',
@@ -87,7 +87,7 @@ function buildDarkTheme(): Extension {
     },
     '.cm-completionDetail': {
       color: 'var(--neutral3)',
-      fontSize: '0.7rem',
+      fontSize: 'var(--text-ui-sm)',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
@@ -118,7 +118,7 @@ function buildLightTheme(): Extension {
     '&': {
       backgroundColor: 'transparent',
       color: 'var(--neutral6)',
-      fontSize: '0.8rem',
+      fontSize: 'var(--text-ui-smd)',
     },
     '&.cm-editor .cm-scroller': {
       fontFamily: 'var(--font-mono)',
@@ -163,7 +163,7 @@ function buildLightTheme(): Extension {
     },
     '.cm-completionDetail': {
       color: 'var(--neutral3)',
-      fontSize: '0.7rem',
+      fontSize: 'var(--text-ui-sm)',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
@@ -227,7 +227,7 @@ export const useCodemirrorTheme = (): Extension => {
 const codeEditorVariants = cva(
   cn(
     'relative overflow-hidden font-mono outline-hidden focus-within:outline-hidden focus:outline-hidden',
-    'duration-normal transition-colors ease-out-custom',
+    'transition-colors duration-normal ease-out-custom',
   ),
   {
     variants: {

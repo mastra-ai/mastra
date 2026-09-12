@@ -65,7 +65,12 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
-import type { TraceQueryResponse, TrustedTraceQueryPlan } from './trace-query';
+import type {
+  QueryThreadsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryPlan,
+} from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -93,7 +98,7 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query';
+export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query' | 'thread-query';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -355,6 +360,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated thread-query plan.
+   */
+  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced thread queries',
     });
   }
 

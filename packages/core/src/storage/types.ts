@@ -235,14 +235,6 @@ export type StorageCloneThreadInput = {
   metadata?: Record<string, unknown>;
   /** Options for filtering which messages to include */
   options?: {
-    /**
-     * When true (default), the returned `clonedMessages` array is populated with the
-     * fully hydrated (parsed) message payloads. When false, message rows are copied
-     * inside the database (never returned to the JS heap) and `clonedMessages` is
-     * returned empty; only `messageIdMap` is produced. Set false on paths that discard
-     * payloads (e.g. forked-subagent clones, observational-memory-only remaps).
-     */
-    hydrateMessages?: boolean;
     /** Maximum number of messages to copy (from most recent) */
     messageLimit?: number;
     /** Filter messages by date range or specific IDs */
@@ -258,15 +250,22 @@ export type StorageCloneThreadInput = {
 };
 
 /**
+ * Output from copying a thread. Message payloads are copied inside the store and
+ * never returned; only the id mapping is produced.
+ */
+export type StorageCopyThreadOutput = {
+  /** The newly created thread */
+  thread: StorageThreadType;
+  /** Map from source message IDs to copied message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
+};
+
+/**
  * Output from cloning a thread
  */
-export type StorageCloneThreadOutput = {
-  /** The newly created cloned thread */
-  thread: StorageThreadType;
+export type StorageCloneThreadOutput = StorageCopyThreadOutput & {
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
-  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
-  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {

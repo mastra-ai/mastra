@@ -811,6 +811,21 @@ export class LibSQLDB extends MastraBase {
         }
       }
 
+      // Ensure read indexes for the built-in trace list/detail queries exist.
+      // These are created idempotently on every init (cheap metadata no-op once present)
+      // and outside the unique-index guard above so existing/migrated databases also gain
+      // them. Without these, the default trace-list query
+      // (WHERE parentSpanId IS NULL ORDER BY startedAt DESC) and the trace-detail query
+      // (WHERE traceId = ? ORDER BY startedAt ASC) full-scan the table and build a
+      // temporary B-tree for ordering.
+      await this.client.execute(
+        `CREATE INDEX IF NOT EXISTS "mastra_ai_spans_roots_started_at_idx" ON "${TABLE_SPANS}" ("startedAt" DESC) WHERE "parentSpanId" IS NULL`,
+      );
+      await this.client.execute(
+        `CREATE INDEX IF NOT EXISTS "mastra_ai_spans_trace_started_at_idx" ON "${TABLE_SPANS}" ("traceId", "startedAt")`,
+      );
+      this.logger.debug(`LibSQLDB: Ensured trace read indexes for ${TABLE_SPANS}`);
+
       this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
     } catch (error) {
       // Rethrow MastraError (especially for migration required errors) - these must stop init

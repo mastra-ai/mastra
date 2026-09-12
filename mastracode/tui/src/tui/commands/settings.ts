@@ -204,6 +204,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
+    experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so
     // the choice comes back when the key does.
@@ -276,6 +277,13 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.signals.experimentalGithubSignals = enabled;
         saveSettings(current);
         ctx.showInfo(`Experimental GitHub signals: ${enabled ? 'on' : 'off'} (restart required)`);
+        return true;
+      },
+      onExperimentalCrossAgentSignalsChange: enabled => {
+        const current = loadSettings();
+        current.signals.experimentalCrossAgentSignals = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
       },
       onWebSearchProviderChange: provider => {

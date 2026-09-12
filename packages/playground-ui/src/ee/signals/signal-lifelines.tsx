@@ -32,7 +32,7 @@ export function SignalLifelines({
 
   return (
     <section aria-label={`${label} lifelines`} className="min-w-0">
-      <h3 className="font-mono text-xs font-semibold tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+      <h3 className="text-ui-sm font-mono font-semibold tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -55,7 +55,7 @@ export function SignalLifelines({
         </Tooltip>
       </h3>
       {isCollapsed ? undefined : rows.length === 0 ? (
-        <p className="text-neutral3 mt-2 text-xs">No themes in these landmarks.</p>
+        <p className="text-ui-sm text-neutral3 mt-2">No themes in these landmarks.</p>
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (

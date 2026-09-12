@@ -752,23 +752,10 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
-
-        // A run that dies after emitting `tool_suspended` (e.g. persisting the
-        // suspended snapshot failed) leaves its parked suspensions unresumable:
-        // answering them would fail with a misleading "could not find a
-        // suspended run" error that masks this primary failure. Retract them so
-        // the UI dismisses the prompts and the user sees the real error.
-        const failedRunId = chunk.runId ?? this.#session.run.getRunId();
-        if (failedRunId) {
-          for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId: failedRunId })) {
-            this.#session.emit({
-              type: 'tool_suspension_cancelled',
-              toolCallId,
-              toolName,
-              reason: streamError.message,
-            });
-          }
-        }
+        this.retractFailedRunSuspensions({
+          runId: chunk.runId ?? this.#session.run.getRunId(),
+          reason: streamError.message,
+        });
         break;
       }
 
@@ -782,41 +769,53 @@ export class SessionRunEngine {
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
         if (usageRecord) {
-          const promptTokens =
-            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-          const completionTokens =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-          const stepUsage: TokenUsage = {
-            promptTokens,
-            completionTokens,
-            totalTokens,
-          };
-          addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-          addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens5m',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
-          );
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens1h',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
-          );
-          if (usageRecord.raw !== undefined) {
-            stepUsage.raw = usageRecord.raw;
+          // A step whose usage payload carries no usable primary count (missing,
+          // nested-object, or all-undefined shapes) must NOT be coerced into a
+          // {0,0,0} tally: doing so fabricates a false `usage_update` event and
+          // persists a false zero that is indistinguishable from a measured zero.
+          // Only fold/persist/emit when at least one primary count is present.
+          // A genuine measured zero arrives as an explicit numeric 0, which
+          // `getUsageNumber` reports as present.
+          const rawPrompt = getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens');
+          const rawCompletion =
+            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens');
+          const rawTotal = getUsageNumber(usageRecord, 'totalTokens');
+          const hasPrimaryCount = rawPrompt !== undefined || rawCompletion !== undefined || rawTotal !== undefined;
+          if (hasPrimaryCount) {
+            const promptTokens = rawPrompt ?? 0;
+            const completionTokens = rawCompletion ?? 0;
+            const totalTokens = rawTotal ?? promptTokens + completionTokens;
+            const stepUsage: TokenUsage = {
+              promptTokens,
+              completionTokens,
+              totalTokens,
+            };
+            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
+            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens5m',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
+            );
+            addOptionalUsageField(
+              stepUsage,
+              'cacheCreationInputTokens1h',
+              getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
+            );
+            if (usageRecord.raw !== undefined) {
+              stepUsage.raw = usageRecord.raw;
+            }
+
+            this.#session.addUsage(stepUsage);
+
+            this.#machinery.persistTokenUsage().catch(() => {});
+            this.#session.emit({ type: 'usage_update', usage: stepUsage });
           }
-
-          this.#session.addUsage(stepUsage);
-
-          this.#machinery.persistTokenUsage().catch(() => {});
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
         break;
       }
@@ -1214,11 +1213,26 @@ export class SessionRunEngine {
     await this.#session.drainFollowUpQueue();
   }
 
+  private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
+    if (!runId) return;
+
+    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId })) {
+      this.#session.emit({
+        type: 'tool_suspension_cancelled',
+        toolCallId,
+        toolName,
+        reason,
+      });
+    }
+  }
+
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
-      this.#session.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      const streamError = getErrorFromUnknown(error);
+      this.#session.emit({ type: 'error', error: streamError });
+      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();

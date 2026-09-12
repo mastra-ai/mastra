@@ -37,8 +37,8 @@ export const Centered: Story = {
       </PageHeader>
       <MainContentContent isCentered>
         <div className="text-center">
-          <p className="text-neutral5 text-lg">No items found</p>
-          <p className="text-neutral3 text-sm">Create your first item to get started</p>
+          <p className="text-header-sm text-neutral5">No items found</p>
+          <p className="text-ui-md text-neutral3">Create your first item to get started</p>
         </div>
       </MainContentContent>
     </MainContentLayout>
@@ -71,7 +71,7 @@ export const WithLeftServiceColumn: Story = {
       </PageHeader>
       <MainContentContent hasLeftServiceColumn>
         <div className="border-border1 bg-surface2 border-r p-2">
-          <p className="text-neutral3 text-sm">Nav</p>
+          <p className="text-ui-md text-neutral3">Nav</p>
         </div>
         <div className="p-4">
           <p className="text-neutral5">Main content</p>
@@ -89,7 +89,7 @@ export const DividedWithServiceColumn: Story = {
       </PageHeader>
       <MainContentContent isDivided hasLeftServiceColumn>
         <div className="border-border1 bg-surface2 border-r p-2">
-          <p className="text-neutral3 text-sm">Nav</p>
+          <p className="text-ui-md text-neutral3">Nav</p>
         </div>
         <div className="border-border1 border-r p-4">
           <p className="text-neutral5">Center column</p>

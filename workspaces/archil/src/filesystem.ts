@@ -294,9 +294,13 @@ export class ArchilFilesystem extends MastraFilesystem {
   }
 
   /**
-   * Parallel grep across files on the disk.
+   * Parallel grep across files on the disk using Archil's serverless search.
+   *
+   * Named `diskGrep` (not `grep`) because it has Archil-specific options and
+   * results that differ from the optional `WorkspaceFilesystem.grep` capability
+   * contract.
    */
-  async grep(opts: GrepOptions): Promise<GrepResult> {
+  async diskGrep(opts: GrepOptions): Promise<GrepResult> {
     await this.ensureReady();
     return this.disk.grep(opts);
   }

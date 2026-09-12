@@ -178,7 +178,7 @@ describe('SankeyChart', () => {
 
     it('truncates node labels further than a wide chart does', async () => {
       const findFirstColumnLabel = (container: HTMLElement) =>
-        [...container.querySelectorAll('svg text[font-size="11"]')].find(
+        [...container.querySelectorAll('svg text[font-size="10"]')].find(
           label => label.getAttribute('text-anchor') === 'start',
         );
 
@@ -534,7 +534,7 @@ describe('SankeyChart', () => {
     expect(Number(regionLabel?.getAttribute('x'))).toBeCloseTo(columnXs[1] + nodeWidth / 2);
     expect(Number(outcomeLabel?.getAttribute('x'))).toBeCloseTo(columnXs[2] + nodeWidth);
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
-    expect(searchLabel?.getAttribute('font-size')).toBe('11');
+    expect(searchLabel?.getAttribute('font-size')).toBe('10');
     expect(searchLabel?.getAttribute('text-anchor')).toBe('start');
     expect(searchLabel?.getAttribute('x')).toBe('160');
     expect(Number(searchLabel?.getAttribute('y'))).toBeGreaterThan(Number(channelLabel?.getAttribute('y')) + 16);

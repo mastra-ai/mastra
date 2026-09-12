@@ -1,5 +1,17 @@
 # @mastra/factory
 
+## 0.14.1-alpha.2
+
+### Patch Changes
+
+- Kept Factory chat status indicators, goal progress, and status commands consistent, and cleared the previous run's status when starting a new thread. ([#23605](https://github.com/mastra-ai/mastra/pull/23605))
+
+- Fixed reused managed Factory sessions keeping stale observational-memory models: when automation reuses an existing managed session, the project's current observer and reflector model settings are now reapplied before the run, instead of silently keeping the models the session was originally created with. Also, when a run is aborted by a permanent observational-memory failure (for example a provider rejecting an unsupported model), the real error is now surfaced and the decision is marked as a non-retryable configuration failure instead of being retried behind a generic "aborted" message. ([#23573](https://github.com/mastra-ai/mastra/pull/23573))
+
+- Updated dependencies [[`a0aa698`](https://github.com/mastra-ai/mastra/commit/a0aa698427db9730e39f0c9956d21b97307ab313), [`c3d00db`](https://github.com/mastra-ai/mastra/commit/c3d00db279a95c7dcba0f767704a2bb6544b7b29), [`44c20c9`](https://github.com/mastra-ai/mastra/commit/44c20c9a40ba5ef153e1d5d0c413b825e1de42d7), [`f466753`](https://github.com/mastra-ai/mastra/commit/f4667539a0c41ae4aa08a4ed380f374687db2592), [`e3c3e5e`](https://github.com/mastra-ai/mastra/commit/e3c3e5e3e354e88207aa9747f9f0cd3352cea972), [`d581249`](https://github.com/mastra-ai/mastra/commit/d581249a5bf97d32d73e0f1f30cd50ff108e2d67), [`990b47f`](https://github.com/mastra-ai/mastra/commit/990b47fa7370753967ea7ce83100a522f79ab328), [`e872dd6`](https://github.com/mastra-ai/mastra/commit/e872dd6619f3a5a46f1158b190b02f607b74d191)]:
+  - @mastra/core@1.67.0-alpha.2
+  - @mastra/code-sdk@1.7.2-alpha.2
+
 ## 0.14.1-alpha.1
 
 ### Patch Changes

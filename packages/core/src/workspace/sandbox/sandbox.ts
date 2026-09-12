@@ -116,6 +116,25 @@ export function assertModesUnsupported(files: SandboxFileInput[], provider: stri
   }
 }
 
+/** Options for {@link WorkspaceSandbox.writeFiles}. */
+export interface WriteFilesOptions {
+  /**
+   * Abort signal to cancel the write.
+   *
+   * Observing the signal is provider-dependent. `DockerSandbox` terminates the
+   * in-flight upload when the signal aborts; providers that do not observe the
+   * signal run to completion. Providers that observe the signal reject an
+   * already-aborted write before archive creation or upload begins.
+   *
+   * Cancellation rejects with a {@link SandboxAbortError} (code `ABORTED`).
+   * Because upload and cancellation race, an upload that completes before the
+   * abort is observed resolves normally. Cancellation does not roll back writes:
+   * files transferred or extracted before the abort may remain in the sandbox,
+   * so callers are responsible for any cleanup or sandbox disposal.
+   */
+  abortSignal?: AbortSignal;
+}
+
 /**
  * Type guard: does this sandbox support the networking capability?
  *
@@ -472,8 +491,12 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * ```typescript
    * await sandbox.writeFiles?.([{ path: '/app/index.mjs', content: bundle }]);
    * ```
+   *
+   * Pass `options.abortSignal` to cancel the write. See {@link WriteFilesOptions}
+   * for the cancellation contract (provider-dependent observance, the
+   * completion-versus-cancellation race, and the partial-write boundary).
    */
-  writeFiles?(files: SandboxFileInput[]): Promise<void>;
+  writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Process Management (Optional)

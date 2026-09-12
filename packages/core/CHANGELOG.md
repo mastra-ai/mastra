@@ -1,5 +1,70 @@
 # @mastra/core
 
+## 1.67.0-alpha.2
+
+### Minor Changes
+
+- Add thread ownership transfer (resourceId reassignment). ([#23533](https://github.com/mastra-ai/mastra/pull/23533))
+
+  You can now transfer an existing thread to a different resource, reassigning both the thread and its messages to the new `resourceId` while preserving the thread's original `createdAt` timestamp. This supports scenarios like moving a private thread into a shared workspace without the previous upsert workaround.
+
+  - `@mastra/core` / `@mastra/memory`: new `Memory.updateThreadResourceId({ threadId, resourceId })` method, backed by a default `MemoryStorage.updateThreadResourceId` implementation. When semantic recall is enabled, the message vectors are migrated to the new `resourceId` so resource-scoped retrieval keeps surfacing the transferred thread.
+  - `@mastra/server`: new `POST /memory/threads/:threadId/transfer` route. The endpoint is restricted to privileged, non-resource-scoped callers and rejects requests made with a resolved resource scope.
+  - `@mastra/client-js`: new `MemoryThread.transfer({ resourceId })` method.
+  - `@mastra/pg`, `@mastra/libsql`, `@mastra/mssql`, `@mastra/dsql`, `@mastra/oracledb`, `@mastra/mysql`, `@mastra/spanner`: atomic, serialized `updateThreadResourceId` overrides. The thread and all of its messages are moved inside a single transaction, so overlapping transfers of the same thread cannot interleave and leave split ownership. Postgres, MySQL, SQL Server and Oracle take a row lock (`SELECT ... FOR UPDATE` / `UPDLOCK, HOLDLOCK`); libSQL and Spanner serialize their write transactions; Aurora DSQL relies on its optimistic concurrency control with automatic retry. Adapters without a transaction primitive fall back to the base best-effort implementation, which fails closed by reverting on error.
+
+  ```typescript
+  // Server-side, from a privileged (non-resource-scoped) context:
+  const thread = await memory.updateThreadResourceId({
+    threadId: 'thread-123',
+    resourceId: 'new-resource-456',
+  });
+
+  // Client-side:
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const thread = client.getMemoryThread('thread-123', 'agent-id');
+  await thread.transfer({ resourceId: 'new-resource-456' });
+  ```
+
+### Patch Changes
+
+- Fixed browser providers signalling a remote browser's PID on the host machine. When a provider connected to an existing browser over `cdpUrl` (or a Firecrawl/Browserbase cloud session), it captured the remote browser's PID and, on disconnect, ran `process.kill(-pid, 'SIGKILL')` locally. That PID belongs to another host or container, so the signal hit an unrelated local process group — and when the remote Chromium was its container's PID 1, `kill(-1)` broadcast SIGKILL to every process the Mastra user owned. ([#23599](https://github.com/mastra-ai/mastra/pull/23599))
+
+  Providers now skip PID capture whenever the browser was reached over CDP, so there is nothing to signal for browsers we do not own. As defense in depth, `killProcessGroup` in `@mastra/core` now refuses any PID that cannot name a killable local process group (non-integer, negative, `0`, or `1`). Locally launched browsers are unaffected and still have their process group cleaned up.
+
+- Improved core primitive declarations with concise usage examples and directions to bundled documentation. ([#23489](https://github.com/mastra-ai/mastra/pull/23489))
+
+- Fixed workflow retry counts leaking across concurrent runs and foreach items. ([#23593](https://github.com/mastra-ai/mastra/pull/23593))
+
+- Durable agents attached to a chat channel now render their final answer after a tool call. Previously the first tool step ended channel rendering, so the tool cards posted but the answer that followed was silently dropped — the run still reported success and saved the message to the thread. Any output processor reading `stepResult.isContinued` on `step-finish` chunks now receives it on durable runs too, matching regular agent runs, including when a tool error makes the loop continue past a model `stop`. Fixes #23341. ([#23610](https://github.com/mastra-ai/mastra/pull/23610))
+
+- Scorer judge configuration now accepts an optional `modelSettings` field (temperature, topP, topK, maxOutputTokens, maxRetries, frequencyPenalty, presencePenalty, timeout, etc.), forwarded to the internal judge agent run. It can be set at the scorer level and overridden per step, removing the need for an input-processor workaround. Closes #23458. ([#23637](https://github.com/mastra-ai/mastra/pull/23637))
+
+  ```ts
+  const scorer = createScorer({
+    id: 'answer-relevancy',
+    description: 'Scores answer relevancy',
+    judge: {
+      model: openai('gpt-4o'),
+      instructions: 'Return a relevancy score.',
+      // New: configure the judge model call directly
+      modelSettings: { temperature: 0, maxRetries: 3 },
+    },
+  })
+    .analyze({
+      description: 'analyze',
+      outputSchema: z.object({ value: z.number() }),
+      createPrompt: () => 'analyze this',
+      // Optional per-step override (replaces the scorer-level value)
+      judge: { modelSettings: { temperature: 0.7 } },
+    })
+    .generateScore(({ results }) => results.analyzeStepResult.value);
+  ```
+
+- Add an opt-in `injectCatalog` option to `ToolSearchProcessor`. When enabled, the available-tool catalog (each tool's name and a short description) is injected into the system prompt so the agent can skip the `search_tools` turn and call `load_tool` directly, collapsing the default `search -> load -> use` (3 turns) into `load -> use` (2 turns). `search_tools` stays available as a keyword fallback, injected entries respect the `filter` hook, and the option defaults to `false` so existing behavior is unchanged. Best suited to small/medium tool sets where listing the catalog inline is cheaper than a discovery round-trip. Closes #16463. ([#23578](https://github.com/mastra-ai/mastra/pull/23578))
+
+- Fixed live agent scores being dropped when tracing is enabled. Durable agents now save scorer results, and scores link to the exported agent span instead of a hidden workflow step span. (#23465) ([#23600](https://github.com/mastra-ai/mastra/pull/23600))
+
 ## 1.67.0-alpha.1
 
 ### Minor Changes
