@@ -34,7 +34,7 @@ export function MainHeaderRoot({
       {children}
     </header>
   ) : (
-    <header className={cn('grid gap-2 py-8 ', className)}>
+    <header className={cn('grid gap-2 py-5', className)}>
       <h1
         className={cn(
           'flex items-center gap-2 text-header-md font-normal text-neutral6',
@@ -54,7 +54,7 @@ export function MainHeaderRoot({
       </h1>
       {description && (
         <p
-          className={cn('m-0 text-ui-md text-neutral4', {
+          className={cn('m-0 text-ui-sm text-neutral4', {
             'bg-surface4 w-[40rem] max-w-[80%] rounded-md animate-pulse': descriptionIsLoading,
           })}
         >

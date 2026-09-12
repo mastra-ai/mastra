@@ -66,7 +66,7 @@ export const SkillWorkspaceLayout = ({
           <div
             role="tablist"
             aria-label="Workspace view"
-            className="border-border1 bg-surface3 relative mx-auto flex h-9 w-full max-w-sm items-center rounded-full border p-0.5"
+            className="border-border1 bg-surface3 h-form-lg relative mx-auto flex w-full max-w-sm items-center rounded-full border p-0.5"
           >
             <span
               aria-hidden="true"

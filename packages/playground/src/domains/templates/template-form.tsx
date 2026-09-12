@@ -103,7 +103,7 @@ export function TemplateForm({
                 And
               </div>
 
-              <h3 className="text-neutral4 text-ui-lg">Set AI Model for Template Installation</h3>
+              <h3 className="text-neutral4 text-ui-md">Set AI Model for Template Installation</h3>
               <p className="text-neutral3 text-ui-md mt-2 mb-8">
                 This model will be used by the workflow to process and install the template
               </p>

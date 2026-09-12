@@ -56,7 +56,7 @@ export const FilterableList = ({
       data-testid={`${testIdPrefix}-filter`}
     >
       <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${testIdPrefix}-filter-search`}>
-        <InputGroup variant="outline" size="lg">
+        <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>

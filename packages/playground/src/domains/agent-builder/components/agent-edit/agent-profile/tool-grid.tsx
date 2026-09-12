@@ -44,7 +44,7 @@ export const ToolGrid = ({
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
       <div className="flex shrink-0 items-center justify-between gap-4">
         <div data-testid="tools-card-picker-search" className="bg-surface3 max-w-[30ch] flex-1 rounded-full">
-          <InputGroup variant="outline" size="lg">
+          <InputGroup variant="outline" size="default">
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>

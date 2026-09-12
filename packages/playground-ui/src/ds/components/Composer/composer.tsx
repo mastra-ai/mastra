@@ -88,7 +88,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'min-h-17 field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'field-sizing-content min-h-14 w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-ui-md leading-ui-md text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

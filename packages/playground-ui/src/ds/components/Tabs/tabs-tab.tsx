@@ -63,7 +63,7 @@ export const Tab = ({
       data-slot="tab"
       data-closable={onClose ? '' : undefined}
       className={cn(
-        'text-ui-md font-normal text-neutral3',
+        'text-ui-smd font-normal text-neutral3',
         attention && 'relative',
         'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
         transitions.colors,

@@ -213,7 +213,7 @@ export const ToolkitFilterPane = ({
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
       <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroup variant="outline" size="lg">
+        <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
           </InputGroupAddon>

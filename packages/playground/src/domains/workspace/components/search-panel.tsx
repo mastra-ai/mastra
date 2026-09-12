@@ -87,7 +87,7 @@ export function SearchWorkspacePanel({
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
               placeholder="Search workspace files..."
               variant="outline"
-              className="h-10 pl-9"
+              className="pl-9"
             />
           </div>
 
@@ -100,13 +100,13 @@ export function SearchWorkspacePanel({
               max={50}
               value={topK}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="bg-surface2 border-border1 h-10 w-14 text-center"
+              className="bg-surface2 border-border1 w-14 text-center"
               title="Number of results"
             />
           </div>
 
           {/* Search Button */}
-          <Button type="submit" disabled={isSearching || !query.trim()} size="lg" className="h-10 px-4">
+          <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>

@@ -243,7 +243,7 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(({ cl
     <DialogPrimitive.Title
       ref={ref}
       className={cn(
-        'text-ui-md font-medium',
+        'text-header-xs font-medium',
         variant === 'new' && 'pr-8 leading-ui-md [overflow-wrap:anywhere] text-neutral6',
         className,
       )}

@@ -53,7 +53,7 @@ export function ReferenceViewerDialog({
               <FileText className="text-neutral4 h-4 w-4" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-neutral6 text-ui-lg font-medium">
+              <h2 id="reference-viewer-title" className="text-neutral6 text-ui-md font-medium">
                 {referencePath}
               </h2>
               <p className="text-neutral3 text-ui-sm">from {skillName}</p>

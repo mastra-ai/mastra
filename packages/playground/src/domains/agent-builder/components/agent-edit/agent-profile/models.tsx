@@ -137,7 +137,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
           <div data-testid="model-card-picker-search" className="bg-surface3 max-w-[30ch] shrink-0 rounded-full">
-            <InputGroup variant="outline" size="lg">
+            <InputGroup variant="outline" size="default">
               <InputGroupAddon align="inline-start">
                 <SearchIcon />
               </InputGroupAddon>

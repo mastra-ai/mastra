@@ -18,12 +18,13 @@ export const controlHeight: Record<ControlSize, string> = {
 };
 
 // Height + matching text size — the common pairing for text-bearing controls.
+// Heights: xs 20px / sm 24px / md,default 28px / lg 32px; text 10/12/13/13/14px.
 export const controlSizeClasses: Record<ControlSize, string> = {
   xs: 'h-form-xs text-ui-xs',
   sm: 'h-form-sm text-ui-sm',
-  md: 'h-form-md text-ui-md',
-  default: 'h-form-default text-ui-md',
-  lg: 'h-form-lg text-ui-lg',
+  md: 'h-form-md text-ui-smd',
+  default: 'h-form-default text-ui-smd',
+  lg: 'h-form-lg text-ui-md',
 };
 
 export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
