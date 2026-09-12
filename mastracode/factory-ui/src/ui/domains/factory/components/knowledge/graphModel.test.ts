@@ -6,10 +6,12 @@ import {
   deriveRecordElements,
   egoGraph,
   filterGraph,
+  graphTraversalEdges,
   RECORD_DOT_SIZE,
   RECORD_JUNCTION_SIZE,
   RECORD_PIN_SIZE,
   recordPairEdges,
+  renderedGraphEdges,
   NODE_SIZE_DOT,
   NODE_SIZE_MAX,
   NODE_SIZE_MIN,
@@ -215,6 +217,25 @@ describe('egoGraph (Amendment A5)', () => {
     const edges = recordPairEdges(records);
     const result = egoGraph(nodes, edges, 'a', records);
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+});
+
+describe('structural lens edge composition', () => {
+  it('keeps containment edges when records replace payload wikilinks', () => {
+    const contains: KnowledgeGraphEdge = {
+      id: 'contains:scope:a',
+      source: 'scope',
+      target: 'a',
+      type: 'contains',
+    };
+    const records = [{ id: 'm1', nodeIds: ['a', 'b'], pinned: false, text: 'record m1' }];
+    const traversal = graphTraversalEdges([contains, edge('a', 'b')], records);
+    expect(traversal.map(edge => edge.type)).toEqual(['contains', 'wikilink']);
+
+    const nodeFlow = toFlowGraph([node('scope'), node('a'), node('b')], traversal);
+    const recordFlow = toFlowGraph([node('a'), node('b')], recordPairEdges(records));
+    const rendered = renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true);
+    expect(rendered.map(edge => edge.data?.linkType)).toEqual(['contains', 'wikilink']);
   });
 });
 

@@ -71,15 +71,15 @@ export function useKnowledgeGraph(
 
 export function useKnowledgeActivity(
   factoryProjectId: string | undefined,
-  scopeLevel: KnowledgeRung | undefined,
+  selection: KnowledgeSelection | undefined,
   threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeActivity(factoryProjectId, scopeLevel, threadId),
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, selectionKey(selection), threadId),
     queryFn:
-      factoryProjectId && scopeLevel
-        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, scopeLevel, threadId, signal)
+      factoryProjectId && selection
+        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, signal)
         : skipToken,
     refetchInterval: 5_000,
   });
