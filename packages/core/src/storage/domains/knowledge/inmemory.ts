@@ -216,10 +216,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       else parentsByScopeId.set(scopeId, [parentId]);
     }
     const summaries: KnowledgeScopeNodeSummary[] = [];
-    for (const scope of this.#structureScopes.values()) {
+    for (const [address, scope] of this.#structureScopes) {
       if (scope.deletedAt) continue;
       summaries.push({
         id: scope.id,
+        address,
         name: scope.name,
         ...(scope.kind ? { kind: scope.kind } : {}),
         ...(scope.description ? { description: scope.description } : {}),
