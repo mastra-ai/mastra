@@ -3,7 +3,8 @@ import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-re
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChatRunningContext, useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { AssistantTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/data-part-renderer';
 import { messageTextKind } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text-kind';
@@ -20,7 +21,7 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
-import { badgeStatus } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
+import { badgeStatus, isSettledState } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@mastra/playground-ui/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@mastra/playground-ui/domains/chat/tools/tool-groups';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
@@ -235,7 +236,8 @@ export const MessageRow = memo(function MessageRow({
   const metadata = getMessageMetadata(message);
   const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
   const dataParts = useMemo(() => getDataParts(message), [message]);
-  const { isRunning } = useChatRunning();
+  const running = useChatRunning();
+  const isRunning = running.isRunning && running.activeRunId !== undefined && metadata?.runId === running.activeRunId;
   const { data: mcpAppTools } = useMcpAppTools();
 
   // One clock for the whole message, so a tool row waits behind the sentence written before it.
@@ -264,17 +266,29 @@ export const MessageRow = memo(function MessageRow({
                   toolName: member.toolName,
                   args: member.input,
                   status: badgeStatus(member.state, isRunning),
+                  hasResult: isSettledState(member.state),
                 }))}
               >
-                {members.map(member => (
-                  <ToolCard
-                    key={member.toolCallId}
-                    {...member}
-                    metadata={metadata}
-                    dataParts={dataParts}
-                    readOnly={readOnly}
-                  />
-                ))}
+                {members.map(member => {
+                  const incomplete = !isRunning && !isSettledState(member.state) && member.state !== 'output-error';
+                  return (
+                    <div
+                      key={member.toolCallId}
+                      role="group"
+                      aria-label={member.toolName}
+                      className="flex items-start gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <ToolCard {...member} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
+                      </div>
+                      {incomplete && (
+                        <Txt as="span" variant="ui-xs" className="mt-1 shrink-0">
+                          Incomplete
+                        </Txt>
+                      )}
+                    </div>
+                  );
+                })}
               </ToolCallGroup>
             </Arriving>
           </>
@@ -357,7 +371,9 @@ export const MessageRow = memo(function MessageRow({
   return (
     <div className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
       <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-        <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+        <ChatRunningContext.Provider value={{ ...running, isRunning }}>
+          <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+        </ChatRunningContext.Provider>
       </div>
       {(showActionBar || footerSlot) && (
         <div className="flex h-6 items-center gap-2 pt-4">

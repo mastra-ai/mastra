@@ -23,7 +23,10 @@ export function readToolPart(part: ToolPart): ToolPartFields {
       toolCallId: invocation.toolCallId,
       input: 'args' in invocation ? invocation.args : undefined,
       output: 'result' in invocation ? invocation.result : undefined,
-      state: invocation.state,
+      state:
+        invocation.state === 'result' && 'isError' in invocation && invocation.isError === true
+          ? 'output-error'
+          : invocation.state,
     };
   }
   return {

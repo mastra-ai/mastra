@@ -1237,6 +1237,32 @@ describe('useChat forwards clientTools', () => {
     expect(part.output).toEqual({ declined: true });
   });
 
+  it('associates active network messages with their execution until completion', async () => {
+    let complete = () => {};
+    const gate = new Promise<void>(resolve => {
+      complete = resolve;
+    });
+    networkMock.mockImplementationOnce(async () => ({
+      processDataStream: async ({ onChunk }) => {
+        await onChunk(toolExecutionStartChunk('lookupWeather', 'network-tool'));
+        await gate;
+      },
+    }));
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+    let sending: Promise<void> | undefined;
+    await act(async () => {
+      sending = result.current.sendMessage({ mode: 'network', message: 'Check weather' });
+    });
+    expect(result.current.activeRunId).toEqual(expect.any(String));
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.content.metadata?.runId).toBe(result.current.activeRunId);
+    await act(async () => {
+      complete();
+      await sending;
+    });
+    expect(result.current.activeRunId).toBeUndefined();
+  });
+
   it('seeds the user message exactly once when sendMessage uses network mode', async () => {
     nextNetworkChunks = [
       toolExecutionStartChunk('lookupWeather', 'tc-net-dedupe'),
