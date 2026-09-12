@@ -9,10 +9,10 @@ describe('Recent message settings', () => {
     [0, { maxTokens: 4000 }],
     [false, { maxTokens: 4000 }],
   ] as const)(
-    'when history is disabled by lastMessages=%j messageTokens=%j',
-    (lastMessages, messageTokens) => {
+    'when history is disabled by lastMessages=%j messageHistory=%j',
+    (lastMessages, messageHistory) => {
       it('does not show an enabled message window', () => {
-        expect(getRecentMessagesSettings(lastMessages, messageTokens)).toEqual({
+        expect(getRecentMessagesSettings(lastMessages, messageHistory)).toEqual({
           enabled: false,
           maxMessages: undefined,
           description: 'Recent message history is not included in context.',

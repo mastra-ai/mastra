@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, successResponseSchema } from './common';
-import { lastMessagesSchema, messageTokensSchema } from './message-history';
+import { lastMessagesSchema, messageHistorySchema } from './message-history';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -483,7 +483,7 @@ export const memoryConfigResponseSchema = z.object({
   config: z
     .object({
       lastMessages: lastMessagesSchema.optional(),
-      messageTokens: messageTokensSchema.optional(),
+      messageHistory: messageHistorySchema.optional(),
       semanticRecall: z.union([z.boolean(), z.unknown()]).optional(),
       workingMemory: z
         .object({

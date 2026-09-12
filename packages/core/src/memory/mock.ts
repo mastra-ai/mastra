@@ -96,7 +96,7 @@ export class MockMemory extends MastraMemory {
             } as WorkingMemory)
           : options?.workingMemory,
         lastMessages:
-          enableMessageHistory && options?.messageTokens === undefined
+          enableMessageHistory && options?.messageHistory === undefined
             ? (options?.lastMessages ?? 10)
             : options?.lastMessages,
       },

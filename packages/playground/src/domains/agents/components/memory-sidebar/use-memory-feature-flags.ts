@@ -17,7 +17,7 @@ export function useMemoryFeatureFlags(agentId: string): MemoryFeatureFlags {
   const config = memoryConfig?.config;
 
   return {
-    recentMessages: getRecentMessagesSettings(config?.lastMessages, config?.messageTokens),
+    recentMessages: getRecentMessagesSettings(config?.lastMessages, config?.messageHistory),
     semanticRecallOn: Boolean(config?.semanticRecall),
     workingMemoryOn: Boolean(config?.workingMemory?.enabled),
     observationalOn: Boolean(config?.observationalMemory?.enabled),

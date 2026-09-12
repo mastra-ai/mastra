@@ -4,9 +4,9 @@ type MemoryConfig = NonNullable<GetMemoryConfigResponse['config']>;
 
 export function getRecentMessagesSettings(
   lastMessages: MemoryConfig['lastMessages'],
-  messageTokens?: MemoryConfig['messageTokens'],
+  messageHistory?: MemoryConfig['messageHistory'],
 ) {
-  const maxTokens = messageTokens?.maxTokens;
+  const maxTokens = messageHistory?.maxTokens;
   const maxMessages = typeof lastMessages === 'number' ? lastMessages : undefined;
   const enabled = lastMessages !== false && maxMessages !== 0 && (maxMessages !== undefined || maxTokens !== undefined);
 

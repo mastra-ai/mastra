@@ -34,7 +34,7 @@ const args = (messageList: MessageList, requestContext?: RequestContext): Proces
 });
 
 describe('token-based memory history', () => {
-  it('resolves lastMessages and messageTokens into one history config', () => {
+  it('resolves lastMessages and messageHistory into one history config', () => {
     expect(normalizeMessageHistoryConfig(5)).toEqual({ enabled: true, maxMessages: 5 });
     expect(normalizeMessageHistoryConfig(false).enabled).toBe(false);
     expect(normalizeMessageHistoryConfig(undefined, { maxTokens: 100 })).toEqual({
@@ -56,7 +56,7 @@ describe('token-based memory history', () => {
       { maxTokens: 5, atMaxRemoveTokens: 6 },
       { maxTokens: 5, atMaxRemoveTokens: -1 },
     ]) {
-      expect(() => normalizeMessageHistoryConfig(undefined, tokens)).toThrow('messageTokens');
+      expect(() => normalizeMessageHistoryConfig(undefined, tokens)).toThrow('messageHistory');
     }
   });
 
@@ -69,10 +69,10 @@ describe('token-based memory history', () => {
     expect(normalizeMessageHistoryConfig(undefined)).toEqual({ enabled: false, maxMessages: undefined });
   });
 
-  it('drops the default count window when only messageTokens is configured', async () => {
-    const withTokens = new MockMemory({ options: { messageTokens: { maxTokens: 100 } } });
+  it('drops the default count window when only messageHistory is configured', async () => {
+    const withTokens = new MockMemory({ options: { messageHistory: { maxTokens: 100 } } });
     expect((withTokens as any).threadConfig.lastMessages).toBeUndefined();
-    const withBoth = new MockMemory({ options: { lastMessages: 4, messageTokens: { maxTokens: 100 } } });
+    const withBoth = new MockMemory({ options: { lastMessages: 4, messageHistory: { maxTokens: 100 } } });
     expect((withBoth as any).threadConfig.lastMessages).toBe(4);
   });
 
@@ -142,7 +142,7 @@ describe('token-based memory history', () => {
     await store.saveMessages({ messages: [message('old'), message('same-time'), message('newer', 1)] });
     const context = new RequestContext();
     context.set('MastraMemory', { thread, resourceId: 'resource' });
-    const memory = new MockMemory({ storage, options: { messageTokens: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
+    const memory = new MockMemory({ storage, options: { messageHistory: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
     const processors = await memory.getInputProcessors([], context);
     const history = processors.find(p => p.id === 'message-history')!;
     const limiter = processors.find(p => p.id === 'token-limiter')!;

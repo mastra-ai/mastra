@@ -564,7 +564,7 @@ type Shared_Type_22 = {
 type Shared_Type_23 = {
   readOnly?: boolean | undefined;
   lastMessages?: (number | false) | undefined;
-  messageTokens?:
+  messageHistory?:
     | {
         maxTokens: number;
         atMaxRemoveTokens?: number | undefined;
@@ -7402,7 +7402,7 @@ export type GetMemoryConfig_Response = {
   memoryType?: ('local' | 'gateway') | undefined;
   config: {
     lastMessages?: (number | false) | undefined;
-    messageTokens?:
+    messageHistory?:
       | {
           maxTokens: number;
           atMaxRemoveTokens?: number | undefined;

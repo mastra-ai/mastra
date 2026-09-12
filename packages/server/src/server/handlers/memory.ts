@@ -2052,7 +2052,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       // Single call to recall - just like the agent does
       // The Memory class handles scope (thread vs resource) internally
       const threadConfig = memory.getMergedThreadConfig(config || {});
-      const historyEnabled = threadConfig.lastMessages !== false && (threadConfig.lastMessages || threadConfig.messageTokens);
+      const historyEnabled = threadConfig.lastMessages !== false && (threadConfig.lastMessages || threadConfig.messageHistory);
       if (!historyEnabled && !threadConfig.semanticRecall) {
         return { results: [], count: 0, query: searchQuery };
       }

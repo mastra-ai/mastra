@@ -401,9 +401,9 @@ https://mastra.ai/en/docs/memory/overview`,
 
     // A token budget replaces the default count window; an explicit numeric `lastMessages` still applies on top.
     if (
-      config?.messageTokens !== undefined &&
+      config?.messageHistory !== undefined &&
       config.lastMessages === undefined &&
-      this.threadConfig.messageTokens === undefined &&
+      this.threadConfig.messageHistory === undefined &&
       this.threadConfig.lastMessages === memoryDefaultOptions.lastMessages
     ) {
       mergedConfig.lastMessages = undefined;
@@ -809,7 +809,7 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageTokens);
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
@@ -1016,7 +1016,7 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageTokens);
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({

@@ -697,7 +697,7 @@ export class Memory extends MastraMemory {
       if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
       // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-      const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageTokens);
+      const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
       const perPage = perPageArg !== undefined ? perPageArg : history.enabled ? (history.maxMessages ?? false) : 0;
 
       // lastMessages: false means "disable conversation history entirely".
@@ -1930,7 +1930,7 @@ ${workingMemory}`;
       }
     } else {
       // No OM: load recent messages
-      const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageTokens);
+      const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
       if (!lastMessages.enabled) {
         messages = [];
       } else {

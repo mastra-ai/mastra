@@ -951,7 +951,7 @@ type BaseMemoryConfig = {
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
    * ```
-   * @deprecated Counting messages is a poor proxy for context size. Prefer `messageTokens`
+   * @deprecated Counting messages is a poor proxy for context size. Prefer `messageHistory`
    * to bound history by a token budget. `lastMessages: false` still disables history.
    */
   lastMessages?: number | false;
@@ -964,11 +964,11 @@ type BaseMemoryConfig = {
    *
    * @example
    * ```typescript
-   * messageTokens: { maxTokens: 8000 } // frees 25% of the budget when exceeded
+   * messageHistory: { maxTokens: 8000 } // frees 25% of the budget when exceeded
    * messageTokens: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
    * ```
    */
-  messageTokens?: import('./message-history-config').MessageTokens;
+  messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1294,7 +1294,7 @@ export type SerializedMemoryConfig = {
     lastMessages?: number | false;
 
     /** Token budget for conversation history */
-    messageTokens?: import('./message-history-config').MessageTokens;
+    messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

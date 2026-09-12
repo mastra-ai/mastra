@@ -5,14 +5,14 @@ import type { StorageThreadType } from './types';
  * Token budget for conversation history. Only remembered messages are removed;
  * system instructions and the current turn's input/output are never trimmed.
  */
-export type MessageTokens = {
+export type MessageHistoryConfig = {
   /** Token budget for context (system prompt + history + current turn). */
   maxTokens: number;
   /** Tokens to free when the budget is exceeded. Defaults to 25% of maxTokens. */
   atMaxRemoveTokens?: number;
 };
 
-export type MessageHistoryConfig = {
+export type ResolvedMessageHistory = {
   enabled: boolean;
   /** Message-count cap. `undefined` means no count cap (token-only history). */
   maxMessages: number | undefined;
@@ -21,13 +21,13 @@ export type MessageHistoryConfig = {
 };
 
 /**
- * Resolves `lastMessages` and `messageTokens` into a single history config.
+ * Resolves `lastMessages` and `messageHistory` into a single history config.
  * A numeric `lastMessages` is a count cap on top of the token budget; `false` disables history entirely.
  */
 export function normalizeMessageHistoryConfig(
   lastMessages: number | false | undefined,
-  messageTokens?: MessageTokens,
-): MessageHistoryConfig {
+  messageHistory?: MessageHistoryConfig,
+): ResolvedMessageHistory {
   if (
     typeof lastMessages === 'number' &&
     (!Number.isFinite(lastMessages) || lastMessages < 0 || !Number.isInteger(lastMessages))
@@ -35,18 +35,18 @@ export function normalizeMessageHistoryConfig(
     throw new Error('lastMessages must be a finite non-negative integer');
   }
   const maxMessages = lastMessages === false ? 0 : lastMessages;
-  if (messageTokens === undefined) {
+  if (messageHistory === undefined) {
     return { enabled: maxMessages !== undefined && maxMessages !== 0, maxMessages };
   }
-  const { maxTokens, atMaxRemoveTokens } = messageTokens;
+  const { maxTokens, atMaxRemoveTokens } = messageHistory;
   if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens < 0) {
-    throw new Error('messageTokens.maxTokens must be a finite non-negative number');
+    throw new Error('messageHistory.maxTokens must be a finite non-negative number');
   }
   if (
     atMaxRemoveTokens !== undefined &&
     (!Number.isFinite(atMaxRemoveTokens) || atMaxRemoveTokens < 0 || atMaxRemoveTokens > maxTokens)
   ) {
-    throw new Error('messageTokens.atMaxRemoveTokens must be a finite non-negative number no greater than maxTokens');
+    throw new Error('messageHistory.atMaxRemoveTokens must be a finite non-negative number no greater than maxTokens');
   }
   return {
     enabled: maxMessages !== 0,
