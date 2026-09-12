@@ -3,7 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { UserTextPartRenderer } from '../messages/renderers/user-text-part-renderer';
 
 const meta = {
-  title: 'Chat/System Reminders',
+  title: 'AI/System Reminders',
   component: UserTextPartRenderer,
   args: {
     part: {
