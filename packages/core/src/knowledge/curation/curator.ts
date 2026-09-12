@@ -122,7 +122,10 @@ export class KnowledgeCurator {
         }),
       };
     }
-    if (sourceCapabilities.suggest && destinationCapabilities.suggest) {
+    if (
+      (sourceCapabilities.manageAccess || sourceCapabilities.suggest) &&
+      (destinationCapabilities.manageAccess || destinationCapabilities.suggest)
+    ) {
       return {
         mode: 'proposed',
         proposal: await this.knowledge.proposeNodePromotion({

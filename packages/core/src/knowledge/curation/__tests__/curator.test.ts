@@ -5,7 +5,7 @@ import { InMemoryStore } from '../../../storage';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from '../../../storage/domains/knowledge';
 import { KNOWLEDGE_CURATOR_INSTRUCTIONS } from '../curator';
 
-async function fixture(role: 'owner' | 'suggest' = 'owner') {
+async function fixture(role: 'owner' | 'suggest' | 'mixed' = 'owner') {
   const provider = new InMemoryStore({ id: `curator-${role}` });
   const knowledge = new Knowledge({
     id: 'curation',
@@ -21,7 +21,7 @@ async function fixture(role: 'owner' | 'suggest' = 'owner') {
         address: 'scope:uncurated',
         name: 'Uncurated',
         grants: [
-          role === 'owner'
+          role === 'owner' || role === 'mixed'
             ? { scopeRefAddress: `principal:${role}`, role: 'owner' }
             : { scopeRefAddress: `principal:${role}`, role: 'readonly', canSuggest: true },
           { scopeRefAddress: 'principal:reviewer', role: 'owner' },
@@ -50,13 +50,13 @@ async function fixture(role: 'owner' | 'suggest' = 'owner') {
     grants: [
       {
         scopeAddress: 'scope:uncurated',
-        role: role === 'owner' ? 'owner' : 'readonly',
+        role: role === 'owner' || role === 'mixed' ? 'owner' : 'readonly',
         canSuggest: role === 'suggest' ? true : undefined,
       },
       {
         scopeAddress: 'scope:curated',
         role: role === 'owner' ? 'owner' : 'readonly',
-        canSuggest: role === 'suggest' ? true : undefined,
+        canSuggest: role === 'suggest' || role === 'mixed' ? true : undefined,
       },
     ],
   });
@@ -199,6 +199,30 @@ describe('Knowledge curator', () => {
     ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
     const proposals = await value.knowledge.listProposals({ vouchedScopeIds: [value.ids['principal:suggest']!] });
     expect(proposals.proposals).toEqual([expect.objectContaining({ operation: 'update-node', status: 'pending' })]);
+  });
+
+  it('proposes promotion with direct source authority and suggestion-only destination authority', async () => {
+    const value = await fixture('mixed');
+    const { node, record } = await provisionalNode(value, 'Mixed authority promotion');
+
+    const promotion = await value.curator.promote({
+      nodeId: node.id,
+      version: node.version,
+      destinationScopeId: value.ids['scope:curated']!,
+    });
+
+    expect(promotion).toMatchObject({
+      mode: 'proposed',
+      proposal: { operation: 'promote-node', status: 'pending', targetId: node.id },
+    });
+    if (promotion.mode !== 'proposed') throw new Error('Expected promotion proposal');
+    await value.knowledge.approveProposal({
+      id: promotion.proposal.id,
+      reviewerContextScopeId: value.ids['principal:reviewer']!,
+      vouchedScopeIds: [value.ids['principal:reviewer']!],
+    });
+    expect(await value.storage.getNodeScopeIds(node.id)).toEqual([value.ids['scope:curated']]);
+    expect(await value.storage.getRecordScopeIds(record.id)).toEqual([value.ids['scope:curated']]);
   });
 
   it('rolls back promotion before record restamps when node CAS is stale', async () => {
