@@ -443,14 +443,19 @@ describe('KnowledgePage', () => {
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
   });
 
-  it('merged identity entries open the structural lens of the scope node they name', async () => {
+  it('merged identity entries open the structural lens and read content at its own rung', async () => {
     stubKnowledgeRoute();
     const subgraphParams: string[] = [];
+    const nodeScopeLevels: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
         const scopeNodeId = new URL(request.url).searchParams.get('scopeNodeId');
         if (scopeNodeId) subgraphParams.push(scopeNodeId);
         return HttpResponse.json(graphFixture);
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, ({ request }) => {
+        nodeScopeLevels.push(new URL(request.url).searchParams.get('scopeLevel') ?? 'none');
+        return HttpResponse.json(nodeFixture);
       }),
     );
     const user = userEvent.setup();
@@ -469,11 +474,90 @@ describe('KnowledgePage', () => {
     expect(merged).toHaveAttribute('aria-pressed', 'true');
     expect(merged).toHaveClass('bg-surface4');
 
+    // A project-scoped content node reached through the merged org lens must
+    // load detail at the node's own rung, not the lens marker's org rung.
+    fireEvent.click(await screen.findByText('Payments Service'));
+    await waitFor(() => expect(nodeScopeLevels).toContain('resource'));
+    expect(nodeScopeLevels).not.toContain('org');
+
     // The merged project entry behaves the same way.
     const project = within(scopes).getByRole('button', { name: /fp-1 · your project/ });
     await user.click(project);
     await waitFor(() => expect(subgraphParams).toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
     expect(project).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('opens details and recent activity for the active structural lens root instead of re-drilling it', async () => {
+    const scopeRootId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const activityScopeIds: Array<string | null> = [];
+    stubKnowledgeRoute({
+      ...graphFixture,
+      nodes: [
+        {
+          id: scopeRootId,
+          name: FACTORY_ID,
+          kind: 'scope',
+          scope: null,
+          rung: null,
+          isScope: true,
+          pinned: false,
+          recordCount: 0,
+        },
+        graphFixture.nodes[0]!,
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          name: 'features',
+          kind: 'feature',
+          scope: null,
+          rung: null,
+          isScope: true,
+          pinned: false,
+          recordCount: 0,
+        },
+      ],
+      edges: [
+        { id: 'contains:content', source: scopeRootId, target: 'ent-1', type: 'contains' },
+        {
+          id: 'contains:child',
+          source: scopeRootId,
+          target: '22222222-2222-4222-8222-222222222222',
+          type: 'contains',
+        },
+      ],
+      records: [],
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
+        activityScopeIds.push(new URL(request.url).searchParams.get('scopeNodeId'));
+        return HttpResponse.json({
+          events: [
+            {
+              id: 'activity-scope-1',
+              action: 'knowledge-appended',
+              recordType: 'record',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              createdAt: '2026-08-13T03:00:00.000Z',
+            },
+          ],
+        });
+      }),
+    );
+    const { router } = renderRoute();
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    fireEvent.click(await within(scopes).findByRole('button', { name: /fp-1 · your project/ }));
+    const root = (await screen.findAllByTestId('knowledge-node')).find(node => node.textContent?.includes(FACTORY_ID));
+    if (!root) throw new Error('Expected the selected structural scope root');
+    fireEvent.click(root);
+
+    const flyout = await screen.findByTestId('knowledge-scope-flyout');
+    expect(flyout).toHaveTextContent(`resource:${FACTORY_ID}`);
+    expect(flyout).toHaveTextContent('Content nodes1');
+    expect(flyout).toHaveTextContent('Child scopes1');
+    expect(await within(flyout).findByText('knowledge-appended')).toBeInTheDocument();
+    expect(activityScopeIds).toContain(scopeRootId);
+    expect(router.state.location.search).toContain(`node=${scopeRootId}`);
+    expect(router.state.location.search).toContain(`scope=${scopeRootId}`);
   });
 
   it('falls back to plain identity rung entries when the adapter exposes no scope nodes', async () => {
@@ -575,20 +659,67 @@ describe('KnowledgePage', () => {
     expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
   });
 
-  it('shows the truncation banner when the payload window was capped', async () => {
-    stubKnowledgeRoute({
-      ...graphFixture,
-      truncated: true,
-      outOfWindow: [{ id: 'ent-x', name: 'Elsewhere' }],
-      unresolvedCapped: { count: 3, names: ['Ghost'] },
-    });
-    renderRoute();
+  it('shows bounded-window status and deep-links rendered out-of-window wikilinks', async () => {
+    stubKnowledgeRoute(
+      {
+        ...graphFixture,
+        truncated: true,
+        outOfWindow: [
+          {
+            id: 'ent-x',
+            name: 'Elsewhere',
+            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            rung: 'resource',
+          },
+        ],
+        unresolvedCapped: { count: 3, names: ['Ghost'] },
+      },
+      {
+        ...nodeFixture,
+        records: [{ ...nodeFixture.records[0]!, text: 'See [[Elsewhere]] for the related decision.' }],
+      },
+    );
+    const detailRequests: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, ({ request }) => {
+        detailRequests.push(request.url);
+        const nodeId = new URL(request.url).pathname.split('/').at(-1) ?? 'missing';
+        return HttpResponse.json({
+          ...nodeFixture,
+          node: { ...nodeFixture.node, id: nodeId, name: nodeId === 'ent-x' ? 'Elsewhere' : nodeFixture.node.name },
+          records: [{ ...nodeFixture.records[0]!, text: 'See [[Elsewhere]] for the related decision.' }],
+        });
+      }),
+    );
+    const { router } = renderRoute();
 
     const banner = await screen.findByTestId('knowledge-truncation-banner');
     expect(banner).toHaveTextContent(/Partial view/);
     expect(banner).toHaveTextContent(/newest 2 nodes/);
     expect(banner).toHaveTextContent(/1 linked nodes outside the window/);
     expect(banner).toHaveTextContent(/3 links unresolved/);
+
+    fireEvent.click(screen.getByText('Payments Service'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Elsewhere' }));
+    await waitFor(() => {
+      expect(router.state.location.search).toContain('scope=resource');
+      expect(router.state.location.search).toContain('node=ent-x');
+      expect(router.state.location.search).toContain('nodeRung=resource');
+      expect(detailRequests.some(url => url.includes('/nodes/ent-x?') && url.includes('scopeLevel=resource'))).toBe(
+        true,
+      );
+    });
+  });
+
+  it('restores a node flyout from its deep link', async () => {
+    stubKnowledgeRoute();
+    renderRoute(
+      `/factories/${FACTORY_ID}/knowledge?scope=resource&node=ent-1&nodeName=Payments+Service&nodeRung=resource`,
+    );
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('Payments Service')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Knowledge scope' })).toHaveTextContent('Payments Service');
   });
 
   it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
