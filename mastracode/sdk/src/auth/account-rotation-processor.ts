@@ -22,7 +22,7 @@
 import { TripWire } from '@mastra/core/agent';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
-import { listResolvableModePacks } from '../agents/model.js';
+import { listResolvableModePacks, resolveModel } from '../agents/model.js';
 import { resolveModePackFallbackChain } from '../onboarding/packs.js';
 import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
@@ -513,7 +513,19 @@ export class AccountRotationProcessor implements Processor {
     for (const packId of chain) {
       const pack = packs.find(candidate => candidate.id === packId);
       const packModels = pack ? resolveModePackModels(settings, pack) : {};
-      if (resolvedPacks.length > 0 && !packModels[modeId]) break;
+      if (resolvedPacks.length > 0) {
+        const entryModelId = packModels[modeId];
+        if (!entryModelId) break;
+        // Mirror getDynamicModel's truncation: an entry whose model cannot
+        // resolve (e.g. unconnected provider in deployed fail-closed mode)
+        // ends the cascade here so a later hop is never announced for a pack
+        // core's fallback array cannot reach.
+        try {
+          resolveModel(entryModelId, { requestContext: args.requestContext });
+        } catch {
+          break;
+        }
+      }
       resolvedPacks.push({ packId, label: pack?.name ?? packId });
       models[packId] = packModels;
     }
@@ -547,10 +559,10 @@ export class AccountRotationProcessor implements Processor {
   /**
    * Emit the pack-fallback part when a configured chain has a next pack and
    * queue the thread stickiness trigger. Core's fallback array does the hop
-   * itself on `retry: false`; this only announces it. Silent when the landed
-   * pack cannot serve the session mode (truncated cascades make that
-   * unreachable in practice; the guard stays so a stale cache can never
-   * announce a hop core cannot make).
+   * itself on `retry: false`; this only announces it. The cascade is
+   * truncated exactly like getDynamicModel's chain (missing mode model or
+   * unresolvable model), so an announced hop is always one core can make;
+   * the toModelId guard stays as defense against a stale cache.
    */
   private async emitPackFallbackPart(
     args: ProcessAPIErrorArgs,

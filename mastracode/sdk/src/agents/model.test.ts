@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { MastraGateway } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
 import { getDynamicModel, resolveModel } from './model.js';
 
@@ -22,6 +23,7 @@ afterEach(() => {
   else process.env.KIMI_API_KEY = previousEnv.kimiApiKey;
   if (previousEnv.mastraGatewayApiKey === undefined) delete process.env.MASTRA_GATEWAY_API_KEY;
   else process.env.MASTRA_GATEWAY_API_KEY = previousEnv.mastraGatewayApiKey;
+  setCredentialStoreProvider(undefined);
   vi.restoreAllMocks();
 });
 
@@ -105,6 +107,27 @@ describe('getDynamicModel fallback chain', () => {
 
     // The fallback pack cannot serve mode 'build', so the chain collapses to
     // the primary alone — a bare model, not a one-entry fallback array.
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
+  it('truncates the chain at a fallback entry whose model fails to resolve (deployed fail-closed)', async () => {
+    seedSettings({ anthropic: 'openai' });
+    // Deployed-style tenant store: anthropic connected, openai not, and no
+    // environment fallback — openai model resolution throws.
+    setCredentialStoreProvider(() => ({
+      allowEnvironmentFallback: false,
+      reload: () => {},
+      get: provider => (provider === 'anthropic' ? { type: 'api_key' as const, key: 'sk-ant-tenant' } : undefined),
+      getStoredApiKey: provider => (provider === 'anthropic' ? 'sk-ant-tenant' : undefined),
+      getApiKey: async provider => (provider === 'anthropic' ? 'sk-ant-tenant' : undefined),
+    }));
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user_1', id: 'prov_1', organizationId: 'org_1' });
+    requestContext.set('controller', { session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' } });
+
+    const model = getDynamicModel({ requestContext });
+
     expect(Array.isArray(model)).toBe(false);
     expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
   });
