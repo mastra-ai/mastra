@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, type KnowledgeProposal } from '@mastra/core/knowledge';
 import { LibSQLStore } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 
@@ -372,7 +372,7 @@ const sealedProposal = await knowledge.proposeNodeUpdate({
 // indistinguishable from absent on list and single-id surfaces.
 const readerSealedList = await knowledge.listProposals({ vouchedScopeIds: [reader], limit: 10 });
 invariant(
-  readerSealedList.proposals.every(proposal => proposal.id !== sealedProposal.id),
+  readerSealedList.proposals.every((proposal: KnowledgeProposal) => proposal.id !== sealedProposal.id),
   'Target-only reader saw a proposal whose proposer context is sealed',
 );
 invariant(
@@ -383,7 +383,7 @@ invariant(
 // holds direct edit authority on the target — the proposal stays visible.
 const ownerSealedList = await knowledge.listProposals({ vouchedScopeIds: [owner], limit: 50 });
 invariant(
-  ownerSealedList.proposals.some(proposal => proposal.id === sealedProposal.id),
+  ownerSealedList.proposals.some((proposal: KnowledgeProposal) => proposal.id === sealedProposal.id),
   'Direct approver lost a proposal because the proposer context is sealed',
 );
 invariant(
