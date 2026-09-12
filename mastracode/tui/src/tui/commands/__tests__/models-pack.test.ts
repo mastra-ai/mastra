@@ -3,11 +3,14 @@ import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboardin
 import { describe, expect, it } from 'vitest';
 import {
   deserializePack,
+  fallbackPackCandidates,
+  formatPackFallbackChain,
   getOverriddenPackModes,
   handleModelsPackCommand,
   removeCustomPackFromSettings,
   resetBuiltinPackOverrides,
   serializePack,
+  setPackFallback,
   upsertCustomPackInSettings,
 } from '../models-pack.js';
 
@@ -254,6 +257,75 @@ describe('handleModelsPackCommand', () => {
 
     expect(events).toEqual(['create', 'list-models']);
     expect(ctx.state.pendingNewThread).toBe(false);
+  });
+});
+
+describe('setPackFallback', () => {
+  it('sets and clears a fallback on a builtin pack', () => {
+    const settings = createSettings();
+
+    setPackFallback(settings, 'anthropic', 'openai');
+    expect(settings.models.packFallbacks).toEqual({ anthropic: 'openai' });
+
+    setPackFallback(settings, 'anthropic', null);
+    expect(settings.models.packFallbacks).toEqual({});
+  });
+
+  it('sets a fallback on a custom pack and overwrites an existing one', () => {
+    const settings = createSettings();
+
+    setPackFallback(settings, 'custom:Alpha', 'anthropic');
+    setPackFallback(settings, 'custom:Alpha', 'github-copilot');
+    expect(settings.models.packFallbacks).toEqual({ 'custom:Alpha': 'github-copilot' });
+  });
+
+  it('tolerates a settings object without a packFallbacks map', () => {
+    const settings = createSettings();
+    delete (settings.models as { packFallbacks?: Record<string, string> }).packFallbacks;
+
+    setPackFallback(settings, 'anthropic', 'openai');
+    expect(settings.models.packFallbacks).toEqual({ anthropic: 'openai' });
+  });
+});
+
+describe('fallbackPackCandidates', () => {
+  const packs: ModePack[] = [
+    { id: 'anthropic', name: 'Anthropic', description: '', models: {} },
+    { id: 'openai', name: 'OpenAI', description: '', models: {} },
+    alphaPack,
+    { id: 'custom', name: 'New Custom', description: '', models: {} },
+  ];
+
+  it('excludes the pack itself and the New Custom pseudo-row', () => {
+    expect(fallbackPackCandidates(packs, 'anthropic').map(p => p.id)).toEqual(['openai', 'custom:Alpha']);
+    expect(fallbackPackCandidates(packs, 'custom:Alpha').map(p => p.id)).toEqual(['anthropic', 'openai']);
+  });
+});
+
+describe('formatPackFallbackChain', () => {
+  const packs: ModePack[] = [
+    { id: 'anthropic', name: 'Anthropic', description: '', models: {} },
+    { id: 'openai', name: 'OpenAI', description: '', models: {} },
+    { id: 'github-copilot', name: 'GitHub Copilot', description: '', models: {} },
+  ];
+
+  it('renders the implied chain and null when no fallback is set', () => {
+    const settings = createSettings();
+    expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBeNull();
+
+    setPackFallback(settings, 'anthropic', 'openai');
+    setPackFallback(settings, 'openai', 'github-copilot');
+    expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBe('OpenAI → GitHub Copilot');
+  });
+
+  it('caps cycles at one revisit, matching the runtime cascade', () => {
+    const settings = createSettings();
+    setPackFallback(settings, 'anthropic', 'openai');
+    setPackFallback(settings, 'openai', 'anthropic');
+
+    // Each pack appears at most twice (initial + one revisit), so the A⇄B
+    // cycle renders its full capped chain and then stops.
+    expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBe('OpenAI → Anthropic → OpenAI');
   });
 });
 
