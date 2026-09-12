@@ -101,7 +101,7 @@ export default function InboxPage() {
 
   return (
     <div className="relative h-full overflow-hidden">
-      <PageLayout height="full">
+      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
         <PageLayout.MainArea className="min-h-0 overflow-hidden">
           {isInboxEmpty ? (
             <InboxEmptyState />
