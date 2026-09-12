@@ -17,7 +17,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'A complete conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Send a message or attach a local file; a deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text just as in Studio and Factory. Reset restores the selected scenario. This is the shared UI reference; transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
+          'An interactive conversation assembled from playground-ui components: ChatShell, message renderers, grouped tools, plan, edit, question, approvals, tasks, timeline, attachments, and Composer. Type / for fixture commands, send a message, or attach a local file. ComposerSuggestions and useComposerCommands provide the shared command interaction; command selection submits a fixture message. A deterministic fixture produces incoming chunks, and useRevealedParts paces the displayed text. Reset restores the selected scenario. Transport, persistence, model selection, and application-specific message wrappers remain owned by Studio and Factory.',
       },
     },
   },
@@ -35,6 +35,29 @@ export const AwaitingApproval: Story = { args: { scenario: 'approval' } };
 export const Declined: Story = { args: { scenario: 'declined' } };
 export const Error: Story = { args: { scenario: 'error' } };
 export const LongConversation: Story = { args: { scenario: 'long' } };
+
+export const SlashCommands: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(input, '/');
+    await expect(await canvas.findByRole('listbox', { name: 'Slash commands' })).toBeVisible();
+    await userEvent.type(input, 'rev');
+    await userEvent.keyboard('{Tab}');
+    await expect(input).toHaveValue('/review ');
+    await expect(await canvas.findByRole('listbox', { name: '/review options' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect(input).toHaveValue('/review');
+    await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+    await expect(input).toHaveValue('');
+    await expect(input).toHaveFocus();
+    await expect(canvas.getByRole('region', { name: 'Turn 1' })).toHaveTextContent('/review attachments');
+    await expect(canvas.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Stop response' }));
+    await expect(input).toHaveFocus();
+  },
+};
 
 export const ReviewAndApprove: Story = {
   args: { scenario: 'question' },
