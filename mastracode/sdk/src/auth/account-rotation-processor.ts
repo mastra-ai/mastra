@@ -410,12 +410,9 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
-    const providerId = providerFromError(error) ?? providerFromSession(args);
-    if (!providerId) {
-      await this.gateChainHop(args, error);
-      return { retry: false };
-    }
-
+    // Classify before attributing: an error from a provider outside the OAuth
+    // registry (API-key/router providers are valid pack members) still hops on
+    // rotate/hop classes — there is just no account cursor to advance.
     const classification = classifyRotationError(error);
     // Q14: 400/unknown errors never rotate and never hop packs. With a chain
     // active, core's fallback array would still advance on a bare
@@ -423,6 +420,12 @@ export class AccountRotationProcessor implements Processor {
     // gate converts that into a surfaced error instead of a silent hop.
     if (classification.kind === 'never') {
       await this.gateChainHop(args, error);
+      return { retry: false };
+    }
+
+    const providerId = providerFromError(error) ?? providerFromSession(args);
+    if (!providerId) {
+      await this.emitPackFallbackPart(args, classification.kind === 'hop' ? 'persistent-outage' : 'pool-exhausted');
       return { retry: false };
     }
 
@@ -460,7 +463,10 @@ export class AccountRotationProcessor implements Processor {
 
     const tried = getTriedInstances(state);
     if (active) tried.add(active.id);
-    if (tried.size >= accounts.length) {
+    // The tried-set is request-global and shared across providers after a
+    // pack hop, so exhaustion must count only this provider's ids.
+    const triedForProvider = accounts.filter(account => tried.has(account.id)).length;
+    if (triedForProvider >= accounts.length) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
 
@@ -542,7 +548,7 @@ export class AccountRotationProcessor implements Processor {
         // ends the cascade here so a later hop is never announced for a pack
         // core's fallback array cannot reach.
         try {
-          resolveModel(entryModelId, { requestContext: args.requestContext });
+          resolveModel(entryModelId, { remapForCodexOAuth: true, requestContext: args.requestContext });
         } catch {
           break;
         }
@@ -597,7 +603,6 @@ export class AccountRotationProcessor implements Processor {
     if (!from || !to) return;
     const toModelId = cascade.models[to.packId]?.[cascade.modeId];
     if (!toModelId) return;
-    cascade.position++;
 
     const controller = args.requestContext?.get('controller') as
       | {
@@ -624,6 +629,9 @@ export class AccountRotationProcessor implements Processor {
     // Live visibility: data parts never ride controller message events, so
     // emit the same line as an info event (see emitAccountSwitchPart).
     controller?.emitEvent?.({ type: 'info', message: packFallbackNoticeText(data) });
+    // Advance only after the part and stickiness landed — a throw mid-emit
+    // must not desync the cascade from what the transcript shows.
+    cascade.position++;
   }
 
   private async declarePoolUnavailable(
