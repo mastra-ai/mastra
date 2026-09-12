@@ -3,6 +3,7 @@ import {
   KnowledgeNotFoundError,
   type KnowledgeProposal,
   type KnowledgeProposalApprovalCapability,
+  type KnowledgeProposalApprovalScopeIds,
   type KnowledgeProposalTarget,
   type KnowledgeScopeIds,
   type KnowledgeStorage,
@@ -12,6 +13,14 @@ import {
 import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } from '../access/mutations';
 import { getKnowledgeReadableScopeIds } from '../access/read-filter';
 import type { KnowledgeAccessFrontier } from '../access/types';
+
+const APPROVAL_CAPABILITIES = [
+  'append',
+  'edit',
+  'delete',
+  'createChildren',
+  'manageAccess',
+] as const satisfies readonly KnowledgeProposalApprovalCapability[];
 
 export interface ProposeKnowledgeNodeUpdateInput {
   mutation: UpdateKnowledgeNodeInput;
@@ -135,7 +144,7 @@ export class KnowledgeProposalLifecycle {
   }): Promise<ListKnowledgeProposalsOutput> {
     const frontier = await this.evaluateAccess(input.vouchedScopeIds);
     const result = await this.storage.listProposals({
-      scopeIds: getKnowledgeReadableScopeIds(frontier),
+      ...this.#proposalVisibility(frontier),
       status: input.status,
       limit: input.limit,
       cursor: input.cursor,
@@ -194,7 +203,7 @@ export class KnowledgeProposalLifecycle {
     this.#assertContextScope(frontier, input.reviewerContextScopeId);
     const proposal = await this.storage.getVisibleProposal({
       id: input.id,
-      scopeIds: getKnowledgeReadableScopeIds(frontier),
+      ...this.#proposalVisibility(frontier),
     });
     if (!proposal || proposal.status !== 'conflicted') throw new KnowledgeNotFoundError('proposal', input.id);
     const payload = decodeNodeUpdatePayload(proposal);
@@ -209,9 +218,29 @@ export class KnowledgeProposalLifecycle {
   }
 
   async #getVisiblePendingProposal(id: string, frontier: KnowledgeAccessFrontier): Promise<KnowledgeProposal> {
-    const proposal = await this.storage.getVisibleProposal({ id, scopeIds: getKnowledgeReadableScopeIds(frontier) });
+    const proposal = await this.storage.getVisibleProposal({ id, ...this.#proposalVisibility(frontier) });
     if (!proposal || proposal.status !== 'pending') throw new KnowledgeNotFoundError('proposal', id);
     return proposal;
+  }
+
+  /**
+   * Visibility inputs for storage proposal reads: the readable scope set plus
+   * per-approval-capability scope sets for the direct-write-authority branch
+   * of the visibility disjunction. Single-ID and list surfaces use identical
+   * semantics so authorization is indistinguishable between them.
+   */
+  #proposalVisibility(frontier: KnowledgeAccessFrontier): {
+    scopeIds: KnowledgeScopeIds;
+    approvalScopeIds: KnowledgeProposalApprovalScopeIds;
+  } {
+    const approvalScopeIds: KnowledgeProposalApprovalScopeIds = {};
+    for (const [scopeId, capabilities] of Object.entries(frontier.scopes)) {
+      for (const capability of APPROVAL_CAPABILITIES) {
+        if (!capabilities[capability]) continue;
+        (approvalScopeIds[capability] ??= []).push(scopeId);
+      }
+    }
+    return { scopeIds: getKnowledgeReadableScopeIds(frontier), approvalScopeIds };
   }
 
   async #authorizeAndFindStaleTarget(
