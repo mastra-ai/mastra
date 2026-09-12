@@ -341,6 +341,32 @@ describe('notification inbox', () => {
     ).resolves.toMatchObject({ action: 'summarize', summaryAt: now, reason: 'idle-low-summary' });
   });
 
+  it('does not resolve inherited Object.prototype members as source decisions', async () => {
+    const now = new Date('2026-05-30T12:00:00Z');
+    const baseRecord = {
+      id: 'n1',
+      threadId: 'thread-1',
+      source: 'mastracode',
+      kind: 'manual',
+      status: 'pending',
+      summary: 'Test notification',
+      priority: 'low',
+      createdAt: now,
+      updatedAt: now,
+    } as const;
+
+    for (const source of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+      await expect(
+        resolveNotificationDeliveryDecision({
+          now,
+          threadState: 'active',
+          config: { sources: {}, default: 'discard' },
+          record: { ...baseRecord, source },
+        }),
+      ).resolves.toEqual({ action: 'discard' });
+    }
+  });
+
   it('lists due notifications across threads and ignores future or terminal records', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
