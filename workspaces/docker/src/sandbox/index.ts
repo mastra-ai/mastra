@@ -20,7 +20,13 @@ import type {
   SandboxFileInput,
   WriteFilesOptions,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxAbortError, SandboxError, SandboxNotReadyError } from '@mastra/core/workspace';
+import {
+  MastraSandbox,
+  SandboxAbortError,
+  SandboxError,
+  SandboxNotReadyError,
+  validateSandboxFileMode,
+} from '@mastra/core/workspace';
 import Docker from 'dockerode';
 import type { Container, ContainerInfo } from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
@@ -540,15 +546,7 @@ export class DockerSandbox extends MastraSandbox {
 
     const pack = tarPack();
     for (const file of files) {
-      // Inlined mode validation (0o001–0o777) to avoid a runtime dependency on
-      // a newer @mastra/core value export than this adapter's peer floor permits.
-      if (file.mode !== undefined && (!Number.isInteger(file.mode) || file.mode < 0o001 || file.mode > 0o777)) {
-        throw new SandboxError(
-          `Invalid file mode ${file.mode}: must be an integer between 0o001 (1) and 0o777 (${0o777}).`,
-          'INVALID_ARGUMENT',
-          { mode: file.mode },
-        );
-      }
+      if (file.mode !== undefined) validateSandboxFileMode(file.mode);
       const resolved = posixPath.isAbsolute(file.path)
         ? posixPath.normalize(file.path)
         : posixPath.resolve(this.workingDirectory, file.path);

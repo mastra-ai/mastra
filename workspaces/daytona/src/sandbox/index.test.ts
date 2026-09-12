@@ -15,6 +15,7 @@
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import {
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
   WORKSPACE_TOOLS,
   Workspace,
   createWorkspaceTools,
@@ -1421,7 +1422,7 @@ describe('DaytonaSandbox', () => {
 
       await expect(
         sandbox.writeFiles([{ path: '/home/daytona/app/a.txt', content: 'hello', mode: 0o600 }]),
-      ).rejects.toThrow(/does not support per-file permission modes/);
+      ).rejects.toThrow(SandboxUnsupportedFeatureError);
       expect(mockSandbox.fs.uploadFiles).not.toHaveBeenCalled();
     });
   });

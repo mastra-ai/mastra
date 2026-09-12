@@ -8,7 +8,7 @@ import type {
   SandboxFileInput,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox } from '@mastra/core/workspace';
+import { MastraSandbox, assertModesUnsupported } from '@mastra/core/workspace';
 import { CloudflareSandboxBridgeClient, type CloudflareSandboxBridgeClientOptions } from './bridge-client';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -228,13 +228,7 @@ export class CloudflareSandbox extends MastraSandbox {
   }
 
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
-    // Inlined mode-presence guard to avoid a runtime dependency on a newer
-    // @mastra/core value export than this adapter's peer floor permits.
-    if (files.some(f => f.mode !== undefined)) {
-      throw new Error(
-        `The Cloudflare sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
-      );
-    }
+    assertModesUnsupported(files, 'Cloudflare');
     const sandboxId = this.requireSandboxId();
     // The bridge writes one file per request.
     for (const file of files) {

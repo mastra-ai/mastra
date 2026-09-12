@@ -23,7 +23,7 @@ import type {
   SandboxInfo,
   SandboxNetworking,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
 
@@ -315,13 +315,7 @@ export class VercelSandbox extends MastraSandbox {
    * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
-    // Inlined mode-presence guard to avoid a runtime dependency on a newer
-    // @mastra/core value export than this adapter's peer floor permits.
-    if (files.some(f => f.mode !== undefined)) {
-      throw new Error(
-        `The Vercel sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
-      );
-    }
+    assertModesUnsupported(files, 'Vercel');
     await this.ensureRunning();
     await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
   }

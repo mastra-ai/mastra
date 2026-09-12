@@ -1,3 +1,4 @@
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { createSandboxLifecycleTests } from '@internal/workspace-test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -195,7 +196,7 @@ describe('CloudflareSandbox', () => {
     await sandbox._start();
 
     await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x', mode: 0o600 }])).rejects.toThrow(
-      /does not support per-file permission modes/,
+      SandboxUnsupportedFeatureError,
     );
     expect(bridge.files.size).toBe(0);
   });

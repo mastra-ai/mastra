@@ -32,7 +32,7 @@ import type {
   SandboxCloneOptions,
   SandboxStartResult,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
@@ -692,13 +692,7 @@ export class DaytonaSandbox extends MastraSandbox {
    * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
-    // Inlined mode-presence guard to avoid a runtime dependency on a newer
-    // @mastra/core value export than this adapter's peer floor permits.
-    if (files.some(f => f.mode !== undefined)) {
-      throw new Error(
-        `The Daytona sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
-      );
-    }
+    assertModesUnsupported(files, 'Daytona');
     await this.ensureRunning();
     await this.daytona.fs.uploadFiles(
       files.map(file => ({

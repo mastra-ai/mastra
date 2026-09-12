@@ -14,6 +14,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
@@ -3235,7 +3236,7 @@ describe('writeFiles()', () => {
     const sandbox = new E2BSandbox();
     await sandbox._start();
     await expect(sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
-      /does not support per-file permission modes/,
+      SandboxUnsupportedFeatureError,
     );
     expect(mockSandbox.files.write).not.toHaveBeenCalled();
   });

@@ -26,7 +26,7 @@ import type {
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
   BuildOptions,
@@ -604,13 +604,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
-    // Inlined mode-presence guard (matching the type-inlining convention above)
-    // to avoid a runtime dependency on a newer @mastra/core value export.
-    if (files.some(f => f.mode !== undefined)) {
-      throw new Error(
-        `The E2B sandbox does not support per-file permission modes in writeFiles(). Omit 'mode' to use the provider default.`,
-      );
-    }
+    assertModesUnsupported(files, 'E2B');
     await this.ensureRunning();
     await this.e2b.files.write(
       files.map(f => ({

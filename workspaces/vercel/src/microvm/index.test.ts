@@ -1,4 +1,4 @@
-import { Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VercelSandbox } from './index';
 
@@ -246,7 +246,7 @@ describe('VercelSandbox', () => {
 
       const sandbox = new VercelSandbox();
       await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
-        /does not support per-file permission modes/,
+        SandboxUnsupportedFeatureError,
       );
       expect(fake.writeFiles).not.toHaveBeenCalled();
     });
