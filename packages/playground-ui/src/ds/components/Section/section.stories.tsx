@@ -68,7 +68,7 @@ export const Default: Story = {
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-ui-md text-neutral5">Section content goes here</p>
+        <p className="text-neutral5 text-ui-md">Section content goes here</p>
       </div>
     </Section>
   ),
@@ -89,7 +89,7 @@ export const WithAction: Story = {
         </Button>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
-        <p className="text-ui-md text-neutral5">List of agents would go here</p>
+        <p className="text-neutral5 text-ui-md">List of agents would go here</p>
       </div>
     </Section>
   ),
@@ -110,16 +110,16 @@ export const ConfigurationSection: Story = {
       </Section.Header>
       <div className="border-border1 bg-surface2 space-y-3 rounded-md border p-4">
         <div className="flex justify-between">
-          <span className="text-ui-md text-neutral3">Model</span>
-          <span className="text-ui-md text-neutral6">GPT-4</span>
+          <span className="text-neutral3 text-ui-md">Model</span>
+          <span className="text-neutral6 text-ui-md">GPT-4</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-ui-md text-neutral3">Temperature</span>
-          <span className="text-ui-md text-neutral6">0.7</span>
+          <span className="text-neutral3 text-ui-md">Temperature</span>
+          <span className="text-neutral6 text-ui-md">0.7</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-ui-md text-neutral3">Max Tokens</span>
-          <span className="text-ui-md text-neutral6">4096</span>
+          <span className="text-neutral3 text-ui-md">Max Tokens</span>
+          <span className="text-neutral6 text-ui-md">4096</span>
         </div>
       </div>
     </Section>

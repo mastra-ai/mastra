@@ -28,7 +28,7 @@ type Story = StoryObj<typeof JSONSchemaForm.Root>;
 function JSONSchemaPreview({ schema }: { schema: JsonSchema | null }) {
   if (!schema) return null;
   return (
-    <pre className="bg-surface2 text-ui-sm text-neutral4 mt-4 max-h-64 overflow-auto rounded-md p-4">
+    <pre className="bg-surface2 text-neutral4 text-ui-sm mt-4 max-h-64 overflow-auto rounded-md p-4">
       {JSON.stringify(schema, null, 2)}
     </pre>
   );

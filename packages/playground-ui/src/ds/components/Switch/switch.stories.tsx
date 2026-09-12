@@ -264,7 +264,7 @@ export const WithDescription: Story = {
     <div className="flex w-[350px] items-start justify-between gap-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor="dark-mode">Dark mode</Label>
-        <span className="text-ui-sm text-neutral3">Switch to a darker color scheme</span>
+        <span className="text-neutral3 text-ui-sm">Switch to a darker color scheme</span>
       </div>
       <Switch id="dark-mode" />
     </div>

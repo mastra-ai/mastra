@@ -73,18 +73,18 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
-        <dt className="text-ui-sm text-neutral3">Traces analyzed</dt>
-        <dd className="text-header-sm text-neutral6 mt-1 font-semibold">{formatNumber(progress.traceCount)}</dd>
+        <dt className="text-neutral3 text-ui-sm">Traces analyzed</dt>
+        <dd className="text-neutral6 text-header-sm mt-1 font-semibold">{formatNumber(progress.traceCount)}</dd>
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
-        <dt className="text-ui-sm text-neutral3">Trace signal types ready</dt>
-        <dd className="text-header-sm text-neutral6 mt-1 font-semibold">
+        <dt className="text-neutral3 text-ui-sm">Trace signal types ready</dt>
+        <dd className="text-neutral6 text-header-sm mt-1 font-semibold">
           {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
         </dd>
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
-        <dt className="text-ui-sm text-neutral3">Status</dt>
-        <dd className="text-header-sm text-neutral6 mt-1 font-semibold capitalize">{progress.status}</dd>
+        <dt className="text-neutral3 text-ui-sm">Status</dt>
+        <dd className="text-neutral6 text-header-sm mt-1 font-semibold capitalize">{progress.status}</dd>
       </div>
     </dl>
   );
@@ -110,9 +110,9 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
               <span className="text-ui-md font-semibold" style={signalStyle(signalName)}>
                 {label}
               </span>
-              <span className="text-ui-sm text-neutral4">{isReady ? 'Themes ready' : 'Processing'}</span>
+              <span className="text-neutral4 text-ui-sm">{isReady ? 'Themes ready' : 'Processing'}</span>
             </div>
-            <p className="text-ui-sm text-neutral3 mt-1">
+            <p className="text-neutral3 text-ui-sm mt-1">
               {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
             </p>
           </li>
@@ -135,10 +135,10 @@ export function PendingSignalProgress({
 
   return (
     <section className="border-border1 bg-surface2 rounded-lg border p-4" aria-labelledby="pending-signals-heading">
-      <h2 id="pending-signals-heading" className="text-ui-md text-neutral6 font-semibold">
+      <h2 id="pending-signals-heading" className="text-neutral6 text-ui-md font-semibold">
         Signals building themes
       </h2>
-      <p className="text-ui-sm text-neutral3 mt-1">
+      <p className="text-neutral3 text-ui-sm mt-1">
         Themes appear once enough new traces are analyzed, embedded, and clustered.
       </p>
       <ul aria-label="Pending trace signals" className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -150,12 +150,12 @@ export function PendingSignalProgress({
                 <span className="text-ui-md font-semibold" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
                 </span>
-                <span className="text-ui-sm text-neutral4 capitalize">{signal.status}</span>
+                <span className="text-neutral4 text-ui-sm capitalize">{signal.status}</span>
               </div>
               {signalDescription(catalog, signal.name) ? (
-                <p className="text-ui-sm text-neutral3 mt-1">{signalDescription(catalog, signal.name)}</p>
+                <p className="text-neutral3 text-ui-sm mt-1">{signalDescription(catalog, signal.name)}</p>
               ) : null}
-              <p className="text-ui-sm text-neutral3 mt-1">
+              <p className="text-neutral3 text-ui-sm mt-1">
                 {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
               </p>
             </li>
@@ -189,14 +189,14 @@ export const SignalsEmptyState = ({
     <section className="bg-surface1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="mx-auto w-full max-w-260">
         <header>
-          <p className="text-ui-sm text-neutral4 flex items-center gap-2 font-mono tracking-wider uppercase">
+          <p className="text-neutral4 text-ui-sm flex items-center gap-2 font-mono tracking-wider uppercase">
             <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
             Trace Intelligence
           </p>
           <h1 className="text-header-xl text-neutral6 mt-2 font-medium tracking-tight">
             Understand what drives every agent interaction
           </h1>
-          <p className="text-ui-md text-neutral3 mt-2 max-w-180">
+          <p className="text-neutral3 text-ui-md mt-2 max-w-180">
             Trace Intelligence groups recurring goals, outcomes, behaviors, and sentiment across completed traces.
           </p>
         </header>
@@ -207,9 +207,9 @@ export const SignalsEmptyState = ({
           className="mt-14 grid gap-4 lg:grid-cols-[17.5rem_4.5rem_17.5rem_4.5rem_minmax(0,1fr)] lg:gap-0"
         >
           <div role="listitem" className="min-h-50 p-5">
-            <h2 className="text-header-sm text-neutral6 font-semibold">Traces</h2>
-            <p className="text-ui-sm text-neutral3 mt-0.5">Every agent interaction</p>
-            <p className="text-ui-sm text-neutral3 mt-5 font-mono tracking-[0.18em] uppercase">Input</p>
+            <h2 className="text-neutral6 text-header-sm font-semibold">Traces</h2>
+            <p className="text-neutral3 text-ui-sm mt-0.5">Every agent interaction</p>
+            <p className="text-neutral3 text-ui-sm mt-5 font-mono tracking-[0.18em] uppercase">Input</p>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
@@ -231,8 +231,8 @@ export const SignalsEmptyState = ({
             className="flex min-h-50 flex-col items-center p-5 text-center"
             elevation="elevated"
           >
-            <h2 className="text-header-sm text-neutral6 font-semibold">Trace Intelligence</h2>
-            <p className="text-ui-sm text-neutral3 mt-0.5">Finds recurring themes</p>
+            <h2 className="text-neutral6 text-header-sm font-semibold">Trace Intelligence</h2>
+            <p className="text-neutral3 text-ui-sm mt-0.5">Finds recurring themes</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
               <span className="signals-engine-pulse border-positive1/15 absolute size-20 rounded-full border" />
               <span className="border-positive1/25 absolute size-14 rounded-full border" />
@@ -247,9 +247,9 @@ export const SignalsEmptyState = ({
           <PipelineConnector />
 
           <div role="listitem" className="min-h-50 p-5">
-            <h2 className="text-header-sm text-neutral6 font-semibold">Theme analysis</h2>
-            <p className="text-ui-sm text-neutral3 mt-0.5">How recurring patterns connect</p>
-            <p className="text-ui-sm text-neutral3 mt-5 font-mono tracking-[0.18em] uppercase">Output</p>
+            <h2 className="text-neutral6 text-header-sm font-semibold">Theme analysis</h2>
+            <p className="text-neutral3 text-ui-sm mt-0.5">How recurring patterns connect</p>
+            <p className="text-neutral3 text-ui-sm mt-5 font-mono tracking-[0.18em] uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {signalDefinitions.map(signal => (
                 <span
@@ -266,7 +266,7 @@ export const SignalsEmptyState = ({
         </div>
 
         <section className="mt-10" aria-labelledby="signal-definitions-heading">
-          <h2 id="signal-definitions-heading" className="text-header-sm text-neutral6 font-semibold">
+          <h2 id="signal-definitions-heading" className="text-neutral6 text-header-sm font-semibold">
             What each trace signal means
           </h2>
           <ul aria-label="Trace signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -275,7 +275,7 @@ export const SignalsEmptyState = ({
                 <h3 className="text-ui-md font-semibold" style={signalStyle(signal.key)}>
                   {signal.label}
                 </h3>
-                {signal.description ? <p className="text-ui-sm text-neutral3 mt-1.5">{signal.description}</p> : null}
+                {signal.description ? <p className="text-neutral3 text-ui-sm mt-1.5">{signal.description}</p> : null}
               </li>
             ))}
           </ul>
@@ -288,7 +288,7 @@ export const SignalsEmptyState = ({
               className="bg-warning1 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor]"
             />
             <div className="min-w-0 flex-1">
-              <p className="text-ui-sm text-neutral3">
+              <p className="text-neutral3 text-ui-sm">
                 <strong className="text-neutral5 font-semibold">{copy.title}</strong> {copy.body}
               </p>
               {progress ? <ProgressSummary progress={progress} /> : null}

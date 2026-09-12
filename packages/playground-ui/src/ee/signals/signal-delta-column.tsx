@@ -55,20 +55,20 @@ export function SignalDeltaColumn({
         </Tooltip>
       </h3>
       <ul className="mt-2 space-y-1.5">
-        {deltas.length === 0 ? <li className="text-ui-sm text-neutral3">No themes in either snapshot.</li> : null}
+        {deltas.length === 0 ? <li className="text-neutral3 text-ui-sm">No themes in either snapshot.</li> : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;
           const card = (
             <>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-ui-sm text-neutral6 truncate font-medium" title={delta.label}>
+                <span className="text-neutral6 text-ui-sm truncate font-medium" title={delta.label}>
                   {delta.label}
                 </span>
-                <span className="text-ui-sm text-neutral6 shrink-0 font-mono font-semibold tabular-nums">
+                <span className="text-neutral6 text-ui-sm shrink-0 font-mono font-semibold tabular-nums">
                   {deltaLabel(delta.delta)}
                 </span>
               </div>
-              <p className="text-ui-sm text-neutral3 font-mono tabular-nums">
+              <p className="text-neutral3 text-ui-sm font-mono tabular-nums">
                 {percent(delta.fromShare)} → {percent(delta.toShare)}
               </p>
               <ThemeCompareSparkline

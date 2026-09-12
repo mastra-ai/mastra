@@ -55,7 +55,7 @@ export function SignalLifelines({
         </Tooltip>
       </h3>
       {isCollapsed ? undefined : rows.length === 0 ? (
-        <p className="text-ui-sm text-neutral3 mt-2">No themes in these landmarks.</p>
+        <p className="text-neutral3 text-ui-sm mt-2">No themes in these landmarks.</p>
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (

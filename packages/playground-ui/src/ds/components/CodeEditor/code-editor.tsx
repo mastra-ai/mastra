@@ -227,7 +227,7 @@ export const useCodemirrorTheme = (): Extension => {
 const codeEditorVariants = cva(
   cn(
     'relative overflow-hidden font-mono outline-hidden focus-within:outline-hidden focus:outline-hidden',
-    'transition-colors duration-normal ease-out-custom',
+    'duration-normal transition-colors ease-out-custom',
   ),
   {
     variants: {

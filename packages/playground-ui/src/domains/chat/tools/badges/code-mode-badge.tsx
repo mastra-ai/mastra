@@ -73,7 +73,7 @@ export const CodeModeBadge = ({
             <SectionLabel>Error</SectionLabel>
             <pre
               data-testid="code-mode-error"
-              className="bg-surface4 text-ui-sm text-error rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
+              className="bg-surface4 text-error text-ui-sm rounded-md px-3 py-2 font-mono break-words whitespace-pre-wrap"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}

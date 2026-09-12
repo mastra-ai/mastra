@@ -103,7 +103,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
             ].map(([label, value]) => (
               <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
                 <p className="text-ui-xs text-neutral3 font-medium uppercase">{label}</p>
-                <p className="text-header-lg text-neutral6 mt-2 font-semibold">{value}</p>
+                <p className="text-neutral6 text-header-lg mt-2 font-semibold">{value}</p>
               </div>
             ))}
           </div>
@@ -156,7 +156,7 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
     <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-ui-md text-neutral6 font-medium">Mastra Studio</span>
+      <span className="text-neutral6 text-ui-md font-medium">Mastra Studio</span>
     </header>
     {children}
     <div className="min-w-0 flex-1 p-4">
@@ -269,7 +269,7 @@ const StudioSidebarBody = () => {
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-ui-xs text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
+                  className="border-border1 bg-surface4 text-neutral3 text-ui-xs ml-auto rounded border px-1.5 py-0.5 font-mono leading-none"
                 >
                   ⌘K
                 </kbd>
