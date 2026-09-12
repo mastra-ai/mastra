@@ -3,6 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plug, Unplug } from 'lucide-react';
 import {
   useChannelPlatforms,
   useChannelInstallations,
@@ -94,11 +95,18 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       ) : null}
 
       {isLoading ? null : activeInstallation ? (
-        <Button size="sm" variant="ghost" onClick={handleDisconnect} disabled={isDisconnecting} className="shrink-0">
+        <Button
+          icon={<Unplug />}
+          size="sm"
+          variant="ghost"
+          onClick={handleDisconnect}
+          disabled={isDisconnecting}
+          className="shrink-0"
+        >
           {isDisconnecting ? 'Removing...' : 'Remove'}
         </Button>
       ) : platform.isConfigured ? (
-        <Button size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
+        <Button icon={<Plug />} size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect'}
         </Button>
       ) : null}

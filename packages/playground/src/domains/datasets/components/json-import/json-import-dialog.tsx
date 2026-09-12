@@ -11,6 +11,7 @@ import {
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
@@ -160,7 +161,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
         <DialogFooter className="border-border1 items-center border-t px-4 py-3 sm:justify-between">
           <JSONImportStatus validation={validation} />
           <div className="flex gap-2">
-            <Button onClick={handleClose} disabled={isImporting}>
+            <Button icon={<X />} onClick={handleClose} disabled={isImporting}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleImport} disabled={validation.status !== 'ready' || isImporting}>

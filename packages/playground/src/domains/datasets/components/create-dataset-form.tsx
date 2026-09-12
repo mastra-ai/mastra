@@ -1,7 +1,9 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
@@ -111,10 +113,15 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       )}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" onClick={onCancel}>
+        <Button icon={<X />} type="button" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={createDataset.isPending || !name.trim()}>
+        <Button
+          icon={<DatasetsIcon />}
+          type="submit"
+          variant="primary"
+          disabled={createDataset.isPending || !name.trim()}
+        >
           {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
         </Button>
       </div>

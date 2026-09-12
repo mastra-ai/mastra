@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Lock } from 'lucide-react';
+import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
@@ -185,7 +185,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
           {error && <div className="text-ui-md rounded-md bg-red-500/10 p-3 text-red-400">{error.message}</div>}
 
-          <Button type="submit" disabled={isPending} className="w-full" size="lg">
+          <Button icon={<LogIn />} type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 

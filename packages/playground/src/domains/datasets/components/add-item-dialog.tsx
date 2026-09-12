@@ -6,6 +6,7 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { DatasetItemScorerSelector } from './dataset-detail/dataset-item-scorer-selector';
@@ -280,10 +281,10 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" onClick={handleCancel}>
+            <Button icon={<X />} type="button" onClick={handleCancel}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={addItem.isPending}>
+            <Button icon={<Plus />} type="submit" variant="primary" disabled={addItem.isPending}>
               {addItem.isPending ? 'Adding...' : 'Add Item'}
             </Button>
           </div>

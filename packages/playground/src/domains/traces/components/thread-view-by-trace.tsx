@@ -15,7 +15,7 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-auto-height';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
@@ -323,8 +323,8 @@ function TraceThreadRow({
               variant="ghost"
               size="md"
               className="shrink-0"
+              icon={<ExternalLinkIcon />}
             >
-              <ExternalLinkIcon />
               Go to trace
             </Button>
           </DataPanel.Header>
@@ -352,7 +352,7 @@ function TraceThreadRow({
             </div>
             {overflows && isClamped && (
               <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
-                <Button variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
+                <Button icon={<ChevronDown />} variant="ghost" size="sm" onClick={() => onExpandedChange(true)}>
                   Show more
                 </Button>
               </div>
@@ -361,7 +361,7 @@ function TraceThreadRow({
           {/* Collapsing would hide the selected span, so the control waits until the panel closes. */}
           {overflows && !isClamped && !isActive && (
             <div className="flex justify-center py-2">
-              <Button variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
+              <Button icon={<ChevronUp />} variant="ghost" size="sm" onClick={() => onExpandedChange(false)}>
                 Show less
               </Button>
             </div>

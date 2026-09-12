@@ -72,8 +72,7 @@ export function ExperimentScorePanel({
             />
           )}
           {onShowTrace && score.traceId && (
-            <Button size="md" onClick={onShowTrace}>
-              <TraceIcon />
+            <Button size="md" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}

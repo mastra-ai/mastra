@@ -356,8 +356,7 @@ export function AgentPlaygroundEvaluate({
 
     const backButton = (label: string, onClick: () => void) => (
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
-        <Button variant="ghost" size="sm" onClick={onClick}>
-          <ChevronLeft className="size-4" />
+        <Button variant="ghost" size="sm" onClick={onClick} icon={<ChevronLeft />}>
           {label}
         </Button>
       </div>
@@ -878,8 +877,7 @@ export function AgentPlaygroundEvaluate({
             {activeTab === 'datasets' && (
               <>
                 {unattachedDatasets.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)}>
-                    <Paperclip className="mr-1 size-3.5" />
+                  <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)} icon={<Paperclip />}>
                     Attach
                   </Button>
                 )}
@@ -889,8 +887,8 @@ export function AgentPlaygroundEvaluate({
                   onClick={() =>
                     void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)
                   }
+                  icon={<Plus />}
                 >
-                  <Plus className="mr-1 size-3.5" />
                   Create
                 </Button>
               </>
@@ -898,13 +896,16 @@ export function AgentPlaygroundEvaluate({
             {activeTab === 'scorers' && (
               <>
                 {unattachedScorers.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
-                    <Paperclip className="mr-1 size-3.5" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAttachScorerDialog(true)}
+                    icon={<Paperclip />}
+                  >
                     Attach
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setDetailView({ type: 'new-scorer' })}>
-                  <Plus className="mr-1 size-3.5" />
+                <Button variant="ghost" size="sm" onClick={() => setDetailView({ type: 'new-scorer' })} icon={<Plus />}>
                   New
                 </Button>
               </>

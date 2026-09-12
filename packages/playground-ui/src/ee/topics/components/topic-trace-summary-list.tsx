@@ -1,4 +1,4 @@
-import { SearchIcon } from 'lucide-react';
+import { SearchIcon, ChevronDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { TopicTraceSummary } from '../types';
 import { getVisibleTraceSummaries } from '../utils';
@@ -72,7 +72,12 @@ export function TopicTraceSummaryList({
       </DataList>
 
       {visible.hasMore ? (
-        <Button variant="outline" size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
+        <Button
+          icon={<ChevronDown />}
+          variant="outline"
+          size="sm"
+          onClick={() => setPage(currentPage => currentPage + 1)}
+        >
           Load more traces ({visible.traces.length} of {visible.total})
         </Button>
       ) : null}

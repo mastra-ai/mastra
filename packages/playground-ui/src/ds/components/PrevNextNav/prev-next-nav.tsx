@@ -17,12 +17,11 @@ export function PrevNextNav({
 }: PrevNextNavProps) {
   return (
     <ButtonsGroup spacing="close">
-      <Button onClick={onPrevious} disabled={!onPrevious} aria-label={previousAriaLabel}>
-        <ArrowUpIcon /> Prev
+      <Button onClick={onPrevious} disabled={!onPrevious} aria-label={previousAriaLabel} icon={<ArrowUpIcon />}>
+        Prev
       </Button>
-      <Button onClick={onNext} disabled={!onNext} aria-label={nextAriaLabel}>
+      <Button onClick={onNext} disabled={!onNext} aria-label={nextAriaLabel} icon={<ArrowDownIcon />}>
         Next
-        <ArrowDownIcon />
       </Button>
     </ButtonsGroup>
   );

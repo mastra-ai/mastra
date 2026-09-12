@@ -230,19 +230,16 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         actionSlot={
           <div className="flex flex-col items-center gap-2">
             <ButtonsGroup>
-              <Button variant="primary" onClick={onAddClick}>
-                <Plus />
+              <Button variant="primary" onClick={onAddClick} icon={<Plus />}>
                 Add Item
               </Button>
               {onImportClick && (
-                <Button onClick={onImportClick}>
-                  <Upload />
+                <Button onClick={onImportClick} icon={<Upload />}>
                   Import CSV
                 </Button>
               )}
               {onImportJsonClick && (
-                <Button onClick={onImportJsonClick}>
-                  <FileJson />
+                <Button onClick={onImportJsonClick} icon={<FileJson />}>
                   Import JSON
                 </Button>
               )}
@@ -253,8 +250,9 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
               href="https://mastra.ai/docs/evals/datasets"
               target="_blank"
               rel="noopener noreferrer"
+              icon={<ExternalLinkIcon />}
             >
-              Datasets Documentation <ExternalLinkIcon />
+              Datasets Documentation
             </Button>
           </div>
         }

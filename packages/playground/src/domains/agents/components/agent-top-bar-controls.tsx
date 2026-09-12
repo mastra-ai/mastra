@@ -18,8 +18,8 @@ export function AgentTopBarRunOptions({ requestContextSchema }: AgentTopBarRunOp
           type="button"
           tooltip="Run options"
           data-testid="agent-top-bar-run-options-trigger"
+          icon={<Settings2 />}
         >
-          <Settings2 />
           Run options
         </Button>
       </PopoverTrigger>

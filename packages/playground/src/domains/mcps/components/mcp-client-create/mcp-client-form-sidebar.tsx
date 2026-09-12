@@ -246,8 +246,7 @@ export function MCPClientFormSidebar({
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
-                      <PlusIcon className="mr-1 h-3 w-3" />
+                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
                       Add variable
                     </Button>
                   )}

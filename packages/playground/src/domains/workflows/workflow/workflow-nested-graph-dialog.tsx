@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useState } from 'react';
 
@@ -24,7 +25,7 @@ export function WorkflowNestedGraphDialog({ stepName, fullStep, stepGraph }: Wor
 
   return (
     <>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button icon={<WorkflowIcon />} type="button" size="sm" onClick={() => setOpen(true)}>
         View nested graph
       </Button>
 

@@ -3,7 +3,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
-import { Pencil } from 'lucide-react';
+import { Pencil, X, Check } from 'lucide-react';
 import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 /** Schema validation error from API */
@@ -164,10 +164,10 @@ export function EditModeContent({
         </div>
 
         <div className="flex gap-2 pt-4">
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
         </div>

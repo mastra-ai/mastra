@@ -11,7 +11,7 @@ export const WorkflowRunOptions = () => {
         Debug Mode
       </Txt>
 
-      <Checkbox checked={debugMode} onCheckedChange={value => setDebugMode(value as boolean)} />
+      <Checkbox checked={debugMode} onCheckedChange={value => setDebugMode(value)} />
     </>
   );
 };

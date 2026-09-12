@@ -82,8 +82,13 @@ export default function PromptBlocks() {
             />
           </div>
           {isCmsAvailable && (
-            <Button as={Link} to={paths.cmsPromptBlockCreateLink()} variant="primary" className="shrink-0">
-              <Plus />
+            <Button
+              as={Link}
+              to={paths.cmsPromptBlockCreateLink()}
+              variant="primary"
+              className="shrink-0"
+              icon={<Plus />}
+            >
               Create Prompt
             </Button>
           )}

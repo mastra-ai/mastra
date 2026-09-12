@@ -1,5 +1,5 @@
 import { format, formatDate, isValid } from 'date-fns';
-import { CalendarIcon, CircleAlertIcon } from 'lucide-react';
+import { CalendarIcon, CircleAlertIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
@@ -253,11 +253,12 @@ export const DateTimePickerContent = ({
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
         {newValueDefined && (
-          <Button tabIndex={0} size="md" onClick={handleClear} type="button">
+          <Button icon={<X />} tabIndex={0} size="md" onClick={handleClear} type="button">
             Clear
           </Button>
         )}
         <Button
+          icon={newValueDefined ? <Check /> : <X />}
           tabIndex={0}
           type="button"
           size="md"
@@ -287,9 +288,9 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         variant={variant}
         size={size}
         className={cn('justify-start', controlTriggerOpenStateFor(variant), className)}
+        icon={<CalendarIcon />}
         {...props}
       >
-        <CalendarIcon className="size-4" />
         {value ? (
           <span className="text-neutral6">{format(value, 'PP p')}</span>
         ) : (

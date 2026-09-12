@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { DatabaseIcon } from 'lucide-react';
+import { DatabaseIcon, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams } from 'react-router';
 
@@ -45,7 +45,11 @@ function DatasetItemPage() {
               iconSlot={<DatabaseIcon />}
               titleSlot="Item not found"
               descriptionSlot={`No loaded item "${itemId}".`}
-              actionSlot={<Button onClick={close}>Close</Button>}
+              actionSlot={
+                <Button icon={<X />} onClick={close}>
+                  Close
+                </Button>
+              }
             />
           </div>
         </div>

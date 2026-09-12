@@ -3,7 +3,6 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Pencil } from 'lucide-react';
 
 interface LinkedDataset {
@@ -74,10 +73,7 @@ export function ScorerDetailView({
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {!isCode && (
-              <Button variant="ghost" size="sm" onClick={onEdit}>
-                <Icon size="sm">
-                  <Pencil />
-                </Icon>
+              <Button variant="ghost" size="sm" onClick={onEdit} icon={<Pencil />}>
                 Edit
               </Button>
             )}

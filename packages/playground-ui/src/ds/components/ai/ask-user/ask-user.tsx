@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
@@ -58,7 +59,7 @@ export const AskUserOptionControl = ({ type, label, description, className, ...p
 );
 
 export const AskUserSubmit = ({ children = 'Submit answer', ...props }: ComponentProps<typeof Button>) => (
-  <Button type="button" size="sm" variant="primary" {...props}>
+  <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
     {children}
   </Button>
 );

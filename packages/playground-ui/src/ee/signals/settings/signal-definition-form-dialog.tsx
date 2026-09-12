@@ -3,6 +3,7 @@ import type {
   TraceSignalDefinition,
   UpdateTraceSignalDefinitionInput,
 } from '@mastra/client-js';
+import { X } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { Button } from '@/ds/components/Button';
@@ -179,11 +180,16 @@ export function SignalDefinitionFormDialog({
           </form>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
+          <Button icon={<X />} type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} variant="primary" disabled={pending}>
-            {pending ? <Spinner className="size-4" /> : null}
+          <Button
+            type="submit"
+            form={formId}
+            variant="primary"
+            disabled={pending}
+            icon={pending ? <Spinner /> : undefined}
+          >
             {editing ? 'Save signal' : 'Create signal'}
           </Button>
         </DialogFooter>

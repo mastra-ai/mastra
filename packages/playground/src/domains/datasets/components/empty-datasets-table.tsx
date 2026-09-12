@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Plus, CircleSlashIcon, BookOpen } from 'lucide-react';
 
 export interface EmptyDatasetsTableProps {
@@ -17,10 +16,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
         actionSlot={
           <div className="flex flex-col gap-2 sm:flex-row">
             {onCreateClick && (
-              <Button size="lg" variant="default" onClick={onCreateClick}>
-                <Icon>
-                  <Plus />
-                </Icon>
+              <Button size="lg" variant="default" onClick={onCreateClick} icon={<Plus />}>
                 Create Dataset
               </Button>
             )}
@@ -31,10 +27,8 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
               href="https://mastra.ai/docs/evals/datasets"
               target="_blank"
               rel="noopener noreferrer"
+              icon={<BookOpen />}
             >
-              <Icon>
-                <BookOpen />
-              </Icon>
               Documentation
             </Button>
           </div>

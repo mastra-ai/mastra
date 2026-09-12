@@ -71,8 +71,8 @@ export function TemplatesTools({
         options={providerOptions}
       />
       {onReset && (
-        <Button onClick={onReset}>
-          Reset <XIcon />
+        <Button onClick={onReset} icon={<XIcon />}>
+          Reset
         </Button>
       )}
     </div>

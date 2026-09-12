@@ -143,8 +143,8 @@ export function DatasetItemsToolbar({
         {selectionDropdown}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button onClick={onAddClick}>
-              <Plus /> Add Item
+            <Button onClick={onAddClick} icon={<Plus />}>
+              Add Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>

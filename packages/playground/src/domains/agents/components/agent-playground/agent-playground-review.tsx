@@ -18,7 +18,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, ChevronDown, FilterIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
+import { CheckCircle, ChevronDown, FilterIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useReviewQueue } from '../../context/review-queue-context';
@@ -399,7 +399,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             </div>
           </DialogBody>
           <DialogFooter className="px-4">
-            <Button variant="ghost" onClick={() => setShowAnalyzeDialog(false)} disabled={isAnalyzing}>
+            <Button icon={<X />} variant="ghost" onClick={() => setShowAnalyzeDialog(false)} disabled={isAnalyzing}>
               Cancel
             </Button>
             <Button
@@ -490,10 +490,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             })}
           </DialogBody>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} variant="ghost" onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
             <Button
+              icon={<Check />}
               variant="default"
               onClick={handleAcceptProposals}
               disabled={proposedAssignments.filter(p => p.accepted).length === 0}
@@ -512,8 +513,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <div className="flex items-center gap-3">
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
-                    <FilterIcon />
+                  <Button variant="outline" size="md" icon={<FilterIcon />}>
                     Filter
                     {activeFilterCount > 0 && (
                       <span
@@ -622,8 +622,8 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     setShowCompleted(false);
                     setFeaturedItemId(null);
                   }}
+                  icon={<XIcon />}
                 >
-                  <XIcon />
                   Reset
                 </Button>
               )}

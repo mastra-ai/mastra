@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Plug, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -53,6 +54,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
 
         {!platform.isConfigured ? (
           <Button
+            icon={<Settings2 />}
             size="sm"
             variant="ghost"
             disabled
@@ -62,6 +64,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : installation ? (
           <Button
+            icon={<Settings2 />}
             size="sm"
             variant="default"
             onClick={() => setDialogOpen(true)}
@@ -71,6 +74,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : (
           <Button
+            icon={<Plug />}
             size="sm"
             variant="default"
             onClick={handleConnect}

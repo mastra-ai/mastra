@@ -36,8 +36,7 @@ export function ExperimentTopArea({ experiment, onDeleteClick, children }: Exper
       <PageLayout.Row className="items-center justify-start gap-2">
         <ButtonsGroup className="whitespace-nowrap">
           <RerunExperimentButton experiment={experiment} />
-          <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)}>
-            <ClipboardCheck />
+          <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)} icon={<ClipboardCheck />}>
             Review queue
           </Button>
           {hasMenu && (
