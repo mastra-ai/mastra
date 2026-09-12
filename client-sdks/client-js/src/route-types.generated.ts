@@ -17,7 +17,7 @@ type Shared_Auxiliary_272 =
       [key: string]: Shared_Auxiliary_272;
     };
 
-type Shared_Auxiliary_590 =
+type Shared_Auxiliary_593 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,41 +52,41 @@ type Shared_Auxiliary_590 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_590[];
+      args: Shared_Auxiliary_593[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_590;
+      arg: Shared_Auxiliary_593;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_608;
+            some: Shared_Auxiliary_611;
           }
         | {
-            none: Shared_Auxiliary_608;
+            none: Shared_Auxiliary_611;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_608;
+            some: Shared_Auxiliary_611;
           }
         | {
-            none: Shared_Auxiliary_608;
+            none: Shared_Auxiliary_611;
           };
     }
   | {
       feedback:
         | {
-            some: Shared_Auxiliary_608;
+            some: Shared_Auxiliary_611;
           }
         | {
-            none: Shared_Auxiliary_608;
+            none: Shared_Auxiliary_611;
           };
     };
 
-type Shared_Auxiliary_608 =
+type Shared_Auxiliary_611 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -121,14 +121,14 @@ type Shared_Auxiliary_608 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_608[];
+      args: Shared_Auxiliary_611[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_608;
+      arg: Shared_Auxiliary_611;
     };
 
-type Shared_Auxiliary_1148 =
+type Shared_Auxiliary_1151 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -173,19 +173,19 @@ type Shared_Auxiliary_1148 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1148[];
+      args: Shared_Auxiliary_1151[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1148;
+      arg: Shared_Auxiliary_1151;
     };
 
-type Shared_Auxiliary_1288 = {
+type Shared_Auxiliary_1291 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1288[] | undefined;
+  children?: Shared_Auxiliary_1291[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2618,7 +2618,7 @@ type Shared_Type_111 = {
       }
     | undefined;
   steps: Shared_Type_106;
-  predicates: Shared_Auxiliary_1148[];
+  predicates: Shared_Auxiliary_1151[];
 };
 
 type Shared_Type_112 = {
@@ -2641,7 +2641,7 @@ type Shared_Type_112 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1148;
+  predicate: Shared_Auxiliary_1151;
 };
 
 type Shared_Type_113 =
@@ -2995,7 +2995,7 @@ type Shared_Type_126 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1288[] | undefined;
+  files?: Shared_Auxiliary_1291[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8398,6 +8398,54 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /knowledge/:instanceKey/importers/:importerId/webhook
+// ============================================================================
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams = {
+  instanceKey: string;
+  importerId: string;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body = {
+  payload?: unknown | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response = {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: 'static' | 'agentic';
+  triggerKind: 'cron' | 'webhook' | 'programmatic';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+  error?: string | undefined;
+  transcriptThreadId?: string | undefined;
+  traceId?: string | undefined;
+  queuedAt: Date;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request = Simplify<
+  (PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams extends never
+    ? {}
+    : { params: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body extends never
+      ? {}
+      : {} extends PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body
+        ? { body?: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body }
+        : { body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body })
+>;
+
+export interface PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract {
+  pathParams: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams;
+  queryParams: never;
+  body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body;
+  request: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request;
+  response: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
@@ -9186,7 +9234,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_590 | undefined;
+  where?: Shared_Auxiliary_593 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16927,7 +16975,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1288[] | undefined;
+  files?: Shared_Auxiliary_1291[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16985,7 +17033,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1288[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1291[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22419,6 +22467,7 @@ export interface RouteTypes {
   'PATCH /memory/network/threads/:threadId': PatchMemoryNetworkThreadsThreadId_RouteContract;
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
+  'POST /knowledge/:instanceKey/importers/:importerId/webhook': PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -23168,6 +23217,9 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/knowledge/:instanceKey/importers/:importerId/webhook': {
+    POST: PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;
