@@ -315,6 +315,7 @@ describe('KnowledgeRoutes', () => {
       scopes: [
         { address: 'org:acme', name: 'mastra' },
         { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: 'features:child', name: 'child', kind: 'domain', parentAddresses: ['features'] },
       ],
     });
 
@@ -331,6 +332,25 @@ describe('KnowledgeRoutes', () => {
       scopeAddresses: ['features'],
     });
     await record(h.knowledge, alpha, 'see [[Beta]] for the follow-up', h.projectScope);
+
+    // InMemory keeps reconciled scope rows outside its node map, unlike SQL
+    // adapters. Surface the real child membership shape so this regression
+    // covers a structural lens containing both a child scope and content.
+    const listScopeMembers = h.knowledge.listScopeMembers.bind(h.knowledge);
+    h.knowledge.listScopeMembers = async query => [
+      ...(await listScopeMembers(query)),
+      {
+        id: ids['features:child'],
+        name: 'child',
+        kind: 'domain',
+        scope: null,
+        isScope: true,
+        version: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as KnowledgeNode,
+    ];
+
     // Same structural scope, but stamped at a sibling resource of the same
     // org — an org-wide roll-up would include it, a project view must not.
     const sibling = await h.knowledge.createNode({
@@ -348,13 +368,16 @@ describe('KnowledgeRoutes', () => {
 
     const nodeIds = body.nodes.map(item => item.id);
     expect(nodeIds).toContain(ids['features']);
+    expect(nodeIds).toContain(ids['features:child']);
     expect(nodeIds).toContain(alpha.id);
     expect(nodeIds).toContain(beta.id);
     expect(nodeIds).not.toContain(sibling.id);
     expect(body.nodes.find(item => item.id === ids['features'])).toMatchObject({ isScope: true, rung: null });
+    expect(body.nodes.find(item => item.id === ids['features:child'])).toMatchObject({ isScope: true, scope: null });
 
     expect(body.edges).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: ids['features:child'] }),
         expect.objectContaining({ type: 'contains', source: ids['features'], target: alpha.id }),
         expect.objectContaining({ type: 'contains', source: ids['features'], target: beta.id }),
         expect.objectContaining({ type: 'wikilink', source: alpha.id, target: beta.id }),
