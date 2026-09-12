@@ -139,7 +139,7 @@ export class KnowledgeProposalLifecycle {
     const frontier = await this.evaluateAccess(input.vouchedScopeIds);
     const proposal = await this.storage.getVisibleProposal({
       id: input.id,
-      scopeIds: getKnowledgeReadableScopeIds(frontier),
+      ...this.#proposalVisibility(frontier),
     });
     return proposal ? this.#redactAttribution(proposal, frontier) : null;
   }
