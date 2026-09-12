@@ -164,9 +164,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return this.#db.knowledgeAccessEpoch;
   }
 
-  override async listScopeGrants(input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
+  override async listScopeGrants(
+    input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
+  ): Promise<KnowledgeScopeGrant[]> {
     return [...this.#db.knowledgeScopeGrants.values()]
       .filter(grant => {
+        if (input.scopeNodeId && grant.scopeNodeId !== input.scopeNodeId) return false;
         if (input.includeDeleted) return true;
         const scopeNode = this.#db.knowledgeNodes.get(grant.scopeNodeId);
         const scopeRef = this.#db.knowledgeNodes.get(grant.scopeRefId);
@@ -730,7 +733,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#enqueue('node', existing.id, 'delete', deleted.version, scopeIds);
       for (const record of this.#db.knowledgeRecords.values()) {
         if (record.nodeId === existing.id && !record.deletedAt) {
-          this.#enqueue('record', record.id, 'delete', record.version, this.#recordScopeIds(record.id));
+          // Owner transitions advance dependent record versions so each
+          // delete/restore cycle gets a fresh semantic-outbox idempotency
+          // identity (matching the updateNode membership-change precedent).
+          const updatedRecord = { ...record, version: record.version + 1, updatedAt: now };
+          this.#db.knowledgeRecords.set(record.id, updatedRecord);
+          this.#enqueue('record', record.id, 'delete', updatedRecord.version, this.#recordScopeIds(record.id));
         }
       }
       return cloneNode(deleted);
@@ -761,7 +769,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#enqueue('node', existing.id, 'upsert', restored.version, scopeIds);
       for (const record of this.#db.knowledgeRecords.values()) {
         if (record.nodeId === existing.id && !record.deletedAt) {
-          this.#enqueue('record', record.id, 'upsert', record.version, this.#recordScopeIds(record.id));
+          // Restore re-enqueues owned records at an advanced version — the
+          // pre-restore delete already consumed the old upsert idempotency
+          // key, so an unchanged version would leave vectors deleted.
+          const updatedRecord = { ...record, version: record.version + 1, updatedAt: now };
+          this.#db.knowledgeRecords.set(record.id, updatedRecord);
+          this.#enqueue('record', record.id, 'upsert', updatedRecord.version, this.#recordScopeIds(record.id));
         }
       }
       return cloneNode(restored);
