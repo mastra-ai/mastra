@@ -10,6 +10,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { TripWire } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -561,5 +562,121 @@ describe('pack-fallback parts', () => {
       .map(call => call[0])
       .find(part => part.type === PACK_FALLBACK_PART_TYPE);
     expect(packPart?.data.to).toEqual({ packId: 'openai', label: 'OpenAI' });
+  });
+});
+
+describe('Q14 chain gate (400/unknown never hop packs)', () => {
+  function seedSettingsWithFallbacks(packFallbacks: Record<string, string>) {
+    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { packFallbacks },
+      }),
+      'utf-8',
+    );
+  }
+
+  function makeControllerArgs(modelId: string, modeId = 'build') {
+    const emitEvent = vi.fn();
+    const setState = vi.fn(async () => {});
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId, modeId }, emitEvent, setState });
+    return makeArgs({ requestContext, emitEvent, setState });
+  }
+
+  it('throws TripWire on a 400 when the session pack has an active fallback chain', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+    const error = apiError(400, { message: 'invalid request: max_tokens too large' });
+
+    const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
+    expect(thrown).toBeInstanceOf(TripWire);
+    expect((thrown as TripWire).message).toBe('invalid request: max_tokens too large');
+    expect((thrown as TripWire).processorId).toBe(processor.id);
+    // No rotation, no parts: the cursor and transcript stay untouched.
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+    expect(args.writer.custom).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a 400 with retry:false (no TripWire) when no chain is configured', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({});
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    const result = await processor.processAPIError({ ...args, error: apiError(400) } as never);
+    expect(result.retry).toBe(false);
+  });
+
+  it('throws TripWire on an unknown error when a chain is active', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+    const error = new Error('something unexpected');
+
+    const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
+    expect(thrown).toBeInstanceOf(TripWire);
+  });
+
+  it('throws TripWire at retry-budget exhaustion when a chain is active', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    const thrown = await processor
+      .processAPIError({ ...args, retryCount: 3, error: apiError(429) } as never)
+      .catch(e => e);
+    expect(thrown).toBeInstanceOf(TripWire);
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+  });
+
+  it('returns retry:false at retry-budget exhaustion when no chain is configured', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({});
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    const result = await processor.processAPIError({ ...args, retryCount: 3, error: apiError(429) } as never);
+    expect(result.retry).toBe(false);
+  });
+
+  it('returns retry:false on a 400 when the request is already on the last chain entry', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    // Exhaust the anthropic pool → hop to openai (cascade position advances).
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await processor.processAPIError({ ...args, error: apiError(429) } as never);
+    }
+    // Now on the openai pack (last entry): a 400 surfaces plainly.
+    const result = await processor.processAPIError({
+      ...args,
+      retryCount: 2,
+      error: apiError(400, { url: 'https://api.openai.com/v1/responses' }),
+    } as never);
+    expect(result.retry).toBe(false);
+  });
+
+  it('still hops on pool exhaustion with a chain active (gate only covers never-classified errors)', async () => {
+    const seeded = makeTwoAccountStorage();
+    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeControllerArgs('anthropic/claude-fable-5');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await processor.processAPIError({ ...args, error: apiError(429) } as never);
+      expect(result.retry).toBe(attempt === 0);
+    }
+    const parts = args.writer.custom.mock.calls.map(call => call[0]);
+    expect(parts.some(part => part.type === PACK_FALLBACK_PART_TYPE)).toBe(true);
   });
 });

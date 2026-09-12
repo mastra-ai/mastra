@@ -281,13 +281,25 @@ export function getDynamicModel(
     if (!pack) break;
     const entryModelId = resolveModePackModels(settings, pack)[modeId];
     if (!entryModelId) break;
+    // Best-effort resolution: an unresolvable fallback (e.g. unconnected
+    // provider in deployed fail-closed mode) truncates the chain here rather
+    // than failing the request before the primary is ever tried.
+    let entryModel: ResolvedModel;
+    try {
+      entryModel = resolveModel(entryModelId, resolveOptions);
+    } catch {
+      break;
+    }
     const occurrence = (appearances.get(packId) ?? 0) + 1;
     appearances.set(packId, occurrence);
     entries.push({
       id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
-      model: resolveModel(entryModelId, resolveOptions),
+      model: entryModel,
     });
   }
+  // A chain that truncated to the primary alone is indistinguishable from no
+  // chain — return the bare model so core never sees a one-entry array.
+  if (entries.length < 2) return primary;
   return entries;
 }
 

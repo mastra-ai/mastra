@@ -19,6 +19,7 @@
  * `StreamErrorRetryProcessor`; `AccountStartNoticeProcessor` implements
  * `processInput` only and is registered in `inputProcessors`.
  */
+import { TripWire } from '@mastra/core/agent';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
 import { listResolvableModePacks } from '../agents/model.js';
@@ -355,27 +356,55 @@ function providerFromSession(
  * spent, which is exactly the hop condition. Implements `processAPIError`
  * ONLY (see the file header for the runner-order rationale).
  */
+/** Cached per-request pack cascade (state.packCascade). */
+interface PackCascade {
+  packs: Array<{ packId: string; label: string }>;
+  models: Record<string, Record<string, string>>;
+  modeId: string;
+  position: number;
+}
+
 export class AccountRotationProcessor implements Processor {
   readonly id = 'mastracode-account-rotation' as const;
 
-  constructor(private readonly options: { credentialStore: RotationCredentialStore; maxProcessorRetries: number }) {}
+  constructor(
+    private readonly options: {
+      credentialStore: RotationCredentialStore;
+      maxProcessorRetries: number;
+      settingsPath?: string;
+    },
+  ) {}
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<{ retry: boolean }> {
+    const { error, state } = args;
+
     // Core runs error processors even after the shared retry budget is spent
     // and silently discards `retry: true` then (llm-execution-step.ts
     // canRetryError) — rotating the cursor or emitting a switch part for a
     // retry that will never run would lie to both auth.json and the
-    // transcript. `retry: false` still lets core advance a model fallback
-    // chain, which is the honest outcome at budget exhaustion.
-    if (args.retryCount >= this.options.maxProcessorRetries) return { retry: false };
-
-    const { error, state } = args;
+    // transcript. With a fallback chain configured, a bare `retry: false`
+    // here would silently hop packs for an error we never classified, so the
+    // chain gate surfaces the error instead.
+    if (args.retryCount >= this.options.maxProcessorRetries) {
+      await this.gateChainHop(args, error);
+      return { retry: false };
+    }
 
     const providerId = providerFromError(error) ?? providerFromSession(args);
-    if (!providerId) return { retry: false };
+    if (!providerId) {
+      await this.gateChainHop(args, error);
+      return { retry: false };
+    }
 
     const classification = classifyRotationError(error);
-    if (classification.kind === 'never') return { retry: false };
+    // Q14: 400/unknown errors never rotate and never hop packs. With a chain
+    // active, core's fallback array would still advance on a bare
+    // `retry: false` (it advances on any thrown non-TripWire error), so the
+    // gate converts that into a surfaced error instead of a silent hop.
+    if (classification.kind === 'never') {
+      await this.gateChainHop(args, error);
+      return { retry: false };
+    }
 
     const store = this.options.credentialStore;
     const accounts = store.listAccounts?.(providerId) ?? [];
@@ -444,65 +473,97 @@ export class AccountRotationProcessor implements Processor {
    * all — there are no accounts to declare unavailable.
    */
   /**
-   * Emit the pack-fallback part when a configured chain has a next pack.
-   * The cascade is computed once per request from the session's pack and
-   * cached in processor state; the position advances per hop, so a second
-   * hop in the same turn reports B→C even though the session modelId still
-   * points at pack A (stickiness lands TUI-side only after the part renders).
-   * Returns nothing — core's fallback array does the hop on retry:false.
+   * The request's pack cascade, computed once from the session's pack and
+   * cached in processor state. Truncated at the first pack that lacks the
+   * session mode's model — mirroring getDynamicModel's truncation — so the
+   * cascade never promises a hop core's fallback array cannot make. The
+   * position advances per hop, so a second hop in the same turn reports B→C
+   * even though the session modelId still points at pack A (stickiness lands
+   * TUI-side only after the part renders). Returns null when the session has
+   * no active pack or the pack has no fallback chain.
+   */
+  private async getPackCascade(args: ProcessAPIErrorArgs): Promise<PackCascade | null> {
+    if (args.state.packCascade !== undefined) {
+      return (args.state.packCascade as PackCascade | null) ?? null;
+    }
+    const controller = args.requestContext?.get('controller') as
+      | { session?: { modelId?: unknown; modeId?: unknown } }
+      | undefined;
+    const modelId = controller?.session?.modelId;
+    if (typeof modelId !== 'string' || modelId.length === 0) {
+      args.state.packCascade = null;
+      return null;
+    }
+    const modeId =
+      typeof controller?.session?.modeId === 'string' && controller.session.modeId.length > 0
+        ? controller.session.modeId
+        : 'build';
+    const settings = loadSettings(this.options.settingsPath);
+    const packs = listResolvableModePacks(settings);
+    const activePack = findModePackForModel(settings, packs, modelId, modeId);
+    const chain = activePack
+      ? resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, activePack.id, settings.customModelPacks)
+      : [];
+    if (chain.length < 2) {
+      args.state.packCascade = null;
+      return null;
+    }
+    const resolvedPacks: Array<{ packId: string; label: string }> = [];
+    const models: Record<string, Record<string, string>> = {};
+    for (const packId of chain) {
+      const pack = packs.find(candidate => candidate.id === packId);
+      const packModels = pack ? resolveModePackModels(settings, pack) : {};
+      if (resolvedPacks.length > 0 && !packModels[modeId]) break;
+      resolvedPacks.push({ packId, label: pack?.name ?? packId });
+      models[packId] = packModels;
+    }
+    if (resolvedPacks.length < 2) {
+      args.state.packCascade = null;
+      return null;
+    }
+    const cascade: PackCascade = { packs: resolvedPacks, models, modeId, position: 0 };
+    args.state.packCascade = cascade;
+    return cascade;
+  }
+
+  /**
+   * Q14 gate: 400/unknown/unattributable errors never hop packs. Core's
+   * fallback array advances on ANY thrown error except TripWire
+   * (llm-execution-step.ts), so when the session's pack has a chain and the
+   * current entry is non-last, a bare `retry: false` would silently hop on an
+   * error class the user excluded from hop triggers. TripWire is the only
+   * no-advance escape: the runner rethrows it and the fallback loop declines
+   * to advance. No chain (or already on the last entry) → return and let the
+   * plain `retry: false` surface the error exactly as before.
+   */
+  private async gateChainHop(args: ProcessAPIErrorArgs, error: unknown): Promise<void> {
+    const cascade = await this.getPackCascade(args);
+    if (!cascade) return;
+    if (cascade.position >= cascade.packs.length - 1) return;
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new TripWire(reason, {}, this.id);
+  }
+
+  /**
+   * Emit the pack-fallback part when a configured chain has a next pack and
+   * queue the thread stickiness trigger. Core's fallback array does the hop
+   * itself on `retry: false`; this only announces it. Silent when the landed
+   * pack cannot serve the session mode (truncated cascades make that
+   * unreachable in practice; the guard stays so a stale cache can never
+   * announce a hop core cannot make).
    */
   private async emitPackFallbackPart(
     args: ProcessAPIErrorArgs,
     reason: 'pool-exhausted' | 'persistent-outage',
   ): Promise<void> {
-    interface PackCascade {
-      packs: Array<{ packId: string; label: string }>;
-      models: Record<string, Record<string, string>>;
-      position: number;
-    }
-    let cascade = args.state.packCascade as PackCascade | null | undefined;
-    if (cascade === undefined) {
-      const controller = args.requestContext?.get('controller') as
-        | { session?: { modelId?: unknown; modeId?: unknown } }
-        | undefined;
-      const modelId = controller?.session?.modelId;
-      const modeId = controller?.session?.modeId;
-      if (typeof modelId !== 'string' || modelId.length === 0) {
-        args.state.packCascade = null;
-        return;
-      }
-      const settings = loadSettings();
-      const packs = listResolvableModePacks(settings);
-      const activePack = findModePackForModel(
-        settings,
-        packs,
-        modelId,
-        typeof modeId === 'string' && modeId.length > 0 ? modeId : 'build',
-      );
-      const chain = activePack
-        ? resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, activePack.id, settings.customModelPacks)
-        : [];
-      if (chain.length < 2) {
-        args.state.packCascade = null;
-        return;
-      }
-      cascade = {
-        packs: chain.map(packId => ({ packId, label: packs.find(pack => pack.id === packId)?.name ?? packId })),
-        models: Object.fromEntries(
-          chain.map(packId => {
-            const pack = packs.find(candidate => candidate.id === packId);
-            return [packId, pack ? resolveModePackModels(settings, pack) : {}];
-          }),
-        ),
-        position: 0,
-      };
-      args.state.packCascade = cascade;
-    }
+    const cascade = await this.getPackCascade(args);
     if (!cascade) return;
 
     const from = cascade.packs[cascade.position];
     const to = cascade.packs[cascade.position + 1];
     if (!from || !to) return;
+    const toModelId = cascade.models[to.packId]?.[cascade.modeId];
+    if (!toModelId) return;
     cascade.position++;
 
     const controller = args.requestContext?.get('controller') as
@@ -512,22 +573,18 @@ export class AccountRotationProcessor implements Processor {
           emitEvent?: (event: { type: 'info'; message: string }) => void;
         }
       | undefined;
-    const modeId = typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build';
-    const toModelId = cascade.models[to.packId]?.[modeId];
     const at = new Date().toISOString();
-    if (toModelId) {
-      // Thread stickiness trigger — must land before the info event so the
-      // TUI never renders a hop it cannot stick. Cleared by the TUI handler.
-      await controller?.setState?.({
-        [PACK_FALLBACK_STATE_KEY]: {
-          fromPackId: from.packId,
-          toPackId: to.packId,
-          toModelId,
-          reason,
-          at,
-        } satisfies PendingPackFallback,
-      });
-    }
+    // Thread stickiness trigger — must land before the info event so the
+    // TUI never renders a hop it cannot stick. Cleared by the TUI handler.
+    await controller?.setState?.({
+      [PACK_FALLBACK_STATE_KEY]: {
+        fromPackId: from.packId,
+        toPackId: to.packId,
+        toModelId,
+        reason,
+        at,
+      } satisfies PendingPackFallback,
+    });
 
     const data: PackFallbackPartData = { from, to, reason, at };
     await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });

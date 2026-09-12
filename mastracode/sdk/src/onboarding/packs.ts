@@ -152,10 +152,12 @@ export function pruneUnknownModePackFallbacks(
 /**
  * Walk `settings.models.packFallbacks` from `startPackId`, returning the pack
  * ids in cascade order starting with the pack itself. Cycles are allowed but
- * each pack id appears at most twice (initial visit + one revisit); the walk
- * stops when the next link would add a third appearance or when a link
- * dangles at an unknown pack. This cap is the cycle handling for both the
- * fallback model chain (request time) and the /models picker's chain display.
+ * the cascade gets exactly one revisit total (Q15: "full circle then one
+ * revisit then surface"): the walk stops when the next link would add a pack
+ * already in the chain after the revisit was consumed, or when a link
+ * dangles at an unknown pack. An A⇄B cycle therefore yields [A, B, A#2] and
+ * stops. This cap is the cycle handling for both the fallback model chain
+ * (request time) and the /models picker's chain display.
  */
 export function resolveModePackFallbackChain(
   fallbacks: Record<string, string>,
@@ -163,14 +165,15 @@ export function resolveModePackFallbackChain(
   savedCustomPacks: Array<{ name: string }> = [],
 ): string[] {
   const chain = [startPackId];
-  const appearances = new Map<string, number>([[startPackId, 1]]);
+  let revisitUsed = false;
   let current = startPackId;
   while (true) {
     const next = fallbacks[current];
     if (!next || !isKnownModePackId(next, savedCustomPacks)) break;
-    const seen = (appearances.get(next) ?? 0) + 1;
-    if (seen > 2) break;
-    appearances.set(next, seen);
+    if (chain.includes(next)) {
+      if (revisitUsed) break;
+      revisitUsed = true;
+    }
     chain.push(next);
     current = next;
   }
