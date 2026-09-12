@@ -38,6 +38,7 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
+import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
 export const OPENAI_PREFIX = 'openai/';
@@ -81,9 +82,17 @@ export type MastraCodeGatewayOptions = {
  * the developer's real app-data dir for every credential read.
  */
 let authStorageSingleton: AuthStorage | undefined;
+let authStorageSingletonDir: string | undefined;
 
 function getGlobalAuthStorage(): AuthStorage {
-  if (!authStorageSingleton) authStorageSingleton = new AuthStorage();
+  // Keyed by the resolved app-data dir: in-process harnesses re-point
+  // MASTRA_APP_DATA_DIR per run inside one long-lived worker, so a store
+  // pinned to a previous dir must be discarded, not reused.
+  const dir = getAppDataDir();
+  if (!authStorageSingleton || authStorageSingletonDir !== dir) {
+    authStorageSingleton = new AuthStorage();
+    authStorageSingletonDir = dir;
+  }
   return authStorageSingleton;
 }
 
@@ -429,7 +438,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     };
 
     try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage: this.#credentials });
+      const copilotModels = await getCopilotModelCatalog({ authStorage: getGlobalAuthStorage() });
       providers['github-copilot'] = {
         name: 'GitHub Copilot',
         apiKeyEnvVar: '',
