@@ -1,9 +1,8 @@
 /*
  * Local Mastra Studio fonts. Bundled into the public `mastra` CLI build.
- * Mona Sans (display), Inter (body) and Commit Mono (code) are all SIL OFL —
- * safe to redistribute in the open-source package (see OFL-MonaSans.txt,
- * OFL-Inter.txt and OFL-CommitMono.txt). Non-OFL product fonts stay outside
- * this package.
+ * Inter (display + body) and Commit Mono (code) are both SIL OFL — safe to
+ * redistribute in the open-source package (see OFL-Inter.txt and
+ * OFL-CommitMono.txt). Non-OFL product fonts stay outside this package.
  */
 
 @font-face {
@@ -12,17 +11,6 @@
     local('Inter'),
     url('./assets/fonts/InterVariable.woff2') format('woff2');
   font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Mona Sans';
-  src:
-    local('Mona Sans'),
-    url('./assets/fonts/MonaSans-VariableFont_wdth-wght.ttf') format('truetype');
-  font-weight: 200 900;
-  font-stretch: 75% 125%;
   font-style: normal;
   font-display: swap;
 }
