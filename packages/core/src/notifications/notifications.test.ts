@@ -366,13 +366,20 @@ describe('notification inbox', () => {
     });
   });
 
-  it('rejects search without a query at the schema level', () => {
+  it('rejects search without a query and id-scoped actions without an id at the schema level', () => {
     const tool = createNotificationInboxTool({ storage: new InMemoryNotificationsStorage() });
     const schema = tool.inputSchema as z.ZodType;
     expect(schema.safeParse({ action: 'search' }).success).toBe(false);
     expect(schema.safeParse({ action: 'search', query: '  ' }).success).toBe(false);
     expect(schema.safeParse({ action: 'search', query: 'launch' }).success).toBe(true);
     expect(schema.safeParse({ action: 'list' }).success).toBe(true);
+    for (const action of ['markSeen', 'dismiss', 'archive']) {
+      expect(schema.safeParse({ action }).success).toBe(false);
+      expect(schema.safeParse({ action, id: '' }).success).toBe(false);
+      expect(schema.safeParse({ action, id: 'n1' }).success).toBe(true);
+    }
+    // read supports both a single id and a bulk unread read.
+    expect(schema.safeParse({ action: 'read' }).success).toBe(true);
   });
 
   it('resolves priority-aware default delivery decisions', async () => {

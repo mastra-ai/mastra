@@ -25,6 +25,12 @@ const notificationActionSchema = z
     if (input.action === 'search' && !input.query?.trim()) {
       ctx.addIssue({ code: 'custom', path: ['query'], message: 'notification-inbox search requires query' });
     }
+    if (
+      (input.action === 'markSeen' || input.action === 'dismiss' || input.action === 'archive') &&
+      !input.id?.trim()
+    ) {
+      ctx.addIssue({ code: 'custom', path: ['id'], message: `notification-inbox ${input.action} requires id` });
+    }
   });
 
 type NotificationInboxAction = z.infer<typeof notificationActionSchema>;
@@ -194,7 +200,6 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
         });
       }
 
-      if (!input.id) throw new Error(`notification-inbox ${input.action} requires id`);
       const statusByAction = {
         markSeen: 'seen',
         dismiss: 'dismissed',
@@ -204,7 +209,8 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
       return {
         notification: await storage.updateNotification({
           threadId,
-          id: input.id,
+          // The schema refine guarantees id for these actions; superRefine does not narrow the type.
+          id: input.id!,
           status: statusByAction[input.action],
         }),
       };
