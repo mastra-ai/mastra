@@ -1,6 +1,7 @@
 {
   "attachment": [
     "alibaba/kimi-k2.5",
+    "alibaba/kimi-k3",
     "alibaba/qwen-max",
     "alibaba/qwen-omni-turbo",
     "alibaba/qwen3-max",
@@ -182,6 +183,7 @@
     "openai/o3",
     "openai/o4-mini",
     "quartz/gemini-3.1-pro-preview",
+    "runpod/kimi-k3",
     "runware/gemma-4-31b-it",
     "runware/glm-5.3-flash",
     "runware/kimi-k2.6",
@@ -524,6 +526,7 @@
     "zai/glm-5.3-flash"
   ],
   "structuredOutput": [
+    "alibaba/kimi-k3",
     "alibaba/qwen3.8-flash",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
@@ -643,6 +646,7 @@
     "perplexity/sonar-reasoning-pro",
     "quartz/gemini-3.1-pro-preview",
     "ranoai/deepseek-v4-flash",
+    "runpod/kimi-k3",
     "runware/deepseek-v4-flash",
     "runware/deepseek-v4-pro",
     "runware/glm-5.3",
