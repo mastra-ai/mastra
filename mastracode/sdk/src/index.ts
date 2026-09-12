@@ -1252,11 +1252,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         const unsubscribeSession = session.subscribe(event => {
           if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
           else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
-          else if (event.type === 'thread_title_updated') {
+          else if (event.type === 'thread_title_updated' || event.type === 'om_thread_title_updated') {
             controller.getCurrentAgent(session).updateThreadPeerAdvertisement({
               resourceId: session.identity.getResourceId(),
               threadId: event.threadId,
-              peer: { title: event.title },
+              peer: { title: event.type === 'thread_title_updated' ? event.title : event.newTitle },
             });
           }
         });
