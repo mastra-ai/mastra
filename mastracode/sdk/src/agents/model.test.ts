@@ -95,14 +95,28 @@ describe('getDynamicModel fallback chain', () => {
     expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
   });
 
+  it('truncates the chain at a fallback pack that lacks the session mode model', () => {
+    seedSettings({ anthropic: 'custom:empty' });
+    const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));
+    raw.customModelPacks = [{ name: 'empty', models: {} }];
+    writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(raw), 'utf-8');
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    // The fallback pack cannot serve mode 'build', so the chain collapses to
+    // the primary alone — a bare model, not a one-entry fallback array.
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
   it('gives a revisited pack a unique per-occurrence id (A→B→A chain)', () => {
     seedSettings({ anthropic: 'openai', openai: 'anthropic' });
 
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
     const entries = model as Array<{ id?: string }>;
 
-    // Each pack appears at most twice (initial visit + one revisit).
-    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2', 'openai#2']);
+    // One revisit total per cascade (Q15: full circle, one revisit, surface).
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
   });
 
   it('identifies the pack through builtin overrides applied to the session model', () => {
