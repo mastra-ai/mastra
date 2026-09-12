@@ -107,7 +107,7 @@ describe('Session follow-up queue items', () => {
     }
   }, 15_000);
 
-  it('steer drops every queued follow-up and reports an empty list', async () => {
+  it('steer runs its message next and keeps the queued follow-ups, one run each', async () => {
     const { agent, prompts, finish } = makeHeldRuns('follow-up-queue-steer');
     const controller = new AgentController({
       id: 'follow-up-queue-steer-controller',
@@ -117,25 +117,125 @@ describe('Session follow-up queue items', () => {
     try {
       await controller.init();
       const session = await controller.createSession({ resourceId: 'owner-steer' });
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => events.push(event));
       const first = session.sendMessage({ content: 'Hold the first instruction.' });
       void first.catch(() => {});
       await vi.waitFor(() => expect(session.displayState.get().isRunning).toBe(true));
-      await session.followUp({ content: 'Queued behind the run.' });
-      expect(session.displayState.get().queuedFollowUpItems).toHaveLength(1);
+      await session.followUp({ content: 'Queued first.' });
+      await session.followUp({ content: 'Queued second.' });
 
       const steered = session.steer({ content: 'Change course now.' });
       void steered.catch(() => {});
+
+      // The aborted run ends, then the steered message runs on its own and the
+      // queue keeps its order behind it.
       await vi.waitFor(() => expect(prompts).toHaveLength(2));
-      expect(session.displayState.get().queuedFollowUps).toBe(0);
-      expect(session.displayState.get().queuedFollowUpItems).toEqual([]);
+      expect(JSON.stringify(prompts[1])).toContain('Change course now.');
+      expect(JSON.stringify(prompts[1])).not.toContain('Queued first.');
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Queued first.', 'Queued second.']);
 
       finish(1);
-      await Promise.all([first, steered]);
-      await vi.waitFor(() => expect(session.displayState.get().isRunning).toBe(false));
+      await vi.waitFor(() => expect(prompts).toHaveLength(3));
+      expect(JSON.stringify(prompts[2])).toContain('Queued first.');
+      expect(JSON.stringify(prompts[2])).not.toContain('Queued second.');
+
+      finish(2);
+      await vi.waitFor(() => expect(prompts).toHaveLength(4));
+      expect(JSON.stringify(prompts[3])).toContain('Queued second.');
+
+      finish(3);
+      await Promise.all([first.catch(() => {}), steered]);
+      await vi.waitFor(() => {
+        expect(events.filter(event => event.type === 'agent_end').map(event => event.reason)).toEqual([
+          'aborted',
+          'complete',
+          'complete',
+          'complete',
+        ]);
+        expect(session.displayState.get().isRunning).toBe(false);
+        expect(session.followUps.count()).toBe(0);
+      });
     } finally {
       await controller.destroy();
     }
-  }, 15_000);
+  }, 20_000);
+
+  it('queues messages sent while a run is still starting and runs each on its own', async () => {
+    const { agent, prompts, finish } = makeHeldRuns('follow-up-queue-starting');
+    const controller = new AgentController({
+      id: 'follow-up-queue-starting-controller',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    try {
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'owner-starting' });
+      const first = session.sendMessage({ content: 'First instruction.' });
+      void first.catch(() => {});
+      // The run has not started yet: these must not be folded into its first request.
+      await session.followUp({ content: 'Second instruction.' });
+      await session.followUp({ content: 'Third instruction.' });
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Second instruction.', 'Third instruction.']);
+
+      await vi.waitFor(() => expect(prompts).toHaveLength(1));
+      expect(JSON.stringify(prompts[0])).toContain('First instruction.');
+      expect(JSON.stringify(prompts[0])).not.toContain('Second instruction.');
+
+      finish(0);
+      await vi.waitFor(() => expect(prompts).toHaveLength(2));
+      expect(JSON.stringify(prompts[1])).toContain('Second instruction.');
+      expect(JSON.stringify(prompts[1])).not.toContain('Third instruction.');
+
+      finish(1);
+      await vi.waitFor(() => expect(prompts).toHaveLength(3));
+      expect(JSON.stringify(prompts[2])).toContain('Third instruction.');
+
+      finish(2);
+      await first;
+      await vi.waitFor(() => {
+        expect(session.displayState.get().isRunning).toBe(false);
+        expect(session.followUps.count()).toBe(0);
+      });
+    } finally {
+      await controller.destroy();
+    }
+  }, 20_000);
+
+  it('moves the queue on when the send ahead of it never becomes a run', async () => {
+    const { agent, prompts, finish } = makeHeldRuns('follow-up-queue-refused');
+    const controller = new AgentController({
+      id: 'follow-up-queue-refused-controller',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    try {
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'owner-refused' });
+      vi.spyOn(agent, 'sendSignal').mockImplementationOnce(
+        () =>
+          ({
+            signal: { id: 'refused', type: 'user-message', contents: 'Refused instruction.' },
+            accepted: Promise.reject(new Error('refused before start')),
+          }) as any,
+      );
+      const first = session.sendMessage({ content: 'Refused instruction.' });
+      await session.followUp({ content: 'Queued behind the refused send.' });
+      expect(session.followUps.count()).toBe(1);
+      await expect(first).rejects.toThrow('refused before start');
+
+      // Nothing started, so no run end will send the queue: it moves on at once.
+      await vi.waitFor(() => expect(prompts).toHaveLength(1));
+      expect(JSON.stringify(prompts[0])).toContain('Queued behind the refused send.');
+      finish(0);
+      await vi.waitFor(() => {
+        expect(session.displayState.get().isRunning).toBe(false);
+        expect(session.followUps.count()).toBe(0);
+      });
+    } finally {
+      await controller.destroy();
+    }
+  }, 20_000);
 });
 
 describe('Session follow-ups behind parked and starting runs', () => {
@@ -221,6 +321,60 @@ describe('Session follow-ups behind parked and starting runs', () => {
         expect.objectContaining({ content: 'Third, after the first settled.' }),
       );
       expect(session.followUps.list().map(item => item.content)).toEqual(['Second, right behind it.']);
+    } finally {
+      await controller.destroy();
+    }
+  });
+
+  it('moves the queue on when Stop abandons a parked run', async () => {
+    const { controller, session, queueMessage } = await createIdleSession('follow-up-parked-stop');
+    try {
+      const sendMessage = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      // No live thread stream here, so Stop itself moves the queue on.
+      session.stream.detach();
+      session.emit({
+        type: 'tool_suspended',
+        toolCallId: 'call-generate',
+        toolName: 'generate_image',
+        args: {},
+        suspendPayload: { prompt: 'a cat' },
+      });
+      await session.followUp({ content: 'After the stop.' });
+      expect(session.followUps.count()).toBe(1);
+
+      session.abort();
+
+      await vi.waitFor(() => {
+        const dispatched = [...sendMessage.mock.calls, ...queueMessage.mock.calls].map(call => JSON.stringify(call[0]));
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0]).toContain('After the stop.');
+      });
+      expect(session.followUps.count()).toBe(0);
+    } finally {
+      await controller.destroy();
+    }
+  });
+
+  it('steer on a parked run sends the steered message first and keeps the queue', async () => {
+    const { controller, session, queueMessage } = await createIdleSession('follow-up-parked-steer');
+    try {
+      const sendMessage = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      session.stream.detach();
+      session.emit({
+        type: 'tool_suspended',
+        toolCallId: 'call-generate',
+        toolName: 'generate_image',
+        args: {},
+        suspendPayload: { prompt: 'a cat' },
+      });
+      await session.followUp({ content: 'Queued while generating.' });
+
+      await session.steer({ content: 'Stop that and do this.' });
+
+      const dispatched = [...sendMessage.mock.calls, ...queueMessage.mock.calls].map(call => JSON.stringify(call[0]));
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0]).toContain('Stop that and do this.');
+      expect(session.followUps.list().map(item => item.content)).toEqual(['Queued while generating.']);
     } finally {
       await controller.destroy();
     }

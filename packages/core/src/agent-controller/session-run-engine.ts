@@ -1297,22 +1297,22 @@ export class SessionRunEngine {
               isError = true;
               this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
             }
+            if (aborted) {
+              // The abort chunk terminates this consumer loop, so the live
+              // subscription is no longer being drained. Detach it before the
+              // run is finished: finishing sends the next queued message, which
+              // must start on a fresh subscription, not on the one being
+              // detached, or its run's chunks are never processed and the
+              // message gets no response.
+              this.#session.stream.detach();
+            }
             await this.finishSubscribedStreamRun({
               suspended,
               error: isError,
               aborted,
             });
             currentRun = undefined;
-            if (aborted) {
-              // The abort chunk terminates this consumer loop, so the live
-              // subscription is no longer being drained. Detach it so the next
-              // signal (e.g. a follow-up message sent right after Ctrl+C)
-              // re-subscribes and starts a fresh consumer — otherwise the new
-              // run's chunks would never be processed and the follow-up would
-              // get no response.
-              this.#session.stream.detach();
-              break;
-            }
+            if (aborted) break;
           }
         } catch (error) {
           await this.handleSubscribedStreamError(error);

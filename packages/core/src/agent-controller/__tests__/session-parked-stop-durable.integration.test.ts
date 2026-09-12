@@ -141,4 +141,23 @@ describe('durable Session: Stop on a parked question frees the thread', () => {
       await h.close();
     }
   });
+
+  it('runs the follow-up that waited behind a parked question once Stop abandons it', async () => {
+    const h = await createHarness('stop-drains-queue');
+    try {
+      await h.session.sendMessage({ content: 'Ask me a color.' });
+      await vi.waitFor(() => expect(h.session.displayState.get().pendingSuspensions.size).toBe(1));
+      await h.session.followUp({ content: 'Queued behind the question.' });
+      expect(h.session.followUps.count()).toBe(1);
+
+      h.session.abort();
+
+      await vi.waitFor(() => expect(h.ends.at(-1)).toBe('complete'), { timeout: 15_000 });
+      expect(JSON.stringify(h.prompts.at(-1))).toContain('Queued behind the question.');
+      expect(h.session.followUps.count()).toBe(0);
+      expect(h.errors).toEqual([]);
+    } finally {
+      await h.close();
+    }
+  });
 });

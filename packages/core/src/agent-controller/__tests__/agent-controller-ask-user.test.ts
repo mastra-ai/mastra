@@ -475,4 +475,20 @@ describe('AgentController: Stop on a parked question frees the thread', () => {
     expect(session.displayState.get().isRunning).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
   }, 20_000);
+
+  it('runs the follow-up that waited behind a parked question once Stop abandons it', async () => {
+    const { controller, session, prompts, ends } = await buildRecording('stop-drains-queue');
+    await session.sendMessage({ content: 'Ask me a color.' });
+    expect(ends).toEqual(['suspended']);
+    await session.followUp({ content: 'Queued behind the question.' });
+    expect(session.followUps.count()).toBe(1);
+
+    session.abort();
+
+    await vi.waitFor(() => expect(ends.at(-1)).toBe('complete'), { timeout: 10_000 });
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('Queued behind the question.');
+    expect(session.followUps.count()).toBe(0);
+    await vi.waitFor(() => expect(controller.listActiveThreadRuns()).toHaveLength(0));
+  }, 20_000);
 });
