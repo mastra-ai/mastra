@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Agents list: the whole row now navigates to the agent, not only the Name/Purpose cells. Keyboard focus lands on the row itself.
+Studio lists with cells outside the main link/button (agents, datasets, experiments, workflows, inbox, skills) now activate from anywhere on the row: clicking a trailing cell navigates or selects, and keyboard focus lands on the row itself instead of the inner link. Buttons, popovers and expanders inside those rows keep their own behavior without triggering the row.
