@@ -121,6 +121,12 @@ export type UpdateNotificationInput = {
   summarySignalId?: string;
 };
 
+export type UpdateNotificationsStatusInput = {
+  threadId: string;
+  ids: string[];
+  status: NotificationStatus;
+};
+
 export type NotificationSummary = {
   threadId: string;
   resourceId?: string;
