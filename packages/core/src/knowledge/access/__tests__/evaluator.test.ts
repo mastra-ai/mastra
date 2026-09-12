@@ -217,6 +217,31 @@ describe('Knowledge access frontier evaluator', () => {
     expect(listGrants).toHaveBeenCalledTimes(2);
   });
 
+  it('retries when a vouched scope is deleted during the access snapshot', async () => {
+    const storage = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    let epoch = 1;
+    vi.spyOn(storage, 'getAccessEpoch').mockImplementation(async () => epoch);
+    vi.spyOn(storage, 'listScopeGrants').mockResolvedValue([grant(PROJECT, PRINCIPAL, 'readonly')]);
+    const resolveLiveVouchedScopeIds = vi
+      .fn<(scopeIds: readonly string[]) => Promise<string[]>>()
+      .mockImplementationOnce(async () => {
+        epoch = 2;
+        return [PRINCIPAL];
+      })
+      .mockResolvedValue([]);
+
+    const frontier = await new KnowledgeAccessEvaluator({
+      instance: {},
+      storage,
+      resolveLiveVouchedScopeIds,
+    }).evaluate([PRINCIPAL]);
+
+    expect(frontier.accessEpoch).toBe(2);
+    expect(frontier.vouchedScopeIds).toEqual([]);
+    expect(frontier.scopes[PROJECT]).toBeUndefined();
+    expect(resolveLiveVouchedScopeIds).toHaveBeenCalledTimes(2);
+  });
+
   it('fails closed after three inconsistent epoch snapshots', async () => {
     const storage = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     let epoch = 0;
