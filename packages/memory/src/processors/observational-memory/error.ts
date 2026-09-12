@@ -2,6 +2,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export type OmFailurePolicy = 'abort' | 'continue';
+export type OmFailureKind = 'observer-provider';
+
+export class ObserverProviderError extends Error {
+  readonly failureKind = 'observer-provider' as const;
+
+  constructor(cause: unknown) {
+    super(formatOmError(cause), { cause });
+    this.name = 'ObserverProviderError';
+  }
+}
+
+export function isObserverProviderError(error: unknown): error is ObserverProviderError {
+  try {
+    return error instanceof ObserverProviderError;
+  } catch {
+    return false;
+  }
+}
+
+export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
+  return {
+    failurePolicy,
+    ...(isObserverProviderError(error) ? { failureKind: error.failureKind } : {}),
+  };
+}
+
 /** Keep provider diagnostics in streamed/persisted markers, not whole API request/response objects. */
 export function formatOmError(error: unknown): string {
   const details = new Set<string>();

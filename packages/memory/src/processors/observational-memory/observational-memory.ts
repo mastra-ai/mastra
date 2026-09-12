@@ -581,6 +581,7 @@ export class ObservationalMemory {
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
+      onFailure: config.observation?.onFailure ?? 'abort',
       // When shared budget, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
       messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
@@ -734,6 +735,7 @@ export class ObservationalMemory {
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
+      onFailure: 'abort' | 'continue';
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -745,6 +747,7 @@ export class ObservationalMemory {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
+        onFailure: this.observationConfig.onFailure,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,

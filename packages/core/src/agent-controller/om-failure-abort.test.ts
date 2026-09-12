@@ -89,4 +89,63 @@ describe('AgentController OM failure abort behavior', () => {
     expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
+
+  it('continues the stream after an observer/provider buffering failure under continue policy', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-buffering-failed',
+          data: {
+            cycleId: 'c3',
+            operationType: 'observation',
+            error: 'fetch failed',
+            failurePolicy: 'continue',
+            failureKind: 'observer-provider',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't3' } };
+      })(),
+    });
+
+    expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
+    expect(events.some(e => e.type === 'message_start')).toBe(true);
+  });
+
+  it('continues the stream after an awaited observer/provider failure under continue policy', async () => {
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    session.run.ensureAbortController();
+
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-observation-failed',
+          data: {
+            cycleId: 'c4',
+            operationType: 'observation',
+            error: 'fetch failed',
+            durationMs: 50,
+            failurePolicy: 'continue',
+            failureKind: 'observer-provider',
+          },
+        };
+        yield { type: 'text-start', payload: { id: 't4' } };
+      })(),
+    });
+
+    expect(events.some(e => e.type === 'om_observation_failed')).toBe(true);
+    expect(events.some(e => e.type === 'error')).toBe(false);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(false);
+    expect(events.some(e => e.type === 'message_start')).toBe(true);
+  });
 });

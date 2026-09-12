@@ -4194,6 +4194,7 @@ describe('ObservationalMemory Integration', () => {
         observation: {
           messageTokens: 500,
           previousObserverTokens: 2000,
+          onFailure: 'abort',
         },
         reflection: {
           observationTokens: 1000,
