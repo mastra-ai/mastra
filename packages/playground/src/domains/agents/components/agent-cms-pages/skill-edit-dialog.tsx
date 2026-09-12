@@ -4,8 +4,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  CopyIcon,
+  Globe,
+  LockIcon,
+  Pencil,
+  Settings2,
+  Check,
+} from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -308,7 +319,13 @@ export function SkillEditDialog({
                   </SelectContent>
                 </Select>
               )}
-              <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim() || isPending}>
+              <Button
+                icon={isExistingSkill ? <Check /> : <SkillIcon />}
+                variant="primary"
+                size="sm"
+                onClick={handleSave}
+                disabled={!name.trim() || isPending}
+              >
                 {isPending ? 'Saving...' : isExistingSkill ? 'Save' : 'Create'}
               </Button>
             </>

@@ -4,7 +4,7 @@ import { DatePicker } from '@mastra/playground-ui/components/DateTimePicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isValid } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, X } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 
 export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
@@ -60,7 +60,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
         <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
         {value && (
           <div className="p-3 pt-0">
-            <Button variant="default" size="lg" className="w-full" onClick={handleClear}>
+            <Button icon={<X />} variant="default" size="lg" className="w-full" onClick={handleClear}>
               Clear
             </Button>
           </div>

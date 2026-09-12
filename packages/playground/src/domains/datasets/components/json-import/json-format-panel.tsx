@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
 const DOCS_URL = 'https://mastra.ai/docs/evals/datasets';
 
@@ -50,7 +50,7 @@ export function JSONFormatPanel() {
       <div className="border-border1 overflow-hidden rounded-lg border">
         <div className="border-border1 bg-surface3 flex items-center justify-between border-b py-1.5 pr-1.5 pl-3">
           <span className="text-ui-xs text-neutral4 font-mono">example.json</span>
-          <Button variant="ghost" size="xs" onClick={handleCopy}>
+          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="xs" onClick={handleCopy}>
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>

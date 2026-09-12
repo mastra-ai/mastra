@@ -9,10 +9,11 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
+import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2, Paperclip } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
@@ -347,7 +348,12 @@ export function DatasetDetailView({
               </button>
               {unattachedScorerEntries.length > 0 && (
                 <div className="pr-2">
-                  <Button variant="ghost" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                  <Button
+                    icon={<Paperclip />}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAttachScorerDialog(true)}
+                  >
                     Attach
                   </Button>
                 </div>
@@ -361,7 +367,12 @@ export function DatasetDetailView({
                   </Txt>
                   {unattachedScorerEntries.length > 0 && (
                     <div className="mt-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
+                      <Button
+                        icon={<ScorersIcon />}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAttachScorerDialog(true)}
+                      >
                         Attach a scorer
                       </Button>
                     </div>
@@ -767,7 +778,7 @@ function ExpandedItemEditor({
             >
               {deleteItem.isPending ? <Spinner className="h-3 w-3" /> : 'Yes'}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
+            <Button icon={<X />} variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
               No
             </Button>
           </>

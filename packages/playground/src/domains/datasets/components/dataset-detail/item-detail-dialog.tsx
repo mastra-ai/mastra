@@ -20,6 +20,8 @@ import {
   Pencil,
   Trash2,
   Eraser,
+  Check,
+  X,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
@@ -293,6 +295,7 @@ export function ItemDetailDialog({
                 preventDefault, which would hide the pending state and a failed
                 purge behind a toast. */}
             <Button
+              icon={<Trash2 />}
               variant="primary"
               size="lg"
               onClick={() => void handlePurgeConfirm()}
@@ -459,10 +462,10 @@ function EditModeContent({
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>

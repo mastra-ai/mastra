@@ -14,7 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon, Save } from 'lucide-react';
+import { DatabaseIcon, Save, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
@@ -146,7 +146,7 @@ function DatasetSaveDialog({
           </div>
         </DialogBody>
         <DialogFooter className="px-4">
-          <Button variant="default" size="sm" onClick={() => onOpenChange(false)}>
+          <Button icon={<X />} variant="default" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button

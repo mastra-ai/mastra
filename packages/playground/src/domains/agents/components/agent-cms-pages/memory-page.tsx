@@ -49,7 +49,7 @@ export function MemoryPage() {
                     name="memory.enabled"
                     control={control}
                     render={({ field }) => (
-                      <Button variant="default" size="sm" onClick={() => field.onChange(true)}>
+                      <Button icon={<MemoryIcon />} variant="default" size="sm" onClick={() => field.onChange(true)}>
                         Enable Memory
                       </Button>
                     )}

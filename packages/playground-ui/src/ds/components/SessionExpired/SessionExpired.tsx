@@ -53,7 +53,7 @@ export function SessionExpired({ title, description, className }: SessionExpired
       titleSlot={title ?? 'Session Expired'}
       descriptionSlot={description ?? 'Your session has expired. Please log in again to continue.'}
       actionSlot={
-        <Button variant="default" onClick={handleLogin} disabled={isPending}>
+        <Button icon={<LogIn />} variant="default" onClick={handleLogin} disabled={isPending}>
           {isPending ? 'Redirecting...' : 'Log in'}
         </Button>
       }

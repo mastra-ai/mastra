@@ -17,7 +17,7 @@ import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Sparkles, Trash2, Plus } from 'lucide-react';
+import { Sparkles, Trash2, Plus, X, RotateCcw } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 
 import { useGenerationTasks } from '../context/generation-context';
@@ -162,7 +162,9 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
         </DialogBody>
         <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
-            <Button onClick={() => handleClose(false)}>Cancel</Button>
+            <Button icon={<X />} onClick={() => handleClose(false)}>
+              Cancel
+            </Button>
             <Button variant="primary" onClick={handleGenerate} disabled={!modelId} icon={<Sparkles />}>
               Generate
             </Button>
@@ -285,7 +287,7 @@ export function GenerateReviewDialog({
                 </Txt>
               </div>
               {onStartOver && (
-                <Button variant="ghost" size="sm" onClick={onStartOver}>
+                <Button icon={<RotateCcw />} variant="ghost" size="sm" onClick={onStartOver}>
                   Start over
                 </Button>
               )}
@@ -339,7 +341,9 @@ export function GenerateReviewDialog({
         </DialogBody>
         <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
-            <Button onClick={() => handleClose(false)}>Cancel</Button>
+            <Button icon={<X />} onClick={() => handleClose(false)}>
+              Cancel
+            </Button>
             <Button
               variant="primary"
               onClick={handleAddSelected}

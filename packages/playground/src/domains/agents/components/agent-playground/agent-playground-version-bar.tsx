@@ -19,7 +19,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -292,7 +292,7 @@ export function AgentPlaygroundVersionBar({
               </div>
             </DialogBody>
             <DialogFooter className="px-4">
-              <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
+              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
                 Cancel
               </Button>
               <Button

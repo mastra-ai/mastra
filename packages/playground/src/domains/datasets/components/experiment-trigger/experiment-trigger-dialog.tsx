@@ -17,7 +17,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
@@ -380,7 +380,7 @@ export function ExperimentTriggerDialog({
             )}
           </p>
           <div className="flex items-center gap-2">
-            <Button onClick={handleClose} disabled={isRunning}>
+            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>

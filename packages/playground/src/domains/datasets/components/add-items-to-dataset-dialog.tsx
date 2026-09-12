@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@m
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';
@@ -134,10 +135,11 @@ export function AddItemsToDatasetDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isAdding}>
+              <Button icon={<X />} type="button" onClick={handleCancel} disabled={isAdding}>
                 Cancel
               </Button>
               <Button
+                icon={<Plus />}
                 type="submit"
                 variant="primary"
                 disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}

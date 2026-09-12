@@ -6,7 +6,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChevronLeft, Link2 } from 'lucide-react';
+import { ChevronLeft, Link2, Unplug } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
@@ -117,6 +117,7 @@ export const ManageConnectionForm = ({
           </div>
 
           <Button
+            icon={<Unplug />}
             type="button"
             variant="ghost"
             onClick={() => setConfirmDisconnectOpen(true)}
@@ -150,6 +151,7 @@ export const ManageConnectionForm = ({
               Cancel
             </AlertDialog.Cancel>
             <Button
+              icon={<Unplug />}
               type="button"
               variant="primary"
               onClick={disconnect}

@@ -20,7 +20,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
+import { CheckCircle, CircleSlashIcon, EllipsisIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
@@ -536,7 +536,7 @@ export function DatasetReview({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
@@ -610,10 +610,14 @@ export function DatasetReview({
             })}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowProposalDialog(false)}>
+            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAcceptProposals} disabled={proposedAssignments.filter(p => p.accepted).length === 0}>
+            <Button
+              icon={<Check />}
+              onClick={handleAcceptProposals}
+              disabled={proposedAssignments.filter(p => p.accepted).length === 0}
+            >
               Accept {proposedAssignments.filter(p => p.accepted).length} proposals
             </Button>
           </DialogFooter>

@@ -74,6 +74,7 @@ const DeleteAgentDialog = ({
             Cancel
           </AlertDialog.Cancel>
           <Button
+            icon={<Trash2 />}
             variant="primary"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
@@ -103,6 +104,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
   return (
     <>
       <Button
+        icon={<Trash2 />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"

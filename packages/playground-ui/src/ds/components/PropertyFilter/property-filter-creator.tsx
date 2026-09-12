@@ -1,4 +1,12 @@
-import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
+import {
+  ArrowLeftIcon,
+  ChevronRightIcon,
+  FilterIcon,
+  ListFilterPlusIcon,
+  PlusIcon,
+  ListFilterPlus,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
@@ -276,10 +284,10 @@ export function PropertyFilterCreator({
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="outline" size="md" onClick={commit}>
+              <Button icon={<ListFilterPlus />} variant="outline" size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>

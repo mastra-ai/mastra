@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, Settings2 } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
@@ -93,10 +94,16 @@ export const AgentStepContainer = ({
             data-testid="agent-step-footer"
           >
             {backButton}
-            <Button variant="outline" onClick={() => startViewTransition(() => next())} disabled={isStreaming}>
+            <Button
+              icon={<Settings2 />}
+              variant="outline"
+              onClick={() => startViewTransition(() => next())}
+              disabled={isStreaming}
+            >
               See agent configuration
             </Button>
             <Button
+              icon={<AgentIcon />}
               variant="primary"
               onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
               disabled={isStreaming}

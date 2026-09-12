@@ -10,7 +10,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
-import { Braces, CopyIcon, ExternalLink, X } from 'lucide-react';
+import { Braces, CopyIcon, ExternalLink, X, Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
@@ -206,7 +206,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
               <X />
             </Button>
           )}
-          <Button type="button" onClick={handleSaveRequestContext} disabled={!isRequestContextDirty}>
+          <Button icon={<Check />} type="button" onClick={handleSaveRequestContext} disabled={!isRequestContextDirty}>
             Save
           </Button>
         </div>

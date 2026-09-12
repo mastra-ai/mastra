@@ -20,6 +20,8 @@ import {
   ClipboardCheck,
   Award,
   ExternalLink,
+  ListChecks,
+  X,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -475,7 +477,7 @@ export function ExperimentResultsPanel({
               Send to Review
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={clearSelection}>
+          <Button icon={<X />} variant="ghost" size="sm" onClick={clearSelection}>
             Clear
           </Button>
         </div>
@@ -483,7 +485,7 @@ export function ExperimentResultsPanel({
 
       {results && results.length > 0 && selectedIds.size === 0 && (
         <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
-          <Button variant="ghost" size="sm" onClick={selectAllFailed}>
+          <Button icon={<ListChecks />} variant="ghost" size="sm" onClick={selectAllFailed}>
             Select all failures
           </Button>
         </div>

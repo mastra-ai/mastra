@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { GitCompare, Play, XIcon } from 'lucide-react';
+import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 
 export interface ExperimentsToolbarDatasetOption {
@@ -103,7 +103,9 @@ export function ExperimentsToolbar({
           <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
             Compare Experiments
           </Button>
-          <Button onClick={selection.onCancelSelection}>Cancel</Button>
+          <Button icon={<X />} onClick={selection.onCancelSelection}>
+            Cancel
+          </Button>
         </ButtonsGroup>
       ) : (
         <ButtonsGroup className="ml-auto shrink-0">

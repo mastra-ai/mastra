@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import * as React from 'react';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
@@ -11,14 +12,14 @@ export function AddField({ children, ...props }: JSONSchemaFormAddFieldProps) {
   const nestedContext = useJSONSchemaFormNestedContext();
 
   // Use nested context parentPath if available, otherwise add to root
-  const parentPath = nestedContext ? nestedContext.parentPath : [];
+  const parentPath = nestedContext?.parentPath;
 
   const handleClick = React.useCallback(() => {
-    addField(parentPath);
+    addField(parentPath ?? []);
   }, [addField, parentPath]);
 
   return (
-    <Button type="button" {...props} onClick={handleClick}>
+    <Button icon={<Plus />} type="button" {...props} onClick={handleClick}>
       {children || 'Add field'}
     </Button>
   );

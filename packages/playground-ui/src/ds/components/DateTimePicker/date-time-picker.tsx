@@ -1,5 +1,5 @@
 import { format, formatDate, isValid } from 'date-fns';
-import { CalendarIcon, CircleAlertIcon } from 'lucide-react';
+import { CalendarIcon, CircleAlertIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
@@ -239,11 +239,12 @@ export const DateTimePickerContent = ({
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
         {newValueDefined && (
-          <Button tabIndex={0} size="md" onClick={handleClear} type="button">
+          <Button icon={<X />} tabIndex={0} size="md" onClick={handleClear} type="button">
             Clear
           </Button>
         )}
         <Button
+          icon={newValueDefined ? <Check /> : <X />}
           tabIndex={0}
           type="button"
           size="md"

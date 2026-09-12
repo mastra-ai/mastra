@@ -1,5 +1,5 @@
 import { isValid, parse } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Check } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
@@ -157,7 +157,7 @@ export function DateTimeRangePicker({
             >
               &larr; Presets
             </button>
-            <Button variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
+            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
           </div>
