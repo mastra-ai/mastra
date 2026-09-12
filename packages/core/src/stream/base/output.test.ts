@@ -962,7 +962,17 @@ describe('MastraModelOutput', () => {
         },
       });
 
-      await output.consumeStream();
+      const chunks: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const finalChunk = chunks.filter(c => c.type === 'finish').pop();
+      expect((finalChunk as any)?.payload?.output?.usage).toMatchObject({
+        cacheCreationInputTokens: 5268,
+        cacheCreationInputTokens5m: 4100,
+        cacheCreationInputTokens1h: 1168,
+      });
 
       expect(finishPayload?.totalUsage?.inputTokens).toBe(17962);
       expect(finishPayload?.totalUsage?.outputTokens).toBe(1500);

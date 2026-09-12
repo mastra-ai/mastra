@@ -1029,6 +1029,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 ...(self.#usageCount.cacheCreationInputTokens !== undefined && {
                   cacheCreationInputTokens: self.#usageCount.cacheCreationInputTokens,
                 }),
+                ...(self.#usageCount.cacheCreationInputTokens5m !== undefined && {
+                  cacheCreationInputTokens5m: self.#usageCount.cacheCreationInputTokens5m,
+                }),
+                ...(self.#usageCount.cacheCreationInputTokens1h !== undefined && {
+                  cacheCreationInputTokens1h: self.#usageCount.cacheCreationInputTokens1h,
+                }),
                 ...(self.#usageCount.raw !== undefined && {
                   raw: self.#usageCount.raw,
                 }),
