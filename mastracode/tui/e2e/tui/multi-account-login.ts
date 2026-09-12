@@ -42,9 +42,15 @@ export const multiAccountLoginScenario = {
     patches.setProperty(anthropicOAuthProvider, 'login', async callbacks => {
       loginCalls += 1;
       callbacks.onProgress?.(`MC_MULTI_ACCOUNT_LOGIN_CALL_${loginCalls}`);
-      return loginCalls === 1
-        ? { access: 'mc-multi-a-access', refresh: 'mc-multi-a-refresh', expires: Date.now() + 60 * 60 * 1000 }
-        : { access: 'mc-multi-b-access', refresh: 'mc-multi-b-refresh', expires: Date.now() + 60 * 60 * 1000 };
+      if (loginCalls === 1) {
+        return { access: 'mc-multi-a-access', refresh: 'mc-multi-a-refresh', expires: Date.now() + 60 * 60 * 1000 };
+      }
+      if (loginCalls === 2) {
+        return { access: 'mc-multi-b-access', refresh: 'mc-multi-b-refresh', expires: Date.now() + 60 * 60 * 1000 };
+      }
+      // Third call: re-authentication of account A — providers rotate refresh
+      // tokens per authorization, so this returns a fresh token set.
+      return { access: 'mc-multi-a2-access', refresh: 'mc-multi-a2-refresh', expires: Date.now() + 60 * 60 * 1000 };
     });
 
     try {
@@ -103,6 +109,40 @@ export const multiAccountLoginScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Account A/i, terminal, 8_000);
     await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
+
+    // Re-authenticate account A in place: fresh tokens (rotated refresh
+    // token) must replace A's entry — same label, same position, now active —
+    // without appending a third account.
+    // Rows: [Account A, Account B, Add another, Re-authenticate…, Remove…, Back].
+    terminal.write('\x1b[B');
+    terminal.write('\x1b[B');
+    terminal.write('\x1b[B');
+    await runtime.waitForScreenText(/→ Re-authenticate…/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Select the account to re-authenticate:/i, terminal, 8_000);
+    terminal.write('\r'); // Account A is the first row
+    await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
+    // The placeholder names Account A — the picked account, not a fresh append.
+    await runtime.waitForScreenText(/Enter to keep "Account A"/i, terminal, 8_000);
+    terminal.write('\r'); // keep the "Account A" label
+    await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
+
+    // Registry on disk after re-auth: two entries, A re-keyed to the new
+    // refresh token and active with its label preserved, slot holds A's new
+    // tokens.
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); const reAuth=keys.find(k=>a[k].label==="Account A"); console.log("REAUTH_COUNT="+keys.length); console.log("REAUTH_REFRESH="+(reAuth?a[reAuth].refresh:"missing")); console.log("REAUTH_ACTIVE="+(reAuth?a[reAuth].active:"missing")); console.log("REAUTH_SLOT_ACCESS="+(a.anthropic&&a.anthropic.access));'`,
+    );
+    await runtime.waitForScreenText(/REAUTH_COUNT=2/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_REFRESH=mc-multi-a2-refresh/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_ACTIVE=true/i, terminal, 8_000);
+    await runtime.waitForScreenText(/REAUTH_SLOT_ACCESS=mc-multi-a2-access/i, terminal, 8_000);
+
+    // Remove the re-authenticated account A.
+    terminal.submit('/login');
+    await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
 
     // Rows: [Account A, Account B, Add another, Re-authenticate…, Remove…, Back].
     terminal.write('\x1b[B');

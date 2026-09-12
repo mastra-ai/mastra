@@ -61,6 +61,10 @@ export const loginDialogMaskedInputScenario = {
     expect(maskedScreen).toMatch(/\*{30}/);
 
     terminal.write('\r');
+    await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
+    // Keep the default label (Enter) — the rename prompt is part of the
+    // post-login account-registration flow.
+    terminal.write('\r');
     await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
     terminal.submit(
