@@ -653,7 +653,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           </dd>
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
           <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {new Date(node.updatedAt).toLocaleString()}
+            {node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}
           </dd>
         </dl>
       </div>

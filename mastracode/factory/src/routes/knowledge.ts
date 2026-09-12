@@ -64,6 +64,15 @@ export interface KnowledgeScopeTreePayload {
     level: KnowledgeScopeLevel;
     id: string;
     available: boolean;
+    /**
+     * Set when a reconciled structural scope node has this rung's canonical
+     * address (`org:<orgId>`, `resource:<projectId>`, `thread:<threadId>`) —
+     * the client renders ONE merged entry (structural name, identity marker)
+     * that opens the structural lens instead of duplicating the scope.
+     */
+    scopeNodeId?: string;
+    /** Structural name of the matched scope node (present iff scopeNodeId). */
+    name?: string;
   }>;
   defaultLevel: 'resource';
   /**
@@ -116,24 +125,26 @@ export interface KnowledgeGraphNode {
   pinned: boolean;
   /** Records owned by this node INSIDE the snapshot window (not a total). */
   recordCount: number;
-  createdAt: string;
-  updatedAt: string;
+  /** Omitted for a structural lens root when the adapter cannot read it back as a node. */
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface KnowledgeGraphEdge {
   id: string;
-  /** The owning node of the record (its `node`). */
+  /** The owning node of the record (its `node`); the scope node for containment edges. */
   source: string;
-  /** The wikilink-resolved node. */
+  /** The wikilink-resolved node; the contained member for containment edges. */
   target: string;
   /**
-   * Always 'wikilink': the record's `node` is the edge SOURCE, so the
-   * plan's "parent link" collapses into the wikilink edge — nodes carry no
-   * separate parent field to derive a second edge type from.
+   * 'wikilink': derived from a record's wikilinks (the record's `node` is the
+   * edge SOURCE, so the plan's "parent link" collapses into the wikilink edge).
+   * 'contains': structural lens only — the selected scope node contains the
+   * target member, so the clicked scope is visible as its own graph root.
    */
-  type: 'wikilink';
-  /** The record whose text produced the edge. */
-  recordId: string;
+  type: 'wikilink' | 'contains';
+  /** The record whose text produced the edge; absent on containment edges. */
+  recordId?: string;
   /**
    * True when the edge is derived from a PINNED record linking two nodes —
    * the pin marks the relationship, so the accent lives on the edge (A9).
@@ -217,6 +228,15 @@ function deepestRung(scope: KnowledgeScope): 'org' | 'resource' | 'thread' {
     if (ns === 'resource') rung = 'resource';
   }
   return rung;
+}
+
+/**
+ * True when `scope` is a prefix of the active view scope — the content lives
+ * inside the current org + project boundary. Structural member lenses use
+ * this to keep sibling-project knowledge out of a project-scoped view.
+ */
+function withinViewBoundary(scope: KnowledgeScope, viewScope: KnowledgeScope): boolean {
+  return scope.length <= viewScope.length && scope.every((entry, index) => entry === viewScope[index]);
 }
 
 function boundedThreadId(raw: string | undefined): string | undefined {
@@ -481,12 +501,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
             scopeNodes = undefined;
           }
+          // Deduplicate: when a reconciled scope node owns an identity rung's
+          // canonical address, the rung entry carries the structural match so
+          // the client renders one entry instead of two labels for one scope.
+          const scopeNodeByAddress = new Map((scopeNodes ?? []).map(node => [node.address, node]));
+          const rungs = [
+            { level: 'org' as const, id: view.orgId, available: true },
+            { level: 'resource' as const, id: view.factoryProjectId, available: true },
+            ...(view.threadId ? [{ level: 'thread' as const, id: view.threadId, available: true }] : []),
+          ];
           return c.json({
-            roots: [
-              { level: 'org', id: view.orgId, available: true },
-              { level: 'resource', id: view.factoryProjectId, available: true },
-              ...(view.threadId ? [{ level: 'thread' as const, id: view.threadId, available: true }] : []),
-            ],
+            roots: rungs.map(rung => {
+              const match = scopeNodeByAddress.get(`${rung.level}:${rung.id}`);
+              return match ? { ...rung, scopeNodeId: match.id, name: match.name } : rung;
+            }),
             defaultLevel: 'resource',
             ...(scopeNodes ? { scopeNodes } : {}),
           } satisfies KnowledgeScopeTreePayload);
@@ -500,42 +528,142 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in resolved) return resolved.response;
 
           // Structural lens: a reconciled scope node selected in the scope
-          // tree reads its direct members (child scopes and, later waves,
-          // content placed under structural scopes) instead of the identity
-          // rung window. Pins/wikilinks do not apply to structural members.
+          // tree. The lens renders the scope node ITSELF as the graph root
+          // (containment edges to every member), child scopes as drill
+          // targets, and content members with their records and wikilink
+          // edges — the same window machinery as the identity lens. Content
+          // members stay inside the active project boundary: this is a
+          // project-scoped view, so knowledge stamped at another resource of
+          // the same org never rolls up here. Pins do not apply to
+          // structural members.
           const scopeNodeId = loose(c).req.query('scopeNodeId');
           if (scopeNodeId !== undefined) {
             if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
             const limits = this.#limits;
-            const fetched = await resolved.store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes + 1 });
-            const truncated = fetched.length > limits.maxNodes;
-            const members = fetched.slice(0, limits.maxNodes);
+            const { store } = resolved;
+
+            let scopeNodes: KnowledgeScopeNodeSummary[];
+            try {
+              scopeNodes = await store.listScopeNodes();
+            } catch (error) {
+              // Adapters without the structural read have no lenses to serve.
+              if (error instanceof KnowledgeUnsupportedCapabilityError) {
+                return c.json({ error: 'scope_not_found' }, 404);
+              }
+              throw error;
+            }
+            const root = scopeNodes.find(node => node.id === scopeNodeId);
+            if (!root) return c.json({ error: 'scope_not_found' }, 404);
+
+            const fetched = await store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes + 1 });
+            const bounded = fetched.filter(
+              node => node.isScope || (Array.isArray(node.scope) && withinViewBoundary(node.scope, resolved.scope)),
+            );
+            let truncated = bounded.length > limits.maxNodes;
+            const members = bounded.slice(0, limits.maxNodes);
+            const contentMembers = members.filter(node => !node.isScope);
+
+            // Record window over content members (newest-first overall), then
+            // wikilink resolution — member lenses are connected, not dots.
+            const recordWindow: KnowledgeRecord[] = [];
+            for (const node of contentMembers) {
+              if (recordWindow.length > limits.maxRecords) break;
+              const { records } = await store.listKnowledgeAbout({
+                node: node.id,
+                scope: node.scope as KnowledgeScope,
+                limit: limits.maxRecords + 1 - recordWindow.length,
+              });
+              recordWindow.push(...records);
+            }
+            recordWindow.sort((a, b) => b.id.localeCompare(a.id));
+            if (recordWindow.length > limits.maxRecords) {
+              truncated = true;
+              recordWindow.length = limits.maxRecords;
+            }
+
+            const resolver = new WikilinkResolver(store, members, limits.maxFallbackLookups);
+            const edges: KnowledgeGraphEdge[] = [];
+            const graphRecords: KnowledgeGraphRecord[] = [];
+            const edgeSeen = new Set<string>();
+            const recordCounts = new Map<string, number>();
+            for (const record of recordWindow) {
+              recordCounts.set(record.node, (recordCounts.get(record.node) ?? 0) + 1);
+              const nodeIds = [record.node];
+              for (const name of parseKnowledgeWikilinks(record.text)) {
+                const target = await resolver.resolve(name, record.scope);
+                if (!target) continue;
+                if (target.id === record.node) continue;
+                if (!resolver.inWindowId(target.id)) continue;
+                if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
+                const key = `${record.node}\u0000${target.id}`;
+                if (edgeSeen.has(key)) continue;
+                edgeSeen.add(key);
+                edges.push({
+                  id: `wikilink:${record.node}:${target.id}`,
+                  source: record.node,
+                  target: target.id,
+                  type: 'wikilink',
+                  recordId: record.id,
+                });
+              }
+              graphRecords.push({ id: record.id, nodeIds, pinned: false, text: truncateRecordText(record.text) });
+            }
+
+            // Containment: the clicked scope node is the root of its own view.
+            for (const member of members) {
+              edges.push({
+                id: `contains:${root.id}:${member.id}`,
+                source: root.id,
+                target: member.id,
+                type: 'contains',
+              });
+            }
+
+            const rootRow = await store.getNode(root.id);
+            const activity = await store.listActivity({ scope: resolved.scope, limit: 1 });
+
             const payload: KnowledgeGraphPayload = {
               view: resolved.view,
               ...(resolved.threadId ? { threadId: resolved.threadId } : {}),
-              nodes: members.map(node => {
-                const nodeScope = Array.isArray(node.scope) ? node.scope : null;
-                return {
-                  id: node.id,
-                  name: node.name,
-                  kind: node.kind,
-                  ...(node.description ? { description: node.description } : {}),
-                  scope: nodeScope,
-                  rung: nodeScope ? deepestRung(nodeScope) : null,
-                  ...(node.isScope ? { isScope: true } : {}),
+              nodes: [
+                {
+                  id: root.id,
+                  name: root.name,
+                  kind: root.kind ?? 'scope',
+                  ...(root.description ? { description: root.description } : {}),
+                  scope: null,
+                  rung: null,
+                  isScope: true,
                   pinned: false,
                   recordCount: 0,
-                  createdAt: node.createdAt.toISOString(),
-                  updatedAt: node.updatedAt.toISOString(),
-                };
-              }),
-              edges: [],
-              records: [],
+                  ...(rootRow
+                    ? { createdAt: rootRow.createdAt.toISOString(), updatedAt: rootRow.updatedAt.toISOString() }
+                    : {}),
+                },
+                ...members.map(node => {
+                  const nodeScope = Array.isArray(node.scope) ? node.scope : null;
+                  return {
+                    id: node.id,
+                    name: node.name,
+                    kind: node.kind,
+                    ...(node.description ? { description: node.description } : {}),
+                    scope: nodeScope,
+                    rung: nodeScope ? deepestRung(nodeScope) : null,
+                    ...(node.isScope ? { isScope: true } : {}),
+                    pinned: false,
+                    recordCount: recordCounts.get(node.id) ?? 0,
+                    createdAt: node.createdAt.toISOString(),
+                    updatedAt: node.updatedAt.toISOString(),
+                  };
+                }),
+              ],
+              edges,
+              records: graphRecords,
               truncated,
-              outOfWindow: [],
-              unresolvedCapped: { count: 0, names: [] },
+              outOfWindow: [...resolver.outOfWindow.values()],
+              unresolvedCapped: { count: resolver.cappedCount, names: resolver.cappedNames },
               pinCensus: { resource: 0, thread: null },
-              version: null,
+              version: activity[0]?.id ?? null,
             };
             return c.json(payload);
           }

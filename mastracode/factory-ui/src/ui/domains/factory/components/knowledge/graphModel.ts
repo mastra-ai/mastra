@@ -246,8 +246,8 @@ export type RecordFlowNode = Node<{
 }>;
 
 export type KnowledgeFlowEdge = Edge<{
-  recordId: string;
-  linkType: 'wikilink';
+  recordId?: string;
+  linkType: 'wikilink' | 'contains';
   pinned: boolean;
   text?: string;
   /** The edge belongs to the record currently selected in the flyout. */
