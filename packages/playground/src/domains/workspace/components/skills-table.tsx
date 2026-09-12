@@ -50,7 +50,7 @@ export function SkillsTable({
   removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: skills.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: skills.length, global: true });
 
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
   const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;

@@ -51,7 +51,7 @@ export function InboxFeedbackList({
       )
     : items;
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filtered.length, global: true });
   // The sentinel observes the list's own scroll viewport, not the window.
   const { inView, setRef: setEndOfListElement } = useInView({ root: containerRef });
 

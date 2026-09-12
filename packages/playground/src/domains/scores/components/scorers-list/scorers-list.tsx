@@ -43,7 +43,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
     });
   }, [scorerData, search, sourceFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;

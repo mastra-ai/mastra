@@ -120,7 +120,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
     return map;
   }, [rows]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: interactiveIndexByPathKey.size });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: interactiveIndexByPathKey.size, global: true });
 
   const toggleExpanded = (pathKey: string) => {
     setExpandedPaths(previous => {

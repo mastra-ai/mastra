@@ -73,7 +73,7 @@ export function DatasetsList({
     });
   }, [enrichedDatasets, search, experimentFilter, tagFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
