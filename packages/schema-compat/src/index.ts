@@ -49,7 +49,7 @@ export { type JSONSchema7, type Schema, jsonSchema } from './json-schema';
 
 // Re-export standard schema types and functions from the schema.ts subpath
 // These are also available directly from the main entry for convenience
-export type { PublicSchema, InferPublicSchema } from './schema.types';
+export type { PublicSchema, InferPublicSchema, InferPublicSchemaInput } from './schema.types';
 
 export type {
   StandardSchemaWithJSON,
