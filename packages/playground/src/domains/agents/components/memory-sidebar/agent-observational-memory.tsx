@@ -490,10 +490,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       />
       <Button
         size="sm"
-        className="w-full justify-center gap-2"
+        className="w-full justify-center"
         onClick={() => (isDetailViewOpen ? closeDetailView() : openDetailView())}
+        icon={<Brain />}
       >
-        <Brain className="h-3.5 w-3.5" />
         Analyze Observations
       </Button>
     </div>

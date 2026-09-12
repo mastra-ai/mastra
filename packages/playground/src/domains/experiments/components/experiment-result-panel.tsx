@@ -245,26 +245,22 @@ export function ExperimentResultPanel({
             nextLabel="Next result"
           />
           {experimentLink && (
-            <Button size="md" as={Link} to={experimentLink}>
-              <FlaskConical />
+            <Button size="md" as={Link} to={experimentLink} icon={<FlaskConical />}>
               See experiment
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="md" onClick={onShowTrace}>
-              <TraceIcon />
+            <Button size="md" onClick={onShowTrace} icon={<TraceIcon />}>
               Trace
             </Button>
           )}
           {canFlag && (
-            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)}>
-              <ClipboardCheck />
+            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardCheck />}>
               Flag for Review
             </Button>
           )}
           {onComplete && result.status === 'needs-review' && (
-            <Button size="md" variant="primary" onClick={onComplete}>
-              <CheckCircle />
+            <Button size="md" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
               Mark as reviewed
             </Button>
           )}

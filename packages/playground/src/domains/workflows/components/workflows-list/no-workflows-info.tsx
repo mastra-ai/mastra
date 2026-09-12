@@ -20,8 +20,9 @@ export const NoWorkflowsInfo = () => (
           href="https://mastra.ai/docs/workflows/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Workflows Documentation <ExternalLinkIcon />
+          Workflows Documentation
         </Button>
       }
     />

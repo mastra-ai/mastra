@@ -2,7 +2,6 @@ import { Check, X } from 'lucide-react';
 import { SectionLabel } from '../../components/section-label';
 import { useToolCall } from '../../context/tool-call-context';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface ToolApprovalButtonsProps {
   toolCallId: string;
@@ -74,20 +73,16 @@ export const ToolApprovalButtons = ({
             onClick={handleApprove}
             disabled={isRunning || !!toolCallApprovalStatus}
             className={toolCallApprovalStatus === 'approved' ? 'text-accent1!' : ''}
+            icon={<Check />}
           >
-            <Icon>
-              <Check />
-            </Icon>
             Approve
           </Button>
           <Button
             onClick={handleDecline}
             disabled={isRunning || !!toolCallApprovalStatus}
             className={toolCallApprovalStatus === 'declined' ? 'text-accent2!' : ''}
+            icon={<X />}
           >
-            <Icon>
-              <X />
-            </Icon>
             Decline
           </Button>
         </div>

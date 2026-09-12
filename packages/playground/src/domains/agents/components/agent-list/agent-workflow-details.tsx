@@ -34,8 +34,8 @@ export function AgentWorkflowDetails({ agentName, workflows }: AgentWorkflowDeta
             size="sm"
             className="pointer-events-auto"
             aria-label={`Show ${workflowCount} for ${agentName}`}
+            icon={<WorkflowIcon aria-hidden="true" />}
           >
-            <WorkflowIcon aria-hidden="true" />
             <span>{workflowEntries.length}</span>
           </Button>
         }

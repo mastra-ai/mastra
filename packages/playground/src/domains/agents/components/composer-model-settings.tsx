@@ -10,7 +10,7 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Info, Sliders } from 'lucide-react';
+import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAgentSettings } from '../context/agent-context';
@@ -345,6 +345,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               <div className="flex items-center justify-between gap-2 pt-1">
                 <Button
+                  icon={<RotateCcw />}
                   variant="ghost"
                   size="sm"
                   type="button"
@@ -354,6 +355,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   Reset
                 </Button>
                 <Button
+                  icon={<Settings2 />}
                   variant="default"
                   size="sm"
                   type="button"

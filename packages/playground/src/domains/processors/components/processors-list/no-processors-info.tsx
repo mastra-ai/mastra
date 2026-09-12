@@ -15,8 +15,9 @@ export const NoProcessorsInfo = () => (
           href="https://mastra.ai/docs/agents/processors"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Processors Documentation <ExternalLinkIcon />
+          Processors Documentation
         </Button>
       }
     />

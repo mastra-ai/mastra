@@ -3,6 +3,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { Eye } from 'lucide-react';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { Link } from '@/lib/link';
 
@@ -27,7 +28,7 @@ export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighl
         <div className="flex h-full min-h-0 flex-col">
           {fullThreadHref && (
             <div className="flex justify-center px-3 pt-2">
-              <Button as={Link} href={fullThreadHref} variant="default" size="xs">
+              <Button icon={<Eye />} as={Link} href={fullThreadHref} variant="default" size="xs">
                 View full thread
               </Button>
             </div>

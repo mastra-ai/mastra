@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Eye } from 'lucide-react';
 import { useState } from 'react';
 
 import { CodeDialogContent } from './workflow-code-dialog-content';
@@ -21,7 +22,7 @@ export function WorkflowMapConfigDialog({ stepName, mapConfig }: WorkflowMapConf
 
   return (
     <>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button icon={<Eye />} type="button" size="sm" onClick={() => setOpen(true)}>
         Map config
       </Button>
 

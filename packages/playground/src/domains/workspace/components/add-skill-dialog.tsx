@@ -13,7 +13,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder, X } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -393,7 +393,7 @@ export function AddSkillDialog({
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                     return mount ? <span className="text-icon4 text-ui-sm">Installed at {mount.path}</span> : null;
                   })()}
-                <Button variant="default" onClick={() => handleOpenChange(false)}>
+                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
                 <Button

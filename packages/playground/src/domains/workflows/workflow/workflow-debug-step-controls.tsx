@@ -42,10 +42,14 @@ export function WorkflowDebugStepControls({ isStreaming }: WorkflowDebugStepCont
         Run next step
       </Button>
 
-      <Button type="button" variant="ghost" className="w-full" onClick={continueFullRun} disabled={isStreaming}>
-        <Icon>
-          <StepForwardIcon />
-        </Icon>
+      <Button
+        type="button"
+        variant="ghost"
+        className="w-full"
+        onClick={continueFullRun}
+        disabled={isStreaming}
+        icon={<StepForwardIcon />}
+      >
         Continue full run
       </Button>
     </div>

@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -81,10 +82,17 @@ export function useVisibilityChangeDialog<V extends string>({
             </DialogHeader>
             {renderExtraContent?.(pending)}
             <DialogFooter>
-              <Button variant="ghost" onClick={handleCancel} disabled={isPending} data-testid={testIds.cancel}>
+              <Button
+                icon={<X />}
+                variant="ghost"
+                onClick={handleCancel}
+                disabled={isPending}
+                data-testid={testIds.cancel}
+              >
                 Cancel
               </Button>
               <Button
+                icon={<Check />}
                 variant="default"
                 onClick={confirmFor(pending)}
                 disabled={isPending || (confirmDisabled?.(pending) ?? false)}

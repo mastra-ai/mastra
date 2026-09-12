@@ -10,7 +10,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Check, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -374,10 +374,7 @@ export function ScorerMiniEditor({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <Icon>
-            <ArrowLeft />
-          </Icon>
+        <Button variant="ghost" size="sm" onClick={onBack} icon={<ArrowLeft />}>
           Back
         </Button>
         <Txt as="h3" variant="header-sm" className="ml-2">
@@ -473,10 +470,7 @@ export function ScorerMiniEditor({
                     </Txt>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={addTestItem}>
-                  <Icon>
-                    <Plus />
-                  </Icon>
+                <Button variant="outline" size="sm" onClick={addTestItem} icon={<Plus />}>
                   Add Item
                 </Button>
               </div>
@@ -722,7 +716,13 @@ export function ScorerMiniEditor({
             </Button>
           </>
         )}
-        <Button variant="ghost" size="sm" onClick={onBack} className="ml-auto">
+        <Button
+          icon={isEditing || savedScorerId ? <Check /> : <X />}
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="ml-auto"
+        >
           {isEditing || savedScorerId ? 'Done' : 'Cancel'}
         </Button>
       </div>

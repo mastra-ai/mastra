@@ -39,12 +39,12 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
             aria-label={`Choose ${boundaryLabel}, ${formattedDate}`}
             aria-expanded={open}
             size="xs"
-            className="h-11 w-full min-w-0 justify-between gap-2 overflow-hidden px-3 sm:h-8"
+            className="h-11 w-full min-w-0 justify-start overflow-hidden px-3 sm:h-8"
+            icon={<CalendarDaysIcon aria-hidden="true" />}
           >
             <Txt as="span" variant="ui-sm" className="text-neutral5 truncate tabular-nums">
               {formattedDate}
             </Txt>
-            <CalendarDaysIcon className="text-neutral3 size-3.5 shrink-0" aria-hidden="true" />
           </Button>
         }
       />

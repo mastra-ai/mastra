@@ -7,6 +7,7 @@ import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
+import { ClipboardCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const COLUMNS = 'minmax(0, 2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto auto';
@@ -128,6 +129,7 @@ export function InboxFeedbackList({
                   <DataList.ActionsCell className="pl-2">
                     {feedbackId ? (
                       <Button
+                        icon={<ClipboardCheck />}
                         variant="ghost"
                         size="sm"
                         onClick={() => onMarkReviewed(feedbackId)}

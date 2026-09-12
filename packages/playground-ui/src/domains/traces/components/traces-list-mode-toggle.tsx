@@ -23,9 +23,8 @@ export function TracesListModeToggle({ value, onChange, disabled }: TracesListMo
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="md" variant="default" disabled={disabled}>
+        <Button size="md" variant="default" disabled={disabled} icon={<ChevronDownIcon />}>
           {TRACES_LIST_MODE_LABELS[value]}
-          <ChevronDownIcon />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">
