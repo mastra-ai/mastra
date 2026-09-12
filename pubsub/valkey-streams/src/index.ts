@@ -4,10 +4,33 @@ import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, Subscribe
 import { createClient } from './client.js';
 import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 
-/** Idle pending entries fetched per XPENDING page in the reclaim loop. */
+/** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
-/** Bound on XPENDING pages walked per reclaim tick when the leading pages are all self-owned. */
-const RECLAIM_MAX_PAGES = 10;
+
+/**
+ * Atomically nack a pending entry only if it is still owned by the given
+ * consumer. Returns 1 if this consumer owned it and it was settled, 0 if the
+ * entry was not pending for this consumer (acked, or claimed by a sibling).
+ *
+ * KEYS[1] stream key
+ * ARGV[1] group, ARGV[2] consumer, ARGV[3] stream entry id,
+ * ARGV[4] republish payload ('' = drop without republish),
+ * ARGV[5] stream idle TTL in ms (0 = none)
+ */
+const NACK_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  if ARGV[4] ~= "" then
+    redis.call("XADD", KEYS[1], "*", "event", ARGV[4])
+    if tonumber(ARGV[5]) > 0 then
+      redis.call("PEXPIRE", KEYS[1], ARGV[5])
+    end
+  end
+  redis.call("XACK", KEYS[1], ARGV[1], ARGV[3])
+  return 1
+`;
 
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
@@ -61,7 +84,7 @@ export interface ValkeyStreamsPubSubConfig {
    */
   streamIdleTtlMs?: number;
   /**
-   * How often (in ms) each subscription runs XAUTOCLAIM to recover messages
+   * How often (in ms) each subscription runs a reclaim pass (XPENDING + XCLAIM) to recover messages
    * that an earlier consumer in the group read but never acked. Defaults to
    * 30_000 ms. Set to 0 to disable.
    */
@@ -81,6 +104,21 @@ export interface ValkeyStreamsPubSubConfig {
    * prefer `Infinity` to disable the cap explicitly.
    */
   maxDeliveryAttempts?: number;
+  /**
+   * How long (in ms) a handler may hold a message in-flight (neither acked nor
+   * nacked) before the reclaim loop gives up on it and nacks it on the
+   * handler's behalf. The nack republishes the event with an incremented
+   * `deliveryAttempt`, so `maxDeliveryAttempts` still bounds retries, and acks
+   * the original entry; the hung handler's own eventual ack/nack becomes a
+   * no-op.
+   *
+   * Without this, an in-flight entry is only ever recovered by a *different*
+   * consumer in the group once it has been idle for `reclaimIdleMs`. A
+   * single-consumer group therefore holds a hung message until the process
+   * restarts. Defaults to 0 (disabled). When set, it should be comfortably
+   * larger than the slowest legitimate handler.
+   */
+  inFlightTimeoutMs?: number;
   /**
    * Optional logger for diagnostics. When omitted, suppressed errors
    * (BUSYGROUP, malformed payloads, connection-close races) are swallowed
@@ -114,6 +152,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIntervalMs: number;
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
+  #inFlightTimeoutMs: number;
   #logger?: ValkeyStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
@@ -162,6 +201,13 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     } else {
       this.#maxDeliveryAttempts = cap;
     }
+    const inFlightTimeout = options.inFlightTimeoutMs ?? 0;
+    if (!Number.isFinite(inFlightTimeout) || inFlightTimeout < 0) {
+      throw new Error(
+        `valkey-streams: inFlightTimeoutMs must be a non-negative number (milliseconds), got ${inFlightTimeout}`,
+      );
+    }
+    this.#inFlightTimeoutMs = inFlightTimeout;
   }
 
   /**
@@ -363,6 +409,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       stopped: false,
       loop: undefined,
       reclaimTimer: undefined,
+      inFlight: new Map(),
     };
     this.#subscriptions.set(key, sub);
     sub.loop = this.#runReadLoop(sub);
@@ -374,10 +421,6 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
    * that messages a crashed/stuck consumer read but never acked get redelivered
    * to a live sibling. Runs only for grouped subscriptions — fan-out groups are
    * private to one consumer, so there's no sibling to claim from.
-   *
-   * Entries this consumer already owns are skipped: XAUTOCLAIM would hand them
-   * straight back to us and reset their idle clock, which keeps a stuck entry
-   * pinned to the stuck consumer and starves every sibling of it forever.
    */
   #startReclaimLoop(sub: Subscription): void {
     if (this.#reclaimIntervalMs <= 0) return;
@@ -386,7 +429,37 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const ids = await this.#findClaimableIds(sub);
+        await this.#expireInFlight(sub);
+        // List idle pending entries first and only claim the ones this
+        // subscription is not already processing. Claiming (XAUTOCLAIM/XCLAIM)
+        // resets the entry's idle clock even when the claimant already owns it,
+        // so a claim-then-skip design would let a handler running longer than
+        // reclaimIdleMs re-invoke itself (pre-fix) or keep refreshing the idle
+        // timer on every tick and starve a live sibling of a genuinely stalled
+        // entry. Filtering before the claim leaves in-flight entries untouched:
+        // if the handler settles, ack/nack removes them from the PEL; if it is
+        // truly hung, the idle clock keeps running and a sibling claims them.
+        //
+        // The scan is paginated: locally in-flight entries stay in the PEL
+        // (by design, above) and are listed on every tick, so with a single
+        // fixed-size page they could fill it and hide a reclaimable entry
+        // that sorts after them. Walk pages with an exclusive start id until
+        // the page comes back short or the claim batch is full.
+        const ids: string[] = [];
+        let afterId: string | undefined;
+        for (;;) {
+          const page = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, RECLAIM_PAGE_SIZE, {
+            IDLE: this.#reclaimIdleMs,
+            afterId,
+          });
+          for (const p of page) {
+            if (sub.inFlight.has(p.id)) continue;
+            ids.push(p.id);
+            if (ids.length >= RECLAIM_PAGE_SIZE) break;
+          }
+          if (page.length < RECLAIM_PAGE_SIZE || ids.length >= RECLAIM_PAGE_SIZE) break;
+          afterId = page[page.length - 1]!.id;
+        }
         // Stop may have started while XPENDING was in flight; claiming now would
         // move entries onto a consumer that is about to go away.
         if (ids.length === 0 || sub.stopped || this.#closed) {
@@ -394,14 +467,16 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
           return;
         }
-        const messages = await this.#writeClient.xClaim(
+        // XCLAIM re-checks min-idle atomically, so if a sibling claimed an entry
+        // between the XPENDING and here it is simply omitted from the reply.
+        const claimed = await this.#writeClient.xClaim(
           sub.streamKey,
           sub.group,
           sub.consumer,
           this.#reclaimIdleMs,
           ids,
         );
-        for (const entry of messages) {
+        for (const entry of claimed) {
           // A successful claim already transferred ownership; drain its full batch
           // even if stop started meanwhile, otherwise the entries sit pending under
           // this consumer until a sibling's idle window elapses again.
@@ -427,23 +502,30 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Page through idle pending entries (ascending stream ID) until a batch owned
-   * by other consumers is found or the range is exhausted. Without paging, a
-   * consumer sitting on a full page of its own idle entries would never see the
-   * sibling-owned entries behind them.
+   * Give up on local in-flight entries older than `inFlightTimeoutMs` by
+   * nacking them on the handler's behalf. This is the only way a
+   * single-consumer group recovers a hung handler: the reclaim loop never
+   * claims its own in-flight entries (see the tick above), so without a
+   * timeout the entry stays pending until the process restarts.
    */
-  async #findClaimableIds(sub: Subscription): Promise<string[]> {
-    let afterId: string | undefined;
-    for (let page = 0; page < RECLAIM_MAX_PAGES; page++) {
-      const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, RECLAIM_PAGE_SIZE, {
-        IDLE: this.#reclaimIdleMs,
-        afterId,
+  async #expireInFlight(sub: Subscription): Promise<void> {
+    if (this.#inFlightTimeoutMs <= 0) return;
+    const cutoff = Date.now() - this.#inFlightTimeoutMs;
+    for (const [streamId, entry] of sub.inFlight) {
+      if (entry.since > cutoff) continue;
+      this.#logger?.warn?.('valkey-streams: handler exceeded inFlightTimeoutMs; nacking on its behalf', {
+        topic: sub.topic,
+        group: sub.group,
+        streamId,
+        inFlightMs: Date.now() - entry.since,
       });
-      const ids = pending.filter(entry => entry.consumer !== sub.consumer).map(entry => entry.id);
-      if (ids.length > 0 || pending.length < RECLAIM_PAGE_SIZE) return ids;
-      afterId = pending[pending.length - 1]!.id;
+      // The local marker is not proof of ownership: once the entry has been
+      // idle >= reclaimIdleMs a sibling may have claimed it, or it may have
+      // been acked outright. `expire` verifies ownership and settles in one
+      // atomic step, honours maxDeliveryAttempts, and removes the entry
+      // from `inFlight` either way.
+      await entry.expire();
     }
-    return [];
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -807,6 +889,13 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Clear the in-flight guard only AFTER the entry has been settled.
+        // Clearing before the xAck resolves would open a window where the
+        // entry is neither in-flight nor acked, so a reclaim tick landing in
+        // that window (the entry is already idle >= reclaimIdleMs for a
+        // long-running handler) would redeliver and re-invoke the handler.
+        sub.inFlight.delete(streamId);
       }
     };
     const nack = async () => {
@@ -832,12 +921,16 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
             topic: sub.topic,
             err: err instanceof Error ? err.message : err,
           });
+        } finally {
+          // Cleared only after settlement — see ack() for the reclaim-window
+          // rationale.
+          sub.inFlight.delete(streamId);
         }
         return;
       }
       // Republish with incremented deliveryAttempt FIRST, then ack the
       // original entry. If the republish fails we deliberately leave the
-      // original message pending so XAUTOCLAIM (or another consumer) can
+      // original message pending so the reclaim loop (or another consumer) can
       // pick it up on a future tick — acking first would silently drop it.
       const next: Event = {
         ...event,
@@ -866,8 +959,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           err: err instanceof Error ? err.message : err,
         });
         // Allow this entry to be redelivered: reset settled so the next
-        // delivery attempt (via XAUTOCLAIM) can ack/nack it again.
+        // delivery attempt (via reclaim) can ack/nack it again. The entry
+        // is intentionally left pending, so clear the in-flight guard now to
+        // make it eligible for a future reclaim.
         settled = false;
+        sub.inFlight.delete(streamId);
         return;
       }
       try {
@@ -877,9 +973,67 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           topic: sub.topic,
           err: err instanceof Error ? err.message : err,
         });
+      } finally {
+        // Cleared only after settlement — see ack() for the reclaim-window
+        // rationale.
+        sub.inFlight.delete(streamId);
       }
     };
 
+    // Timeout-driven nack, used by #expireInFlight. Unlike `nack` above this
+    // can run while a sibling may have reclaimed the entry, so the ownership
+    // check and the republish+xAck must be one atomic server-side step: a
+    // read-then-nack would let a sibling XCLAIM land in between, and we'd
+    // republish a duplicate and xAck the sibling's entry out from under it.
+    // Either way the local marker is settled afterwards so a late ack/nack
+    // from the hung handler is a no-op.
+    const expire = async () => {
+      if (settled) return;
+      settled = true;
+      const attempt = event.deliveryAttempt ?? 1;
+      const drop = attempt >= this.#maxDeliveryAttempts;
+      const payload = drop ? '' : JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event);
+      let owned: unknown;
+      try {
+        owned = await this.#writeClient.eval(NACK_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [sub.group, sub.consumer, streamId, payload, String(this.#streamIdleTtlMs)],
+        });
+      } catch (err) {
+        this.#logger?.warn?.('valkey-streams: timeout nack failed; leaving original pending for reclaim', {
+          topic: sub.topic,
+          eventId: event.id,
+          err: err instanceof Error ? err.message : err,
+        });
+        // Same recovery as a failed nack republish: the entry is still
+        // pending, so let a future reclaim (or the next timeout pass, if the
+        // handler is still hung) retry it.
+        settled = false;
+        sub.inFlight.delete(streamId);
+        return;
+      }
+      sub.inFlight.delete(streamId);
+      if (owned !== 1) {
+        this.#logger?.warn?.(
+          'valkey-streams: handler exceeded inFlightTimeoutMs but entry is no longer owned; disowning',
+          { topic: sub.topic, group: sub.group, streamId },
+        );
+        return;
+      }
+      if (drop) {
+        this.#logger?.warn?.('valkey-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+      }
+    };
+
+    // Mark this entry in-flight for the reclaim loop's benefit for exactly the
+    // window between invoking the handler and the delivery settling (ack/nack).
+    sub.inFlight.set(streamId, { since: Date.now(), expire });
     try {
       // EventCallback is typed `=> void` but handlers commonly return a
       // promise (TS allows Promise<void> to satisfy void). If we get one
@@ -950,4 +1104,9 @@ interface Subscription {
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
   reclaimLoop?: Promise<void>;
+  // Stream entry IDs currently being processed locally by this subscription.
+  // The reclaim loop consults this to avoid re-invoking the handler for a
+  // message whose original delivery is still in flight (self-redelivery).
+  // `expire` is the timeout path's atomic nack-if-still-owned.
+  inFlight: Map<string, { since: number; expire: () => Promise<void> }>;
 }
