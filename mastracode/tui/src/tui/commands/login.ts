@@ -1,10 +1,37 @@
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
+import type { OAuthAccountRecord } from '@mastra/code-sdk/auth/types';
+import { LoginAccountManagerComponent } from '../components/login-account-manager.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';
 import { seedOMDefaultAfterLogin } from '../om-defaults.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
+
+function toManagedAccounts(accounts: OAuthAccountRecord[]) {
+  return accounts.map(account => ({ id: account.id, label: account.label, active: account.active }));
+}
+
+/**
+ * After a successful login the active account was just registered — offer a
+ * one-shot rename before the dialog closes. Empty submit (or Escape) keeps
+ * the label the registry resolved (provider hook, or the default).
+ */
+async function promptForAccountName(ctx: SlashCommandContext, dialog: LoginDialogComponent, providerId: string) {
+  const authStorage = ctx.authStorage;
+  if (!authStorage) return;
+  try {
+    const active = authStorage.getActiveAccount(providerId);
+    if (!active) return;
+    const input = await dialog.showPrompt(`Name this account (Enter to keep "${active.label}")`);
+    const name = input.trim();
+    if (name && name !== active.label) {
+      authStorage.renameAccount(providerId, active.id, name);
+    }
+  } catch {
+    // Prompt cancelled — keep the resolved label.
+  }
+}
 
 async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const provider = getOAuthProviders().find(p => p.id === providerId);
@@ -50,6 +77,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
         authMode,
       })
       .then(async () => {
+        await promptForAccountName(ctx, dialog, providerId);
         ctx.state.ui.hideOverlay();
         ctx.state.controller.invalidateAvailableModelsCache();
 
@@ -76,6 +104,55 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
         }
         resolve();
       });
+  });
+}
+
+/**
+ * Open the account manager overlay for a provider that already has
+ * registered accounts. Add/re-authenticate re-run the normal login flow
+ * (`addAccount` updates an existing account in place on id collision).
+ */
+async function openAccountManager(
+  ctx: SlashCommandContext,
+  providerId: string,
+  providerName: string,
+  initialAccounts: OAuthAccountRecord[],
+): Promise<void> {
+  return new Promise<void>(resolve => {
+    const finish = () => {
+      ctx.state.ui.hideOverlay();
+      resolve();
+    };
+
+    const manager = new LoginAccountManagerComponent(providerName, toManagedAccounts(initialAccounts), {
+      onAddAnother: () => {
+        finish();
+        void performLogin(ctx, providerId);
+      },
+      onReauthenticate: () => {
+        finish();
+        void performLogin(ctx, providerId);
+      },
+      onRemove: accountId => {
+        const label =
+          ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
+        ctx.authStorage?.removeAccount(providerId, accountId);
+        ctx.state.controller.invalidateAvailableModelsCache();
+        ctx.showInfo(`Removed ${label} from ${providerName}`);
+        finish();
+      },
+      onActivate: accountId => {
+        ctx.authStorage?.activateAccount(providerId, accountId);
+        ctx.state.controller.invalidateAvailableModelsCache();
+        const label =
+          ctx.authStorage?.listAccounts(providerId).find(account => account.id === accountId)?.label ?? accountId;
+        ctx.showInfo(`Switched ${providerName} to ${label}`);
+        finish();
+      },
+      onBack: () => finish(),
+    });
+
+    showModalOverlay(ctx.state.ui, manager, { widthPercent: 0.8, maxHeight: '60%' });
   });
 }
 
@@ -111,13 +188,19 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
       {
         getOAuthProviders: () => providers,
         isLoggedIn: providerId => loggedInIds.includes(providerId),
+        countAccounts: providerId => ctx.authStorage?.listAccounts(providerId).length ?? 0,
       },
       async providerId => {
         ctx.state.ui.hideOverlay();
         const provider = providers.find(p => p.id === providerId);
         if (provider) {
           if (mode === 'login') {
-            await performLogin(ctx, provider.id);
+            const accounts = ctx.authStorage?.listAccounts(provider.id) ?? [];
+            if (accounts.length > 0) {
+              await openAccountManager(ctx, provider.id, provider.name, accounts);
+            } else {
+              await performLogin(ctx, provider.id);
+            }
           } else {
             if (ctx.authStorage) {
               ctx.authStorage.logout(provider.id);

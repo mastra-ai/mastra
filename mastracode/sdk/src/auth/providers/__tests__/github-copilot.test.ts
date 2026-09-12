@@ -738,3 +738,29 @@ describe('githubCopilotOAuthProvider', () => {
     expect(next.refresh).toBe('ghu_x');
   });
 });
+
+describe('githubCopilotOAuthProvider.getAccountLabel', () => {
+  it('resolves the GitHub login from api.github.com/user with the long-lived token', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(jsonResponse({ login: 'octocat' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({ access: 'bearer', refresh: 'ghu_x', expires: 0 }),
+    ).resolves.toBe('octocat');
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(getUrl(url)).toBe('https://api.github.com/user');
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer ghu_x' });
+  });
+
+  it('returns undefined when the GitHub API call fails', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      githubCopilotOAuthProvider.getAccountLabel?.({ access: 'bearer', refresh: 'ghu_x', expires: 0 }),
+    ).resolves.toBeUndefined();
+  });
+});
