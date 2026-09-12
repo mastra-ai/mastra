@@ -16,6 +16,21 @@ const octokit = new Octokit({
   auth: `token ${process.env.GITHUB_TOKEN}`,
 });
 
+// Run git without a shell: execFileSync passes args directly, so branch
+// names / SHAs derived from PR metadata cannot inject extra commands.
+const SAFE_BRANCH = /^[A-Za-z0-9._/-]+$/;
+const SAFE_SHA = /^[0-9a-f]{4,40}$/;
+
+function assertSafe(value: string, pattern: RegExp, label: string): void {
+  if (!pattern.test(value)) {
+    throw new Error(`Refusing to run git: unsafe ${label} ${JSON.stringify(value)}`);
+  }
+}
+
+function runGit(args: string[]): void {
+  childProcess.execFileSync('git', args, { stdio: 'inherit' });
+}
+
 /**
  * Get the details of the PR, create a new branch, cherry-pick the commit, push the branch, and create a PR.
  */
@@ -50,48 +65,37 @@ async function github({ pull_number, continue: continueAfterCherryPick }: { pull
   const normalizedBranch = branch.replaceAll('/', '-');
   const backportBranchName = `backport/${normalizedBranch}-${pull_number}`;
 
+  assertSafe(baseBranch, SAFE_BRANCH, 'base branch');
+  assertSafe(branch, SAFE_BRANCH, 'head branch');
+  assertSafe(backportBranchName, SAFE_BRANCH, 'backport branch');
+  assertSafe(commitSha, SAFE_SHA, 'commit SHA');
+
   console.log(`Backport branch name: ${backportBranchName}`);
 
-  childProcess.execSync(`git fetch origin ${baseBranch}`, {
-    stdio: `inherit`,
-  });
+  runGit(['fetch', 'origin', baseBranch]);
 
   try {
-    childProcess.execSync(`git switch "${baseBranch}"`, {
-      stdio: `inherit`,
-    });
-    childProcess.execSync(`git pull origin "${baseBranch}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['switch', baseBranch]);
+    runGit(['pull', 'origin', baseBranch]);
   } catch {}
 
   if (!continueAfterCherryPick) {
     try {
-      childProcess.execSync(`git branch -D "${backportBranchName}"`, {
-        stdio: `inherit`,
-      });
+      runGit(['branch', '-D', backportBranchName]);
     } catch {}
   }
 
   if (continueAfterCherryPick) {
-    childProcess.execSync(`git switch "${backportBranchName}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['switch', backportBranchName]);
 
     try {
-      childProcess.execSync(`git cherry-pick --continue`, {
-        stdio: `inherit`,
-      });
+      runGit(['cherry-pick', '--continue']);
     } catch {}
   } else {
-    childProcess.execSync(`git checkout -b "${backportBranchName}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['checkout', '-b', backportBranchName]);
 
     try {
-      childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
-        stdio: `inherit`,
-      });
+      runGit(['cherry-pick', '-x', commitSha]);
     } catch (err) {
       console.error('[ERROR]: cherry-pick failed', err);
 
@@ -108,9 +112,7 @@ cc @${prDetails.data.user.login}
     }
   }
 
-  childProcess.execSync(`git push origin +${backportBranchName} --force`, {
-    stdio: `inherit`,
-  });
+  runGit(['push', 'origin', `+${backportBranchName}`, '--force']);
 
   const pr = await octokit.pulls.create({
     owner,

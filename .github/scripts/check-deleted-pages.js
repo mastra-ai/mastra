@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 const matcherCache = new Map();
@@ -6,10 +6,17 @@ const BASE_REF = process.env.BASE_REF || 'origin/main';
 const DOCS_DIR = 'docs/src/content';
 const VERCEL_JSON_PATH = 'docs/vercel.json';
 
+// Allow only git refs (branch names, tags, SHAs); blocks shell metacharacters from BASE_REF env input.
+const SAFE_REF = /^[A-Za-z0-9._\/-]+$/;
+if (!SAFE_REF.test(BASE_REF)) {
+  console.error(`Refusing to run: unsafe BASE_REF value ${JSON.stringify(BASE_REF)}`);
+  process.exit(1);
+}
+
 // Get list of deleted MDX files
 function getDeletedMdxFiles() {
   try {
-    const diff = execSync(`git diff --name-status ${BASE_REF}...HEAD -- ${DOCS_DIR}`, {
+    const diff = execFileSync('git', ['diff', '--name-status', `${BASE_REF}...HEAD`, '--', DOCS_DIR], {
       encoding: 'utf-8',
     });
 
