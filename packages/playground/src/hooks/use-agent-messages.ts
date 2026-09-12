@@ -23,10 +23,9 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
         agentId,
         requestContext,
         includeSystemReminders: true,
-        // Page 0 = newest PER_PAGE messages (DESC).
+        // Page 0 = newest PER_PAGE messages, returned in chronological order by the server.
         page: pageParam,
         perPage: PER_PAGE,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
     },
     initialPageParam: 0,
@@ -48,8 +47,7 @@ export const useAgentMessages = ({ threadId, agentId, memory }: UseAgentMessages
           if (seen.has(msg.id)) return false;
           seen.add(msg.id);
           return true;
-        })
-        .reverse();
+        });
       return { ...data, messages: allMessages };
     },
   });
