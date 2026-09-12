@@ -4882,7 +4882,6 @@ export type ProviderModelsMap = {
     'thinkingmachines/inkling',
     'thinkingmachines/inkling-small',
     'thinkingmachines/inkling-small:free',
-    'thinkingmachines/inkling:free',
     'undi95/remm-slerp-l2-13b',
     'upstage/solar-pro-3',
     'upstage/solar-pro4',
@@ -6813,7 +6812,7 @@ export type ProviderModelsMap = {
   readonly nan: readonly [
     'deepseek-v4-flash',
     'gemma4',
-    'glm5.2',
+    'glm5.3',
     'glm5.3-flash',
     'mimo-v2.5',
     'qwen3.6',

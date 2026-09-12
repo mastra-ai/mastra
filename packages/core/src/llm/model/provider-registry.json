@@ -6029,7 +6029,6 @@
         "thinkingmachines/inkling",
         "thinkingmachines/inkling-small",
         "thinkingmachines/inkling-small:free",
-        "thinkingmachines/inkling:free",
         "undi95/remm-slerp-l2-13b",
         "upstage/solar-pro-3",
         "upstage/solar-pro4",
@@ -9106,7 +9105,7 @@
       "apiKeyEnvVar": "NAN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "NaN",
-      "models": ["deepseek-v4-flash", "gemma4", "glm5.2", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
+      "models": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
       "docUrl": "https://nan.builders/docs/models",
       "gateway": "models.dev"
     },
@@ -14770,7 +14769,6 @@
       "thinkingmachines/inkling",
       "thinkingmachines/inkling-small",
       "thinkingmachines/inkling-small:free",
-      "thinkingmachines/inkling:free",
       "undi95/remm-slerp-l2-13b",
       "upstage/solar-pro-3",
       "upstage/solar-pro4",
@@ -16689,7 +16687,7 @@
       "minimax-m2.5",
       "tc-code-latest"
     ],
-    "nan": ["deepseek-v4-flash", "gemma4", "glm5.2", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
+    "nan": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "mimo-v2.5", "qwen3.6", "qwen3.8-flash"],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "kimi-for-coding": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "alibaba-token-plan-cn": [

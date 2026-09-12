@@ -294,4 +294,61 @@ describe('RedisStreamsPubSub reclaim loop', () => {
       await raw.quit();
     }
   });
+
+  it('does not republish or xAck when a sibling claims the entry inside the timeout settlement', async () => {
+    // The tightest possible race: the sibling's XCLAIM lands after the timeout
+    // path has decided to nack but before the nack reaches Redis. A separate
+    // ownership check followed by republish+xAck would still lose here; the
+    // settlement must verify ownership and settle in one atomic Redis step.
+    //
+    // Simulate it by intercepting the write client's script call and moving
+    // the entry to a sibling immediately before it is sent.
+    const topic = `t-${randomUUID()}`;
+    const group = `atomic-${randomUUID()}`;
+    const streamKey = `mastra:topic:${topic}`;
+
+    const raw = createClient({ url: REDIS_URL }) as RedisClientType;
+    await raw.connect();
+
+    let claimedInWindow = 0;
+    const realCreate = createClient;
+    vi.spyOn(await import('redis'), 'createClient').mockImplementation(((opts: any) => {
+      const client = realCreate(opts) as RedisClientType;
+      const origEval = client.eval.bind(client);
+      (client as any).eval = async (...args: Parameters<typeof origEval>) => {
+        const [pending] = await raw.xPendingRange(streamKey, group, '-', '+', 1);
+        if (pending) {
+          await raw.xClaim(streamKey, group, 'sibling', 0, [pending.id], { FORCE: true });
+          claimedInWindow++;
+        }
+        return origEval(...args);
+      };
+      return client;
+    }) as any);
+
+    const ps = createPubSub({ inFlightTimeoutMs: 300, reclaimIdleMs: 60_000 });
+    const attempts: number[] = [];
+    const cb: EventCallback = event => {
+      attempts.push(event.deliveryAttempt ?? 1);
+      // intentionally never ack/nack
+    };
+    await ps.subscribe(topic, cb, { group });
+    await ps.publish(topic, makeEvent({ type: 'atomic' }));
+    await waitFor(() => attempts.length === 1, 5000);
+
+    try {
+      // Cover the timeout (t≈300ms) and its settlement with margin.
+      await sleep(1000);
+
+      expect(attempts).toEqual([1]);
+      // Nothing republished, and the sibling still owns the untouched entry.
+      expect(await raw.xLen(streamKey)).toBe(1);
+      const pending = await raw.xPendingRange(streamKey, group, '-', '+', 10);
+      expect(pending).toHaveLength(1);
+      expect(pending[0]!.consumer).toBe('sibling');
+      expect(claimedInWindow).toBe(1);
+    } finally {
+      await raw.quit();
+    }
+  });
 });
