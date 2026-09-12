@@ -299,6 +299,47 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toEqual(oauthCred('r1', 'a1'));
   });
 
+  it('login routes through the account registry: a second login keeps the first account intact', async () => {
+    const { storage } = makeStorage();
+    const callbacks = { onAuth: () => {}, onPrompt: async () => '' };
+    vi.spyOn(anthropicOAuthProvider, 'login')
+      .mockResolvedValueOnce({ refresh: 'r1', access: 'a1', expires: FUTURE })
+      .mockResolvedValueOnce({ refresh: 'r2', access: 'a2', expires: FUTURE });
+
+    await storage.login(PROVIDER, callbacks);
+    await storage.login(PROVIDER, callbacks);
+
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts).toHaveLength(2);
+    // The first account's tokens survive in its registry entry.
+    expect(accounts[0]).toMatchObject({ refresh: 'r1', access: 'a1', active: false });
+    expect(accounts[1]).toMatchObject({ refresh: 'r2', access: 'a2', active: true });
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
+  });
+
+  it('multi-account kimi auth.json satisfies the startup availability check', async () => {
+    const KIMI = 'kimi-for-coding';
+    const device1 = 'aa'.repeat(16);
+    const device2 = 'bb'.repeat(16);
+    const { storage } = makeStorage();
+    await storage.addAccount(KIMI, { refresh: 'kr1', access: 'ka1', expires: FUTURE, deviceId: device1 });
+    await storage.addAccount(KIMI, { refresh: 'kr2', access: 'ka2', expires: FUTURE, deviceId: device2 });
+
+    // Replicates the availability expression at mastracode/sdk/src/index.ts:1026-1030
+    // verbatim: the slot must still carry a valid oauth credential + deviceId.
+    const { isKimiCodingDeviceId } = await import('./providers/kimi-coding.js');
+    const kimiCodingCred = storage.get(KIMI);
+    const availability =
+      kimiCodingCred?.type === 'oauth' && isKimiCodingDeviceId(kimiCodingCred.deviceId)
+        ? 'oauth'
+        : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
+            Boolean(process.env.KIMI_API_KEY?.trim())
+          ? 'apikey'
+          : false;
+    expect(availability).toBe('oauth');
+    expect((kimiCodingCred as { deviceId?: string })?.deviceId).toBe(device2);
+  });
+
   it('logout removes the slot and every registered account', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });

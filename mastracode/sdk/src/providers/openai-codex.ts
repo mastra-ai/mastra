@@ -130,7 +130,7 @@ async function getCodexBearer(
   const storage = authStorage ?? getAuthStorage();
   storage.reload();
 
-  const cred = storage.get('openai-codex');
+  let cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
     throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
   }
@@ -143,6 +143,13 @@ async function getCodexBearer(
     }
     accessToken = refreshedToken;
     storage.reload();
+    // Re-read after the reload: a refresh-failure rotation inside getApiKey
+    // may have activated a different account — the ChatGPT-Account-ID header
+    // must name the account the token belongs to.
+    cred = storage.get('openai-codex');
+    if (!cred || cred.type !== 'oauth') {
+      throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
+    }
   }
 
   return { accessToken, accountId: (cred as any).accountId as string | undefined };
