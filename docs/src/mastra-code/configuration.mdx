@@ -111,6 +111,18 @@ The account manager lists every registered account with its label and marks the 
 
 Exactly one account per provider is active at a time; the others are kept for rotation and switching. After a successful sign-in you can name the account — ChatGPT and xAI accounts pre-fill the account's email and GitHub Copilot accounts pre-fill the GitHub login when available. `/logout` still signs out of the provider entirely, removing every registered account.
 
+#### Automatic account rotation
+
+When a request fails on the active account, Mastra Code automatically rotates to the next account in the pool and retries:
+
+- **Rate limits and quota exhaustion** (HTTP 429, 402, or provider usage-limit errors) rotate immediately.
+- **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
+- **Server errors and network outages** rotate only after the normal transient retry budget is spent.
+
+Rotation walks accounts in the order they were added and wraps around; each account is tried at most once per request, so a request never burns the whole pool on one failure. When every account in the pool has been tried, the error surfaces normally.
+
+Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too.
+
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
 - **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
