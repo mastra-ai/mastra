@@ -35,10 +35,15 @@ afterEach(async () => {
 describe('trace import manifest', () => {
   it('creates private state and atomically updates its checkpoint', async () => {
     const { directory, manifest } = await initialize();
-    const updated = await writeTraceImportManifest(directory, { ...manifest, phase: 'prepared' });
+    const previousUpdatedAt = '2000-01-01T00:00:00.000Z';
+    const updated = await writeTraceImportManifest(directory, {
+      ...manifest,
+      phase: 'prepared',
+      updatedAt: previousUpdatedAt,
+    });
 
     expect((await readTraceImportManifest(directory)).phase).toBe('prepared');
-    expect(updated.updatedAt).not.toBe('');
+    expect(updated.updatedAt).not.toBe(previousUpdatedAt);
     expect(await readdir(directory)).toEqual(['manifest.json']);
     expect((await stat(directory)).mode & 0o777).toBe(0o700);
     expect((await stat(join(directory, 'manifest.json'))).mode & 0o777).toBe(0o600);

@@ -44,6 +44,11 @@ describe('validateTraceImportTrace', () => {
     ['mixed trace IDs', (trace: TraceImportTrace) => (trace.spans[1]!.traceId = '22222222222222222222222222222222')],
     ['an invalid duration', (trace: TraceImportTrace) => (trace.spans[1]!.endedAt = '2026-09-10T11:59:59.000Z')],
     ['an invalid destination ID', (trace: TraceImportTrace) => (trace.spans[1]!.spanId = 'not-an-otel-id')],
+    [
+      'an all-zero trace ID',
+      (trace: TraceImportTrace) => trace.spans.forEach(span => (span.traceId = '00000000000000000000000000000000')),
+    ],
+    ['an all-zero span ID', (trace: TraceImportTrace) => (trace.spans[1]!.spanId = '0000000000000000')],
   ])('rejects a trace with %s', (_name, mutate) => {
     const trace = validTrace();
     mutate(trace);

@@ -238,6 +238,9 @@ describe('prepared traces', () => {
 
     await expect(completeTraceImport(state.directory)).rejects.toThrow('unacknowledged');
     await acknowledgeTraceBatch(state.directory, batch!);
+    const replayed = await acknowledgeTraceBatch(state.directory, batch!);
+
+    expect(replayed).toMatchObject({ acknowledgedTraces: 2, acknowledgedSpans: 4 });
     const completed = await completeTraceImport(state.directory);
 
     expect(completed.phase).toBe('complete');

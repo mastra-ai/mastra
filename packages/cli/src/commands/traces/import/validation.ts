@@ -4,8 +4,12 @@ import type { TraceImportSpanType, TraceImportTrace } from './types.js';
 
 const timestampSchema = z.string().datetime({ offset: true });
 const spanTypes = new Set<string>(Object.values(SpanType));
-const traceIdSchema = z.string().regex(/^[0-9a-f]{32}$/, 'Expected a lowercase 32-character trace ID.');
-const spanIdSchema = z.string().regex(/^[0-9a-f]{16}$/, 'Expected a lowercase 16-character span ID.');
+const traceIdSchema = z
+  .string()
+  .regex(/^(?!0{32}$)[0-9a-f]{32}$/, 'Expected a non-zero lowercase 32-character trace ID.');
+const spanIdSchema = z
+  .string()
+  .regex(/^(?!0{16}$)[0-9a-f]{16}$/, 'Expected a non-zero lowercase 16-character span ID.');
 
 const traceImportSpanSchema = z
   .object({
