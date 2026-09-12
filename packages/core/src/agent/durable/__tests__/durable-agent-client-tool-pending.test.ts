@@ -12,7 +12,7 @@
  * observable agent surface: model call count, streamed chunks, and the client resume.
  */
 
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -33,9 +33,11 @@ const TOOL_CALL_ID = 'tc-1';
  */
 function createClientToolModel(finalText: string) {
   let callCount = 0;
+  const prompts: LanguageModelV2CallOptions['prompt'][] = [];
   const model = new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async options => {
       callCount++;
+      prompts.push(options.prompt);
       if (callCount === 1) {
         return {
           stream: convertArrayToReadableStream([
@@ -70,7 +72,7 @@ function createClientToolModel(finalText: string) {
     },
   }) as unknown as LanguageModelV2;
 
-  return { model, modelCalls: () => callCount };
+  return { model, modelCalls: () => callCount, prompts };
 }
 
 describe('issue #23295 (durable engine): the loop stops at a client-executed tool call', () => {
@@ -85,7 +87,7 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
 
   function createAgent(finalText = 'client answered') {
     pubsub = new EventEmitterPubSub();
-    const { model, modelCalls } = createClientToolModel(finalText);
+    const { model, modelCalls, prompts } = createClientToolModel(finalText);
 
     const baseAgent = new Agent({
       id: 'test-agent',
@@ -109,7 +111,7 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
       storage: new InMemoryStore(),
     });
 
-    return { durableAgent, modelCalls };
+    return { durableAgent, modelCalls, prompts };
   }
 
   it('ends the run at the client tool call and leaves it unanswered', async () => {
@@ -134,10 +136,17 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
     expect(types).not.toContain('tool-result');
 
     expect(await output.finishReason).toBe('tool-calls');
+
+    // Public step content (what `onStepFinish` / `output.steps` consumers see) must not show
+    // a completed result for a call the client never answered.
+    const steps = await output.steps;
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.content.some(part => part.type === 'tool-call')).toBe(true);
+    expect(steps[0]!.content.some(part => part.type === 'tool-result')).toBe(false);
   });
 
   it('continues when the client result arrives on a follow-up request', async () => {
-    const { durableAgent, modelCalls } = createAgent('client answered');
+    const { durableAgent, modelCalls, prompts } = createAgent('client answered');
 
     const first = await durableAgent.stream('test prompt', { maxSteps: 5 });
     await first.output.consumeStream();
@@ -166,5 +175,15 @@ describe('issue #23295 (durable engine): the loop stops at a client-executed too
     // Ending the turn must leave the run resumable, not dead-ended.
     expect(await second.output.text).toBe('client answered');
     expect(modelCalls()).toBe(2);
+
+    // The resumed model request carries the client's real result for the pending call, not
+    // the fabricated empty result the old loop produced.
+    const toolMessages = prompts[1]!.filter(message => message.role === 'tool');
+    expect(toolMessages).toHaveLength(1);
+    const toolResult = toolMessages[0]!.content.find(
+      part => part.type === 'tool-result' && part.toolCallId === TOOL_CALL_ID,
+    );
+    expect(toolResult).toBeDefined();
+    expect(JSON.stringify(toolResult)).toContain('"confirmed":true');
   });
 });
