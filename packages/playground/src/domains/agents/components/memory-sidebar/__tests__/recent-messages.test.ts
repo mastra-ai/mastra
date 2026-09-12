@@ -2,11 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { getRecentMessagesSettings } from '../lib/recent-messages';
 
 describe('Recent message settings', () => {
-  describe.each([false, undefined, 0, { maxMessages: 0, maxTokens: 4000 }] as const)(
-    'when history is disabled by %j',
-    value => {
+  describe.each([
+    [false, undefined],
+    [undefined, undefined],
+    [0, undefined],
+    [0, { maxTokens: 4000 }],
+    [false, { maxTokens: 4000 }],
+  ] as const)(
+    'when history is disabled by lastMessages=%j messageTokens=%j',
+    (lastMessages, messageTokens) => {
       it('does not show an enabled message window', () => {
-        expect(getRecentMessagesSettings(value)).toEqual({
+        expect(getRecentMessagesSettings(lastMessages, messageTokens)).toEqual({
           enabled: false,
           maxMessages: undefined,
           description: 'Recent message history is not included in context.',
@@ -15,9 +21,9 @@ describe('Recent message settings', () => {
     },
   );
 
-  describe.each([10, {}, { maxMessages: 10 }])('when history has a message window configured by %j', value => {
+  describe('when history has a message window configured', () => {
     it('describes the effective message count', () => {
-      expect(getRecentMessagesSettings(value)).toEqual({
+      expect(getRecentMessagesSettings(10)).toEqual({
         enabled: true,
         maxMessages: 10,
         description: 'Includes the last 10 messages in context.',
@@ -27,7 +33,7 @@ describe('Recent message settings', () => {
 
   describe('when history has only a token budget', () => {
     it('describes enabled history without a message-count limit', () => {
-      expect(getRecentMessagesSettings({ maxTokens: 4000 })).toEqual({
+      expect(getRecentMessagesSettings(undefined, { maxTokens: 4000 })).toEqual({
         enabled: true,
         maxMessages: undefined,
         description: 'Includes recent message history with a 4000-token context budget, trimming oldest history first.',

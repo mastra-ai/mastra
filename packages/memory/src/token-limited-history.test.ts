@@ -16,10 +16,10 @@ const messages: MastraDBMessage[] = Array.from({ length: 15 }, (_, i) => ({
   content: { format: 2, parts: [{ type: 'text', text: 'A historical conversation message. '.repeat(30) }] },
 }));
 
-describe('nested lastMessages', () => {
+describe('messageTokens history', () => {
   it('normalizes pagination without imposing the default message count on token-only history', async () => {
     const storage = new InMemoryStore();
-    const memory = new Memory({ storage, options: { lastMessages: { maxTokens: 1000 } } });
+    const memory = new Memory({ storage, options: { messageTokens: { maxTokens: 1000 } } });
     await memory.saveThread({
       thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
     });
@@ -31,7 +31,7 @@ describe('nested lastMessages', () => {
         await memory.recall({
           threadId: 'thread',
           resourceId: 'resource',
-          threadConfig: { lastMessages: { maxMessages: 3 } },
+          threadConfig: { lastMessages: 3 },
         })
       ).messages.map(m => m.id),
     ).toEqual(['message-12', 'message-13', 'message-14']);
@@ -40,7 +40,7 @@ describe('nested lastMessages', () => {
         await memory.recall({
           threadId: 'thread',
           resourceId: 'resource',
-          threadConfig: { lastMessages: { maxMessages: 0 } },
+          threadConfig: { lastMessages: 0 },
         })
       ).messages,
     ).toEqual([]);
@@ -62,7 +62,7 @@ describe('nested lastMessages', () => {
 
   it('bounds direct context retrieval and respects matching persisted boundaries', async () => {
     const storage = new InMemoryStore();
-    const memory = new Memory({ storage, options: { lastMessages: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
+    const memory = new Memory({ storage, options: { messageTokens: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
     await memory.saveThread({
       thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
     });
@@ -89,17 +89,17 @@ describe('nested lastMessages', () => {
       },
     });
     expect((await memory.getContext({ threadId: 'thread' })).messages).toEqual([]);
-    expect((await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: 3 } })).messages).toHaveLength(
-      3,
-    );
+    // A runtime count cap layers on the configured token budget, so the persisted boundary still applies.
+    expect((await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: 3 } })).messages).toEqual([]);
+    // A different budget invalidates the persisted boundary.
     expect(
-      (await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: { maxTokens: 10000 } } })).messages,
+      (await memory.getContext({ threadId: 'thread', memoryConfig: { messageTokens: { maxTokens: 10000 } } })).messages,
     ).toHaveLength(15);
   });
 
   it('uses the observational-memory counter in the automatically injected limiter', async () => {
     const storage = new InMemoryStore();
-    const memory = new Memory({ storage, options: { lastMessages: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
+    const memory = new Memory({ storage, options: { messageTokens: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
     const thread = await memory.saveThread({
       thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
     });

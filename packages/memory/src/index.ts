@@ -10,7 +10,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
-  normalizeLastMessages,
+  normalizeMessageHistoryConfig,
   getMemoryTokenBoundary,
   isAfterMemoryTokenBoundary,
 } from '@mastra/core/memory';
@@ -689,10 +689,7 @@ export class Memory extends MastraMemory {
       { threadId, resourceId, vectorSearchString },
       {
         semanticRecallEnabled,
-        lastMessages:
-          typeof config.lastMessages === 'object'
-            ? normalizeLastMessages(config.lastMessages).maxMessages
-            : config.lastMessages,
+        lastMessages: config.lastMessages,
       },
     );
 
@@ -700,7 +697,7 @@ export class Memory extends MastraMemory {
       if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
       // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-      const history = normalizeLastMessages(config.lastMessages);
+      const history = normalizeMessageHistoryConfig(config.lastMessages, config.messageTokens);
       const perPage = perPageArg !== undefined ? perPageArg : history.enabled ? (history.maxMessages ?? false) : 0;
 
       // lastMessages: false means "disable conversation history entirely".
@@ -1933,7 +1930,7 @@ ${workingMemory}`;
       }
     } else {
       // No OM: load recent messages
-      const lastMessages = normalizeLastMessages(config.lastMessages);
+      const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageTokens);
       if (!lastMessages.enabled) {
         messages = [];
       } else {
@@ -1950,7 +1947,7 @@ ${workingMemory}`;
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
-          perPage: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+          perPage: lastMessages.maxMessages ?? false,
           filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
           // Only `messages` is consumed here; skip the COUNT(*) work.
           includeTotal: false,

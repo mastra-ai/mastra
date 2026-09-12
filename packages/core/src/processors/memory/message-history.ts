@@ -2,7 +2,7 @@ import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
-import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/last-messages';
+import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';

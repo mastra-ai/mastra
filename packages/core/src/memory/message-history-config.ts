@@ -1,42 +1,58 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import type { StorageThreadType } from './types';
 
-export type LastMessages =
-  | number
-  | false
-  | {
-      /** Maximum number of recent messages. Omit to limit only by tokens. */
-      maxMessages?: number;
-      /** Token budget for context; only remembered messages may be removed. */
-      maxTokens?: number;
-      /** Tokens to free when the budget is exceeded. Defaults to 25% of maxTokens. */
-      atMaxRemoveTokens?: number;
-    };
+/**
+ * Token budget for conversation history. Only remembered messages are removed;
+ * system instructions and the current turn's input/output are never trimmed.
+ */
+export type MessageTokens = {
+  /** Token budget for context (system prompt + history + current turn). */
+  maxTokens: number;
+  /** Tokens to free when the budget is exceeded. Defaults to 25% of maxTokens. */
+  atMaxRemoveTokens?: number;
+};
 
-export function normalizeLastMessages(value: LastMessages | undefined) {
-  if (typeof value !== 'object') {
-    if (typeof value === 'number' && (!Number.isFinite(value) || value < 0 || !Number.isInteger(value))) {
-      throw new Error('lastMessages must be a finite non-negative integer');
-    }
-    return { enabled: value !== undefined && value !== false && value !== 0, maxMessages: value === false ? 0 : value };
+export type MessageHistoryConfig = {
+  enabled: boolean;
+  /** Message-count cap. `undefined` means no count cap (token-only history). */
+  maxMessages: number | undefined;
+  maxTokens?: number;
+  atMaxRemoveTokens?: number;
+};
+
+/**
+ * Resolves `lastMessages` and `messageTokens` into a single history config.
+ * A numeric `lastMessages` is a count cap on top of the token budget; `false` disables history entirely.
+ */
+export function normalizeMessageHistoryConfig(
+  lastMessages: number | false | undefined,
+  messageTokens?: MessageTokens,
+): MessageHistoryConfig {
+  if (
+    typeof lastMessages === 'number' &&
+    (!Number.isFinite(lastMessages) || lastMessages < 0 || !Number.isInteger(lastMessages))
+  ) {
+    throw new Error('lastMessages must be a finite non-negative integer');
   }
-  const { maxMessages, maxTokens, atMaxRemoveTokens } = value;
-  for (const [name, limit] of Object.entries(value)) {
-    if (limit !== undefined && (!Number.isFinite(limit) || limit < 0)) {
-      throw new Error(`lastMessages.${name} must be a finite non-negative number`);
-    }
+  const maxMessages = lastMessages === false ? 0 : lastMessages;
+  if (messageTokens === undefined) {
+    return { enabled: maxMessages !== undefined && maxMessages !== 0, maxMessages };
   }
-  if (maxMessages !== undefined && !Number.isInteger(maxMessages)) {
-    throw new Error('lastMessages.maxMessages must be an integer');
+  const { maxTokens, atMaxRemoveTokens } = messageTokens;
+  if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens < 0) {
+    throw new Error('messageTokens.maxTokens must be a finite non-negative number');
   }
-  if (atMaxRemoveTokens !== undefined && (maxTokens === undefined || atMaxRemoveTokens > maxTokens)) {
-    throw new Error('lastMessages.atMaxRemoveTokens requires maxTokens and cannot exceed it');
+  if (
+    atMaxRemoveTokens !== undefined &&
+    (!Number.isFinite(atMaxRemoveTokens) || atMaxRemoveTokens < 0 || atMaxRemoveTokens > maxTokens)
+  ) {
+    throw new Error('messageTokens.atMaxRemoveTokens must be a finite non-negative number no greater than maxTokens');
   }
   return {
     enabled: maxMessages !== 0,
-    maxMessages: maxMessages ?? (maxTokens === undefined ? 10 : undefined),
+    maxMessages,
     maxTokens,
-    atMaxRemoveTokens: maxTokens === undefined ? undefined : (atMaxRemoveTokens ?? maxTokens * 0.25),
+    atMaxRemoveTokens: atMaxRemoveTokens ?? maxTokens * 0.25,
   };
 }
 

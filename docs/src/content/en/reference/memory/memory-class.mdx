@@ -79,6 +79,13 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             defaultValue: '10',
           },
           {
+            name: 'messageTokens',
+            type: '{ maxTokens: number; atMaxRemoveTokens?: number }',
+            description:
+              'Token budget for recent message history. When the remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (defaults to 25% of `maxTokens`). The current turn\'s input, responses, context, and system messages are never removed. Trimmed history is excluded from later turns via a persisted per-thread boundary, but the messages themselves stay in storage. When set without an explicit `lastMessages`, the default 10-message cap is not applied. Prefer this over `lastMessages`, since message count is a poor proxy for context size.',
+            isOptional: true,
+          },
+          {
             name: 'readOnly',
             type: 'boolean',
             description:

@@ -1,5 +1,5 @@
 export * from './types';
-export * from './last-messages';
+export * from './message-history-config';
 export * from './memory';
 export * from './mock';
 export * from './run-state';

@@ -32,7 +32,11 @@ import type { ToolAction } from '../tools';
 import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
-import { advanceMemoryTokenBoundary, getMemoryTokenBoundary, normalizeLastMessages } from './last-messages';
+import {
+  advanceMemoryTokenBoundary,
+  getMemoryTokenBoundary,
+  normalizeMessageHistoryConfig,
+} from './message-history-config';
 
 import type {
   SharedMemoryConfig,
@@ -394,6 +398,16 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     const mergedConfig = deepMerge(this.threadConfig, config || {});
+
+    // A token budget replaces the default count window; an explicit numeric `lastMessages` still applies on top.
+    if (
+      config?.messageTokens !== undefined &&
+      config.lastMessages === undefined &&
+      this.threadConfig.messageTokens === undefined &&
+      this.threadConfig.lastMessages === memoryDefaultOptions.lastMessages
+    ) {
+      mergedConfig.lastMessages = undefined;
+    }
 
     if (
       typeof config?.workingMemory === 'object' &&
@@ -795,7 +809,7 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeLastMessages(effectiveConfig.lastMessages);
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageTokens);
     if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
@@ -818,7 +832,7 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+            lastMessages: lastMessages.maxMessages ?? false,
             tokenLimit:
               lastMessages.maxTokens === undefined
                 ? undefined
@@ -913,9 +927,10 @@ https://mastra.ai/en/docs/memory/overview`,
               stored?.maxTokens === maxTokens && stored.atMaxRemoveTokens === atMaxRemoveTokens ? stored : undefined;
             const boundary = advanceMemoryTokenBoundary(previous, localMessages, maxTokens, atMaxRemoveTokens);
             if (boundary === previous) return;
-            const metadata = { ...latest.metadata, memoryTokenLimiter: boundary };
-            await memoryStore!.patchThread({ id: thread.id, metadata });
-            thread.metadata = metadata;
+            // Patch only our key: `updateThread` merges metadata, so sibling keys written
+            // between the read above and this write (working memory, titles) are not clobbered.
+            await memoryStore!.patchThread({ id: thread.id, metadata: { memoryTokenLimiter: boundary } });
+            thread.metadata = { ...thread.metadata, memoryTokenLimiter: boundary };
           },
         }),
       );
@@ -1001,7 +1016,7 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = normalizeLastMessages(effectiveConfig.lastMessages);
+    const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageTokens);
     if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
@@ -1024,7 +1039,7 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+            lastMessages: lastMessages.maxMessages ?? false,
             tokenLimit:
               lastMessages.maxTokens === undefined
                 ? undefined

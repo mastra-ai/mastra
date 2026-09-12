@@ -124,6 +124,25 @@ You can use this history in two ways:
 
 :::
 
+### Limit history by tokens
+
+Message count is a poor proxy for context size: a tool result can be a few tokens or thousands. Use `messageTokens` to keep recent history within a token budget instead:
+
+```typescript title="src/mastra/agents/test-agent.ts"
+export const agent = new Agent({
+  id: 'test-agent',
+  memory: new Memory({
+    options: {
+      messageTokens: { maxTokens: 8_000, atMaxRemoveTokens: 2_000 },
+    },
+  }),
+})
+```
+
+When remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (default: 25% of `maxTokens`). Removing history in chunks rather than one message at a time keeps the prompt prefix stable across several turns, so provider prompt caches stay warm. The current turn's input, the agent's responses, and system messages are never trimmed.
+
+Trimmed messages stay in storage, but a per-thread boundary is persisted so they are excluded from later turns. Setting `messageTokens` without `lastMessages` disables the default 10-message cap; set both to combine a count cap with a token budget.
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.

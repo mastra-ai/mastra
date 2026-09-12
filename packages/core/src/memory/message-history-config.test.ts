@@ -6,7 +6,11 @@ import { MessageHistory } from '../processors/memory/message-history';
 import { TokenLimiterProcessor } from '../processors/processors/token-limiter';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
-import { advanceMemoryTokenBoundary, getMemoryTokenBoundary, normalizeLastMessages } from './last-messages';
+import {
+  advanceMemoryTokenBoundary,
+  getMemoryTokenBoundary,
+  normalizeMessageHistoryConfig,
+} from './message-history-config';
 import { MockMemory } from './mock';
 
 const message = (id: string, seconds = 0): MastraDBMessage => ({
@@ -30,31 +34,46 @@ const args = (messageList: MessageList, requestContext?: RequestContext): Proces
 });
 
 describe('token-based memory history', () => {
-  it('normalizes old and nested settings and rejects invalid budgets', () => {
-    expect(normalizeLastMessages(5)).toMatchObject({ enabled: true, maxMessages: 5 });
-    expect(normalizeLastMessages(false).enabled).toBe(false);
-    expect(normalizeLastMessages({ maxTokens: 100 })).toMatchObject({ maxMessages: undefined, atMaxRemoveTokens: 25 });
-    expect(normalizeLastMessages({ maxMessages: 3 }).maxMessages).toBe(3);
-    expect(normalizeLastMessages({ maxMessages: 0, maxTokens: 100 }).enabled).toBe(false);
-    for (const config of [
+  it('resolves lastMessages and messageTokens into one history config', () => {
+    expect(normalizeMessageHistoryConfig(5)).toEqual({ enabled: true, maxMessages: 5 });
+    expect(normalizeMessageHistoryConfig(false).enabled).toBe(false);
+    expect(normalizeMessageHistoryConfig(undefined, { maxTokens: 100 })).toEqual({
+      enabled: true,
+      maxMessages: undefined,
+      maxTokens: 100,
+      atMaxRemoveTokens: 25,
+    });
+    expect(normalizeMessageHistoryConfig(3, { maxTokens: 100, atMaxRemoveTokens: 10 })).toMatchObject({
+      maxMessages: 3,
+      maxTokens: 100,
+      atMaxRemoveTokens: 10,
+    });
+    expect(normalizeMessageHistoryConfig(false, { maxTokens: 100 }).enabled).toBe(false);
+    for (const tokens of [
       { maxTokens: NaN },
       { maxTokens: Infinity },
       { maxTokens: -1 },
-      { maxMessages: 1.5 },
-      { atMaxRemoveTokens: 1 },
       { maxTokens: 5, atMaxRemoveTokens: 6 },
+      { maxTokens: 5, atMaxRemoveTokens: -1 },
     ]) {
-      expect(() => normalizeLastMessages(config)).toThrow();
+      expect(() => normalizeMessageHistoryConfig(undefined, tokens)).toThrow('messageTokens');
     }
   });
 
   it.each([-1, 1.5, NaN, Infinity])('rejects invalid scalar message limit %s', value => {
-    expect(() => normalizeLastMessages(value)).toThrow('finite non-negative integer');
+    expect(() => normalizeMessageHistoryConfig(value)).toThrow('finite non-negative integer');
   });
 
   it('preserves disabled and unspecified scalar limits', () => {
-    expect(normalizeLastMessages(0)).toEqual({ enabled: false, maxMessages: 0 });
-    expect(normalizeLastMessages(undefined)).toEqual({ enabled: false, maxMessages: undefined });
+    expect(normalizeMessageHistoryConfig(0)).toEqual({ enabled: false, maxMessages: 0 });
+    expect(normalizeMessageHistoryConfig(undefined)).toEqual({ enabled: false, maxMessages: undefined });
+  });
+
+  it('drops the default count window when only messageTokens is configured', async () => {
+    const withTokens = new MockMemory({ options: { messageTokens: { maxTokens: 100 } } });
+    expect((withTokens as any).threadConfig.lastMessages).toBeUndefined();
+    const withBoth = new MockMemory({ options: { lastMessages: 4, messageTokens: { maxTokens: 100 } } });
+    expect((withBoth as any).threadConfig.lastMessages).toBe(4);
   });
 
   it('drops a chunk of oldest history and protects every current-turn source', async () => {
@@ -123,7 +142,7 @@ describe('token-based memory history', () => {
     await store.saveMessages({ messages: [message('old'), message('same-time'), message('newer', 1)] });
     const context = new RequestContext();
     context.set('MastraMemory', { thread, resourceId: 'resource' });
-    const memory = new MockMemory({ storage, options: { lastMessages: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
+    const memory = new MockMemory({ storage, options: { messageTokens: { maxTokens: 32, atMaxRemoveTokens: 0 } } });
     const processors = await memory.getInputProcessors([], context);
     const history = processors.find(p => p.id === 'message-history')!;
     const limiter = processors.find(p => p.id === 'token-limiter')!;

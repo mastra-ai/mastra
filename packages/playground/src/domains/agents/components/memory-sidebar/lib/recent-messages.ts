@@ -1,16 +1,14 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
 
-type LastMessages = NonNullable<GetMemoryConfigResponse['config']>['lastMessages'];
+type MemoryConfig = NonNullable<GetMemoryConfigResponse['config']>;
 
-export function getRecentMessagesSettings(lastMessages: LastMessages) {
-  const maxTokens = typeof lastMessages === 'object' ? lastMessages.maxTokens : undefined;
-  const maxMessages =
-    typeof lastMessages === 'object'
-      ? (lastMessages.maxMessages ?? (maxTokens === undefined ? 10 : undefined))
-      : typeof lastMessages === 'number'
-        ? lastMessages
-        : undefined;
-  const enabled = lastMessages !== false && lastMessages !== undefined && maxMessages !== 0;
+export function getRecentMessagesSettings(
+  lastMessages: MemoryConfig['lastMessages'],
+  messageTokens?: MemoryConfig['messageTokens'],
+) {
+  const maxTokens = messageTokens?.maxTokens;
+  const maxMessages = typeof lastMessages === 'number' ? lastMessages : undefined;
+  const enabled = lastMessages !== false && maxMessages !== 0 && (maxMessages !== undefined || maxTokens !== undefined);
 
   if (!enabled) {
     return { enabled, maxMessages: undefined, description: 'Recent message history is not included in context.' };
@@ -19,9 +17,10 @@ export function getRecentMessagesSettings(lastMessages: LastMessages) {
   const messageLabel = maxMessages === 1 ? 'message' : 'messages';
   const history =
     maxMessages === undefined ? 'Includes recent message history' : `Includes the last ${maxMessages} ${messageLabel}`;
-  const budget =
+  const description =
     maxTokens === undefined
-      ? 'in context.'
-      : `with a ${maxTokens}-token context budget, trimming oldest history first.`;
-  return { enabled, maxMessages, description: `${history} ${budget}` };
+      ? `${history} in context.`
+      : `${history} with a ${maxTokens}-token context budget, trimming oldest history first.`;
+
+  return { enabled, maxMessages, description };
 }
