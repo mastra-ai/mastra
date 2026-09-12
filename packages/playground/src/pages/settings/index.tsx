@@ -9,16 +9,19 @@ export const StudioSettingsPage = () => {
 
   return (
     <SettingsLayout>
-      <SettingsRow label="Theme" description="Customize the appearance of the studio.">
+      <SettingsRow variant="factory" label="Theme" description="Customize the appearance of the studio.">
         <ThemeToggle />
       </SettingsRow>
 
       <div className="flex min-w-0 flex-col gap-6">
         <SettingsRow
+          variant="factory"
           label="Mastra Connection"
           description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
         />
-        <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+        <div className="mx-4">
+          <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
+        </div>
       </div>
     </SettingsLayout>
   );
