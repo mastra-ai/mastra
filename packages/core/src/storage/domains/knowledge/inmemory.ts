@@ -38,6 +38,8 @@ import type {
   KnowledgeNode,
   KnowledgeNodeAddress,
   KnowledgeProposal,
+  KnowledgeProposalApprovalCapability,
+  KnowledgeProposalApprovalScopeIds,
   KnowledgeRecord,
   KnowledgeScopeAddress,
   KnowledgeScopeGrant,
@@ -1296,23 +1298,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return proposal ? cloneProposal(proposal) : null;
   }
 
-  async getVisibleProposal(input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+  async getVisibleProposal(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
+  }): Promise<KnowledgeProposal | null> {
     const proposal = this.#db.knowledgeProposals.get(input.id);
-    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    return proposal && proposal.targets.every(target => this.#isProposalTargetVisible(target, scopeIds))
-      ? cloneProposal(proposal)
-      : null;
+    return proposal && this.#isProposalVisible(proposal, input) ? cloneProposal(proposal) : null;
   }
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
-    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     const cursor = input.cursor ? this.#db.knowledgeProposals.get(input.cursor) : undefined;
     if (
       input.cursor &&
-      (!cursor ||
-        (input.status && cursor.status !== input.status) ||
-        !cursor.targets.every(target => this.#isProposalTargetVisible(target, scopeIds)))
+      (!cursor || (input.status && cursor.status !== input.status) || !this.#isProposalVisible(cursor, input))
     ) {
       return { proposals: [] };
     }
@@ -1324,7 +1324,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           proposal.createdAt < cursor.createdAt ||
           (proposal.createdAt.getTime() === cursor.createdAt.getTime() && proposal.id < cursor.id),
       )
-      .filter(proposal => proposal.targets.every(target => this.#isProposalTargetVisible(target, scopeIds)))
+      .filter(proposal => this.#isProposalVisible(proposal, input))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
     const page = proposals.slice(0, limit);
     return {
@@ -1666,6 +1666,30 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   #isProposalTargetVisible(target: KnowledgeProposal['targets'][number], visibleScopeIds: KnowledgeScopeIds): boolean {
     return isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds);
+  }
+
+  /**
+   * Full proposal visibility disjunction: (proposer-context read AND every
+   * target readable) OR direct write authority — the caller can satisfy every
+   * target's approval capability on at least one of that target's scopes.
+   */
+  #isProposalVisible(
+    proposal: KnowledgeProposal,
+    input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
+  ): boolean {
+    const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const proposerContextScopeId = proposal.proposerContextScopeId;
+    if (
+      proposerContextScopeId !== undefined &&
+      readable.includes(proposerContextScopeId) &&
+      proposal.targets.every(target => this.#isProposalTargetVisible(target, readable))
+    ) {
+      return true;
+    }
+    return proposal.targets.every(target => {
+      const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
+      return Boolean(authorizedScopeIds?.some(scopeId => target.scopeIds.includes(scopeId)));
+    });
   }
 
   #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {

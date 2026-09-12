@@ -1259,6 +1259,70 @@ export function createKnowledgeStorageTests(
       );
     });
 
+    it('requires proposer-context read or direct write authority for proposal visibility', async () => {
+      const targetNode = await store.createNode({ name: 'Disjunction target', scopeIds: [PROJECT_SCOPE_ID] });
+      const accessEpoch = await store.getAccessEpoch();
+      const proposal = await store.createProposal({
+        id: 'disjunction-proposal',
+        targets: [
+          {
+            type: 'node',
+            id: targetNode.id,
+            expectedVersion: targetNode.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'updateNode',
+        payload: { name: 'Disjunction edit' },
+        proposerContextScopeId: OTHER_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+
+      // Third-party readonly reader: target is readable but the proposer
+      // context is not, and no write authority is held — invisible on both
+      // the list and single-ID surfaces.
+      const readonlyVisibility = { scopeIds: [PROJECT_SCOPE_ID] };
+      await expect(store.listProposals({ ...readonlyVisibility, limit: 10 })).resolves.toEqual({
+        proposals: [],
+      });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...readonlyVisibility })).resolves.toBeNull();
+      // Cursor indistinguishability: paging from the hidden proposal returns
+      // an empty page rather than leaking its existence.
+      await expect(store.listProposals({ ...readonlyVisibility, cursor: proposal.id, limit: 10 })).resolves.toEqual({
+        proposals: [],
+      });
+
+      // Direct write authority on the target's approval capability makes the
+      // proposal visible without proposer-context read.
+      const writeAuthority = { scopeIds: [] as string[], approvalScopeIds: { edit: [PROJECT_SCOPE_ID] } };
+      await expect(store.listProposals({ ...writeAuthority, limit: 10 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: proposal.id })],
+        nextCursor: undefined,
+      });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...writeAuthority })).resolves.toMatchObject({
+        id: proposal.id,
+      });
+
+      // Wrong capability set does not authorize: a manageAccess-only caller
+      // cannot see an edit-approval proposal.
+      const wrongCapability = { scopeIds: [] as string[], approvalScopeIds: { manageAccess: [PROJECT_SCOPE_ID] } };
+      await expect(store.listProposals({ ...wrongCapability, limit: 10 })).resolves.toEqual({
+        proposals: [],
+      });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...wrongCapability })).resolves.toBeNull();
+
+      // Proposer-context read plus target read authorizes the read branch.
+      const proposerView = { scopeIds: [OTHER_SCOPE_ID, PROJECT_SCOPE_ID] };
+      await expect(store.listProposals({ ...proposerView, limit: 10 })).resolves.toEqual({
+        proposals: [expect.objectContaining({ id: proposal.id })],
+        nextCursor: undefined,
+      });
+      await expect(store.getVisibleProposal({ id: proposal.id, ...proposerView })).resolves.toMatchObject({
+        id: proposal.id,
+      });
+    });
+
     it('applies complete proposal mutations atomically and preserves stale proposals for conflict review', async () => {
       const node = await store.createNode({ name: 'Proposal apply target', scopeIds: [PROJECT_SCOPE_ID] });
       const projectScope = await store.getNode(PROJECT_SCOPE_ID);
