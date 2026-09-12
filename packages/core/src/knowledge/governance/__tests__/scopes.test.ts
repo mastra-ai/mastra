@@ -250,4 +250,55 @@ describe('Knowledge scope governance', () => {
       deletedAt: undefined,
     });
   });
+
+  it('restores and idempotently re-creates scopes against a large unrelated hidden grant backlog', async () => {
+    const { knowledge, rootId } = await createFixture();
+    // A backlog of deleted scopes with retained grants — point restore and
+    // creation-retry reads must not depend on this volume.
+    for (let index = 0; index < 250; index += 1) {
+      const backlog = await knowledge.createScope({
+        address: `scope:backlog-${index}`,
+        name: `Backlog ${index}`,
+        parentAddresses: ['scope:root'],
+        contextualScopeAddress: 'scope:root',
+        vouchedScopeIds: [rootId],
+      });
+      const backlogId = backlog.scopes[`scope:backlog-${index}`]!;
+      await knowledge.deleteNode({ id: backlogId, version: 1, deletedBy: rootId, vouchedScopeIds: [rootId] });
+    }
+
+    const target = await knowledge.createScope({
+      address: 'scope:target',
+      name: 'Target',
+      parentAddresses: ['scope:root'],
+      contextualScopeAddress: 'scope:root',
+      vouchedScopeIds: [rootId],
+    });
+    const targetId = target.scopes['scope:target']!;
+    const deletedTarget = await knowledge.deleteNode({
+      id: targetId,
+      version: 1,
+      deletedBy: rootId,
+      vouchedScopeIds: [rootId],
+    });
+
+    const restored = await knowledge.restoreNode({
+      id: targetId,
+      version: deletedTarget.version,
+      vouchedScopeIds: [rootId],
+    });
+    expect(restored).toMatchObject({ id: targetId, deletedAt: undefined });
+
+    // Idempotent re-creation of the live target exercises the
+    // existing-creation comparison against the same backlog.
+    const retried = await knowledge.createScope({
+      address: 'scope:target',
+      name: 'Target',
+      parentAddresses: ['scope:root'],
+      contextualScopeAddress: 'scope:root',
+      vouchedScopeIds: [rootId],
+    });
+    expect(retried.scopes['scope:target']).toBe(targetId);
+    expect(retried.changed).toBe(false);
+  });
 });

@@ -523,11 +523,22 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return Number(result.rows[0]?.epoch ?? 0);
   }
 
-  override async listScopeGrants(input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
+  override async listScopeGrants(
+    input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
+  ): Promise<KnowledgeScopeGrant[]> {
+    const scopeFilter = input.scopeNodeId;
     const result = await this.#client.execute(
       input.includeDeleted
-        ? `SELECT scopeNodeId,scopeRefId,role,canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ORDER BY scopeNodeId,scopeRefId`
-        : `SELECT g.scopeNodeId,g.scopeRefId,g.role,g.canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" g JOIN "${TABLE_KNOWLEDGE_NODES}" target ON target.id=g.scopeNodeId JOIN "${TABLE_KNOWLEDGE_NODES}" ref ON ref.id=g.scopeRefId WHERE target.deletedAt IS NULL AND ref.deletedAt IS NULL ORDER BY g.scopeNodeId,g.scopeRefId`,
+        ? scopeFilter
+          ? {
+              sql: `SELECT scopeNodeId,scopeRefId,role,canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE scopeNodeId=? ORDER BY scopeNodeId,scopeRefId`,
+              args: [scopeFilter],
+            }
+          : `SELECT scopeNodeId,scopeRefId,role,canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ORDER BY scopeNodeId,scopeRefId`
+        : {
+            sql: `SELECT g.scopeNodeId,g.scopeRefId,g.role,g.canSuggest FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" g JOIN "${TABLE_KNOWLEDGE_NODES}" target ON target.id=g.scopeNodeId JOIN "${TABLE_KNOWLEDGE_NODES}" ref ON ref.id=g.scopeRefId WHERE target.deletedAt IS NULL AND ref.deletedAt IS NULL${scopeFilter ? ' AND g.scopeNodeId=?' : ''} ORDER BY g.scopeNodeId,g.scopeRefId`,
+            args: scopeFilter ? [scopeFilter] : [],
+          },
     );
     return result.rows.map(row => ({
       scopeNodeId: String(row.scopeNodeId),
@@ -830,6 +841,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
       });
       await this.#outbox(tx, 'node', input.id, 'delete', existing.version + 1, scopeIds);
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
+        args: [now.toISOString(), input.id],
+      });
       const records = await tx.execute({
         sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
         args: [input.id],
@@ -869,6 +884,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
       });
       await this.#outbox(tx, 'node', input.id, 'upsert', existing.version + 1, scopeIds);
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
+        args: [now.toISOString(), input.id],
+      });
       const records = await tx.execute({
         sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
         args: [input.id],

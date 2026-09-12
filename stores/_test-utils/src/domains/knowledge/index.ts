@@ -688,6 +688,74 @@ export function createKnowledgeStorageTests(
       });
     });
 
+    it('advances owned-record versions so every owner delete and restore cycle re-enqueues vectors', async () => {
+      const node = await store.createNode({ name: 'Cycled owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Cycled record body',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      const drain = async () => {
+        const claimed = await store.claimSemanticOutbox({
+          workerId: 'cycle-worker',
+          scopeIds: [PROJECT_SCOPE_ID],
+          limit: 100,
+        });
+        if (claimed.length > 0) {
+          await store.completeSemanticOutbox({ ids: claimed.map(entry => entry.id), workerId: 'cycle-worker' });
+        }
+        return claimed;
+      };
+
+      // Drain the original create upsert to completion so its idempotency
+      // key is consumed — this is the state a real deployment reaches before
+      // any owner lifecycle change.
+      const originalDrain = await drain();
+      expect(originalDrain.some(entry => entry.documentId === documentId && entry.operation === 'upsert')).toBe(true);
+
+      for (let cycle = 1; cycle <= 2; cycle += 1) {
+        const live = await store.getNodeIncludingDeleted(node.id);
+        const deleted = await store.deleteNode({
+          id: node.id,
+          version: live!.version,
+          deletedBy: PROJECT_SCOPE_ID,
+        });
+        expect(await store.search({ query: 'Cycled record body', scopeIds: [PROJECT_SCOPE_ID] })).toEqual([]);
+        const deleteDrain = await drain();
+        expect(deleteDrain.some(entry => entry.documentId === documentId && entry.operation === 'delete')).toBe(true);
+
+        await store.restoreNode({ id: node.id, version: deleted.version });
+        const searchResults = await store.search({ query: 'Cycled record body', scopeIds: [PROJECT_SCOPE_ID] });
+        expect(searchResults.some(result => result.type === 'record' && result.id === record.id)).toBe(true);
+        const restoreDrain = await drain();
+        expect(restoreDrain.some(entry => entry.documentId === documentId && entry.operation === 'upsert')).toBe(true);
+      }
+
+      const finalRecord = await store.getRecord({ id: record.id });
+      // Two full delete/restore cycles advanced the record version twice
+      // beyond the drained create — every cycle left a fresh idempotency key.
+      expect(finalRecord!.version).toBe(record.version + 4);
+    });
+
+    it('filters scope grants by scope node without scanning unrelated grants', async () => {
+      await store.upsertScopeGrant({ scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' });
+      const unrelated = await store.createNode({
+        name: 'Unrelated grant scope',
+        isScope: true,
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.upsertScopeGrant({ scopeNodeId: unrelated.id, scopeRefId: PROJECT_SCOPE_ID, role: 'mirror' });
+
+      const expected = [{ scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' }];
+      expect(await store.listScopeGrants({ scopeNodeId: PROJECT_SCOPE_ID })).toEqual(expected);
+      expect(await store.listScopeGrants({ scopeNodeId: unrelated.id })).toEqual([
+        { scopeNodeId: unrelated.id, scopeRefId: PROJECT_SCOPE_ID, role: 'mirror' },
+      ]);
+      expect(await store.listScopeGrants({ scopeNodeId: 'missing-scope' })).toEqual([]);
+      expect(await store.listScopeGrants({ scopeNodeId: PROJECT_SCOPE_ID, includeDeleted: true })).toEqual(expected);
+    });
+
     it('accepts memberships only to live scope nodes', async () => {
       const ordinary = await store.createNode({ name: 'Ordinary', scopeIds: [PROJECT_SCOPE_ID] });
       const member = await store.createNode({ name: 'Member', scopeIds: [PROJECT_SCOPE_ID] });
