@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Improved the Studio Settings page with a simpler layout and the same theme toggle as Factory.
+Improved the Studio Settings page with the same settings cards, section headings, and theme toggle as Factory.
