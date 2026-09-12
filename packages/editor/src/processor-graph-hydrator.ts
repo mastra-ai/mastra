@@ -20,6 +20,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core';
 
 import { evaluateRuleGroup } from './rule-evaluator';
+import { withGraphStepId } from './processor-workflow-step';
 
 const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
 
@@ -156,7 +157,7 @@ function buildWorkflow(
     if (entry.type === 'step') {
       const processor = resolveStep(entry.step, ctx);
       if (!processor) continue;
-      const step = createStep(processor as Parameters<typeof createStep>[0]);
+      const step = withGraphStepId(createStep(processor as Parameters<typeof createStep>[0]), entry.step.id);
       workflow = workflow.then(step);
       hasSteps = true;
     } else if (entry.type === 'parallel') {
@@ -168,7 +169,7 @@ function buildWorkflow(
           if (branchEntries.length === 1 && branchEntries[0]!.type === 'step') {
             const proc = resolveStep(branchEntries[0]!.step, ctx);
             if (!proc) return undefined;
-            return createStep(proc as Parameters<typeof createStep>[0]);
+            return withGraphStepId(createStep(proc as Parameters<typeof createStep>[0]), branchEntries[0]!.step.id);
           }
           // Multi-step branch: build a sub-workflow
           const subWorkflow = buildWorkflow(branchEntries, `${workflowId}-parallel-branch-${branchIdx}`, ctx);
@@ -194,7 +195,10 @@ function buildWorkflow(
         if (condition.steps.length === 1 && condition.steps[0]!.type === 'step') {
           const proc = resolveStep(condition.steps[0]!.step, ctx);
           if (!proc) continue;
-          branchStep = createStep(proc as Parameters<typeof createStep>[0]);
+          branchStep = withGraphStepId(
+            createStep(proc as Parameters<typeof createStep>[0]),
+            condition.steps[0]!.step.id,
+          );
         } else {
           branchStep = buildWorkflow(condition.steps, `${workflowId}-cond-branch-${i}`, ctx);
           if (!branchStep) continue;
