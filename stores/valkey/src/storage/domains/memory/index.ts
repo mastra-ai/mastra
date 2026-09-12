@@ -1264,7 +1264,7 @@ export class StoreMemoryValkey extends MemoryStorage {
       multi.set(threadKey, JSON.stringify(processRecord(TABLE_THREADS, newThread).processedRecord));
 
       const clonedMessages: MastraDBMessage[] = [];
-      const messageIdMap: Record<string, string> = {};
+      const messageIdMap: Record<string, string> = Object.create(null);
       const targetResourceId = resourceId || sourceThread.resourceId;
       const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
 

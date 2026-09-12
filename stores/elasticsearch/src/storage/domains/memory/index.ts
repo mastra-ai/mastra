@@ -1106,7 +1106,7 @@ export class MemoryElasticSearch extends MemoryStorage {
       };
 
       const clonedMessages: MastraDBMessage[] = [];
-      const messageIdMap: Record<string, string> = {};
+      const messageIdMap: Record<string, string> = Object.create(null);
       const targetResourceId = resourceId || sourceThread.resourceId;
       const entries: Array<{ key: string; value: Record<string, unknown> }> = [];
 

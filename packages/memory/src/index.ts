@@ -3044,6 +3044,9 @@ Notes:
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
     // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
+    // Resource-scoped copies overwrite the destination resource's working memory; remember what
+    // was there so a later failure can put it back.
+    let priorDestinationResourceWm: string | null | undefined;
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'resource';
       const shouldCopy =
@@ -3056,6 +3059,10 @@ Notes:
           memoryConfig,
         });
         if (sourceWm) {
+          if (scope === 'resource') {
+            const destResource = await memoryStore.getResourceById({ resourceId: result.thread.resourceId });
+            priorDestinationResourceWm = destResource?.workingMemory ?? null;
+          }
           await this.updateWorkingMemory({
             threadId: result.thread.id,
             resourceId: result.thread.resourceId,
@@ -3073,7 +3080,7 @@ Notes:
       try {
         await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
       } catch (error) {
-        await this.rollbackCopiedThread(memoryStore, result.thread, 'OM clone', false);
+        await this.rollbackCopiedThread(memoryStore, result.thread, 'OM clone', false, priorDestinationResourceWm);
         throw error;
       }
     }
@@ -3085,7 +3092,7 @@ Notes:
       } catch (error) {
         // Earlier batches may already be upserted; drop them with the thread so a retry with the
         // same newThreadId doesn't collide with a half-built copy.
-        await this.rollbackCopiedThread(memoryStore, result.thread, 'embedding', true);
+        await this.rollbackCopiedThread(memoryStore, result.thread, 'embedding', true, priorDestinationResourceWm);
         throw error;
       }
     }
@@ -3096,7 +3103,8 @@ Notes:
   /**
    * Best-effort compensation when a later step of copyThread fails after the destination thread
    * was persisted. deleteThread removes the thread, its messages and thread-scoped working memory.
-   * When `afterOmClone` is set the OM step already succeeded, so the thread-scoped OM record and
+   * `priorDestinationResourceWm` is the destination resource's working memory before the copy
+   * overwrote it (`null` = none existed); when defined it is restored. When `afterOmClone` is set the OM step already succeeded, so the thread-scoped OM record and
    * any vectors written so far are dropped too. Resource-scoped OM is left alone: it may be
    * shared with a pre-existing resource and isn't safe to clear blindly.
    */
@@ -3105,12 +3113,24 @@ Notes:
     thread: StorageThreadType,
     failedStep: string,
     afterOmClone: boolean,
+    priorDestinationResourceWm: string | null | undefined,
   ): Promise<void> {
     const threadId = thread.id;
     try {
       await memoryStore.deleteThread({ threadId });
     } catch (rollbackError) {
       this.logger.error(`Failed to rollback copied thread after ${failedStep} failure`, rollbackError);
+    }
+    if (priorDestinationResourceWm !== undefined) {
+      try {
+        // '' reads back as "no working memory", matching a resource that had none before the copy.
+        await memoryStore.updateResource({
+          resourceId: thread.resourceId,
+          workingMemory: priorDestinationResourceWm ?? '',
+        });
+      } catch (rollbackError) {
+        this.logger.error(`Failed to restore resource working memory after ${failedStep} failure`, rollbackError);
+      }
     }
     if (!afterOmClone) return;
     if (memoryStore.supportsObservationalMemory) {

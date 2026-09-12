@@ -3,9 +3,6 @@
 '@mastra/memory': patch
 '@mastra/libsql': patch
 '@mastra/pg': patch
-'@mastra/redis': patch
-'@mastra/valkey': patch
-'@mastra/elasticsearch': patch
 ---
 
 Added `copyThread()` so a thread and its messages can be duplicated without loading every message payload into the Node heap. Fixes #23434.
@@ -20,4 +17,4 @@ const { thread: clonedThread, clonedMessages } = await memory.cloneThread({ sour
 const { thread: copiedThread, messageIdMap } = await memory.copyThread({ sourceThreadId });
 ```
 
-Storage adapters now implement `copyThread()`; the base `cloneThread()` is derived from it. Redis, Valkey and Elasticsearch now also return `messageIdMap` from `cloneThread()`. The unreleased `hydrateMessages` option has been removed.
+Storage adapters now implement `copyThread()`; the base `cloneThread()` is derived from it. The unreleased `hydrateMessages` option has been removed.

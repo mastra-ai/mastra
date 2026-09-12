@@ -77,7 +77,7 @@ describe('Memory.copyThread / cloneThread', () => {
     expect(copySpy).toHaveBeenCalledTimes(1);
   });
 
-  function setupSemanticRecallMemory() {
+  function setupSemanticRecallMemory(extraOptions: Record<string, unknown> = {}) {
     const dim = 4;
     const upsert = vi.fn().mockResolvedValue(undefined);
     const indexes = new Set<string>();
@@ -105,7 +105,7 @@ describe('Memory.copyThread / cloneThread', () => {
       storage: new InMemoryStore(),
       vector: mockVector,
       embedder: mockEmbedder,
-      options: { semanticRecall: { scope: 'thread' }, lastMessages: 10, generateTitle: false },
+      options: { semanticRecall: { scope: 'thread' }, lastMessages: 10, generateTitle: false, ...extraOptions },
     });
     return { upsert };
   }
@@ -193,6 +193,35 @@ describe('Memory.copyThread / cloneThread', () => {
     upsert.mockResolvedValue(undefined);
     const retry = await memory.copyThread({ sourceThreadId: 'src-rollback', newThreadId: 'dest-rollback' });
     expect(retry.thread.id).toBe('dest-rollback');
+  });
+
+  it('restores the destination resource working memory when a copy to another resource fails', async () => {
+    const { upsert } = setupSemanticRecallMemory({ workingMemory: { enabled: true, scope: 'resource' } });
+    await seedThread('src-wm', 3);
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    await memoryStore.updateResource({ resourceId, workingMemory: '# source memory' });
+    await memoryStore.updateResource({ resourceId: 'dest-resource', workingMemory: '# dest memory' });
+    upsert.mockRejectedValueOnce(new Error('vector store down'));
+
+    await expect(memory.copyThread({ sourceThreadId: 'src-wm', resourceId: 'dest-resource' })).rejects.toThrow(
+      'vector store down',
+    );
+
+    expect((await memoryStore.getResourceById({ resourceId: 'dest-resource' }))?.workingMemory).toBe('# dest memory');
+  });
+
+  it('clears the destination resource working memory on failure when none existed before the copy', async () => {
+    const { upsert } = setupSemanticRecallMemory({ workingMemory: { enabled: true, scope: 'resource' } });
+    await seedThread('src-wm-empty', 3);
+    const memoryStore = (await memory.storage.getStore('memory'))!;
+    await memoryStore.updateResource({ resourceId, workingMemory: '# source memory' });
+    upsert.mockRejectedValueOnce(new Error('vector store down'));
+
+    await expect(memory.copyThread({ sourceThreadId: 'src-wm-empty', resourceId: 'fresh-resource' })).rejects.toThrow(
+      'vector store down',
+    );
+
+    expect(await memory.getWorkingMemory({ threadId: 'any', resourceId: 'fresh-resource' })).toBeNull();
   });
 
   it('embeds every copied message exactly once for adapters that return no messageIdMap', async () => {
