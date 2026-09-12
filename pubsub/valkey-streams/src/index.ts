@@ -365,10 +365,14 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * Periodically run XAUTOCLAIM against this subscription's group so that
-   * messages a crashed/stuck consumer read but never acked get redelivered to
-   * a live sibling. Runs only for grouped subscriptions — fan-out groups are
+   * Periodically reclaim idle pending entries in this subscription's group so
+   * that messages a crashed/stuck consumer read but never acked get redelivered
+   * to a live sibling. Runs only for grouped subscriptions — fan-out groups are
    * private to one consumer, so there's no sibling to claim from.
+   *
+   * Entries this consumer already owns are skipped: XAUTOCLAIM would hand them
+   * straight back to us and reset their idle clock, which keeps a stuck entry
+   * pinned to the stuck consumer and starves every sibling of it forever.
    */
   #startReclaimLoop(sub: Subscription): void {
     if (this.#reclaimIntervalMs <= 0) return;
@@ -377,22 +381,28 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     const tick = async () => {
       if (sub.stopped || this.#closed) return;
       try {
-        const reply = await this.#writeClient.xAutoClaim(
+        const pending = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, 100, {
+          IDLE: this.#reclaimIdleMs,
+        });
+        const ids = pending.filter(entry => entry.consumer !== sub.consumer).map(entry => entry.id);
+        if (ids.length === 0) {
+          if (sub.stopped || this.#closed) return;
+          sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+          return;
+        }
+        const messages = await this.#writeClient.xClaim(
           sub.streamKey,
           sub.group,
           sub.consumer,
           this.#reclaimIdleMs,
-          '0-0',
-          { COUNT: 100 },
+          ids,
         );
-        const messages = (reply?.messages ?? []) as Array<{ id: string; message: Record<string, string> } | null>;
         for (const entry of messages) {
           if (sub.stopped || this.#closed) return;
-          if (!entry) continue;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
       } catch (err) {
-        this.#logger?.debug?.('valkey-streams: XAUTOCLAIM failed', {
+        this.#logger?.debug?.('valkey-streams: reclaim failed', {
           topic: sub.topic,
           group: sub.group,
           err: err instanceof Error ? err.message : err,
