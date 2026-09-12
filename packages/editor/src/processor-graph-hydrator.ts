@@ -19,6 +19,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core';
 
+import { matchesAnyConditionRule } from './conditional-branch';
 import { evaluateRuleGroup } from './rule-evaluator';
 
 const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
@@ -187,6 +188,9 @@ function buildWorkflow(
       // Build conditional branches using .branch()
       // branch() takes Array<[ConditionFunction, Step]> tuples
       const branchTuples: Array<[any, any]> = [];
+      const hasDefaultBranch = entry.conditions.some(condition => !condition.rules);
+      const noRulesMatch = (inputData: Record<string, unknown>) =>
+        !matchesAnyConditionRule(entry.conditions, inputData);
 
       for (const [i, condition] of entry.conditions.entries()) {
         // Each condition branch is an array of entries
@@ -208,22 +212,27 @@ function buildWorkflow(
           };
           branchTuples.push([conditionFn, branchStep]);
         } else {
-          // Default branch (no rules = always matches, acts as fallback)
-          branchTuples.push([async () => true, branchStep]);
+          // Default branch: run only when no explicit rule matches.
+          branchTuples.push([
+            async ({ inputData }: { inputData: Record<string, unknown> }) => noRulesMatch(inputData),
+            branchStep,
+          ]);
         }
       }
 
       if (branchTuples.length > 0) {
-        // Always add a pass-through fallback so the workflow returns input unchanged
-        // when no user-defined condition matches (e.g. during inputStep/outputStep phases
-        // where conditions only target 'input' or 'outputResult' phase).
+        // Add a pass-through fallback so the workflow returns input unchanged when no
+        // explicit rule matches and the graph has no user-defined default branch.
         const passthroughStep = createStep({
           id: `${PASSTHROUGH_STEP_PREFIX}${workflowId}`,
           inputSchema: ProcessorStepSchema,
           outputSchema: ProcessorStepSchema,
           execute: async ({ inputData }) => inputData,
         });
-        branchTuples.push([async () => true, passthroughStep]);
+        branchTuples.push([
+          async ({ inputData }: { inputData: Record<string, unknown> }) => !hasDefaultBranch && noRulesMatch(inputData),
+          passthroughStep,
+        ]);
 
         workflow = (workflow as any).branch(branchTuples);
         // After branch, outputs are keyed by step ID: { [stepId]: ProcessorStepOutput }

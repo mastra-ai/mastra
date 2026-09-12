@@ -709,6 +709,80 @@ describe('hydrateProcessorGraph', () => {
       expect(branchACalled).toHaveBeenCalled();
     }, 10000);
 
+    it('should run a default branch only when no explicit rule matches', async () => {
+      const matchingCalled = vi.fn();
+      const defaultCalled = vi.fn();
+      const makeProvider = (id: string, onRun: () => void): ProcessorProvider => ({
+        info: { id, name: id },
+        configSchema: z.object({}),
+        availablePhases: ['processInput'] as ProcessorPhase[],
+        createProcessor: () => ({
+          id: `${id}-instance`,
+          name: id,
+          processInput: async ({ messages }) => {
+            onRun();
+            return messages;
+          },
+        }),
+      });
+
+      const graph: StoredProcessorGraph = {
+        steps: [
+          {
+            type: 'conditional',
+            conditions: [
+              {
+                rules: {
+                  operator: 'AND',
+                  conditions: [{ field: 'state.route', operator: 'equals', value: 'matched' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'matching', providerId: 'matching', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+              {
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'default', providerId: 'default', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const [workflow] = hydrateProcessorGraph(graph, 'input', {
+        providers: {
+          matching: makeProvider('matching', matchingCalled),
+          default: makeProvider('default', defaultCalled),
+        },
+      }) as ProcessorWorkflow[];
+      const messages = [makeMsg('Hello')];
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const matchingRun = await workflow!.createRun();
+      await matchingRun.start({
+        inputData: { phase: 'input', messages, messageList, state: { route: 'matched' } },
+      });
+
+      expect(matchingCalled).toHaveBeenCalledOnce();
+      expect(defaultCalled).not.toHaveBeenCalled();
+
+      const defaultRun = await workflow!.createRun();
+      await defaultRun.start({
+        inputData: { phase: 'input', messages, messageList, state: { route: 'fallback' } },
+      });
+
+      expect(matchingCalled).toHaveBeenCalledOnce();
+      expect(defaultCalled).toHaveBeenCalledOnce();
+    }, 10000);
+
     it('should produce valid ProcessorStepOutput from a conditional workflow with default branch', async () => {
       const defaultCalled = vi.fn();
 
