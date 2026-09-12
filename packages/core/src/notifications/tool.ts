@@ -3,7 +3,7 @@ import { createTool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import { createNotificationSignal } from './signals';
 import type { NotificationsStorage } from './storage';
-import type { ListNotificationsInput, NotificationRecord, NotificationStatus } from './types';
+import type { NotificationRecord, NotificationStatus } from './types';
 
 const notificationActionSchema = z.object({
   action: z.enum(['list', 'read', 'markSeen', 'dismiss', 'archive', 'search']),
@@ -13,7 +13,12 @@ const notificationActionSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   source: z.string().optional(),
   query: z.string().optional(),
-  limit: z.number().int().positive().optional(),
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum records to return. Defaults to 20; the response reports hasMore when more remain.'),
 });
 
 type NotificationInboxAction = z.infer<typeof notificationActionSchema>;
@@ -27,6 +32,42 @@ type NotificationToolAgent = {
 
 const isReadable = (notification: NotificationRecord) =>
   notification.status === 'pending' || notification.status === 'delivered';
+
+const DEFAULT_LIST_LIMIT = 20;
+
+/**
+ * Agent-facing projection for list/search results. `metadata` and `payload` are internal
+ * bookkeeping (content hashes, raw source payloads) that can be several KB per record and
+ * dominate the token cost of an inbox listing.
+ */
+const toInboxProjection = (notification: NotificationRecord) => {
+  const { metadata: _metadata, payload: _payload, ...projection } = notification;
+  return projection;
+};
+
+/**
+ * Viewing a notification marks it as seen: any pending/delivered notification returned to
+ * the agent transitions to 'seen' so the pending backlog drains as the agent triages it.
+ * Without this, summarized notifications stayed 'pending' forever (the summary digest is
+ * consumed without any per-record transition) and every list returned the full backlog.
+ * Returns the number of records whose status write succeeded.
+ */
+async function markViewedNotificationsSeen({
+  notifications,
+  storage,
+}: {
+  notifications: NotificationRecord[];
+  storage: NotificationsStorage;
+}): Promise<number> {
+  const results = await Promise.allSettled(
+    notifications
+      .filter(isReadable)
+      .map(notification =>
+        storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' }),
+      ),
+  );
+  return results.filter(result => result.status === 'fulfilled').length;
+}
 
 async function deliverNotifications({
   notifications,
@@ -75,6 +116,8 @@ async function deliverNotifications({
       await storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' });
       markedSeen += 1;
     } else {
+      // No agent/resourceId to deliver through and no prior signal: the content never reached
+      // the agent, so leave it pending rather than silently consuming it.
       unavailable += 1;
     }
   }
@@ -91,7 +134,7 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
   return createTool({
     id: 'notification-inbox',
     description:
-      'Inspect and manage the current thread notification inbox. Use this to list pending notifications, read full details after a summary, mark notifications seen, dismiss, archive, or search old notifications.',
+      'Inspect and manage the current thread notification inbox. Use this to list unread notifications, read full details after a summary, mark notifications seen, dismiss, archive, or search old notifications. Listing, reading, or searching automatically marks the returned unread notifications as seen; list defaults to unread notifications unless a status is given.',
     inputSchema: notificationActionSchema,
     execute: async (input: NotificationInboxAction, context) => {
       const threadId = input.threadId ?? context?.agent?.threadId;
@@ -99,28 +142,30 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
         throw new Error('notification-inbox requires a threadId');
       }
 
-      if (input.action === 'list') {
-        const listInput: ListNotificationsInput = {
+      if (input.action === 'list' || input.action === 'search') {
+        if (input.action === 'search' && !input.query) throw new Error('notification-inbox search requires query');
+        // Fetch one past the page so the response can report whether the inbox has more.
+        const limit = input.limit ?? DEFAULT_LIST_LIMIT;
+        const notifications = await storage.listNotifications({
           threadId,
-          status: input.status,
+          // Default list to unread: auto-seen bumps updatedAt (the sort key), so listing every
+          // status would keep returning the page just viewed. Search spans all statuses.
+          status: input.status ?? (input.action === 'list' ? ['pending', 'delivered'] : undefined),
           priority: input.priority,
           source: input.source,
-          limit: input.limit,
-        };
-        return { notifications: await storage.listNotifications(listInput) };
-      }
-
-      if (input.action === 'search') {
-        if (!input.query) throw new Error('notification-inbox search requires query');
+          ...(input.action === 'search' ? { search: input.query! } : {}),
+          limit: limit + 1,
+        });
+        const page = notifications.slice(0, limit);
+        const markedSeen = await markViewedNotificationsSeen({ notifications: page, storage });
         return {
-          notifications: await storage.listNotifications({
-            threadId,
-            search: input.query,
-            status: input.status,
-            priority: input.priority,
-            source: input.source,
-            limit: input.limit,
-          }),
+          notifications: page.map(notification =>
+            isReadable(notification)
+              ? { ...toInboxProjection(notification), status: 'seen' as const }
+              : toInboxProjection(notification),
+          ),
+          hasMore: notifications.length > limit,
+          markedSeen,
         };
       }
 
@@ -132,7 +177,7 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
               status: input.status ?? ['pending', 'delivered'],
               priority: input.priority,
               source: input.source,
-              limit: input.limit,
+              limit: input.limit ?? DEFAULT_LIST_LIMIT,
             });
         if (input.id && !notifications[0])
           throw new Error(`Notification ${input.id} was not found for thread ${threadId}`);
