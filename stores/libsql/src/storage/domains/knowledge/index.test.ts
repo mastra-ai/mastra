@@ -76,6 +76,10 @@ describe('KnowledgeLibSQL atomic node and record creation', () => {
     } finally {
       client.close();
       await rm(path, { force: true });
+    }
+  });
+});
+
 describe('LibSQLStore explicit Knowledge activation', () => {
   it.each([false, true])('does not create Knowledge objects during ordinary startup (composed=%s)', async composed => {
     const client = createClient({ url: ':memory:' });
@@ -265,13 +269,18 @@ describe('KnowledgeLibSQL recognized empty experimental schema', () => {
     try {
       await seed(client);
       const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
-      const execute = client.execute.bind(client);
-      const spy = vi.spyOn(client, 'execute').mockImplementation(async statement => {
-        const sql = typeof statement === 'string' ? statement : statement.sql;
-        if (sql.startsWith('CREATE TABLE') && sql.includes('mastra_knowledge_schema')) {
-          throw new Error('injected schema creation failure');
-        }
-        return execute(statement);
+      const transaction = client.transaction.bind(client);
+      const spy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
+        const tx = await transaction(mode);
+        const execute = tx.execute.bind(tx);
+        vi.spyOn(tx, 'execute').mockImplementation(async statement => {
+          const sql = typeof statement === 'string' ? statement : statement.sql;
+          if (sql.startsWith('CREATE TABLE') && sql.includes('mastra_knowledge_schema')) {
+            throw new Error('injected schema creation failure');
+          }
+          return execute(statement);
+        });
+        return tx;
       });
       await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow();
       spy.mockRestore();
