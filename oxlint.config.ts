@@ -88,7 +88,7 @@ export default defineConfig({
       files: ['**/*.ts?(x)'],
       rules: {
         'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
-        'no-unused-vars': [
+        'typescript/no-unused-vars': [
           'error',
           {
             args: 'after-used',
@@ -209,7 +209,7 @@ export default defineConfig({
         'no-debugger': 'off',
         'no-restricted-globals': 'off',
         'no-restricted-imports': 'off',
-        'vitest/no-focused-tests': 'warn',
+        'vitest/no-focused-tests': 'error',
       },
       plugins: ['vitest'],
     },
