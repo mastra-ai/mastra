@@ -1367,43 +1367,57 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const results: SearchKnowledgeResult[] = [];
-    const nodes = await this.#client.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL ORDER BY updatedAt DESC`,
-    );
-    for (const row of nodes.rows) {
-      const node = parseNode(row);
-      const nodeScopeIds = await this.#getNodeScopeIds(this.#client, node.id);
-      const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLocaleLowerCase();
-      if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query))
-        results.push({
-          type: 'node',
-          id: node.id,
-          recordId: node.id,
-          name: node.name,
-          text: node.name,
-          scopeIds: nodeScopeIds,
-        });
-      if (results.length >= (input.limit ?? 20)) return results;
-    }
-    const records = await this.#client.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL ORDER BY id DESC`,
-    );
-    for (const row of records.rows) {
-      const record = parseKnowledge(row);
-      if (!record.text.toLocaleLowerCase().includes(query)) continue;
-      const recordScopeIds = await this.#getRecordScopeIds(this.#client, record.id);
-      if (!(await this.#isRecordVisible(this.#client, record, scopeIds))) continue;
-      const parent = await this.#getNode(this.#client, record.nodeId);
-      results.push({
-        type: 'record',
-        id: record.id,
-        recordId: record.nodeId,
-        name: parent!.name,
-        text: record.text,
-        scopeIds: recordScopeIds,
+    let nodeCursor: { updatedAt: string; id: string } | undefined;
+    while (results.length < limit) {
+      const nodes = await this.#client.execute({
+        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL${nodeCursor ? ' AND (updatedAt < ? OR (updatedAt = ? AND id < ?))' : ''} ORDER BY updatedAt DESC,id DESC LIMIT 100`,
+        args: nodeCursor ? [nodeCursor.updatedAt, nodeCursor.updatedAt, nodeCursor.id] : [],
       });
-      if (results.length >= (input.limit ?? 20)) break;
+      for (const row of nodes.rows) {
+        const node = parseNode(row);
+        const nodeScopeIds = await this.#getNodeScopeIds(this.#client, node.id);
+        const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLocaleLowerCase();
+        if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query)) {
+          results.push({
+            type: 'node',
+            id: node.id,
+            recordId: node.id,
+            name: node.name,
+            text: node.name,
+            scopeIds: nodeScopeIds,
+          });
+          if (results.length >= limit) return results;
+        }
+      }
+      if (nodes.rows.length < 100) break;
+      const last = parseNode(nodes.rows.at(-1)!);
+      nodeCursor = { updatedAt: last.updatedAt.toISOString(), id: last.id };
+    }
+    let recordCursor: string | undefined;
+    while (results.length < limit) {
+      const records = await this.#client.execute({
+        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL${recordCursor ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT 100`,
+        args: recordCursor ? [recordCursor] : [],
+      });
+      for (const row of records.rows) {
+        const record = parseKnowledge(row);
+        if (!record.text.toLocaleLowerCase().includes(query)) continue;
+        if (!(await this.#isRecordVisible(this.#client, record, scopeIds))) continue;
+        const parent = await this.#getNode(this.#client, record.nodeId);
+        results.push({
+          type: 'record',
+          id: record.id,
+          recordId: record.nodeId,
+          name: parent!.name,
+          text: record.text,
+          scopeIds: await this.#getRecordScopeIds(this.#client, record.id),
+        });
+        if (results.length >= limit) return results;
+      }
+      if (records.rows.length < 100) break;
+      recordCursor = String(records.rows.at(-1)!.id);
     }
     return results;
   }

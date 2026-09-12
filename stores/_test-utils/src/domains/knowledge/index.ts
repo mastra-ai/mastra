@@ -449,6 +449,18 @@ export function createKnowledgeStorageTests(
       expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], limit: 2 })).toEqual(beforeActivity);
     });
 
+    it('continues bounded search pages until an authorized match is found', async () => {
+      const target = await store.createNode({ name: 'Deep searchable needle', scopeIds: [PROJECT_SCOPE_ID] });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      for (let index = 0; index < 105; index++) {
+        await store.createNode({ name: `Newer unrelated node ${index}`, scopeIds: [PROJECT_SCOPE_ID] });
+      }
+
+      expect(await store.search({ query: 'searchable needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual([
+        expect.objectContaining({ type: 'node', id: target.id }),
+      ]);
+    });
+
     it('hides records unless their owner and every mention target are visible', async () => {
       const source = await store.createNode({ name: 'Public brief', scopeIds: [PROJECT_SCOPE_ID] });
       const secret = await store.createNode({ name: 'Private target', scopeIds: [OTHER_SCOPE_ID] });
