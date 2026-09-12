@@ -10,7 +10,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Real Studio text renderer at fixed points in a response. Message ordering and reveal pacing remain covered by the consumer tests listed in the chat behavior baseline.',
+          'Real Studio text renderer at fixed points in a response. Studio and Factory consumer tests cover message ordering and reveal pacing.',
       },
     },
   },
