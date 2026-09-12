@@ -133,8 +133,11 @@ export function buildGitHubCopilotOAuthFetch(
       throw new ProviderAuthRequiredError('Failed to refresh the GitHub Copilot token.');
     }
     storage.reload();
-
-    const enterpriseUrl = (cred as GitHubCopilotCredentials).enterpriseUrl;
+    // Re-read after the reload: a refresh-failure rotation inside getApiKey
+    // may have activated a different account, and the enterprise URL must
+    // follow it.
+    const activeCred = storage.get(COPILOT_PROVIDER_ID);
+    const enterpriseUrl = (activeCred as GitHubCopilotCredentials | undefined)?.enterpriseUrl;
 
     let parsedBody: unknown;
     if (typeof init?.body === 'string') {
