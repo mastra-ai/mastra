@@ -9507,6 +9507,54 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /knowledge/:instanceKey/importers/:importerId/webhook
+// ============================================================================
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams = {
+  instanceKey: string;
+  importerId: string;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body = {
+  payload?: unknown | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response = {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: 'static' | 'agentic';
+  triggerKind: 'cron' | 'webhook' | 'programmatic';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+  error?: string | undefined;
+  transcriptThreadId?: string | undefined;
+  traceId?: string | undefined;
+  queuedAt: Date;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+};
+
+export type PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request = Simplify<
+  (PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams extends never
+    ? {}
+    : { params: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body extends never
+      ? {}
+      : {} extends PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body
+        ? { body?: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body }
+        : { body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body })
+>;
+
+export interface PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract {
+  pathParams: PostKnowledgeInstanceKeyImportersImporterIdWebhook_PathParams;
+  queryParams: never;
+  body: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Body;
+  request: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Request;
+  response: PostKnowledgeInstanceKeyImportersImporterIdWebhook_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /scores/scorers
 // ============================================================================
 export type GetScoresScorers_Response = {
@@ -24061,6 +24109,7 @@ export interface RouteTypes {
   'PATCH /memory/network/threads/:threadId': PatchMemoryNetworkThreadsThreadId_RouteContract;
   'DELETE /memory/network/threads/:threadId': DeleteMemoryNetworkThreadsThreadId_RouteContract;
   'POST /memory/network/messages/delete': PostMemoryNetworkMessagesDelete_RouteContract;
+  'POST /knowledge/:instanceKey/importers/:importerId/webhook': PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   'GET /scores/scorers': GetScoresScorers_RouteContract;
   'GET /scores/scorers/:scorerId': GetScoresScorersScorerId_RouteContract;
   'GET /scores/run/:runId': GetScoresRunRunId_RouteContract;
@@ -24831,6 +24880,9 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/knowledge/:instanceKey/importers/:importerId/webhook': {
+    POST: PostKnowledgeInstanceKeyImportersImporterIdWebhook_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;
