@@ -1,8 +1,13 @@
-import { SettingsCard } from '@mastra/playground-ui/components/SettingsCard';
-import { SettingsLayout } from '@mastra/playground-ui/components/SettingsLayout';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsSubsection } from '@mastra/playground-ui/components/SettingsSubsection';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsLayout,
+  SettingsRow,
+  SettingsTitle,
+} from '@mastra/playground-ui/new/settings';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
@@ -12,20 +17,27 @@ export const StudioSettingsPage = () => {
   return (
     <SettingsLayout>
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
-        <SettingsSubsection title="General" description="Stored in this browser.">
-          <SettingsCard>
-            <SettingsRow variant="factory" label="Theme" description="Customize the appearance of the studio.">
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle>General</SettingsTitle>
+            <SettingsDescription>Stored in this browser.</SettingsDescription>
+          </SettingsHeader>
+          <SettingsContainer>
+            <SettingsRow label="Theme" description="Customize the appearance of the studio.">
               <ThemeToggle />
             </SettingsRow>
-          </SettingsCard>
-        </SettingsSubsection>
+          </SettingsContainer>
+        </SettingsGroup>
 
-        <SettingsSubsection
-          title="Mastra Connection"
-          description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
-        >
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle>Mastra Connection</SettingsTitle>
+            <SettingsDescription>
+              Configure the Mastra instance URL, API prefix, and request headers used by the studio.
+            </SettingsDescription>
+          </SettingsHeader>
           <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
-        </SettingsSubsection>
+        </SettingsGroup>
       </div>
     </SettingsLayout>
   );

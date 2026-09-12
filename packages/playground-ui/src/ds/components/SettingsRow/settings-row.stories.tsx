@@ -24,7 +24,7 @@ function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }
 }
 
 const meta: Meta<typeof SettingsRow> = {
-  title: 'Layout/SettingsRow',
+  title: 'Deprecated/SettingsRow',
   component: SettingsRow,
   parameters: {
     layout: 'padded',

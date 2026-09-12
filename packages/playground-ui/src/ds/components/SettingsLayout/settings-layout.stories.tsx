@@ -1,17 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
-import { Section } from '../Section';
-import type { SectionVariant } from '../Section';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Switch } from '../Switch';
 import { SettingsLayout } from './settings-layout';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsRow,
+  SettingsTitle,
+} from '@/ds/new/settings';
 
 type SettingsLayoutStoryProps = {
   title: string;
   description: string;
   inset: boolean;
-  sectionVariant: SectionVariant;
   showAction: boolean;
   showTitleAccessory: boolean;
   variant: 'default' | 'header';
@@ -21,21 +26,18 @@ function SettingsLayoutStory({
   title,
   description,
   inset,
-  sectionVariant,
   showAction,
   showTitleAccessory,
   variant,
 }: SettingsLayoutStoryProps) {
   const content = (
-    <Section variant={sectionVariant}>
-      <Section.Header inset={inset}>
-        <Section.HeaderText>
-          <Section.Heading>General</Section.Heading>
-          <Section.Description>Stored in this browser.</Section.Description>
-        </Section.HeaderText>
-      </Section.Header>
-      <Section.Content>
-        <Section.Row label="Theme" description="Color scheme for the interface" htmlFor="settings-theme">
+    <SettingsGroup>
+      <SettingsHeader>
+        <SettingsTitle>General</SettingsTitle>
+        <SettingsDescription>Stored in this browser.</SettingsDescription>
+      </SettingsHeader>
+      <SettingsContainer>
+        <SettingsRow label="Theme" description="Color scheme for the interface" htmlFor="settings-theme">
           <Select defaultValue="system">
             <SelectTrigger id="settings-theme" className="w-full sm:w-40">
               <SelectValue />
@@ -46,13 +48,12 @@ function SettingsLayoutStory({
               <SelectItem value="dark">Dark</SelectItem>
             </SelectContent>
           </Select>
-        </Section.Row>
-        <Section.Divider />
-        <Section.Row label="Completion sound" description="Played when an agent run finishes in a workspace">
+        </SettingsRow>
+        <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
           <Switch aria-label="Play completion sound" defaultChecked />
-        </Section.Row>
-      </Section.Content>
-    </Section>
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
   );
 
   return (
@@ -83,7 +84,6 @@ const meta = {
     title: 'Preferences',
     description: '',
     inset: false,
-    sectionVariant: 'factory',
     showAction: false,
     showTitleAccessory: false,
     variant: 'default',
@@ -92,10 +92,6 @@ const meta = {
     title: { control: 'text' },
     description: { control: 'text' },
     inset: { control: 'boolean' },
-    sectionVariant: {
-      control: 'select',
-      options: ['default', 'flat', 'factory'],
-    },
     showAction: { control: 'boolean' },
     showTitleAccessory: { control: 'boolean' },
     variant: {

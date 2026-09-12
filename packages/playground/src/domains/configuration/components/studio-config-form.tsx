@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsCard } from '@mastra/playground-ui/components/SettingsCard';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -20,7 +19,7 @@ export interface StudioConfigFormProps {
 
 export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
   const isFactoryLayout = variant === 'factory';
-  const FieldsContainer = isFactoryLayout ? SettingsCard : Fragment;
+  const FieldsContainer = isFactoryLayout ? SettingsContainer : Fragment;
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -88,7 +87,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
           {connectionFields.map(({ label, ...field }) => {
             if (isFactoryLayout) {
               return (
-                <SettingsRow key={field.name} variant="factory" label={label} htmlFor={`input-${field.name}`}>
+                <SettingsRow key={field.name} label={label} htmlFor={`input-${field.name}`}>
                   <Input {...field} id={`input-${field.name}`} className="w-full lg:max-w-96" />
                 </SettingsRow>
               );
@@ -97,7 +96,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
             return <TextFieldBlock key={field.name} label={label} {...field} />;
           })}
           {isFactoryLayout ? (
-            <SettingsRow variant="factory" label="Headers">
+            <SettingsRow label="Headers">
               <div className="w-full lg:max-w-96">{headersEditor}</div>
             </SettingsRow>
           ) : (

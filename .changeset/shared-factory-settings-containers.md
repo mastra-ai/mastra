@@ -2,19 +2,16 @@
 '@mastra/playground-ui': minor
 ---
 
-Added shared `SettingsCard` and `SettingsSubsection` components so Studio and Factory use the same settings containers and headings.
+Added the named settings components at `@mastra/playground-ui/new/settings`: `SettingsGroup`, `SettingsHeader`, `SettingsTitle`, `SettingsDescription`, `SettingsContainer`, and `SettingsRow`, alongside the existing `SettingsLayout`.
+
+The components use Factory's settings presentation. Import `SettingsRow` from the new entry point without `variant="factory"`. The old `components/SettingsRow` and settings-specific `Section` row APIs remain compatible through shared implementations and are deprecated for new settings screens.
 
 ```tsx
-import { SettingsCard } from '@mastra/playground-ui/components/SettingsCard';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsSubsection } from '@mastra/playground-ui/components/SettingsSubsection';
-import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-<SettingsSubsection title="General" description="Stored in this browser.">
-  <SettingsCard>
-    <SettingsRow variant="factory" label="Theme">
-      <ThemeToggle />
-    </SettingsRow>
-  </SettingsCard>
-</SettingsSubsection>;
+<SettingsContainer>
+  <SettingsRow label="API prefix" htmlFor="api-prefix">
+    <input id="api-prefix" defaultValue="/api" />
+  </SettingsRow>
+</SettingsContainer>;
 ```

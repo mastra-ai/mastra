@@ -1,16 +1,32 @@
-import { SettingsSubsection as SharedSettingsSubsection } from '@mastra/playground-ui/components/SettingsSubsection';
-import type { ComponentProps } from 'react';
-
+import { SettingsDescription, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 import { ScopeBadge, ScopeSwitch } from './SettingsScope';
 import type { ScopeControl, SettingsScope } from './SettingsScope';
 
 export function SettingsSubsection({
+  id,
+  title,
+  description,
   scope,
-  ...props
-}: Omit<ComponentProps<typeof SharedSettingsSubsection>, 'titleAccessory'> & {
+  action,
+  children,
+}: {
+  id?: string;
+  title: string;
+  description?: string;
   scope: SettingsScope | ScopeControl;
+  action?: ReactNode;
+  children?: ReactNode;
 }) {
-  return <SharedSettingsSubsection {...props} titleAccessory={<ScopeIndicator scope={scope} />} />;
+  return (
+    <SettingsGroup id={id}>
+      <SettingsHeader action={action}>
+        <SettingsTitle accessory={<ScopeIndicator scope={scope} />}>{title}</SettingsTitle>
+        {description && <SettingsDescription>{description}</SettingsDescription>}
+      </SettingsHeader>
+      {children}
+    </SettingsGroup>
+  );
 }
 
 function ScopeIndicator({ scope }: { scope: SettingsScope | ScopeControl }) {
