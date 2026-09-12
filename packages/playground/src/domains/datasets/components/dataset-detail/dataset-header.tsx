@@ -74,8 +74,7 @@ export function DatasetHeader({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-not-allowed">
-                    <Button disabled tabIndex={-1}>
-                      <Play />
+                    <Button disabled tabIndex={-1} icon={<Play />}>
                       Run Experiment
                     </Button>
                   </span>
@@ -83,8 +82,7 @@ export function DatasetHeader({
                 <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
               </Tooltip>
             ) : (
-              <Button onClick={onExperimentClick}>
-                <Play />
+              <Button onClick={onExperimentClick} icon={<Play />}>
                 Run Experiment
               </Button>
             )

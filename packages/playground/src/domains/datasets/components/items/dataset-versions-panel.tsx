@@ -86,13 +86,14 @@ export function DatasetVersionsPanel({
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltip={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
+              icon={<ArrowRightIcon />}
             >
-              <ArrowRightIcon /> Compare
+              Compare
             </Button>
           </div>
         ) : (
-          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)}>
-            <GitCompareIcon /> Compare
+          <Button variant="ghost" size="sm" onClick={() => setIsSelectionActive(true)} icon={<GitCompareIcon />}>
+            Compare
           </Button>
         )}
       </div>

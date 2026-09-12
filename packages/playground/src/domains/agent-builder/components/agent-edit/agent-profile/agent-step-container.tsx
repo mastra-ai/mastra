@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -57,10 +56,9 @@ export const AgentStepContainer = ({
       onClick={() => startViewTransition(() => prev())}
       disabled={isStreaming}
       data-testid="agent-builder-step-back"
+      icon={<ArrowLeftIcon />}
     >
-      <Icon>
-        <ArrowLeftIcon />
-      </Icon>{' '}
+      {' '}
       Back
     </Button>
   ) : null;

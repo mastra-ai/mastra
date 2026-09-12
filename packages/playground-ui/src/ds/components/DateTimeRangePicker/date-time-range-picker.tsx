@@ -97,8 +97,7 @@ export function DateTimeRangePicker({
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         <PopoverTrigger asChild>
-          <Button size={size} disabled={disabled}>
-            <CalendarIcon />
+          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
             {dateFrom ? dateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
             {dateTo ? dateTo.toLocaleDateString() : 'End'}
           </Button>
@@ -170,8 +169,7 @@ export function DateTimeRangePicker({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size={size} disabled={disabled}>
-          <CalendarIcon />
+        <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
           {datePresetLabel}
         </Button>
       </DropdownMenu.Trigger>

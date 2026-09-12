@@ -72,8 +72,7 @@ export default function SchedulePage() {
       <PageLayout.TopArea>
         <PageLayout.Row className="justify-end">
           <PageLayout.Column className="flex justify-end gap-2">
-            <Button as={Link} to={paths.schedulesLink()} variant="ghost">
-              <ArrowLeftIcon />
+            <Button as={Link} to={paths.schedulesLink()} variant="ghost" icon={<ArrowLeftIcon />}>
               Back to schedules
             </Button>
             {workflowId ? (

@@ -1,7 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
@@ -64,10 +63,8 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
         variant="primary"
         className="w-full"
         onClick={onClick}
+        icon={<Plus />}
       >
-        <Icon>
-          <Plus />
-        </Icon>
         New workflow run
       </Button>
     </div>

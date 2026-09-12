@@ -86,15 +86,16 @@ export default function AgentBuilderSkillsPage() {
             actionSlot={
               canWriteSkills ? (
                 <div className="flex items-center gap-2">
-                  <Button variant="primary" onClick={goToCreate}>
-                    <PlusIcon /> New skill
+                  <Button variant="primary" onClick={goToCreate} icon={<PlusIcon />}>
+                    New skill
                   </Button>
                   {enabledRegistry && (
                     <Button
                       variant="default"
                       onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                      icon={<DownloadIcon />}
                     >
-                      <DownloadIcon /> Browse registry
+                      Browse registry
                     </Button>
                   )}
                 </div>
@@ -126,12 +127,18 @@ export default function AgentBuilderSkillsPage() {
                     variant="default"
                     className="w-full justify-center md:w-auto"
                     onClick={() => setRegistryDialog({ id: enabledRegistry.id, label: enabledRegistry.label })}
+                    icon={<DownloadIcon />}
                   >
-                    <DownloadIcon /> Browse registry
+                    Browse registry
                   </Button>
                 )}
-                <Button variant="primary" className="w-full justify-center md:w-auto" onClick={goToCreate}>
-                  <PlusIcon /> New skill
+                <Button
+                  variant="primary"
+                  className="w-full justify-center md:w-auto"
+                  onClick={goToCreate}
+                  icon={<PlusIcon />}
+                >
+                  New skill
                 </Button>
               </div>
             )}

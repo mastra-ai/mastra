@@ -87,8 +87,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button as={Link} to="/datasets">
-              <ArrowLeft />
+            <Button as={Link} to="/datasets" icon={<ArrowLeft />}>
               Back to Datasets
             </Button>
           }
@@ -133,8 +132,7 @@ function DatasetPage() {
               }
               rightSlot={
                 <ButtonsGroup>
-                  <Button as={Link} to={`/experiments?dataset=${datasetId}`}>
-                    <FlaskConical />
+                  <Button as={Link} to={`/experiments?dataset=${datasetId}`} icon={<FlaskConical />}>
                     View experiments
                   </Button>
                   <DatasetVersions
@@ -149,8 +147,7 @@ function DatasetPage() {
                       <TooltipTrigger asChild>
                         <span className="cursor-not-allowed">
                           <div className="pointer-events-none opacity-50" inert aria-disabled="true">
-                            <Button variant="primary">
-                              <Play />
+                            <Button variant="primary" icon={<Play />}>
                               Run Experiment
                             </Button>
                           </div>
@@ -159,8 +156,7 @@ function DatasetPage() {
                       <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
                     </Tooltip>
                   ) : (
-                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
-                      <Play />
+                    <Button variant="primary" onClick={() => setExperimentDialogOpen(true)} icon={<Play />}>
                       Run Experiment
                     </Button>
                   )}

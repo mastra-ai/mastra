@@ -218,10 +218,7 @@ export function ToolsPage() {
             {canEditToolMembership && unselectedOptions.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Icon size="sm">
-                      <PlusIcon />
-                    </Icon>
+                  <Button variant="ghost" size="sm" icon={<PlusIcon />}>
                     Add Tools
                   </Button>
                 </PopoverTrigger>

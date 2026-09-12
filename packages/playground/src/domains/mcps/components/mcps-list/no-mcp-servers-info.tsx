@@ -20,8 +20,9 @@ export const NoMCPServersInfo = () => (
           href="https://mastra.ai/docs/tools-mcp/mcp-overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          MCP Documentation <ExternalLinkIcon />
+          MCP Documentation
         </Button>
       }
     />

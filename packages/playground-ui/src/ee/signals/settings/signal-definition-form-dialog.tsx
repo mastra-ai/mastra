@@ -182,8 +182,13 @@ export function SignalDefinitionFormDialog({
           <Button type="button" variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} variant="primary" disabled={pending}>
-            {pending ? <Spinner className="size-4" /> : null}
+          <Button
+            type="submit"
+            form={formId}
+            variant="primary"
+            disabled={pending}
+            icon={pending ? <Spinner /> : undefined}
+          >
             {editing ? 'Save signal' : 'Create signal'}
           </Button>
         </DialogFooter>

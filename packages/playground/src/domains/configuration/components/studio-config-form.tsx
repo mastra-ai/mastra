@@ -70,8 +70,7 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
 
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="mt-10! ml-auto">
-          <SaveIcon />
+        <Button type="submit" className="mt-10! ml-auto" icon={<SaveIcon />}>
           Save Configuration
         </Button>
       </form>

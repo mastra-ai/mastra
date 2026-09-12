@@ -146,8 +146,7 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled}>
-          <ListFilterPlusIcon />
+        <Button variant="outline" size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
           {label}
         </Button>
       </PopoverTrigger>

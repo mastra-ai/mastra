@@ -374,10 +374,7 @@ export function ScorerMiniEditor({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <Icon>
-            <ArrowLeft />
-          </Icon>
+        <Button variant="ghost" size="sm" onClick={onBack} icon={<ArrowLeft />}>
           Back
         </Button>
         <Txt as="h3" variant="header-sm" className="ml-2">
@@ -473,10 +470,7 @@ export function ScorerMiniEditor({
                     </Txt>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={addTestItem}>
-                  <Icon>
-                    <Plus />
-                  </Icon>
+                <Button variant="outline" size="sm" onClick={addTestItem} icon={<Plus />}>
                   Add Item
                 </Button>
               </div>

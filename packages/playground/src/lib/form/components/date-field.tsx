@@ -42,8 +42,13 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button id={id} variant="default" size="lg" className={cn('w-full', error ? 'border-accent2' : '')}>
-          <CalendarIcon className="h-4 w-4" />
+        <Button
+          id={id}
+          variant="default"
+          size="lg"
+          className={cn('w-full', error ? 'border-accent2' : '')}
+          icon={<CalendarIcon />}
+        >
           {value ? (
             <span className="text-white">{format(value, 'PPP')}</span>
           ) : (

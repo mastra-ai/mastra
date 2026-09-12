@@ -8,7 +8,6 @@ import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns/format';
 import {
@@ -225,22 +224,13 @@ export function ItemDetailDialog({
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Icon>
-                <Pencil />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleEdit} icon={<Pencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete}>
-              <Icon>
-                <Trash2 />
-              </Icon>
+            <Button variant="outline" size="sm" onClick={handleDelete} icon={<Trash2 />}>
               Delete
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)}>
-              <Icon>
-                <Eraser />
-              </Icon>
+            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
               Purge Data
             </Button>
           </div>

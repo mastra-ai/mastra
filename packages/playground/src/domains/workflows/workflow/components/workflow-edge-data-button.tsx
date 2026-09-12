@@ -28,9 +28,9 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
       <Button
         size="sm"
         onClick={() => setIsOpen(true)}
-        className="border-border1 bg-surface3/95 text-neutral5 hover:bg-surface4 h-7 gap-1 rounded-full border px-2 shadow-lg"
+        className="border-border1 bg-surface3/95 text-neutral5 hover:bg-surface4 h-7 rounded-full border px-2 shadow-lg"
+        icon={<Database className="text-accent1" />}
       >
-        <Database className="h-icon-sm w-icon-sm text-accent1" />
         Data
       </Button>
 

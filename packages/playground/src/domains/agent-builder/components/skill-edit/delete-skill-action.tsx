@@ -91,8 +91,8 @@ export const DeleteSkillPanelButton = ({ skillId, skillName, disabled = false }:
         disabled={disabled || isPending}
         className="w-full"
         data-testid="skill-builder-delete-skill"
+        icon={<Trash2 />}
       >
-        <Trash2 />
         <span>Delete skill</span>
       </Button>
       <DeleteSkillDialog

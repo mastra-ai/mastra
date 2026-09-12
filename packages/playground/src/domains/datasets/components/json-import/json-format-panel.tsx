@@ -65,8 +65,16 @@ export function JSONFormatPanel() {
         />
       </div>
 
-      <Button variant="ghost" as="a" href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="self-start">
-        Datasets documentation <ExternalLinkIcon />
+      <Button
+        variant="ghost"
+        as="a"
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="self-start"
+        icon={<ExternalLinkIcon />}
+      >
+        Datasets documentation
       </Button>
     </div>
   );

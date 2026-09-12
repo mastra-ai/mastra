@@ -66,10 +66,8 @@ export const ManageConnectionForm = ({
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
             className="text-neutral3 -mt-1 -ml-1.5 w-fit"
+            icon={<ChevronLeft />}
           >
-            <Icon>
-              <ChevronLeft />
-            </Icon>
             Connections
           </Button>
         )}

@@ -84,8 +84,8 @@ export function ExperimentsToolbar({
           className="whitespace-nowrap"
         />
         {onReset && hasActiveFilters && (
-          <Button onClick={onReset} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
@@ -100,8 +100,7 @@ export function ExperimentsToolbar({
               <span className="text-accent2">· {selection.compareDisabledReason}</span>
             )}
           </ButtonsGroupText>
-          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare}>
-            <GitCompare />
+          <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>
             Compare Experiments
           </Button>
           <Button onClick={selection.onCancelSelection}>Cancel</Button>
@@ -109,14 +108,16 @@ export function ExperimentsToolbar({
       ) : (
         <ButtonsGroup className="ml-auto shrink-0">
           {onCompareClick && (
-            <Button onClick={onCompareClick} tooltip="Select two experiments of the same dataset to compare">
-              <GitCompare />
+            <Button
+              onClick={onCompareClick}
+              tooltip="Select two experiments of the same dataset to compare"
+              icon={<GitCompare />}
+            >
               Compare
             </Button>
           )}
           {onRunClick && (
-            <Button onClick={onRunClick} tooltip={runTooltip} variant="primary">
-              <Play />
+            <Button onClick={onRunClick} tooltip={runTooltip} variant="primary" icon={<Play />}>
               Run Experiment
             </Button>
           )}

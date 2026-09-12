@@ -256,8 +256,11 @@ function EditLayoutWrapper() {
             {showCodeModeActions ? (
               isCodeAgentEditable ? (
                 <>
-                  <Button onClick={() => void handleDownloadJson()} disabled={isSavingDraft || isSubmitting}>
-                    <Download />
+                  <Button
+                    onClick={() => void handleDownloadJson()}
+                    disabled={isSavingDraft || isSubmitting}
+                    icon={<Download />}
+                  >
                     Download JSON
                   </Button>
                   <Button

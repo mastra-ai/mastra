@@ -111,8 +111,8 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
+            icon={<Settings />}
           >
-            <Settings className="h-4 w-4" />
             Settings
           </Button>
           <Button variant="ghost" onClick={handleLogout} disabled={isPending} className="w-full justify-start">

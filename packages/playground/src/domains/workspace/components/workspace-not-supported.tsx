@@ -21,8 +21,9 @@ export const WorkspaceNotSupported = () => (
           href="https://mastra.ai/en/docs/workspace/overview"
           target="_blank"
           rel="noopener noreferrer"
+          icon={<ExternalLinkIcon />}
         >
-          Workspaces Documentation <ExternalLinkIcon />
+          Workspaces Documentation
         </Button>
       }
     />

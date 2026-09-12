@@ -323,8 +323,8 @@ function TraceThreadRow({
               variant="ghost"
               size="md"
               className="shrink-0"
+              icon={<ExternalLinkIcon />}
             >
-              <ExternalLinkIcon />
               Go to trace
             </Button>
           </DataPanel.Header>

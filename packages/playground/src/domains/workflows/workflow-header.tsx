@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ApiIcon } from '@mastra/playground-ui/icons/ApiIcon';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CalendarClockIcon, EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
@@ -18,21 +17,22 @@ export function WorkflowHeader({ workflowName, workflowId }: { workflowName: str
     <RouteHeaderActions owner="workflow-detail">
       <div className="flex items-center gap-2">
         {scheduleCount > 0 && (
-          <Button as={Link} to={schedulesHref} size="sm">
-            <Icon>
-              <CalendarClockIcon />
-            </Icon>
+          <Button as={Link} to={schedulesHref} size="sm" icon={<CalendarClockIcon />}>
             Schedules ({scheduleCount})
           </Button>
         )}
-        <Button as={Link} to={`/traces?entity=${encodeURIComponent(workflowName)}`} size="sm">
-          <Icon>
-            <EyeIcon />
-          </Icon>
+        <Button as={Link} to={`/traces?entity=${encodeURIComponent(workflowName)}`} size="sm" icon={<EyeIcon />}>
           Traces
         </Button>
-        <Button as="a" target="_blank" rel="noopener noreferrer" href="/swagger-ui" variant="ghost" size="sm">
-          <ApiIcon />
+        <Button
+          as="a"
+          target="_blank"
+          rel="noopener noreferrer"
+          href="/swagger-ui"
+          variant="ghost"
+          size="sm"
+          icon={<ApiIcon />}
+        >
           API endpoints
         </Button>
       </div>

@@ -512,8 +512,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <div className="flex items-center gap-3">
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" size="md">
-                    <FilterIcon />
+                  <Button variant="outline" size="md" icon={<FilterIcon />}>
                     Filter
                     {activeFilterCount > 0 && (
                       <span
@@ -622,8 +621,8 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     setShowCompleted(false);
                     setFeaturedItemId(null);
                   }}
+                  icon={<XIcon />}
                 >
-                  <XIcon />
                   Reset
                 </Button>
               )}

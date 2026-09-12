@@ -249,10 +249,7 @@ export function DatasetDetailView({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={onGenerate}>
-              <Icon size="sm">
-                <Sparkles />
-              </Icon>
+            <Button variant="ghost" size="sm" onClick={onGenerate} icon={<Sparkles />}>
               Generate
             </Button>
             <Button
@@ -714,10 +711,7 @@ function ExpandedItemEditor({
             )}
             Save
           </Button>
-          <Button variant="ghost" size="sm" onClick={cancelEditing}>
-            <Icon size="sm">
-              <X />
-            </Icon>
+          <Button variant="ghost" size="sm" onClick={cancelEditing} icon={<X />}>
             Cancel
           </Button>
         </div>
@@ -756,10 +750,7 @@ function ExpandedItemEditor({
         </div>
       )}
       <div className="flex items-center gap-2 pt-1">
-        <Button variant="ghost" size="sm" onClick={startEditing}>
-          <Icon size="sm">
-            <Pencil />
-          </Icon>
+        <Button variant="ghost" size="sm" onClick={startEditing} icon={<Pencil />}>
           Edit
         </Button>
         {isConfirmingDelete ? (
@@ -786,10 +777,8 @@ function ExpandedItemEditor({
             size="sm"
             onClick={() => setIsConfirmingDelete(true)}
             className="text-neutral2 hover:text-negative1"
+            icon={<Trash2 />}
           >
-            <Icon size="sm">
-              <Trash2 />
-            </Icon>
             Delete
           </Button>
         )}

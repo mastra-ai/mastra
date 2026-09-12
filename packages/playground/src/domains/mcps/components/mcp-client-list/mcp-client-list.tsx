@@ -135,10 +135,7 @@ export function MCPClientList() {
           <SubSectionHeader title="MCP Clients" icon={<LaptopMinimal />} />
 
           {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)}>
-              <Icon size="sm">
-                <PlusIcon />
-              </Icon>
+            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
               Add MCP Client
             </Button>
           )}
@@ -156,10 +153,7 @@ export function MCPClientList() {
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
-                <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
-                  <Icon size="sm">
-                    <PlusIcon />
-                  </Icon>
+                <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
                   Add MCP Client
                 </Button>
               }
@@ -204,10 +198,8 @@ export function MCPClientList() {
                         e.stopPropagation();
                         handleRemove(index);
                       }}
+                      icon={<XIcon />}
                     >
-                      <Icon>
-                        <XIcon />
-                      </Icon>
                       Remove
                     </Button>
                   )}

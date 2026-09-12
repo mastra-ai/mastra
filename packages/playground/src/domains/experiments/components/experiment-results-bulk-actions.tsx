@@ -18,8 +18,7 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
 
   return (
     <ButtonsGroup className="whitespace-nowrap">
-      <Button variant="outline" disabled={busy} onClick={selection.flagSelectedForReview}>
-        <ClipboardCheck />
+      <Button variant="outline" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardCheck />}>
         Flag {selectedIds.size} to review
       </Button>
       <ExperimentResultsTagPicker

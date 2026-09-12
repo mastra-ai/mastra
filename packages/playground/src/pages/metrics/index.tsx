@@ -313,8 +313,9 @@ function MetricsContent() {
                 href="https://mastra.ai/docs/observability/metrics/overview"
                 target="_blank"
                 rel="noopener noreferrer"
+                icon={<ExternalLinkIcon />}
               >
-                Metrics Documentation <ExternalLinkIcon />
+                Metrics Documentation
               </Button>
             }
           />

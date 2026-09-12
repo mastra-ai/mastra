@@ -409,8 +409,8 @@ export function DatasetReview({
           />
         )}
         {hasActiveFilters && (
-          <Button onClick={resetFilters} size="sm" variant="default">
-            <XIcon className="size-3" /> Reset
+          <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+            Reset
           </Button>
         )}
       </ButtonsGroup>
@@ -428,8 +428,7 @@ export function DatasetReview({
                 onRemoveTag={handleBulkRemoveTag}
                 onNewTag={tag => handleBulkTag(tag)}
               />
-              <Button variant="primary" onClick={handleBulkComplete}>
-                <CheckCircle />
+              <Button variant="primary" onClick={handleBulkComplete} icon={<CheckCircle />}>
                 Mark as reviewed
               </Button>
               <DropdownMenu>
