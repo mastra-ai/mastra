@@ -8,6 +8,31 @@ import type { RedisClientOptions, RedisClientType } from 'redis';
 const RECLAIM_PAGE_SIZE = 100;
 
 /**
+ * Atomically nack a pending entry only if it is still owned by the given
+ * consumer. Returns 1 if this consumer owned it and it was settled, 0 if the
+ * entry was not pending for this consumer (acked, or claimed by a sibling).
+ *
+ * KEYS[1] stream key
+ * ARGV[1] group, ARGV[2] consumer, ARGV[3] stream entry id,
+ * ARGV[4] republish payload ('' = drop without republish),
+ * ARGV[5] stream idle TTL in ms (0 = none)
+ */
+const NACK_IF_OWNED_SCRIPT = `
+  local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
+  if #pending == 0 or pending[1][2] ~= ARGV[2] then
+    return 0
+  end
+  if ARGV[4] ~= "" then
+    redis.call("XADD", KEYS[1], "*", "event", ARGV[4])
+    if tonumber(ARGV[5]) > 0 then
+      redis.call("PEXPIRE", KEYS[1], ARGV[5])
+    end
+  end
+  redis.call("XACK", KEYS[1], ARGV[1], ARGV[3])
+  return 1
+`;
+
+/**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
  * `MultiErrorReply` whose own message is just "N commands failed…" — the real
  * per-command errors (e.g. BUSYGROUP) live in `err.replies`, so those are
@@ -486,39 +511,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const cutoff = Date.now() - this.#inFlightTimeoutMs;
     for (const [streamId, entry] of sub.inFlight) {
       if (entry.since > cutoff) continue;
-      // The local marker is not proof of ownership: if the entry has already
-      // been idle >= reclaimIdleMs a sibling may have claimed it (and may be
-      // processing it right now), or it may have been acked outright. Nacking
-      // in that state would republish a duplicate and xAck the sibling's
-      // pending entry out from under it. So check the PEL first and, if we no
-      // longer own the entry, just disown it locally — that also flips
-      // `settled` so a late ack/nack from the hung handler becomes a no-op.
-      // XCLAIM by a sibling between this check and the nack's xAck is still
-      // possible but requires the claim to land inside a single round-trip.
-      const [pendingEntry] = await this.#writeClient.xPendingRange(sub.streamKey, sub.group, streamId, streamId, 1);
-      if (!pendingEntry || pendingEntry.consumer !== sub.consumer) {
-        this.#logger?.warn?.(
-          'redis-streams: handler exceeded inFlightTimeoutMs but entry is no longer owned; disowning',
-          {
-            topic: sub.topic,
-            group: sub.group,
-            streamId,
-            owner: pendingEntry?.consumer ?? null,
-          },
-        );
-        entry.disown();
-        continue;
-      }
       this.#logger?.warn?.('redis-streams: handler exceeded inFlightTimeoutMs; nacking on its behalf', {
         topic: sub.topic,
         group: sub.group,
         streamId,
         inFlightMs: Date.now() - entry.since,
       });
-      // nack() is idempotent via its `settled` flag, republishes with
-      // deliveryAttempt + 1 (so maxDeliveryAttempts still applies), and
-      // removes the entry from `inFlight` once Redis has settled it.
-      await entry.nack();
+      // The local marker is not proof of ownership: once the entry has been
+      // idle >= reclaimIdleMs a sibling may have claimed it, or it may have
+      // been acked outright. `expire` verifies ownership and settles in one
+      // atomic Redis step, honours maxDeliveryAttempts, and removes the entry
+      // from `inFlight` either way.
+      await entry.expire();
     }
   }
 
@@ -981,13 +985,60 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       }
     };
 
+    // Timeout-driven nack, used by #expireInFlight. Unlike `nack` above this
+    // can run while a sibling may have reclaimed the entry, so the ownership
+    // check and the republish+xAck must be one atomic Redis step: a
+    // read-then-nack would let a sibling XCLAIM land in between, and we'd
+    // republish a duplicate and xAck the sibling's entry out from under it.
+    // Either way the local marker is settled afterwards so a late ack/nack
+    // from the hung handler is a no-op.
+    const expire = async () => {
+      if (settled) return;
+      settled = true;
+      const attempt = event.deliveryAttempt ?? 1;
+      const drop = attempt >= this.#maxDeliveryAttempts;
+      const payload = drop ? '' : JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event);
+      let owned: unknown;
+      try {
+        owned = await this.#writeClient.eval(NACK_IF_OWNED_SCRIPT, {
+          keys: [sub.streamKey],
+          arguments: [sub.group, sub.consumer, streamId, payload, String(this.#streamIdleTtlMs)],
+        });
+      } catch (err) {
+        this.#logger?.warn?.('redis-streams: timeout nack failed; leaving original pending for reclaim', {
+          topic: sub.topic,
+          eventId: event.id,
+          err: err instanceof Error ? err.message : err,
+        });
+        // Same recovery as a failed nack republish: the entry is still
+        // pending, so let a future reclaim (or the next timeout pass, if the
+        // handler is still hung) retry it.
+        settled = false;
+        sub.inFlight.delete(streamId);
+        return;
+      }
+      sub.inFlight.delete(streamId);
+      if (owned !== 1) {
+        this.#logger?.warn?.(
+          'redis-streams: handler exceeded inFlightTimeoutMs but entry is no longer owned; disowning',
+          { topic: sub.topic, group: sub.group, streamId },
+        );
+        return;
+      }
+      if (drop) {
+        this.#logger?.warn?.('redis-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+      }
+    };
+
     // Mark this entry in-flight for the reclaim loop's benefit for exactly the
     // window between invoking the handler and the delivery settling (ack/nack).
-    const disown = () => {
-      settled = true;
-      sub.inFlight.delete(streamId);
-    };
-    sub.inFlight.set(streamId, { since: Date.now(), nack, disown });
+    sub.inFlight.set(streamId, { since: Date.now(), expire });
     try {
       // EventCallback is typed `=> void` but handlers commonly return a
       // promise (TS allows Promise<void> to satisfy void). If we get one
@@ -1062,7 +1113,6 @@ interface Subscription {
   // Stream entry IDs currently being processed locally by this subscription.
   // The reclaim loop consults this to avoid re-invoking the handler for a
   // message whose original delivery is still in flight (self-redelivery).
-  // `disown` marks the delivery settled locally without touching Redis, for
-  // when the timeout path finds the entry is no longer owned by this consumer.
-  inFlight: Map<string, { since: number; nack: () => Promise<void>; disown: () => void }>;
+  // `expire` is the timeout path's atomic nack-if-still-owned.
+  inFlight: Map<string, { since: number; expire: () => Promise<void> }>;
 }
