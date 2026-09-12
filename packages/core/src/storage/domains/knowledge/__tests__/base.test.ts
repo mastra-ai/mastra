@@ -47,9 +47,9 @@ describe('InMemoryKnowledgeStorage', () => {
     const features = nodes.find(node => node.name === 'features')!;
     const mastra = nodes.find(node => node.name === 'mastra')!;
     const memory = nodes.find(node => node.name === 'memory')!;
-    expect(features).toMatchObject({ kind: 'domain', parentIds: [mastra.id] });
-    expect(memory).toMatchObject({ description: 'Memory scope', parentIds: [features.id] });
-    expect(mastra.parentIds).toEqual([]);
+    expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
+    expect(memory).toMatchObject({ address: 'features:memory', description: 'Memory scope', parentIds: [features.id] });
+    expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
     expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
 
     await expect(store.listScopeMembers({ scopeNodeId: mastra.id })).resolves.toEqual([]);
