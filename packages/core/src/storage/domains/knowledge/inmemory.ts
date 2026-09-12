@@ -1214,13 +1214,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         continue;
       }
       const parent = this.#resolveTerminalNode(record.nodeId);
-      if (!parent) continue;
-      const parentVisible = isKnowledgeNodeVisible(parent, this.#nodeScopeIds(parent.id), queryScope);
+      if (!parent || !isKnowledgeNodeVisible(parent, this.#nodeScopeIds(parent.id), queryScope)) continue;
       results.push({
         type: 'record',
         id: record.id,
-        recordId: parentVisible ? parent.id : record.id,
-        name: parentVisible ? parent.name : '(private node)',
+        recordId: parent.id,
+        name: parent.name,
         text: record.text,
         scopeIds: [...this.#recordScopeIds(record.id)],
       });

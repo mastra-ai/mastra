@@ -15,7 +15,11 @@ import {
   type PromoteKnowledgeNodeInput,
   type UpdateKnowledgeNodeInput,
 } from '../../storage/domains/knowledge';
-import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } from '../access/mutations';
+import {
+  assertKnowledgeScopeCapabilities,
+  assertKnowledgeTargetCapability,
+  getKnowledgeMutationCapabilities,
+} from '../access/mutations';
 import { getKnowledgeReadableScopeIds } from '../access/read-filter';
 import type { KnowledgeAccessFrontier } from '../access/types';
 
@@ -143,7 +147,7 @@ export class KnowledgeProposalLifecycle {
       destinationScopeId: input.mutation.destinationScopeId,
       vouchedScopeIds: input.vouchedScopeIds,
       frontier,
-      capability: 'suggest',
+      allowSuggestion: true,
     });
     return this.#redactAttribution(
       await this.storage.createProposal({
@@ -246,7 +250,7 @@ export class KnowledgeProposalLifecycle {
             destinationScopeId: mutation.mutation.destinationScopeId,
             vouchedScopeIds: input.vouchedScopeIds,
             frontier,
-            capability: 'manageAccess',
+            allowSuggestion: false,
           })
         : await this.#proposalTargets(mutation);
     for (const target of targets) {
@@ -433,17 +437,24 @@ export class KnowledgeProposalLifecycle {
     destinationScopeId: string;
     vouchedScopeIds: KnowledgeScopeIds;
     frontier: KnowledgeAccessFrontier;
-    capability: 'suggest' | 'manageAccess';
+    allowSuggestion: boolean;
   }): Promise<KnowledgeProposalTarget[]> {
     const nodeScopeIds = await this.storage.getNodeScopeIds(input.node.id);
     if (!nodeScopeIds.includes(input.sourceScopeId)) throw new KnowledgeNotFoundError('node', input.node.id);
     const structuralScopeIds = [input.sourceScopeId, input.destinationScopeId].sort();
-    assertKnowledgeScopeCapabilities({
-      frontier: input.frontier,
-      scopeIds: structuralScopeIds,
-      capability: input.capability,
-      targetType: 'scope',
-    });
+    if (input.allowSuggestion) {
+      for (const scopeId of structuralScopeIds) {
+        const capabilities = getKnowledgeMutationCapabilities(input.frontier, [scopeId]);
+        if (!capabilities.manageAccess && !capabilities.suggest) throw new KnowledgeNotFoundError('scope', scopeId);
+      }
+    } else {
+      assertKnowledgeScopeCapabilities({
+        frontier: input.frontier,
+        scopeIds: structuralScopeIds,
+        capability: 'manageAccess',
+        targetType: 'scope',
+      });
+    }
     const targets: KnowledgeProposalTarget[] = [
       {
         type: 'node',
@@ -465,13 +476,18 @@ export class KnowledgeProposalLifecycle {
       });
       for (const record of page.records) {
         const scopeIds = await this.storage.getRecordScopeIds(record.id);
-        assertKnowledgeTargetCapability({
-          frontier: input.frontier,
-          scopeIds,
-          capability: input.capability === 'suggest' ? 'suggest' : 'edit',
-          targetType: 'record',
-          targetId: record.id,
-        });
+        if (input.allowSuggestion) {
+          const capabilities = getKnowledgeMutationCapabilities(input.frontier, scopeIds);
+          if (!capabilities.edit && !capabilities.suggest) throw new KnowledgeNotFoundError('record', record.id);
+        } else {
+          assertKnowledgeTargetCapability({
+            frontier: input.frontier,
+            scopeIds,
+            capability: 'edit',
+            targetType: 'record',
+            targetId: record.id,
+          });
+        }
         targets.push({
           type: 'record',
           id: record.id,
