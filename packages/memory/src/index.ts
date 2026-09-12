@@ -67,6 +67,7 @@ import { TokenCounter } from './processors/observational-memory/token-counter';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
+import { createCuratorHandler } from './processors/observational-memory/subconscious/curate';
 
 export {
   ModelByInputTokens,
@@ -398,6 +399,7 @@ export class Memory extends MastraMemory {
   }
 
   private pendingSubconsciousWork = new Set<Promise<void>>();
+  private curationsInFlight = new Set<string>();
 
   /** @internal Track observation-dispatched work without blocking the observation turn. */
   trackSubconsciousWork(work: Promise<void>): void {
@@ -432,6 +434,39 @@ export class Memory extends MastraMemory {
     }
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
+  }
+
+  /** Run the subconscious curator directly over the pending worklist, without an observation cycle. */
+  async runCuration(options: {
+    threadId: string;
+    resourceId: string;
+    requestContext?: RequestContext;
+    prompt?: string;
+  }): Promise<{ outcome: 'ran' | 'no-op' | 'skipped' | 'no-model' }> {
+    const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+    const subconscious = omConfig?.experimental_subconscious;
+    if (!omConfig || !(subconscious instanceof Subconscious)) return { outcome: 'no-op' };
+    if (this.curationsInFlight.has(options.threadId)) return { outcome: 'skipped' };
+    this.curationsInFlight.add(options.threadId);
+    try {
+      const handler = createCuratorHandler(this, subconscious.resolved, this.createSubconsciousMemory(), {
+        omModel: omConfig.observation?.model ?? omConfig.model,
+      });
+      const outcome = await handler({
+        parentThreadId: options.threadId,
+        resourceId: options.resourceId,
+        observations: options.prompt ?? '',
+        requestContext: options.requestContext,
+      });
+      return { outcome: outcome === 'ran' ? 'ran' : 'no-op' };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('requires the main agent to resolve its model')) {
+        return { outcome: 'no-model' };
+      }
+      throw error;
+    } finally {
+      this.curationsInFlight.delete(options.threadId);
+    }
   }
 
   /** The shared ObservationalMemory engine. Lazily created on first access. */

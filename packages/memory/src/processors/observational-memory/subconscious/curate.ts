@@ -2,6 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
+import { omError } from '../debug';
+import { Extractor } from '../extractor';
 import type { ObservationalMemoryModel, ReflectionCommittedContext } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
 import { createKnowledgeCurationTools, getKnowledgeStore, resolveKnowledgeScopeIds } from './knowledge-tools';
@@ -46,13 +48,45 @@ async function readWorklist(
   return { records, hasMore: Boolean(cursor) };
 }
 
+export class SubconsciousCurateExtractor extends Extractor<unknown> {
+  constructor(
+    config: ResolvedSubconsciousAgent,
+    subconscious: ResolvedSubconsciousConfig,
+    getCuratorMemory: () => Memory,
+    omModel?: ObservationalMemoryModel,
+  ) {
+    super({
+      name: 'Curate',
+      mode: 'hook',
+      onExtracted: async context => {
+        if (!context.rawObservations?.trim() || !context.memory) return;
+        const handler = createCuratorHandler(context.memory, subconscious, getCuratorMemory(), { omModel });
+        context.memory.trackSubconsciousWork(
+          handler({
+            parentThreadId: context.threadId,
+            resourceId: context.resourceId ?? context.threadId,
+            observations: context.rawObservations,
+            requestContext: context.requestContext,
+            abortSignal: context.abortSignal,
+            mainAgent: context.mainAgent,
+            writer: context.writer,
+            sendStateSignal: context.sendStateSignal,
+          })
+            .then(() => undefined)
+            .catch(error => omError(`[Subconscious:curate] ${String(error)}`)),
+        );
+      },
+    });
+  }
+}
+
 export function createCuratorHandler(
   memory: Memory,
   subconscious: ResolvedSubconsciousConfig,
   curatorMemory = memory,
   options?: { omModel?: ObservationalMemoryModel },
 ): (context: ReflectionCommittedContext) => Promise<'ran' | 'no-op'> {
-  const config = subconscious.reflection.find(agent => agent.name === CURATION_AGENT);
+  const config = subconscious.observation.find(agent => agent.name === CURATION_AGENT);
   if (!config) return async () => 'no-op';
 
   return async context => {
