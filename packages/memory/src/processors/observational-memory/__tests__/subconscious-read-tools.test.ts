@@ -181,15 +181,24 @@ describe('Subconscious knowledge read tools', () => {
       source: 'beta',
       metadata: { sourceThreadId: 'beta' },
     });
+    const crossScopedRecord = await store.createRecord({
+      node: privateParent,
+      text: 'The cobalt rollout has a public recovery procedure.',
+      scopeIds: [alphaScopeIds[1]!],
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
+    });
 
     await memory.drainKnowledgeSemanticIndex(betaScopeIds);
+    await memory.drainKnowledgeSemanticIndex(alphaScopeIds);
     const tools = memory.listTools();
-    const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
+    const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout', limit: 10 }, toolContext());
     expect((result as any).results).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'node', name: 'Deployment runbook' })]),
     );
     expect((result as any).results.map((result: any) => result.name)).not.toContain('Beta Secret');
     expect((result as any).results.map((result: any) => result.id)).not.toContain(privateRecord.id);
+    expect((result as any).results.map((result: any) => result.id)).not.toContain(crossScopedRecord.id);
     expect((result as any).results.some((result: any) => result.sources.includes('semantic'))).toBe(true);
   });
 
