@@ -16,6 +16,8 @@ export class LoginDialogComponent extends Box implements Focusable {
   private abortController = new AbortController();
   private inputResolver?: (value: string) => void;
   private inputRejecter?: (error: Error) => void;
+  private inPostLoginPrompt = false;
+  private postLoginResolver?: (value: string | null) => void;
 
   // Focusable implementation
   private _focused = false;
@@ -125,6 +127,54 @@ export class LoginDialogComponent extends Box implements Focusable {
   }
 
   /**
+   * Post-login prompt (account naming): resolves null on Escape/Cancel
+   * instead of rejecting — the auth flow already succeeded, so cancelling
+   * the rename must not abort the dialog or report a cancelled login.
+   */
+  promptOptional(message: string): Promise<string | null> {
+    // Replace the auth-flow content (URL, code prompt, progress): the
+    // dialog's bounded height would otherwise clip the trailing prompt.
+    this.contentContainer.clear();
+    this.contentContainer.addChild(new Spacer(1));
+    this.contentContainer.addChild(new Text(theme.fg('text', message)));
+    this.contentContainer.addChild(this.input);
+    this.contentContainer.addChild(new Text(theme.fg('muted', '(Escape to keep current, Enter to submit)')));
+
+    this.input.setValue('');
+    this.tui.requestRender();
+
+    this.inPostLoginPrompt = true;
+    return new Promise<string | null>(resolve => {
+      this.postLoginResolver = resolve;
+      this.input.onSubmit = () => {
+        const value = this.input.getValue();
+        this.finishPostLoginPrompt(value);
+        resolve(value);
+      };
+      this.input.onEscape = () => {
+        this.finishPostLoginPrompt(null);
+        resolve(null);
+      };
+    });
+  }
+
+  /** Restore the interactive-auth prompt handlers after a post-login prompt. */
+  private finishPostLoginPrompt(_value: string | null): void {
+    this.inPostLoginPrompt = false;
+    this.postLoginResolver = undefined;
+    this.input.onSubmit = () => {
+      if (this.inputResolver) {
+        this.inputResolver(this.input.getValue());
+        this.inputResolver = undefined;
+        this.inputRejecter = undefined;
+      }
+    };
+    this.input.onEscape = () => {
+      this.cancel();
+    };
+  }
+
+  /**
    * Show progress message
    */
   showProgress(message: string): void {
@@ -136,6 +186,14 @@ export class LoginDialogComponent extends Box implements Focusable {
     const kb = getKeybindings();
 
     if (kb.matches(data, 'tui.select.cancel')) {
+      if (this.inPostLoginPrompt) {
+        // Cancelling the account-name prompt keeps the resolved label —
+        // the login itself already succeeded.
+        const resolve = this.postLoginResolver;
+        this.finishPostLoginPrompt(null);
+        resolve?.(null);
+        return;
+      }
       this.cancel();
       return;
     }

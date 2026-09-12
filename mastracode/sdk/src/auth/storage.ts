@@ -92,7 +92,7 @@ function credentialFieldsOf(record: OAuthAccountRecord): OAuthCredentials {
  */
 export class AuthStorage {
   private data: AuthStorageData = {};
-  private refreshPromises = new Map<string, Promise<string | undefined>>();
+  private refreshPromises = new Map<string, Promise<OAuthCredentials | undefined>>();
 
   constructor(private authPath: string = join(getAppDataDir(), 'auth.json')) {
     this.reload();
@@ -145,9 +145,26 @@ export class AuthStorage {
         continue;
       }
       if (active.refresh !== slot.refresh) {
-        const { type: _type, ...slotCreds } = slot;
-        this.data[this.accountKeyFor(active.id)] = { ...active, ...slotCreds, type: 'oauth-account' };
-        changed = true;
+        // An external writer (older build, another worktree) owns the slot.
+        // If its tokens belong to a different registered account, that
+        // account is now the active one — re-point activation to it instead
+        // of cloning the refresh token onto the current active entry.
+        const matching = entries.find(entry => entry.id !== active.id && entry.refresh === slot.refresh);
+        if (matching) {
+          const { type: _t, ...slotCreds } = slot;
+          this.data[this.accountKeyFor(matching.id)] = {
+            ...matching,
+            ...slotCreds,
+            type: 'oauth-account',
+            active: true,
+          };
+          this.data[this.accountKeyFor(active.id)] = { ...active, active: false };
+          changed = true;
+        } else {
+          const { type: _type, ...slotCreds } = slot;
+          this.data[this.accountKeyFor(active.id)] = { ...active, ...slotCreds, type: 'oauth-account' };
+          changed = true;
+        }
       }
     }
     if (changed) this.save();
@@ -259,17 +276,21 @@ export class AuthStorage {
   /**
    * Login to an OAuth provider.
    */
-  async login(providerId: OAuthProviderId, callbacks: OAuthLoginCallbacks): Promise<void> {
+  async login(
+    providerId: OAuthProviderId,
+    callbacks: OAuthLoginCallbacks,
+    opts?: { replaceAccountId?: string },
+  ): Promise<void> {
     const provider = getOAuthProvider(providerId);
     if (!provider) {
       throw new Error(`Unknown OAuth provider: ${providerId}`);
     }
 
     const credentials = await provider.login(callbacks);
-    // Route through the account registry: a legacy slot credential is adopted
-    // first, the new account is appended (or updated in place on id
-    // collision), and it becomes the active account.
-    await this.addAccount(providerId, credentials);
+    // Route through the account registry: the new account is appended (or
+    // updated in place — by id collision or an explicit replaceAccountId for
+    // re-authentication) and becomes the active account.
+    await this.addAccount(providerId, credentials, opts);
   }
 
   /**
@@ -324,46 +345,89 @@ export class AuthStorage {
   }
 
   /**
-   * Registered OAuth accounts for a provider, in insertion order.
+   * Registered OAuth accounts for a provider, in insertion order. Copies —
+   * callers cannot corrupt unsaved storage state by mutating a record.
    */
   listAccounts(providerId: string): OAuthAccountRecord[] {
-    return this.accountEntries(providerId);
+    return this.accountEntries(providerId).map(entry => ({ ...entry }));
   }
 
   /**
-   * The provider's active registry entry, if a registry exists.
+   * The provider's active registry entry, if a registry exists. A copy.
    */
   getActiveAccount(providerId: string): OAuthAccountRecord | undefined {
-    return this.accountEntries(providerId).find(entry => entry.active);
+    const active = this.accountEntries(providerId).find(entry => entry.active);
+    return active ? { ...active } : undefined;
   }
 
   /**
    * Register OAuth credentials as an account for a provider, making it active.
    *
-   * A legacy slot credential not matching any registry entry is adopted as the
-   * first entry first. When the new credentials hash to an existing entry's
-   * id, that entry's tokens are updated in place (re-authentication — label
-   * and position preserved); otherwise a new entry is appended and activated.
+   * With `replaceAccountId` (re-authentication of a picked account), the
+   * target entry's tokens are replaced in place — id re-keyed to the new
+   * refresh-token hash, label/position/addedAt preserved — because providers
+   * rotate refresh tokens per authorization, so the picked account's old id
+   * never matches the new token hash. Otherwise, when the new credentials
+   * hash to an existing entry's id (same refresh token), that entry is
+   * updated in place; a genuinely new account is appended and activated.
    */
-  async addAccount(providerId: string, creds: OAuthCredentials, label?: string): Promise<OAuthAccountRecord> {
+  async addAccount(
+    providerId: string,
+    creds: OAuthCredentials,
+    opts?: { label?: string; replaceAccountId?: string },
+  ): Promise<OAuthAccountRecord> {
     this.reload();
     const entries = this.accountEntries(providerId);
 
-    const slot = this.data[providerId];
-    if (slot?.type === 'oauth' && !entries.some(entry => entry.refresh === slot.refresh)) {
-      entries.push(this.adoptSlot(providerId, slot));
+    if (opts?.replaceAccountId) {
+      const target = entries.find(entry => entry.id === opts.replaceAccountId);
+      if (!target) {
+        throw new Error(`No account ${opts.replaceAccountId} for provider ${providerId}`);
+      }
+      const newId = accountIdFor(providerId, creds.refresh);
+      const replacement: OAuthAccountRecord = {
+        ...target,
+        ...creds,
+        type: 'oauth-account',
+        id: newId,
+        label: opts.label ?? target.label,
+      };
+      // Re-key in place so the account keeps its insertion position; a
+      // stale entry already owning the new id (same tokens) is dropped in
+      // favor of the picked account.
+      const rebuilt: AuthStorageData = {};
+      for (const [key, value] of Object.entries(this.data)) {
+        if (key === this.accountKeyFor(target.id)) {
+          rebuilt[this.accountKeyFor(newId)] = replacement;
+        } else if (newId !== target.id && key === this.accountKeyFor(newId)) {
+          continue;
+        } else {
+          rebuilt[key] = value;
+        }
+      }
+      this.data = rebuilt;
+      const activated = this.activateInMemory(providerId, newId);
+      if (!activated) {
+        throw new Error(`Failed to activate account ${newId} for provider ${providerId}`);
+      }
+      this.save();
+      return activated;
     }
 
+    // Resolve the label before the final reload+save: the provider hook may
+    // hit the network, and a concurrent write during that await must not be
+    // clobbered by a stale snapshot.
+    const provider = getOAuthProvider(providerId);
+    const label = opts?.label ?? (await provider?.getAccountLabel?.(creds)) ?? null;
+    this.reload();
+    const freshEntries = this.accountEntries(providerId);
+
     const id = accountIdFor(providerId, creds.refresh);
-    const existing = entries.find(entry => entry.id === id);
+    const existing = freshEntries.find(entry => entry.id === id);
     if (existing) {
       this.data[this.accountKeyFor(id)] = { ...existing, ...creds, type: 'oauth-account', id, active: existing.active };
     } else {
-      const provider = getOAuthProvider(providerId);
-      const resolvedLabel =
-        label ??
-        (await provider?.getAccountLabel?.(creds)) ??
-        `${provider?.name ?? providerId} account ${entries.length + 1}`;
+      const resolvedLabel = label ?? `${provider?.name ?? providerId} account ${freshEntries.length + 1}`;
       this.data[this.accountKeyFor(id)] = {
         type: 'oauth-account',
         id,
@@ -514,6 +578,40 @@ export class AuthStorage {
   }
 
   /**
+   * Refresh one account instance through the per-instance dedupe map. Used
+   * for sibling refreshes during the rotation walk, so a concurrent
+   * `getApiKey` that reloads storage mid-walk (after the candidate was
+   * activated but before its refresh resolves) joins the same refresh
+   * instead of double-spending a single-use refresh token.
+   */
+  private async refreshInstance(
+    providerId: string,
+    instanceId: string,
+    creds: OAuthCredentials,
+  ): Promise<OAuthCredentials | undefined> {
+    const provider = getOAuthProvider(providerId);
+    if (!provider) return undefined;
+    const refreshKey = `${providerId}:${instanceId}`;
+    const pending = this.refreshPromises.get(refreshKey);
+    if (pending) return pending;
+    const refresh = (async () => {
+      try {
+        const fresh = await provider.refreshToken(creds);
+        this.persistActiveCredential(providerId, fresh);
+        return fresh;
+      } catch {
+        return undefined;
+      }
+    })();
+    this.refreshPromises.set(refreshKey, refresh);
+    try {
+      return await refresh;
+    } finally {
+      this.refreshPromises.delete(refreshKey);
+    }
+  }
+
+  /**
    * Get API key for a provider, auto-refreshing OAuth tokens if needed.
    * On refresh failure of the active account, rotates through the provider's
    * remaining registered accounts before giving up (restoring the original).
@@ -536,50 +634,52 @@ export class AuthStorage {
       }
 
       // Share one refresh when concurrent requests observe the same expired
-      // token (keyed per account instance once a registry exists).
+      // token. The promise covers the whole outcome including a rotation
+      // walk, keyed to the observed active account instance.
       const activeEntry = this.getActiveAccount(providerId);
-      const refreshKey = `${providerId}:${activeEntry?.id ?? providerId}`;
+      const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
       const pendingRefresh = this.refreshPromises.get(refreshKey);
-      if (pendingRefresh) return pendingRefresh;
+      if (pendingRefresh) {
+        const creds = await pendingRefresh;
+        return creds ? provider.getApiKey(creds) : undefined;
+      }
 
-      const refresh = (async () => {
+      const refresh = (async (): Promise<OAuthCredentials | undefined> => {
         try {
-          const newCreds = await provider.refreshToken(cred);
-          this.persistActiveCredential(providerId, newCreds);
-          return provider.getApiKey(newCreds);
+          const fresh = await provider.refreshToken(cred);
+          this.persistActiveCredential(providerId, fresh);
+          return fresh;
         } catch {
           // Refresh failed. Rotate through the pool: try each remaining
           // account — refreshing an expired sibling first — and only fail
           // when every instance has, restoring the originally active account
           // (the credential is kept, nothing deleted — same as the
           // single-account behavior).
-          const pool = this.listAccounts(providerId);
-          if (activeEntry && pool.length > 1) {
-            for (const candidate of pool) {
-              if (candidate.id === activeEntry.id) continue;
-              const activated = this.activateAccount(providerId, candidate.id);
-              if (!activated) continue;
-              const slotCred = this.get(providerId);
-              if (slotCred?.type !== 'oauth') continue;
-              let creds: OAuthCredentials = slotCred;
-              if (Date.now() >= creds.expires) {
-                try {
-                  creds = await provider.refreshToken(creds);
-                  this.persistActiveCredential(providerId, creds);
-                } catch {
-                  continue;
-                }
-              }
-              return provider.getApiKey(creds);
-            }
-            this.activateAccount(providerId, activeEntry.id);
-          }
-          return undefined;
         }
+        const pool = this.listAccounts(providerId);
+        if (activeEntry && pool.length > 1) {
+          for (const candidate of pool) {
+            if (candidate.id === activeEntry.id) continue;
+            const activated = this.activateAccount(providerId, candidate.id);
+            if (!activated) continue;
+            const slotCred = this.get(providerId);
+            if (slotCred?.type !== 'oauth') continue;
+            let creds: OAuthCredentials = slotCred;
+            if (Date.now() >= creds.expires) {
+              const refreshed = await this.refreshInstance(providerId, candidate.id, creds);
+              if (!refreshed) continue;
+              creds = refreshed;
+            }
+            return creds;
+          }
+          this.activateAccount(providerId, activeEntry.id);
+        }
+        return undefined;
       })();
       this.refreshPromises.set(refreshKey, refresh);
       try {
-        return await refresh;
+        const creds = await refresh;
+        return creds ? provider.getApiKey(creds) : undefined;
       } finally {
         this.refreshPromises.delete(refreshKey);
       }

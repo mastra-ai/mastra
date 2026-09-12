@@ -125,7 +125,7 @@ describe('AuthStorage multi-account registry', () => {
 
   it('addAccount with a colliding id updates tokens in place (re-authentication path)', async () => {
     const { storage } = makeStorage();
-    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, 'Work');
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
     const original = storage.listAccounts(PROVIDER)[0]!;
 
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1-new', expires: FUTURE });
@@ -297,6 +297,106 @@ describe('AuthStorage multi-account registry', () => {
     expect(accounts).toHaveLength(1); // only the adopted slot entry
     expect(accounts[0]).toMatchObject({ refresh: 'r1', active: true });
     expect(storage.get(PROVIDER)).toEqual(oauthCred('r1', 'a1'));
+  });
+
+  it('re-points activation when an external writer puts a different registered account in the slot', () => {
+    const entry1 = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const entry2 = accountRecord('r2', 'a2', { label: 'Personal' });
+    const { storage } = makeStorage({
+      // External writer swapped the slot to account 2's tokens.
+      [PROVIDER]: oauthCred('r2', 'a2'),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+
+    const active = storage.getActiveAccount(PROVIDER);
+    expect(active?.id).toBe(entry2.id);
+    expect(active?.label).toBe('Personal');
+    // No refresh-token clone: account 1's entry keeps its own tokens.
+    expect(storage.listAccounts(PROVIDER).find(e => e.id === entry1.id)).toMatchObject({
+      refresh: 'r1',
+      active: false,
+    });
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
+  });
+
+  it('addAccount with replaceAccountId re-keys the picked account in place (re-authentication)', async () => {
+    const { storage, authPath } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE }, { label: 'Personal' });
+    const work = storage.listAccounts(PROVIDER)[0]!;
+
+    // Re-authentication returns a rotated refresh token — no id collision
+    // with the picked account's old id is possible.
+    await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1-new', access: 'a1-new', expires: FUTURE },
+      { replaceAccountId: work.id },
+    );
+
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts).toHaveLength(2); // replaced, not appended
+    expect(accounts[0]).toMatchObject({
+      label: 'Work', // label preserved
+      addedAt: work.addedAt, // identity preserved
+      refresh: 'r1-new', // tokens replaced
+      access: 'a1-new',
+      active: true,
+    });
+    expect(accounts[0]!.id).not.toBe(work.id); // re-keyed to the new token hash
+    expect(accounts[1]).toMatchObject({ label: 'Personal', active: false });
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r1-new', access: 'a1-new' });
+    // No entry keyed by the old id remains on disk.
+    expect(readAuthJson(authPath)[`accounts:${work.id}`]).toBeUndefined();
+  });
+
+  it('a fresh AuthStorage instance reloads the registry intact (restart semantics)', async () => {
+    const { storage, authPath } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE }, { label: 'Personal' });
+    const before = storage.getActiveAccount(PROVIDER);
+
+    const reopened = new AuthStorage(authPath);
+    expect(reopened.listAccounts(PROVIDER).map(a => a.label)).toEqual(['Work', 'Personal']);
+    expect(reopened.getActiveAccount(PROVIDER)?.id).toBe(before!.id);
+    expect(reopened.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r2', access: 'a2' });
+  });
+
+  it('a rotation-walk sibling refresh is deduped against concurrent callers (per-instance keys)', async () => {
+    const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
+    const entry2 = accountRecord('r2', 'a2-stale', { expires: PAST });
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1', PAST),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+
+    const siblingRefreshes: string[] = [];
+    let resolveR2!: () => void;
+    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(
+      (creds: OAuthCredentials) =>
+        new Promise<OAuthCredentials>((resolve, reject) => {
+          if (creds.refresh === 'r1') {
+            reject(new Error('refresh rejected'));
+            return;
+          }
+          siblingRefreshes.push(creds.refresh);
+          resolveR2 = () => resolve({ refresh: 'r2', access: 'a2-fresh', expires: FUTURE });
+        }),
+    );
+
+    // Walk: r1 fails inline → activates r2 → sibling refresh goes pending.
+    const walk = storage.getApiKey(PROVIDER);
+    await vi.waitFor(() => expect(siblingRefreshes).toEqual(['r2']));
+
+    // A concurrent caller that reloaded mid-walk sees r2 active + expired
+    // and must join the in-flight sibling refresh instead of double-spending
+    // the (single-use) refresh token.
+    const concurrent = storage.getApiKey(PROVIDER);
+    resolveR2();
+    expect(await walk).toBe('a2-fresh');
+    expect(await concurrent).toBe('a2-fresh');
+    expect(siblingRefreshes).toEqual(['r2']); // exactly one r2 refresh
   });
 
   it('login routes through the account registry: a second login keeps the first account intact', async () => {

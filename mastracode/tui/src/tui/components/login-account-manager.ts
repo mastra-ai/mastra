@@ -62,7 +62,6 @@ export class LoginAccountManagerComponent extends Box {
 
   private rows(): { label: string; action: () => void }[] {
     if (this.mode === 'pick-reauth' || this.mode === 'pick-remove') {
-      const verb = this.mode === 'pick-reauth' ? 'Re-authenticate' : 'Remove';
       return [
         ...this.accounts.map(account => ({
           label: `${account.label}${account.active ? theme.fg('success', ' ✓ active') : ''}`,
