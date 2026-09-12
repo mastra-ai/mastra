@@ -91,19 +91,25 @@ function useIntakeHandlers({
 const jiraReadyStatus: JiraStatus = {
   enabled: true,
   configured: true,
+  mode: 'platform',
   site: 'acme.atlassian.net',
+  sites: ['acme.atlassian.net', 'beta.atlassian.net'],
+  connections: [
+    { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+    { id: 'a1b_beta', integrationId: 'jira', status: 'active', accountLabel: 'beta.atlassian.net' },
+  ],
   reason: 'ready',
 };
 
 const jiraProjects: JiraProject[] = [
-  { id: '10001', key: 'ENG', name: 'Engineering' },
-  { id: '10002', key: 'OPS', name: 'Operations' },
+  { id: '10001', key: 'ENG', name: 'Engineering', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
+  { id: '10002', key: 'OPS', name: 'Operations', connectionId: 'a1b_beta', site: 'beta.atlassian.net' },
 ];
 
 /**
- * Layer a configured Jira deployment on top of the base intake handlers. The
- * ambient MSW handlers answer `/web/jira/*` with 404 (a server without the
- * `JIRA_*` env group), so unconfigured-deployment specs skip this helper.
+ * Layer connected Jira sites on top of the base intake handlers. The ambient
+ * MSW handlers answer `/web/jira/*` with 404 when Platform integration access
+ * is unavailable, so unavailable-feature specs skip this helper.
  */
 function useJiraHandlers({
   config = baseConfig(),
@@ -152,8 +158,8 @@ function renderIntakeSection() {
 }
 
 describe('IntakeSection', () => {
-  describe('given a config with both sources enabled', () => {
-    it('lists the GitHub repositories and Linear projects without an extra expand step', async () => {
+  describe('given a config with the default sources enabled', () => {
+    it('lists every work intake source and expands the configured pickers', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
@@ -161,6 +167,7 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync Jira issues' })).toBeInTheDocument();
 
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
@@ -368,11 +375,20 @@ describe('IntakeSection', () => {
     });
   });
 
-  describe('given Jira is not configured on the server', () => {
-    it('explains the env-only setup with a disabled toggle and no connect button', async () => {
-      // Only the base handlers — the ambient `/web/jira/*` 404s stand in for a
-      // server without the JIRA_* env group.
+  describe('given Jira uses deployment credentials', () => {
+    it('keeps the self-hosted setup guidance when the integration is unavailable', async () => {
       useIntakeHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: false,
+            configured: false,
+            mode: 'direct',
+            site: null,
+            reason: 'missing_config',
+          } satisfies JiraStatus),
+        ),
+      );
 
       renderIntakeSection();
 
@@ -380,6 +396,32 @@ describe('IntakeSection', () => {
         await screen.findByText(
           'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
         ),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
+    });
+  });
+
+  describe('given the organization has no connected Jira account', () => {
+    it('points to Mastra Platform with a disabled toggle', async () => {
+      useIntakeHandlers();
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: false,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            connections: [],
+            reason: 'not_connected',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Connect Jira in Mastra Platform to sync issues from this organization.'),
       ).toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeDisabled();
       expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).not.toBeChecked();
@@ -404,6 +446,28 @@ describe('IntakeSection', () => {
       expect(saved[0]!.github.enabled).toBe(true);
     });
 
+    it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
+      useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
+      server.use(
+        http.get(JIRA_STATUS_URL, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: true,
+            mode: 'platform',
+            site: null,
+            sites: [],
+            reason: 'ready',
+          } satisfies JiraStatus),
+        ),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
+      expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
+    });
+
     it('shows the site and persists an explicit project selection', async () => {
       const { saved } = useJiraHandlers({
         config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } },
@@ -411,7 +475,9 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByText('Connected to acme.atlassian.net')).toBeInTheDocument();
+      expect(await screen.findByText('2 Jira sites connected')).toBeInTheDocument();
+      expect(await screen.findByText('acme.atlassian.net')).toBeInTheDocument();
+      expect(await screen.findByText('beta.atlassian.net')).toBeInTheDocument();
 
       const projects = await screen.findByRole('group', { name: 'Jira projects' });
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
@@ -458,7 +524,7 @@ describe('IntakeSection', () => {
       expect(savedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: null });
     });
 
-    it('surfaces rejected credentials as operator guidance instead of an empty picker', async () => {
+    it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {
       useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
       server.use(
         http.get(JIRA_PROJECTS_URL, () =>
@@ -469,9 +535,7 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       expect(
-        await screen.findByText(
-          'Jira rejected the configured credentials. Ask the operator to check the Jira API token.',
-        ),
+        await screen.findByText('Jira rejected a connected account. Reconnect it in Mastra Platform.'),
       ).toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Jira projects' })).not.toBeInTheDocument();
     });

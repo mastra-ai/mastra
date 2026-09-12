@@ -4,8 +4,14 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
+const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
+const REGIONAL_INTEGRATIONS_URLS: Record<'us' | 'eu', string> = {
+  us: 'https://integrations.us.mastra.ai',
+  eu: 'https://integrations.eu.mastra.ai',
+};
+
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
-  const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
+  const integrationsApiUrl = process.env.MASTRA_INTEGRATIONS_API_URL?.trim() || resolveIntegrationsUrl();
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. The platform API accepts both forms.
@@ -16,11 +22,22 @@ export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
       'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
     );
   }
-  return { baseUrl: normalizeSharedApiUrl(sharedApiUrl), accessToken };
+  return { baseUrl: normalizeIntegrationsApiUrl(integrationsApiUrl), accessToken };
 }
 
-function normalizeSharedApiUrl(sharedApiUrl: string): string {
-  return sharedApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+/**
+ * Resolves the integrations API base URL from `MASTRA_PLATFORM_REGION`
+ * (case-insensitive `us` or `eu`), falling back to the global default.
+ * Unknown region values fall through to the global default.
+ */
+function resolveIntegrationsUrl(): string {
+  const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
+  if (region === 'us' || region === 'eu') return REGIONAL_INTEGRATIONS_URLS[region];
+  return DEFAULT_INTEGRATIONS_URL;
+}
+
+function normalizeIntegrationsApiUrl(integrationsApiUrl: string): string {
+  return integrationsApiUrl.replace(/\/+$/, '');
 }
 
 export class PlatformApiError extends Error {

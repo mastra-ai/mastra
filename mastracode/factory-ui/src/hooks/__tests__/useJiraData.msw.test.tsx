@@ -5,8 +5,8 @@
  * Drives the real services + React Query cache; only the network is mocked
  * (MSW). Handlers register on the ApiConfig base URL the test providers inject
  * (`TEST_BASE_URL`), matching how the app wires it. The ambient MSW handlers
- * answer `/web/jira/*` with 404 — a server without the `JIRA_*` env group —
- * so unconfigured-deployment behavior needs no per-test setup.
+ * answer `/web/jira/*` with 404 — a server without Platform integration
+ * credentials — so unavailable-feature behavior needs no per-test setup.
  */
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -43,12 +43,16 @@ const issue: JiraIssue = {
   updatedAt: '2026-07-02T00:00:00Z',
 };
 
-const projects: JiraProject[] = [{ id: '10001', key: 'ENG', name: 'Engineering' }];
+const projects: JiraProject[] = [
+  { id: 'jira-source-acme-eng', key: 'ENG', name: 'Engineering', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
+];
 
 const readyStatus: JiraStatus = {
   enabled: true,
   configured: true,
   site: 'acme.atlassian.net',
+  sites: ['acme.atlassian.net'],
+  connections: [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
   reason: 'ready',
 };
 
@@ -62,7 +66,7 @@ describe('useJiraStatusQuery', () => {
     expect(result.current.data).toEqual(readyStatus);
   });
 
-  it('given a server without the Jira env group (ambient 404), when the hook resolves, then it degrades to disabled', async () => {
+  it('given a server without Platform Jira support (ambient 404), when the hook resolves, then it degrades to disabled', async () => {
     const { result } = renderHookWithProviders(() => useJiraStatusQuery());
 
     await waitFor(() => expect(result.current.data).toBeDefined());

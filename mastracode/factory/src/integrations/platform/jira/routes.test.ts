@@ -1,18 +1,18 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
-import type { TestAuthUser } from '../../routes/test-utils.js';
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
-import { JiraApiError } from './api.js';
-import { JiraIntegration } from './integration.js';
-import { buildJiraRoutes } from './routes.js';
+import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
+import type { TestAuthUser } from '../../../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
+import type { FactoryStorageTestSeed } from '../../../storage/test-utils.js';
+import { JiraApiError } from '../../jira/api.js';
+import { PlatformJiraIntegration } from './integration.js';
+import { buildPlatformJiraRoutes } from './routes.js';
 
 // A real integration instance with the network edges spied out: source
 // listing and issue paging run the production mapping code paths against the
 // seeded `:memory:` intake storage.
-let jira!: JiraIntegration;
+let jira!: PlatformJiraIntegration;
 let seed!: FactoryStorageTestSeed;
 
 const listJiraSources = vi.fn(async () => [
@@ -22,6 +22,7 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
   issues: [
     {
       id: '10001',
+      externalId: 'jira-issue:encoded-reference',
       sourceId: '1',
       identifier: 'ENG-42',
       title: 'Fix intake sync',
@@ -44,7 +45,7 @@ const listActiveJiraIssues = vi.fn(async (_after?: string, _projectIds?: string[
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: TestAuthUser | null,
-  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean } = {},
+  options: { authEnabled?: boolean; withJira?: boolean; withIntake?: boolean; appDbConfigured?: boolean } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -53,11 +54,12 @@ function buildApp(
   });
   mountApiRoutes(
     app,
-    buildJiraRoutes({
+    buildPlatformJiraRoutes({
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
       projects: seed.projects,
+      appDbConfigured: options.appDbConfigured ?? true,
     }),
   );
   return app;
@@ -67,7 +69,10 @@ const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
-  jira = new JiraIntegration({ baseUrl: 'https://acme.atlassian.net', email: 'ops@acme.test', apiToken: 'jira-token' });
+  jira = new PlatformJiraIntegration({
+    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connectionId: 'a1b_acme',
+  });
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
@@ -80,7 +85,12 @@ beforeEach(async () => {
 
 describe('status route', () => {
   it('reports disabled without web auth and serves only the status route', async () => {
-    const routes = buildJiraRoutes({ jira, auth: fakeRouteAuth({ enabled: false }), intake: seed.intake });
+    const routes = buildPlatformJiraRoutes({
+      jira,
+      auth: fakeRouteAuth({ enabled: false }),
+      intake: seed.intake,
+      appDbConfigured: true,
+    });
     expect(routes).toHaveLength(1);
     const app = buildApp(org1(), { authEnabled: false });
     const res = await app.request('/web/jira/status');
@@ -100,17 +110,22 @@ describe('status route', () => {
   });
 
   it('reports disabled without intake storage', async () => {
-    const res = await buildApp(org1(), { withIntake: false }).request('/web/jira/status');
-    expect(await res.json()).toMatchObject({ enabled: false, reason: 'missing_config' });
+    const res = await buildApp(org1(), { withIntake: false, appDbConfigured: false }).request('/web/jira/status');
+    expect(await res.json()).toMatchObject({
+      enabled: false,
+      reason: 'missing_config',
+      diagnostics: { appDbConfigured: false },
+    });
   });
 
-  it('reports ready with the site host when configured', async () => {
+  it('reports ready with the configured connection', async () => {
     const res = await buildApp(org1()).request('/web/jira/status');
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
-      mode: 'direct',
-      site: 'acme.atlassian.net',
+      mode: 'platform',
+      site: null,
+      sites: [],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
     });
@@ -118,7 +133,11 @@ describe('status route', () => {
 
   it('requires an organization', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/jira/status');
-    expect(await res.json()).toMatchObject({ enabled: true, organizationRequired: true, reason: 'organization_required' });
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      organizationRequired: true,
+      reason: 'organization_required',
+    });
   });
 
   it('401s unauthenticated users when enabled', async () => {
@@ -140,7 +159,9 @@ describe('projects route', () => {
 
   it('lists the site projects for the Settings picker', async () => {
     const res = await buildApp(org1()).request('/web/jira/projects');
-    expect(await res.json()).toEqual({ projects: [{ id: '1', name: 'Engineering', key: 'ENG' }] });
+    expect(await res.json()).toEqual({
+      projects: [{ id: '1', name: 'Engineering', key: 'ENG', connectionId: null, site: null }],
+    });
     expect(listJiraSources).toHaveBeenCalledWith({ orgId: 'org1', userId: 'u1' });
   });
 
@@ -157,6 +178,7 @@ describe('issues route', () => {
     const res = await buildApp(org1()).request('/web/jira/issues');
     const json = await res.json();
     expect(json.issues[0]).toMatchObject({
+      id: 'jira-issue:encoded-reference',
       identifier: 'ENG-42',
       title: 'Fix intake sync',
       state: 'To Do',
@@ -198,6 +220,16 @@ describe('issues route', () => {
       config: { jira: { enabled: true, sourceIds: null } },
     });
     const res = await buildApp(org1()).request('/web/jira/issues');
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveJiraIssues).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty page when there is no saved intake config', async () => {
+    seed = await createFactoryStorageForTests();
+
+    const res = await buildApp(org1()).request('/web/jira/issues');
+
+    expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ issues: [], nextCursor: null });
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });

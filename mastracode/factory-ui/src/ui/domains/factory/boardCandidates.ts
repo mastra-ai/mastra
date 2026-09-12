@@ -131,7 +131,7 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
 export function jiraCandidate(issue: JiraIssue): BoardCandidate {
   const ref = `Jira issue ${issue.identifier} (${issue.url})`;
   return {
-    sourceKey: `jira:${issue.identifier}`,
+    sourceKey: issue.id,
     source: 'jira-issue',
     title: issue.title,
     url: issue.url,
@@ -143,6 +143,7 @@ export function jiraCandidate(issue: JiraIssue): BoardCandidate {
     customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${JIRA_FETCH_HINT}`, instructions),
     metadata: {
       identifier: issue.identifier,
+      issueReference: issue.id,
       state: issue.state,
       assignee: issue.assignee,
       labels: issue.labels,

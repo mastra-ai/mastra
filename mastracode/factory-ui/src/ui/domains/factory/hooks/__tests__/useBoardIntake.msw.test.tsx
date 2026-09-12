@@ -83,7 +83,7 @@ describe('useBoardIntake Linear gating', () => {
 });
 
 const jiraIssue: JiraIssue = {
-  id: '10010',
+  id: 'jira-issue-acme-eng-42',
   identifier: 'ENG-42',
   title: 'Fix intake sync',
   url: 'https://acme.atlassian.net/browse/ENG-42',
@@ -124,7 +124,7 @@ function stubJiraIntake(
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
     http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
-      HttpResponse.json({ enabled: true, configured: true, site: 'acme.atlassian.net', reason: 'ready' }),
+      HttpResponse.json({ enabled: true, configured: true, mode: 'platform', site: null, sites: [], reason: 'ready' }),
     ),
     http.get(`${TEST_BASE_URL}/web/jira/issues`, ({ request }) => {
       requestedFactoryIds.push(new URL(request.url).searchParams.get('factoryProjectId'));
@@ -136,6 +136,23 @@ function stubJiraIntake(
 }
 
 describe('useBoardIntake Jira gating', () => {
+  it('given Jira is enabled but not configured, when the board loads, then the Jira feed is withheld', async () => {
+    const requestedFactoryIds = stubJiraIntake([
+      { integrationId: 'jira', sourceId: '10001', factoryProjectId: 'factory-1' },
+    ]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+        HttpResponse.json({ enabled: true, configured: false, mode: 'platform', reason: 'organization_required' }),
+      ),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).not.toContain('jira');
+    expect(requestedFactoryIds).toEqual([]);
+  });
+
   it('given a source routed to the viewed project, when the board loads, then the Jira feed is offered with Factory-scoped requests', async () => {
     const requestedFactoryIds = stubJiraIntake([
       { integrationId: 'jira', sourceId: '10001', factoryProjectId: 'factory-1' },
@@ -183,7 +200,7 @@ describe('useBoardIntake Jira gating', () => {
 
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
     const candidate = result.current.candidates[0]!;
-    expect(candidate.sourceKey).toBe('jira:ENG-42');
+    expect(candidate.sourceKey).toBe('jira-issue-acme-eng-42');
     expect(candidate.source).toBe('jira-issue');
     expect(candidate.url).toBe('https://acme.atlassian.net/browse/ENG-42');
     expect(candidate.metadata).toMatchObject({ identifier: 'ENG-42' });
@@ -200,7 +217,7 @@ describe('useBoardIntake Jira gating', () => {
         factoryProjectId: 'factory-1',
         repository,
         kind: 'work',
-        knownSourceKeys: new Set(['jira:ENG-42']),
+        knownSourceKeys: new Set(['jira-issue-acme-eng-42']),
       }),
     );
 
@@ -220,8 +237,10 @@ describe('useBoardIntake Jira gating', () => {
 
     // The Jira feed is not displayed, but its issues are fetched for teammate filtering.
     await waitFor(() =>
-      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain('jira:ENG-42'),
+      expect(result.current.participantCandidates.map(candidate => candidate.sourceKey)).toContain(
+        'jira-issue-acme-eng-42',
+      ),
     );
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira:ENG-42');
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).not.toContain('jira-issue-acme-eng-42');
   });
 });

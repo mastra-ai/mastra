@@ -2,14 +2,13 @@
  * Mastra `apiRoutes` for the Jira intake feature.
  *
  * Registered alongside the other `/web/*` routes, behind the host auth gate.
- * Mirrors the Linear module minus everything OAuth: there is no
- * connect/callback flow, no state signer, and no per-org connection storage —
- * Jira credentials are deployment-global constructor config on the
- * integration instance. Every route still re-resolves the authenticated user
- * from the request and scopes intake selections by the caller's org.
+ * Jira connections are owned by the caller's Mastra Platform organization;
+ * provider requests stay server-side and flow through the integrations v2
+ * proxy. Every route re-resolves the authenticated user and scopes intake
+ * selections by the caller's org.
  *
  * When the feature is disabled (no auth, or no intake storage),
- * `buildJiraRoutes` returns only `GET /web/jira/status`, which reports
+ * `buildPlatformJiraRoutes` returns only `GET /web/jira/status`, which reports
  * `enabled:false` so the SPA can cleanly hide all Jira UI.
  */
 
@@ -17,10 +16,10 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { RouteAuth } from '../../routes/route.js';
-import type { IntakeStorage } from '../../storage/domains/intake/base.js';
-import { JiraApiError } from './api.js';
-import type { JiraIntegration } from './integration.js';
+import type { RouteAuth } from '../../../routes/route.js';
+import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
+import { JiraApiError } from '../../jira/api.js';
+import type { PlatformJiraIntegration } from './integration.js';
 
 type RouteContext = Context;
 
@@ -46,7 +45,7 @@ export interface MountJiraRoutesOptions {
    * The integration instance providing REST access. Required for everything
    * beyond the disabled `status` route.
    */
-  jira?: JiraIntegration;
+  jira?: PlatformJiraIntegration;
   /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
   auth: RouteAuth;
   /**
@@ -60,6 +59,8 @@ export interface MountJiraRoutesOptions {
    * belonging to no project.
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
+  /** Whether the host configured the application database backing intake state. */
+  appDbConfigured: boolean;
 }
 
 /**
@@ -141,7 +142,7 @@ function jiraFetchError(c: RouteContext, err: unknown) {
     return c.json(
       {
         error: 'jira_auth_failed',
-        message: 'Jira rejected the configured credentials. Check JIRA_EMAIL and JIRA_API_TOKEN.',
+        message: 'Jira rejected the connected account. Reconnect it in Mastra Platform.',
       },
       409,
     );
@@ -153,14 +154,14 @@ function jiraFetchError(c: RouteContext, err: unknown) {
  * Build the Jira routes as Mastra `apiRoutes`. When the feature is disabled,
  * returns only the `status` route so the SPA can detect the disabled state.
  */
-export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
+export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
   const { jira, auth, intake } = options;
   const enabled = Boolean(jira) && auth.enabled();
   const diagnostics = (): JiraFeatureDiagnostics => ({
     jiraConfigured: Boolean(jira),
     factoryAuthEnabled: auth.enabled(),
-    appDbConfigured: true,
+    appDbConfigured: options.appDbConfigured,
   });
 
   // The status route is always registered so the SPA can detect the disabled state.
@@ -173,7 +174,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           return c.json({
             enabled: false,
             configured: Boolean(jira),
-            mode: 'direct',
+            mode: 'platform',
             site: null,
             reason: 'missing_config',
             diagnostics: diagnostics(),
@@ -183,26 +184,26 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
         const tenant = auth.tenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
 
-        const site = new URL(jira.baseUrl).host;
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            configured: true,
-            mode: 'direct',
+            configured: false,
+            mode: 'platform',
             organizationRequired: true,
-            site,
+            site: null,
+            sites: [],
+            connections: [],
             reason: 'organization_required',
             diagnostics: diagnostics(),
           });
         }
 
-        // Deployment-global credentials: configured means ready — there is no
-        // per-org connection step like Linear's OAuth.
         return c.json({
           enabled: true,
           configured: true,
-          mode: 'direct',
-          site,
+          mode: 'platform',
+          site: null,
+          sites: [],
           reason: 'ready',
           diagnostics: diagnostics(),
         });
@@ -232,6 +233,8 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
               id: source.id,
               name: source.name,
               key: typeof source.metadata?.key === 'string' ? source.metadata.key : null,
+              connectionId: typeof source.metadata?.connectionId === 'string' ? source.metadata.connectionId : null,
+              site: typeof source.metadata?.site === 'string' ? source.metadata.site : null,
             })),
           });
         } catch (err) {
@@ -292,7 +295,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           const { issues, nextCursor } = await jira.listActiveIssues(after, projectIds);
           return c.json({
             issues: issues.map(issue => ({
-              id: issue.id,
+              id: issue.externalId,
               identifier: issue.identifier,
               title: issue.title,
               url: issue.url,
