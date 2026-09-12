@@ -648,7 +648,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
             {degree.incoming} in · {degree.outgoing} out
           </dd>
           <dt>Updated</dt>
-          <dd>{new Date(node.updatedAt).toLocaleString()}</dd>
+          <dd>{node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}</dd>
         </dl>
       </div>
     );

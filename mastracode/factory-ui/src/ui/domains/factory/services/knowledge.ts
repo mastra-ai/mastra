@@ -14,6 +14,8 @@ export type KnowledgeRung = 'org' | 'resource' | 'thread';
 /** A reconciled structural scope node from the server's scope tree. */
 export interface KnowledgeScopeNode {
   id: string;
+  /** Canonical address the scope node was reconciled from (e.g. `org:acme`). */
+  address: string;
   name: string;
   kind?: string;
   description?: string;
@@ -25,6 +27,14 @@ export interface KnowledgeScopeTreePayload {
     level: KnowledgeRung;
     id: string;
     available: boolean;
+    /**
+     * Set when a reconciled scope node owns this rung's address — the client
+     * renders ONE merged entry (structural name, identity marker) that opens
+     * the structural lens, instead of duplicating the scope under two labels.
+     */
+    scopeNodeId?: string;
+    /** Structural name of the matched scope node (present iff scopeNodeId). */
+    name?: string;
   }>;
   defaultLevel: 'resource';
   /** Reconciled structural scope tree (omitted when the adapter lacks it). */
@@ -53,17 +63,24 @@ export interface KnowledgeGraphNode {
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
   recordCount: number;
-  createdAt: string;
-  updatedAt: string;
+  /** Omitted for a structural lens root the adapter cannot read back as a node. */
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  /** Always 'wikilink' — the record's owner node is the edge source. */
-  type: 'wikilink';
-  recordId: string;
+  /**
+   * 'wikilink': derived from a record's wikilinks (the record's owner node is
+   * the edge source). 'contains': structural lens only — the selected scope
+   * node contains the target member, so the clicked scope renders as its own
+   * graph root.
+   */
+  type: 'wikilink' | 'contains';
+  /** The record whose text produced the edge; absent on containment edges. */
+  recordId?: string;
   /** Derived from a PINNED record — the pin marks the relationship (A9). */
   pinned?: boolean;
 }

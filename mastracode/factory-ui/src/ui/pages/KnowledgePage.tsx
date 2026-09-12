@@ -110,7 +110,13 @@ function ScopeTree({
   // Nest the reconciled structural tree under its parent scope nodes. Roots of
   // the structural forest are nodes without parents (or whose parents are not
   // in the payload window).
-  const scopeNodes = scopes?.scopeNodes ?? [];
+  const roots = scopes?.roots ?? [];
+  // An identity rung whose address is owned by a reconciled scope node merges
+  // into ONE entry (structural name, identity marker) opening the structural
+  // lens — the same scope never renders under two labels. The matched scope
+  // node leaves the structural tree below; its children re-root.
+  const mergedByNodeId = new Map(roots.flatMap(root => (root.scopeNodeId ? [[root.scopeNodeId, root] as const] : [])));
+  const scopeNodes = (scopes?.scopeNodes ?? []).filter(node => !mergedByNodeId.has(node.id));
   const byParent = new Map<string, KnowledgeScopeNode[]>();
   const known = new Set(scopeNodes.map(node => node.id));
   const structuralRoots: KnowledgeScopeNode[] = [];
@@ -151,22 +157,46 @@ function ScopeTree({
       </Txt>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
         <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Your access</div>
-        {scopes?.roots.map((root, index) => (
-          <button
-            key={root.level}
-            type="button"
-            aria-pressed={selection?.scopeLevel === root.level}
-            className={cn(
-              'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
-              selection?.scopeLevel === root.level && 'bg-surface4 text-icon6 font-medium',
-            )}
-            style={{ paddingLeft: `${8 + index * 12}px` }}
-            onClick={() => onSelect({ scopeLevel: root.level })}
-          >
-            {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
-            {root.id.slice(0, 8)}
-          </button>
-        ))}
+        {roots.map((root, index) => {
+          if (root.scopeNodeId) {
+            // Merged entry: structural name, identity marker, structural lens.
+            return (
+              <button
+                key={root.level}
+                type="button"
+                aria-pressed={selection?.scopeNodeId === root.scopeNodeId}
+                className={cn(
+                  'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+                  selection?.scopeNodeId === root.scopeNodeId && 'bg-surface4 text-icon6 font-medium',
+                )}
+                style={{ paddingLeft: `${8 + index * 12}px` }}
+                title={root.name}
+                onClick={() => onSelect({ scopeNodeId: root.scopeNodeId! })}
+              >
+                {root.name}{' '}
+                <span className="text-icon3">
+                  · your {root.level === 'resource' ? 'project' : root.level === 'thread' ? 'session' : 'org'}
+                </span>
+              </button>
+            );
+          }
+          return (
+            <button
+              key={root.level}
+              type="button"
+              aria-pressed={selection?.scopeLevel === root.level}
+              className={cn(
+                'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+                selection?.scopeLevel === root.level && 'bg-surface4 text-icon6 font-medium',
+              )}
+              style={{ paddingLeft: `${8 + index * 12}px` }}
+              onClick={() => onSelect({ scopeLevel: root.level })}
+            >
+              {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
+              {root.id.slice(0, 8)}
+            </button>
+          );
+        })}
         {structuralRoots.length > 0 ? (
           <div className="border-surface5 mt-2 flex flex-col gap-1 border-t pt-2">
             <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Knowledge structure</div>
