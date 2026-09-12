@@ -397,8 +397,9 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
       const mastra = nodes.find(node => node.name === 'mastra')!;
       const features = nodes.find(node => node.name === 'features')!;
-      expect(features).toMatchObject({ kind: 'domain', parentIds: [mastra.id] });
-      expect(mastra.parentIds).toEqual([]);
+      expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
+      expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
+      expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
       expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
 
       const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
