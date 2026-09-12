@@ -15,6 +15,7 @@
  * 404 — never a silent fallback to the default view.
  */
 
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -98,8 +99,8 @@ const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
   /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
   projects: FactoryProjectsStorage;
-  /** Lazy handle to the knowledge storage domain; endpoints 503 when absent. */
-  knowledge: (key: string) => Promise<KnowledgeStorage | undefined>;
+  /** Lazy handle to the host-registered Knowledge runtime; endpoints 503 when absent. */
+  knowledge: (key: string) => Promise<Knowledge | undefined>;
   /** Host-selected Knowledge key. Requests cannot override it; endpoints 503 when it does not resolve. */
   defaultKnowledgeKey?: string;
   limits?: Partial<KnowledgeRouteLimits>;
@@ -249,6 +250,8 @@ interface ResolvedView {
   orgId: string;
   userId: string;
   factoryProjectId: string;
+  /** The host-owned Knowledge runtime (source of host-vouched scope materialization). */
+  knowledge: Knowledge;
   store: KnowledgeStorage;
   view: 'project' | 'thread';
   threadId?: string;
@@ -384,16 +387,18 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
 
+    let knowledge: Knowledge | undefined;
     let store: KnowledgeStorage | undefined;
     try {
       // Host-selected key only: an untrusted query parameter must never select
       // another registered Knowledge runtime.
       const key = this.deps.defaultKnowledgeKey ?? 'default';
-      store = await this.deps.knowledge(key);
+      knowledge = await this.deps.knowledge(key);
+      store = knowledge ? await knowledge.getStorage() : undefined;
     } catch {
       store = undefined;
     }
-    if (!store) {
+    if (!store || !knowledge) {
       return {
         response: c.json(
           { error: 'knowledge_unavailable', message: 'The configured Knowledge runtime is unavailable.' },
@@ -413,6 +418,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       return {
         ...tenant,
         factoryProjectId: projectId,
+        knowledge,
         store,
         view: 'project',
         scope: defaultScope,
@@ -428,6 +434,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return {
       ...tenant,
       factoryProjectId: projectId,
+      knowledge,
       store,
       view: 'thread',
       threadId,
@@ -444,6 +451,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       orgId: view.orgId,
       userId: view.userId,
       factoryProjectId: view.factoryProjectId,
+      knowledge: view.knowledge,
       store: view.store,
       view: 'project' as const,
     };
@@ -457,6 +465,46 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     }
     if (level === 'thread' && view.threadId) return view;
     return undefined;
+  }
+
+  /**
+   * Host-vouched identity chain: the org → project → session rungs this
+   * request resolved are materialized as ordinary scope nodes linked by
+   * membership edges, so the sidebar tree is built from scopes that EXIST —
+   * never from the declared structure plan or the rung config. Materialization
+   * is create-only and deduped by address (existing nodes keep their declared
+   * names/parents), so the steady state is a no-op skip. Uncurated companions
+   * are created by capture, not here. A vouch failure never fails the read —
+   * the tree simply serves the scopes that already exist.
+   */
+  async #vouchIdentityScopes(view: ResolvedView): Promise<void> {
+    const orgAddress = `org:${view.orgId}`;
+    const resourceAddress = `resource:${view.factoryProjectId}`;
+    const chain = [
+      { address: orgAddress, contextualScopeAddress: orgAddress },
+      { address: resourceAddress, contextualScopeAddress: orgAddress, parentAddresses: [orgAddress] },
+      ...(view.threadId
+        ? [
+            {
+              address: `thread:${view.threadId}`,
+              contextualScopeAddress: resourceAddress,
+              parentAddresses: [resourceAddress],
+            },
+          ]
+        : []),
+    ];
+    let existing: Set<string>;
+    try {
+      existing = new Set((await view.store.listScopeNodes()).map(node => node.address));
+    } catch (error) {
+      // Adapters without structural scope nodes have no tree to vouch into.
+      if (error instanceof KnowledgeUnsupportedCapabilityError) return;
+      throw error;
+    }
+    for (const link of chain) {
+      if (existing.has(link.address)) continue;
+      await view.knowledge.materializeScope(link).catch(() => undefined);
+    }
   }
 
   /** Reserved `pinned` node ids at the active view's rungs (one exact-scope lookup per rung). */
@@ -490,6 +538,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
+          // The identity chain exists as scope nodes before the tree is read.
+          await this.#vouchIdentityScopes(view);
           // The structural tree comes from the reconciled scope nodes
           // themselves — never synthesized from the identity rungs. Adapters
           // without the structural read (MySQL/MongoDB) omit the tree; any
