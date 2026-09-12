@@ -14,26 +14,28 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
 
 /**
  * After a successful login the active account was just registered — offer a
- * one-shot rename before the dialog closes. Empty submit (or Escape) keeps
- * the label the registry resolved (provider hook, or the default).
+ * one-shot rename before the dialog closes. Escape or empty submit keeps the
+ * label the registry resolved (re-authenticated accounts keep their previous
+ * label; new accounts fall back to the provider hook or the default).
  */
 async function promptForAccountName(ctx: SlashCommandContext, dialog: LoginDialogComponent, providerId: string) {
   const authStorage = ctx.authStorage;
   if (!authStorage) return;
-  try {
-    const active = authStorage.getActiveAccount(providerId);
-    if (!active) return;
-    const input = await dialog.showPrompt(`Name this account (Enter to keep "${active.label}")`);
-    const name = input.trim();
-    if (name && name !== active.label) {
-      authStorage.renameAccount(providerId, active.id, name);
-    }
-  } catch {
-    // Prompt cancelled — keep the resolved label.
+  const active = authStorage.getActiveAccount(providerId);
+  if (!active) return;
+  const input = await dialog.promptOptional(`Name this account (Enter to keep "${active.label}")`);
+  if (input === null) return;
+  const name = input.trim();
+  if (name && name !== active.label) {
+    authStorage.renameAccount(providerId, active.id, name);
   }
 }
 
-async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
+async function performLogin(
+  ctx: SlashCommandContext,
+  providerId: string,
+  opts?: { replaceAccountId?: string },
+): Promise<void> {
   const provider = getOAuthProviders().find(p => p.id === providerId);
   const providerName = provider?.name || providerId;
 
@@ -63,19 +65,23 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
     dialog.focused = true;
 
     ctx
-      .authStorage!.login(providerId, {
-        onAuth: (info: { url: string; instructions?: string }) => {
-          dialog.showAuth(info.url, info.instructions);
+      .authStorage!.login(
+        providerId,
+        {
+          onAuth: (info: { url: string; instructions?: string }) => {
+            dialog.showAuth(info.url, info.instructions);
+          },
+          onPrompt: async (prompt: { message: string; placeholder?: string }) => {
+            return dialog.showPrompt(prompt.message, prompt.placeholder);
+          },
+          onProgress: (message: string) => {
+            dialog.showProgress(message);
+          },
+          signal: dialog.signal,
+          authMode,
         },
-        onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-          return dialog.showPrompt(prompt.message, prompt.placeholder);
-        },
-        onProgress: (message: string) => {
-          dialog.showProgress(message);
-        },
-        signal: dialog.signal,
-        authMode,
-      })
+        opts,
+      )
       .then(async () => {
         await promptForAccountName(ctx, dialog, providerId);
         ctx.state.ui.hideOverlay();
@@ -129,9 +135,9 @@ async function openAccountManager(
         finish();
         void performLogin(ctx, providerId);
       },
-      onReauthenticate: () => {
+      onReauthenticate: accountId => {
         finish();
-        void performLogin(ctx, providerId);
+        void performLogin(ctx, providerId, { replaceAccountId: accountId });
       },
       onRemove: accountId => {
         const label =
