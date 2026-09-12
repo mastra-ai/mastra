@@ -376,6 +376,7 @@ describe('notification inbox', () => {
     for (const action of ['markSeen', 'dismiss', 'archive']) {
       expect(schema.safeParse({ action }).success).toBe(false);
       expect(schema.safeParse({ action, id: '' }).success).toBe(false);
+      expect(schema.safeParse({ action, id: '   ' }).success).toBe(false);
       expect(schema.safeParse({ action, id: 'n1' }).success).toBe(true);
     }
     // read supports both a single id and a bulk unread read.
