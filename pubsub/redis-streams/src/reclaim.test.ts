@@ -207,10 +207,12 @@ describe('RedisStreamsPubSub reclaim loop', () => {
 
     let hung = 0;
     let ghostDeliveries = 0;
-    const cb: EventCallback = (event, ack) => {
+    const cb: EventCallback = async (event, ack) => {
       if (event.type === 'ghost') {
+        // Count only once the XACK has settled, so the forged pending entry
+        // below cannot be raced away by the original ack.
+        await ack?.();
         ghostDeliveries++;
-        void ack?.();
         return;
       }
       hung++;

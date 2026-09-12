@@ -421,7 +421,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           });
           for (const p of page) {
             const id = String(p.id);
-            if (!sub.inFlight.has(id)) ids.push(id);
+            if (sub.inFlight.has(id)) continue;
+            ids.push(id);
+            if (ids.length >= RECLAIM_PAGE_SIZE) break;
           }
           if (page.length < RECLAIM_PAGE_SIZE || ids.length >= RECLAIM_PAGE_SIZE) break;
           start = `(${String(page[page.length - 1]!.id)}`;
