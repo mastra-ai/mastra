@@ -26,6 +26,48 @@ const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
   TOOL: 'tool_call',
 };
 
+const INPUT_TOKEN_KEYS = ['input', 'inputTokens', 'input_tokens'] as const;
+const OUTPUT_TOKEN_KEYS = ['output', 'outputTokens', 'output_tokens'] as const;
+const CACHE_READ_TOKEN_KEYS = ['inputCachedTokens', 'input_cached_tokens', 'cacheReadInputTokens'] as const;
+const CACHE_WRITE_TOKEN_KEYS = [
+  'cacheCreationInputTokens',
+  'cache_creation_input_tokens',
+  'input_cache_creation',
+] as const;
+const INPUT_AUDIO_TOKEN_KEYS = ['inputAudioTokens', 'input_audio_tokens'] as const;
+const REASONING_TOKEN_KEYS = ['outputReasoningTokens', 'output_reasoning_tokens', 'reasoning_tokens'] as const;
+const OUTPUT_AUDIO_TOKEN_KEYS = ['outputAudioTokens', 'output_audio_tokens'] as const;
+
+const MAX_OUTPUT_TOKEN_PARAMETER_KEYS = ['maxOutputTokens', 'max_output_tokens', 'max_tokens'] as const;
+const TOP_P_PARAMETER_KEYS = ['topP', 'top_p'] as const;
+const TOP_K_PARAMETER_KEYS = ['topK', 'top_k'] as const;
+const PRESENCE_PENALTY_PARAMETER_KEYS = ['presencePenalty', 'presence_penalty'] as const;
+const FREQUENCY_PENALTY_PARAMETER_KEYS = ['frequencyPenalty', 'frequency_penalty'] as const;
+const MAX_RETRY_PARAMETER_KEYS = ['maxRetries', 'max_retries'] as const;
+const STOP_SEQUENCE_PARAMETER_KEYS = ['stopSequences', 'stop_sequences', 'stop'] as const;
+
+const MAPPED_USAGE_DETAIL_KEYS = new Set<string>([
+  ...INPUT_TOKEN_KEYS,
+  ...OUTPUT_TOKEN_KEYS,
+  ...CACHE_READ_TOKEN_KEYS,
+  ...CACHE_WRITE_TOKEN_KEYS,
+  ...INPUT_AUDIO_TOKEN_KEYS,
+  ...REASONING_TOKEN_KEYS,
+  ...OUTPUT_AUDIO_TOKEN_KEYS,
+]);
+
+const MAPPED_MODEL_PARAMETER_KEYS = new Set<string>([
+  ...MAX_OUTPUT_TOKEN_PARAMETER_KEYS,
+  'temperature',
+  ...TOP_P_PARAMETER_KEYS,
+  ...TOP_K_PARAMETER_KEYS,
+  ...PRESENCE_PENALTY_PARAMETER_KEYS,
+  ...FREQUENCY_PENALTY_PARAMETER_KEYS,
+  'seed',
+  ...MAX_RETRY_PARAMETER_KEYS,
+  ...STOP_SEQUENCE_PARAMETER_KEYS,
+]);
+
 const MASTRA_SPAN_TYPES = new Set<TraceImportSpan['spanType']>([
   'agent_run',
   'scorer_run',
@@ -483,24 +525,17 @@ function buildAttributes(
 
 function mapUsage(observation: LangfuseObservation): Record<string, unknown> | undefined {
   const inputTokens =
-    finiteNumber(observation.inputUsage) ??
-    numericValue(observation.usageDetails, 'input', 'inputTokens', 'input_tokens');
+    finiteNumber(observation.inputUsage) ?? numericValue(observation.usageDetails, ...INPUT_TOKEN_KEYS);
   const outputTokens =
-    finiteNumber(observation.outputUsage) ??
-    numericValue(observation.usageDetails, 'output', 'outputTokens', 'output_tokens');
+    finiteNumber(observation.outputUsage) ?? numericValue(observation.usageDetails, ...OUTPUT_TOKEN_KEYS);
   const inputDetails = definedRecord({
-    cacheRead: numericValue(
-      observation.usageDetails,
-      'inputCachedTokens',
-      'input_cached_tokens',
-      'cacheReadInputTokens',
-    ),
-    cacheWrite: numericValue(observation.usageDetails, 'cacheCreationInputTokens', 'cache_creation_input_tokens'),
-    audio: numericValue(observation.usageDetails, 'inputAudioTokens', 'input_audio_tokens'),
+    cacheRead: numericValue(observation.usageDetails, ...CACHE_READ_TOKEN_KEYS),
+    cacheWrite: numericValue(observation.usageDetails, ...CACHE_WRITE_TOKEN_KEYS),
+    audio: numericValue(observation.usageDetails, ...INPUT_AUDIO_TOKEN_KEYS),
   });
   const outputDetails = definedRecord({
-    reasoning: numericValue(observation.usageDetails, 'outputReasoningTokens', 'output_reasoning_tokens'),
-    audio: numericValue(observation.usageDetails, 'outputAudioTokens', 'output_audio_tokens'),
+    reasoning: numericValue(observation.usageDetails, ...REASONING_TOKEN_KEYS),
+    audio: numericValue(observation.usageDetails, ...OUTPUT_AUDIO_TOKEN_KEYS),
   });
   const usage = definedRecord({
     inputTokens,
@@ -514,22 +549,32 @@ function mapUsage(observation: LangfuseObservation): Record<string, unknown> | u
 function mapModelParameters(parameters: unknown): Record<string, unknown> | undefined {
   if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) return undefined;
   const source = parameters as Record<string, unknown>;
-  const stopSequences = source.stopSequences ?? source.stop_sequences ?? source.stop;
+  const stopSequences = STOP_SEQUENCE_PARAMETER_KEYS.map(key => source[key]).find(value => value != null);
   const mapped = definedRecord({
-    maxOutputTokens: numericValue(source, 'maxOutputTokens', 'max_output_tokens', 'max_tokens'),
+    maxOutputTokens: numericValue(source, ...MAX_OUTPUT_TOKEN_PARAMETER_KEYS),
     temperature: numericValue(source, 'temperature'),
-    topP: numericValue(source, 'topP', 'top_p'),
-    topK: numericValue(source, 'topK', 'top_k'),
-    presencePenalty: numericValue(source, 'presencePenalty', 'presence_penalty'),
-    frequencyPenalty: numericValue(source, 'frequencyPenalty', 'frequency_penalty'),
+    topP: numericValue(source, ...TOP_P_PARAMETER_KEYS),
+    topK: numericValue(source, ...TOP_K_PARAMETER_KEYS),
+    presencePenalty: numericValue(source, ...PRESENCE_PENALTY_PARAMETER_KEYS),
+    frequencyPenalty: numericValue(source, ...FREQUENCY_PENALTY_PARAMETER_KEYS),
     seed: numericValue(source, 'seed'),
-    maxRetries: numericValue(source, 'maxRetries', 'max_retries'),
+    maxRetries: numericValue(source, ...MAX_RETRY_PARAMETER_KEYS),
     stopSequences:
       Array.isArray(stopSequences) && stopSequences.every(value => typeof value === 'string')
         ? stopSequences
         : undefined,
   });
   return Object.keys(mapped).length > 0 ? mapped : undefined;
+}
+
+function preserveUnmappedFields(value: unknown, mappedKeys: ReadonlySet<string>): unknown {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const remaining = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(([key]) => !mappedKeys.has(key)),
+  );
+  return Object.keys(remaining).length > 0 ? remaining : undefined;
 }
 
 function buildMetadata(
@@ -576,8 +621,12 @@ function buildMetadata(
           : undefined,
       internalModelId: observation.internalModelId ?? undefined,
       modelId: observation.modelId ?? undefined,
-      modelParameters: hasGenerationAttributes ? undefined : (observation.modelParameters ?? undefined),
-      usageDetails: hasModelAttributes ? undefined : (observation.usageDetails ?? undefined),
+      modelParameters: hasGenerationAttributes
+        ? preserveUnmappedFields(observation.modelParameters, MAPPED_MODEL_PARAMETER_KEYS)
+        : (observation.modelParameters ?? undefined),
+      usageDetails: hasModelAttributes
+        ? preserveUnmappedFields(observation.usageDetails, MAPPED_USAGE_DETAIL_KEYS)
+        : (observation.usageDetails ?? undefined),
       inputUsage: hasModelAttributes ? undefined : (observation.inputUsage ?? undefined),
       outputUsage: hasModelAttributes ? undefined : (observation.outputUsage ?? undefined),
       totalUsage: observation.totalUsage ?? undefined,

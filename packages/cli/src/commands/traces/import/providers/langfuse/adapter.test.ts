@@ -63,6 +63,7 @@ describe('mapLangfuseSourceTrace', () => {
       totalUsage: 14,
       inputCost: 0.001,
       modelParameters: { temperature: 0.2, top_p: 0.9, ignored: true },
+      usageDetails: { input: 10, output: 4, input_cache_creation: 3, reasoning_tokens: 2, customUnits: 1 },
       metadata: { customer: 'acme' },
       tags: ['child-tag'],
       createdAt: '2026-08-20T10:00:00.000Z',
@@ -94,7 +95,12 @@ describe('mapLangfuseSourceTrace', () => {
       output: { answer: 'hi' },
       attributes: {
         model: 'gpt-4o-mini',
-        usage: { inputTokens: 10, outputTokens: 4 },
+        usage: {
+          inputTokens: 10,
+          outputTokens: 4,
+          inputDetails: { cacheWrite: 3 },
+          outputDetails: { reasoning: 2 },
+        },
         parameters: { temperature: 0.2, topP: 0.9 },
       },
       metadata: {
@@ -109,6 +115,8 @@ describe('mapLangfuseSourceTrace', () => {
         langfuse: {
           providedModelName: 'openai/gpt-4o-mini',
           internalModelId: 'internal-model-1',
+          modelParameters: { ignored: true },
+          usageDetails: { customUnits: 1 },
           totalUsage: 14,
           inputCost: 0.001,
         },
@@ -119,6 +127,8 @@ describe('mapLangfuseSourceTrace', () => {
       parentObservationId: 'root',
       providedModelName: 'openai/gpt-4o-mini',
       internalModelId: 'internal-model-1',
+      modelParameters: { ignored: true },
+      usageDetails: { customUnits: 1 },
       totalUsage: 14,
       inputCost: 0.001,
     });
