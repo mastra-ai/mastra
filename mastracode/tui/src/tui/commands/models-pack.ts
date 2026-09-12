@@ -159,9 +159,9 @@ async function askCustomPackAction(
 ): Promise<'activate' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
-    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
 
@@ -768,6 +768,28 @@ export function formatPackFallbackChain(settings: GlobalSettings, packs: ModePac
     .join(' → ');
 }
 
+/**
+ * Chain preview shown at the bottom of the fallback picker, recomputed for the
+ * currently highlighted candidate on every cursor move (null = "Clear fallback").
+ * Walks a preview copy of settings so hovering never mutates the real ones.
+ */
+export function formatFallbackChainPreview(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const preview: GlobalSettings = {
+    ...settings,
+    models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
+  };
+  setPackFallback(preview, pack.id, fallbackId);
+  const chain = formatPackFallbackChain(preview, packs, pack.id);
+  return chain
+    ? `When ${pack.name} is unavailable: ${pack.name} → ${chain}`
+    : `No fallback — when ${pack.name} is unavailable the error surfaces.`;
+}
+
 async function askFallbackTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
@@ -801,17 +823,8 @@ async function askFallbackTarget(
       ctx.state.ui.requestRender();
     };
 
-    const chainPreview = (fallbackId: string | null): string => {
-      const preview: GlobalSettings = {
-        ...settings,
-        models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
-      };
-      setPackFallback(preview, pack.id, fallbackId);
-      const chain = formatPackFallbackChain(preview, packs, pack.id);
-      return chain
-        ? theme.fg('dim', `  When ${pack.name} is unavailable: ${pack.name} → ${chain}`)
-        : theme.fg('dim', `  No fallback — when ${pack.name} is unavailable the error surfaces.`);
-    };
+    const chainPreview = (fallbackId: string | null): string =>
+      theme.fg('dim', `  ${formatFallbackChainPreview(settings, packs, pack, fallbackId)}`);
 
     selectList.onSelectionChange = item => {
       detailText.setText(chainPreview(item.value === '__clear__' ? null : item.value));
