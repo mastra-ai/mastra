@@ -61,7 +61,7 @@ export function useBoardIntake({
     linearConnected &&
     (config?.linear.sourceIds?.length ?? 0) > 0 &&
     routedToViewedFactory('linear');
-  const jiraConfigured = jiraStatusQuery.data?.enabled ?? false;
+  const jiraConfigured = Boolean(jiraStatusQuery.data?.enabled && jiraStatusQuery.data.configured);
   const jiraReady =
     (config?.jira.enabled ?? false) &&
     jiraConfigured &&

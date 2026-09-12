@@ -174,6 +174,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           return c.json({
             enabled: false,
             configured: Boolean(jira),
+            mode: 'platform',
             site: null,
             reason: 'missing_config',
             diagnostics: diagnostics(),
@@ -187,6 +188,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
           return c.json({
             enabled: true,
             configured: false,
+            mode: 'platform',
             organizationRequired: true,
             site: null,
             sites: [],
@@ -199,6 +201,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
         return c.json({
           enabled: true,
           configured: true,
+          mode: 'platform',
           site: null,
           sites: [],
           reason: 'ready',

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { fakeRouteAuth } from '../../../routes/test-utils.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import { JiraApiError } from '../../jira/api.js';
 import {
   decodeIssueReference,
@@ -58,6 +60,7 @@ function stubRoutes(routes: Array<[string, string, () => Response]>): ReturnType
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -71,6 +74,18 @@ describe('PlatformJiraIntegration construction', () => {
           clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
         }),
     ).toThrow(/MASTRA_JIRA_CONNECTION_ID/);
+  });
+
+  it('logs initialization without exposing the connection ID', async () => {
+    const infoLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const seed = await createFactoryStorageForTests();
+
+    integration('sensitive-connection-id').initialize({ projects: seed.projects, auth: fakeRouteAuth() });
+
+    const logged = String(infoLog.mock.calls[0]?.[0]);
+    expect(logged).toContain('[Mastra Factory] INFO Platform Jira integration initialized');
+    expect(logged).toContain('"endpointHost":"integrations.example.com"');
+    expect(logged).not.toContain('sensitive-connection-id');
   });
 
   it('uses MASTRA_JIRA_CONNECTION_ID without discovering integrations', async () => {

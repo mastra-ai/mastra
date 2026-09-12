@@ -23,7 +23,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
-import { platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
+import { logPlatformInfo, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -116,6 +116,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
+    logPlatformInfo('Platform Jira integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get projects(): FactoryProjectsStorage {
