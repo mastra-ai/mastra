@@ -1092,7 +1092,7 @@ export function createKnowledgeStorageTests(
       expect(await store.getNodeScopeIds(first.scopes['repo:mastra']!)).toEqual([first.scopes['org:shipyard']!]);
     });
 
-    it('reconciles exact scope grants and advances one shared epoch per transaction', async () => {
+    it('seeds scope grants at creation and never re-imposes them on existing scopes', async () => {
       const epochBefore = await store.getAccessEpoch();
       const initial = await store.reconcileStructure({
         scopes: [
@@ -1110,10 +1110,10 @@ export function createKnowledgeStorageTests(
       });
       expect(initial.accessEpoch).toBe(epochBefore + 1);
       expect(await store.getAccessEpoch()).toBe(epochBefore + 1);
-      const governedGrants = (await store.listScopeGrants()).filter(
+      const seededGrants = (await store.listScopeGrants()).filter(
         grant => grant.scopeNodeId === initial.scopes['project:governed'],
       );
-      expect(governedGrants).toEqual(
+      expect(seededGrants).toEqual(
         expect.arrayContaining([
           {
             scopeNodeId: initial.scopes['project:governed'],
@@ -1129,7 +1129,7 @@ export function createKnowledgeStorageTests(
           },
         ]),
       );
-      expect(governedGrants).toHaveLength(2);
+      expect(seededGrants).toHaveLength(2);
 
       const unchanged = await store.reconcileStructure({
         scopes: [
@@ -1147,7 +1147,9 @@ export function createKnowledgeStorageTests(
       });
       expect(unchanged).toMatchObject({ changed: false, accessEpoch: epochBefore + 1 });
 
-      const changed = await store.reconcileStructure({
+      // A plan carrying different grants for an existing scope must not mutate governed
+      // grant state: grants are seeded at creation and owned by the governance APIs after.
+      const restated = await store.reconcileStructure({
         scopes: [
           { address: 'principal:one', name: 'Principal one' },
           { address: 'principal:two', name: 'Principal two' },
@@ -1158,17 +1160,79 @@ export function createKnowledgeStorageTests(
           },
         ],
       });
-      expect(changed).toMatchObject({ changed: true, accessEpoch: epochBefore + 2 });
+      expect(restated).toMatchObject({ changed: false, accessEpoch: epochBefore + 1 });
+      expect(
+        (await store.listScopeGrants()).filter(grant => grant.scopeNodeId === initial.scopes['project:governed']),
+      ).toEqual(seededGrants);
+
+      // A governed removal survives re-materialization of the same structure.
+      const removed = await store.removeScopeGrant({
+        scopeNodeId: initial.scopes['project:governed']!,
+        scopeRefId: initial.scopes['principal:two']!,
+      });
+      expect(removed.changed).toBe(true);
+      const epochAfterRemoval = removed.accessEpoch;
+      const rematerialized = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          {
+            address: 'project:governed',
+            name: 'Governed',
+            grants: [
+              { scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true },
+              { scopeRefAddress: 'principal:two', role: 'mirror' },
+            ],
+          },
+        ],
+      });
+      expect(rematerialized).toMatchObject({ changed: false, accessEpoch: epochAfterRemoval });
       expect(
         (await store.listScopeGrants()).filter(grant => grant.scopeNodeId === initial.scopes['project:governed']),
       ).toEqual([
         {
           scopeNodeId: initial.scopes['project:governed'],
           scopeRefId: initial.scopes['principal:one'],
-          role: 'append',
+          role: 'readonly',
           canSuggest: true,
         },
       ]);
+
+      // A governed grant absent from the plan survives re-materialization too.
+      const shared = await store.upsertScopeGrant({
+        scopeNodeId: initial.scopes['project:governed']!,
+        scopeRefId: initial.scopes['principal:two']!,
+        role: 'readonly',
+      });
+      expect(shared.changed).toBe(true);
+      const reseated = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          { address: 'project:governed', name: 'Governed', grants: [] },
+        ],
+      });
+      expect(reseated).toMatchObject({ changed: false, accessEpoch: shared.accessEpoch });
+      const survivingGrants = (await store.listScopeGrants()).filter(
+        grant => grant.scopeNodeId === initial.scopes['project:governed'],
+      );
+      expect(survivingGrants).toHaveLength(2);
+      expect(survivingGrants).toEqual(
+        expect.arrayContaining([
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:one'],
+            role: 'readonly',
+            canSuggest: true,
+          },
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:two'],
+            role: 'readonly',
+            canSuggest: undefined,
+          },
+        ]),
+      );
     });
 
     it('rejects stale-authority mutations atomically after the access epoch changes', async () => {

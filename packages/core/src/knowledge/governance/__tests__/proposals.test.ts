@@ -286,14 +286,11 @@ describe('Knowledge proposal lifecycle', () => {
       vouchedScopeIds: [ids['principal:suggest']!],
     });
 
-    await storage.reconcileStructure({
-      scopes: [
-        {
-          address: 'scope:source',
-          name: 'Source scope',
-          grants: [{ scopeRefAddress: 'principal:owner', role: 'owner' }],
-        },
-      ],
+    // Revoke the proposer's grant through the governed API; reconcile only seeds grants
+    // at scope creation, so the revocation is durable.
+    await storage.removeScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:suggest']!,
     });
     await expect(lifecycle.list({ vouchedScopeIds: [ids['principal:suggest']!] })).resolves.toMatchObject({
       proposals: [],
@@ -305,14 +302,15 @@ describe('Knowledge proposal lifecycle', () => {
     });
     expect(ownerView.proposals[0]).not.toHaveProperty('proposerContextScopeId');
 
-    await storage.reconcileStructure({
-      scopes: [
-        {
-          address: 'scope:source',
-          name: 'Source scope',
-          grants: [{ scopeRefAddress: 'principal:suggest', role: 'readonly', canSuggest: true }],
-        },
-      ],
+    await storage.removeScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:owner']!,
+    });
+    await storage.upsertScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:suggest']!,
+      role: 'readonly',
+      canSuggest: true,
     });
     await expect(lifecycle.list({ vouchedScopeIds: [ids['principal:owner']!] })).resolves.toMatchObject({
       proposals: [],
