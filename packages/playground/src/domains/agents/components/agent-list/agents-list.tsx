@@ -25,7 +25,7 @@ const agentsListColumns = 'minmax(12rem,20rem) minmax(0,1fr) auto auto auto auto
 
 export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
   const { paths, Link } = useLinkComponent();
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns={agentsListColumns} fit="container" />;

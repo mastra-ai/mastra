@@ -53,6 +53,7 @@ export function LogsListView({
     count: logs.length,
     containerRef: scrollRef,
     onNavigate: index => virtualizer.scrollToIndex(index),
+    global: true,
   });
 
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).

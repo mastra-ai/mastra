@@ -98,7 +98,7 @@ export function ExperimentsList({
     });
   }, [sortedExperiments, search, datasetMap, statusFilter, datasetFilter]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 

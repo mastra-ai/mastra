@@ -37,7 +37,7 @@ export function PromptsList({
     );
   }, [promptBlocks, search]);
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto" />;

@@ -27,7 +27,7 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
     [toolData, search],
   );
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto" />;
