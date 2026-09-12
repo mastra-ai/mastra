@@ -235,19 +235,7 @@ const proposalForConflict = await knowledge.proposeNodeUpdate({
   proposerContextScopeId: suggester,
   vouchedScopeIds: [suggester],
 });
-await store.reconcileStructure({
-  scopes: [
-    {
-      address: 'scope:project',
-      name: 'Project',
-      grants: [
-        { scopeRefAddress: 'principal:reader', role: 'readonly' },
-        { scopeRefAddress: 'principal:owner', role: 'owner', canSuggest: true },
-        { scopeRefAddress: 'principal:admin', role: 'owner' },
-      ],
-    },
-  ],
-});
+await store.removeScopeGrant({ scopeNodeId: project, scopeRefId: suggester });
 invariant(
   (await knowledge.listProposals({ vouchedScopeIds: [suggester] })).proposals.length === 0,
   'Revoked proposer retained proposal visibility',
@@ -473,15 +461,7 @@ invariant(seenProposalIds.has(sealedReplacement.id), 'Visible actionable proposa
 
 const worker = await readInWorker({ nodeId: visibleNode.id, principalScopeId: reader });
 const warmVisible = await worker.read();
-await store.reconcileStructure({
-  scopes: [
-    {
-      address: 'scope:project',
-      name: 'Project',
-      grants: [{ scopeRefAddress: 'principal:owner', role: 'owner' }],
-    },
-  ],
-});
+await store.removeScopeGrant({ scopeNodeId: project, scopeRefId: reader });
 const visibleAfterRevocation = await worker.read();
 await worker.close();
 invariant(warmVisible, 'Second process could not warm its frontier');
