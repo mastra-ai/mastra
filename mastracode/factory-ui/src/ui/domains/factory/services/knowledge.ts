@@ -107,7 +107,7 @@ export interface KnowledgeGraphPayload {
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
   truncated: boolean;
-  outOfWindow: Array<{ id: string; name: string }>;
+  outOfWindow: Array<{ id: string; name: string; scope: string[]; rung: KnowledgeRung }>;
   unresolvedCapped: { count: number; names: string[] };
   pinCensus: { resource: number; thread: number | null };
   version: string | null;
@@ -196,12 +196,12 @@ export async function fetchKnowledgeGraph(
 export async function fetchKnowledgeActivity(
   baseUrl: string,
   factoryProjectId: string,
-  scopeLevel: KnowledgeRung,
+  selection: KnowledgeSelection,
   threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeActivityPayload> {
   return requestJson<KnowledgeActivityPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(threadId, { scopeLevel })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/activity${knowledgeQuery(threadId, selection)}`,
     { signal },
   );
 }

@@ -212,10 +212,10 @@ describe('KnowledgeRoutes', () => {
     const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
     expect(body.scopeNodes).toHaveLength(2);
     expect(orgNode).toMatchObject({ name: ORG, parentIds: [] });
-    expect(resourceNode).toMatchObject({ name: h.projectId, parentIds: [orgNode!.id] });
+    expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
     expect(body.roots).toEqual([
       { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
-      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: h.projectId },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
     ]);
     expect(body.defaultLevel).toBe('resource');
     // Materialization is create-only and deduped — a repeat read is stable.
@@ -239,10 +239,10 @@ describe('KnowledgeRoutes', () => {
     const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
     const threadNode = body.scopeNodes?.find(node => node.address === 'thread:thread-1');
     expect(threadNode).toMatchObject({ name: 'thread-1', parentIds: [resourceNode!.id] });
-    expect(resourceNode?.parentIds).toEqual([orgNode!.id]);
+    expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
     expect(body.roots).toEqual([
       { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
-      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: h.projectId },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
       { level: 'thread', id: 'thread-1', available: true, scopeNodeId: threadNode!.id, name: 'thread-1' },
     ]);
   });
@@ -252,6 +252,11 @@ describe('KnowledgeRoutes', () => {
     const { scopes: ids } = await h.knowledge.reconcileStructure({
       scopes: [
         { address: `org:${ORG}`, name: 'mastra' },
+        {
+          address: `resource:${h.projectId}`,
+          name: h.projectId,
+          parentAddresses: [`org:${ORG}`],
+        },
         { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
         { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
         { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: [`org:${ORG}`] },
@@ -265,16 +270,16 @@ describe('KnowledgeRoutes', () => {
     const byName = new Map((body.scopeNodes ?? []).map(scopeNode => [scopeNode.name, scopeNode]));
     // The host-vouched project rung materialized as a scope node under the
     // declared org node, keeping the declared name ('mastra') untouched.
-    const resourceNode = byName.get(h.projectId);
+    const resourceNode = byName.get('Graph project');
     expect(resourceNode).toMatchObject({ address: `resource:${h.projectId}`, parentIds: [ids[`org:${ORG}`]] });
     expect([...byName.keys()].sort()).toEqual(
-      ['features', 'issues', 'mastra', 'memory', 'repo:mastra', h.projectId].sort(),
+      ['features', 'Graph project', 'issues', 'mastra', 'memory', 'repo:mastra'].sort(),
     );
     // Identity rungs whose addresses are owned by scope nodes carry the
     // structural match, so the client renders one merged entry per rung.
     expect(body.roots).toEqual([
       { level: 'org', id: ORG, available: true, scopeNodeId: ids[`org:${ORG}`], name: 'mastra' },
-      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: h.projectId },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
     ]);
     expect(byName.get('features')).toMatchObject({
       address: 'features',
@@ -284,6 +289,16 @@ describe('KnowledgeRoutes', () => {
     expect(byName.get('mastra')).toMatchObject({ address: `org:${ORG}`, parentIds: [] });
     expect(byName.get('memory')).toMatchObject({ description: 'Memory scope', parentIds: [ids['features']] });
     expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
+
+    const projectLens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`resource:${h.projectId}`]}`,
+    );
+    expect(projectLens.status).toBe(200);
+    expect(((await projectLens.json()) as KnowledgeGraphPayload).nodes[0]).toMatchObject({
+      id: ids[`resource:${h.projectId}`],
+      name: 'Graph project',
+      isScope: true,
+    });
 
     // Structural lens: the clicked scope node renders as its own graph root.
     const subgraph = await h.app.request(
@@ -386,6 +401,12 @@ describe('KnowledgeRoutes', () => {
     expect(body.records).toHaveLength(1);
     expect(body.records[0]).toMatchObject({ nodeIds: [alpha.id, beta.id] });
     expect(body.nodes.find(item => item.id === alpha.id)?.recordCount).toBe(1);
+
+    const scopeActivity = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${ids['features']}`,
+    );
+    expect(scopeActivity.status).toBe(200);
+    expect(((await scopeActivity.json()) as { events: unknown[] }).events).toHaveLength(3);
   });
 
   it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {
@@ -557,7 +578,9 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
     expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toEqual([{ id: outside.id, name: 'Z outside entity' }]);
+    expect(body.outOfWindow).toEqual([
+      { id: outside.id, name: 'Z outside entity', scope: h.projectScope, rung: 'resource' },
+    ]);
     expect(body.unresolvedCapped.count).toBe(0);
   });
 
@@ -761,7 +784,9 @@ describe('KnowledgeRoutes', () => {
     const narrowBody = (await graph(narrow)).body;
     expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
     expect(narrowBody.edges).toHaveLength(0);
-    expect(narrowBody.outOfWindow).toEqual([{ id: narrowTarget.id, name: 'Z target entity' }]);
+    expect(narrowBody.outOfWindow).toEqual([
+      { id: narrowTarget.id, name: 'Z target entity', scope: narrow.projectScope, rung: 'resource' },
+    ]);
     expect(narrowBody.unresolvedCapped.count).toBe(0);
   });
 

@@ -178,8 +178,13 @@ export interface KnowledgeGraphPayload {
   records: KnowledgeGraphRecord[];
   /** True when the node or record window cap was hit (newest-first window). */
   truncated: boolean;
-  /** Wikilink targets that resolved in the store but fell outside the node window. */
-  outOfWindow: Array<{ id: string; name: string }>;
+  /** Authorized wikilink targets outside the node window, including enough scope context for a deep-link jump. */
+  outOfWindow: Array<{
+    id: string;
+    name: string;
+    scope: KnowledgeScope;
+    rung: 'org' | 'resource' | 'thread';
+  }>;
   /** Unique unknown names skipped once the fallback-lookup cap was hit. */
   unresolvedCapped: { count: number; names: string[] };
   /** Pin counts per rung of the active view (thread is null in the default view). */
@@ -250,6 +255,7 @@ interface ResolvedView {
   orgId: string;
   userId: string;
   factoryProjectId: string;
+  factoryProjectName: string;
   /** The host-owned Knowledge runtime (source of host-vouched scope materialization). */
   knowledge: Knowledge;
   store: KnowledgeStorage;
@@ -276,7 +282,10 @@ class WikilinkResolver {
   #fallbackLookups = 0;
   readonly #store: KnowledgeStorage;
   readonly #maxFallbackLookups: number;
-  readonly outOfWindow = new Map<string, { id: string; name: string }>();
+  readonly outOfWindow = new Map<
+    string,
+    { id: string; name: string; scope: KnowledgeScope; rung: 'org' | 'resource' | 'thread' }
+  >();
   readonly cappedNames: string[] = [];
   #cappedSeen = new Set<string>();
 
@@ -327,7 +336,12 @@ class WikilinkResolver {
 
   #trackOutOfWindow(node: KnowledgeNode | null): KnowledgeNode | null {
     if (node && !this.#windowIds.has(node.id)) {
-      this.outOfWindow.set(node.id, { id: node.id, name: node.name });
+      this.outOfWindow.set(node.id, {
+        id: node.id,
+        name: node.name,
+        scope: node.scope,
+        rung: deepestRung(node.scope),
+      });
     }
     return node;
   }
@@ -418,6 +432,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       return {
         ...tenant,
         factoryProjectId: projectId,
+        factoryProjectName: project.name,
         knowledge,
         store,
         view: 'project',
@@ -434,6 +449,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return {
       ...tenant,
       factoryProjectId: projectId,
+      factoryProjectName: project.name,
       knowledge,
       store,
       view: 'thread',
@@ -451,6 +467,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       orgId: view.orgId,
       userId: view.userId,
       factoryProjectId: view.factoryProjectId,
+      factoryProjectName: view.factoryProjectName,
       knowledge: view.knowledge,
       store: view.store,
       view: 'project' as const,
@@ -482,7 +499,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const resourceAddress = `resource:${view.factoryProjectId}`;
     const chain = [
       { address: orgAddress, contextualScopeAddress: orgAddress },
-      { address: resourceAddress, contextualScopeAddress: orgAddress, parentAddresses: [orgAddress] },
+      {
+        address: resourceAddress,
+        name: view.factoryProjectName,
+        contextualScopeAddress: orgAddress,
+        parentAddresses: [orgAddress],
+      },
       ...(view.threadId
         ? [
             {
@@ -546,7 +568,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           // other failure is a real storage error and must surface as one.
           let scopeNodes: KnowledgeScopeNodeSummary[] | undefined;
           try {
-            scopeNodes = await view.store.listScopeNodes();
+            scopeNodes = (await view.store.listScopeNodes()).map(node =>
+              node.address === `resource:${view.factoryProjectId}` ? { ...node, name: view.factoryProjectName } : node,
+            );
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
             scopeNodes = undefined;
@@ -602,8 +626,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
               throw error;
             }
-            const root = scopeNodes.find(node => node.id === scopeNodeId);
-            if (!root) return c.json({ error: 'scope_not_found' }, 404);
+            const storedRoot = scopeNodes.find(node => node.id === scopeNodeId);
+            if (!storedRoot) return c.json({ error: 'scope_not_found' }, 404);
+            const root =
+              storedRoot.address === `resource:${resolved.factoryProjectId}`
+                ? { ...storedRoot, name: resolved.factoryProjectName }
+                : storedRoot;
 
             const fetched = await store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes + 1 });
             const bounded = fetched.filter(
@@ -860,11 +888,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;
+          const nodeId = loose(c).req.param('nodeId');
+          if (!nodeId || nodeId.length > 512) return c.json({ error: 'node_not_found' }, 404);
+
           const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
           if (!view) return c.json({ error: 'scope_not_found' }, 404);
           const { store, scope } = view;
-          const nodeId = loose(c).req.param('nodeId');
-          if (!nodeId || nodeId.length > 512) return c.json({ error: 'node_not_found' }, 404);
 
           const node = await store.getNode(nodeId);
           // getNode is a bare id lookup with no scope predicate. This explicit
@@ -929,9 +958,35 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;
-          const view = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
-          if (!view) return c.json({ error: 'scope_not_found' }, 404);
-          const events = await this.#visibleActivity(view);
+          const scopeNodeId = loose(c).req.query('scopeNodeId');
+          let view: ResolvedView;
+          let memberIds: Set<string> | undefined;
+          if (scopeNodeId !== undefined) {
+            if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
+            let scopeNodes: KnowledgeScopeNodeSummary[];
+            try {
+              scopeNodes = await resolved.store.listScopeNodes();
+            } catch (error) {
+              if (error instanceof KnowledgeUnsupportedCapabilityError) {
+                return c.json({ error: 'scope_not_found' }, 404);
+              }
+              throw error;
+            }
+            if (!scopeNodes.some(scopeNode => scopeNode.id === scopeNodeId)) {
+              return c.json({ error: 'scope_not_found' }, 404);
+            }
+            const members = await resolved.store.listScopeMembers({
+              scopeNodeId,
+              limit: this.#limits.maxNodes + 1,
+            });
+            memberIds = new Set(members.filter(member => !member.isScope).map(member => member.id));
+            view = resolved;
+          } else {
+            const selected = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
+            if (!selected) return c.json({ error: 'scope_not_found' }, 404);
+            view = selected;
+          }
+          const events = await this.#visibleActivity(view, memberIds);
           return c.json({
             events: events.map(event => ({
               id: event.id,
@@ -952,7 +1007,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    * rows are skipped entirely (no action/type/id/time metadata leaks) and a
    * hidden backlog can never displace visible events from the window.
    */
-  async #visibleActivity(view: ResolvedView): Promise<KnowledgeActivityEvent[]> {
+  async #visibleActivity(view: ResolvedView, memberIds?: Set<string>): Promise<KnowledgeActivityEvent[]> {
     const out: KnowledgeActivityEvent[] = [];
     let after: string | undefined;
     let scanned = 0;
@@ -966,10 +1021,20 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           event.recordType === 'node'
             ? await view.store
                 .getNode(event.recordId)
-                .then(node => Boolean(node && isKnowledgeScopeVisible(node.scope, view.scope)))
+                .then(
+                  node =>
+                    node !== null &&
+                    isKnowledgeScopeVisible(node.scope, view.scope) &&
+                    (memberIds === undefined || memberIds.has(node.id)),
+                )
             : await view.store
                 .getKnowledge({ id: event.recordId })
-                .then(record => Boolean(record && isKnowledgeScopeVisible(record.scope, view.scope)));
+                .then(
+                  record =>
+                    record !== null &&
+                    isKnowledgeScopeVisible(record.scope, view.scope) &&
+                    (memberIds === undefined || memberIds.has(record.node)),
+                );
         if (visible) out.push(event);
         if (out.length >= ACTIVITY_LIMIT) break;
       }

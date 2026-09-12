@@ -20,6 +20,7 @@ import type {
 } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
+import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
 
 /**
  * The Knowledge page: a live force-directed graph of the project's knowledge —
@@ -45,6 +46,22 @@ export interface TrailEntry {
   recordId?: string;
   /** Node rung — lets the flyout open for content members of a structural lens (no identity rung selected). */
   rung?: KnowledgeRung | null;
+}
+
+function writeNodeSelection(params: URLSearchParams, entry: TrailEntry | null): void {
+  if (!entry) {
+    params.delete('node');
+    params.delete('nodeName');
+    params.delete('nodeRung');
+    params.delete('record');
+    return;
+  }
+  params.set('node', entry.nodeId);
+  params.set('nodeName', entry.name);
+  if (entry.rung) params.set('nodeRung', entry.rung);
+  else params.delete('nodeRung');
+  if (entry.recordId) params.set('record', entry.recordId);
+  else params.delete('record');
 }
 
 function Breadcrumb({
@@ -191,18 +208,18 @@ function ScopeTree({
 
 function ActivityPanel({
   factoryProjectId,
-  scopeLevel,
+  selection,
   threadId,
 }: {
   factoryProjectId?: string;
-  scopeLevel: KnowledgeRung | undefined;
+  selection: KnowledgeSelection | undefined;
   threadId?: string;
 }) {
-  const activity = useKnowledgeActivity(factoryProjectId, scopeLevel, threadId);
-  if (!scopeLevel) {
+  const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
+  if (!selection) {
     return (
       <Txt as="p" variant="ui-md" className="text-icon3">
-        Activity is tracked per organization, project, and session — select one of those scopes.
+        Select a scope to view its recent activity.
       </Txt>
     );
   }
@@ -262,8 +279,38 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
-  const selected = trail.at(-1) ?? null;
-  const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
+  const deepLinkedNodeId = searchParams.get('node');
+  const deepLinkedRung = searchParams.get('nodeRung');
+  const deepLinkedSelection: TrailEntry | null = deepLinkedNodeId
+    ? {
+        nodeId: deepLinkedNodeId,
+        name: searchParams.get('nodeName') ?? deepLinkedNodeId,
+        recordId: searchParams.get('record') ?? undefined,
+        rung:
+          deepLinkedRung === 'org' || deepLinkedRung === 'resource' || deepLinkedRung === 'thread'
+            ? deepLinkedRung
+            : undefined,
+      }
+    : null;
+  const selected = trail.at(-1) ?? deepLinkedSelection;
+  const visibleTrail = trail.length > 0 ? trail : deepLinkedSelection ? [deepLinkedSelection] : [];
+  const detailScopeLevel = selected?.rung ?? scopeLevel;
+  const setSelected = (entry: TrailEntry | null) => {
+    setTrail(entry ? [entry] : []);
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, entry);
+      return copy;
+    });
+  };
+  const pushSelected = (entry: TrailEntry) => {
+    setTrail(current => [...current, entry]);
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, entry);
+      return copy;
+    });
+  };
 
   // Live updates hold while the user is exploring (moving, clicking,
   // zooming) and resume after 10s of stillness — the layout never shifts
@@ -297,27 +344,30 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   }, [nextBaseline]);
 
   const openThread = (nextThreadId: string) => {
-    setSelected(null);
+    setTrail([]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, null);
       copy.set('thread', nextThreadId);
       copy.set('scope', 'thread');
       return copy;
     });
   };
   const backToProject = () => {
-    setSelected(null);
+    setTrail([]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, null);
       copy.delete('thread');
       copy.set('scope', 'resource');
       return copy;
     });
   };
   const selectScope = (next: KnowledgeSelection) => {
-    setSelected(null);
+    setTrail([]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, null);
       // Merged entries (scope node owning a rung's address) deep-link to the
       // structural lens — one entry, one lens.
       copy.set('scope', next.scopeNodeId ?? next.scopeLevel);
@@ -378,6 +428,21 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       </Txt>
     );
   } else {
+    const selectedNodeId = selected?.nodeId;
+    const selectedScope =
+      selectedNodeId && selectedNodeId === selection.scopeNodeId
+        ? scopesQuery.data?.scopeNodes?.find(scopeNode => scopeNode.id === selectedNodeId)
+        : undefined;
+    const selectedScopeMemberIds = new Set(
+      selectedScope
+        ? graphQuery.data.edges
+            .filter(edge => edge.type === 'contains' && edge.source === selectedScope.id)
+            .map(edge => edge.target)
+        : [],
+    );
+    const selectedScopeMembers = graphQuery.data.nodes.filter(node => selectedScopeMemberIds.has(node.id));
+    const childScopeCount = selectedScopeMembers.filter(node => node.isScope).length;
+    const contentNodeCount = selectedScopeMembers.length - childScopeCount;
     body = (
       <div
         className="relative min-h-0 flex-1"
@@ -396,15 +461,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           labelAll={Boolean(selection.scopeNodeId)}
           onFocusChange={id => {
             // A graph click starts a fresh trail; a pane click clears it.
-            if (!id) return setTrail([]);
+            if (!id) return setSelected(null);
             const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setTrail([{ nodeId: id, name: node?.name ?? id }]);
+            setSelected({ nodeId: id, name: node?.name ?? id, rung: node?.rung });
           }}
           onNodeClick={node => {
-            // Inside a structural scope, scope members drill down; content
-            // members open the record flyout like identity-lens nodes.
-            if (selection.scopeNodeId && node.isScope) {
-              setTrail([]);
+            // A child scope drills into its lens. Clicking the active lens root
+            // opens scope detail instead of redundantly selecting the same lens.
+            if (selection.scopeNodeId && node.isScope && node.id !== selection.scopeNodeId) {
               selectScope({ scopeNodeId: node.id });
               return;
             }
@@ -413,35 +477,69 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           onEdgeClick={edge => {
             // Selecting an edge selects AND expands the supporting knowledge record (A7).
             const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
+            setSelected({
+              nodeId: edge.source,
+              name: node?.name ?? edge.source,
+              recordId: edge.recordId,
+              rung: node?.rung,
+            });
           }}
         />
-        {selected && factoryProjectId && (scopeLevel ?? selected.rung) ? (
+        {selectedScope && factoryProjectId ? (
+          <KnowledgeScopeFlyout
+            factoryProjectId={factoryProjectId}
+            selection={selection}
+            scope={selectedScope}
+            childScopeCount={childScopeCount}
+            contentNodeCount={contentNodeCount}
+            threadId={threadId}
+            onClose={() => setSelected(null)}
+          />
+        ) : selected && factoryProjectId && detailScopeLevel ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
-            // Identity lenses use the selected rung; structural-lens content
-            // members fall back to the node's own rung.
-            scopeLevel={(scopeLevel ?? selected.rung)!}
+            // Content surfaced through a structural lens is read at its own
+            // identity rung, not the rung of the scope used to reach it.
+            scopeLevel={detailScopeLevel}
             threadId={threadId}
             focusRecordId={selected.recordId}
-            onSelectRecord={recordId =>
+            onSelectRecord={recordId => {
               // Bidirectional selection: expanding a card selects the knowledge record
               // page-wide, so the graph lights its marker/edge up too.
-              setTrail(current =>
-                current.length === 0
-                  ? current
-                  : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
-              )
-            }
-            onClose={() => setTrail([])}
+              const entry = { ...selected, recordId: recordId ?? undefined };
+              setTrail(current => (current.length === 0 ? [entry] : [...current.slice(0, -1), entry]));
+              setSearchParams(params => {
+                const copy = new URLSearchParams(params);
+                writeNodeSelection(copy, entry);
+                return copy;
+              });
+            }}
+            onClose={() => setSelected(null)}
             onOpenThread={openThread}
             onNodeRef={name => {
               // A clicked [[wikilink]] gets the full node-click treatment (A7):
               // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
-              const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
-              if (target && target.id !== selected.nodeId)
-                setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
+              const lowerName = name.toLowerCase();
+              const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === lowerName);
+              if (target && target.id !== selected.nodeId) {
+                pushSelected({ nodeId: target.id, name: target.name, rung: target.rung });
+                return;
+              }
+              const outside = graphQuery.data?.outOfWindow.find(node => node.name.toLowerCase() === lowerName);
+              if (!outside || outside.id === selected.nodeId) return;
+
+              const entry = { nodeId: outside.id, name: outside.name, rung: outside.rung };
+              setTrail([entry]);
+              setSearchParams(params => {
+                const copy = new URLSearchParams(params);
+                writeNodeSelection(copy, entry);
+                copy.set('scope', outside.rung);
+                const targetThread = outside.scope.find(address => address.startsWith('thread:'))?.slice(7);
+                if (outside.rung === 'thread' && targetThread) copy.set('thread', targetThread);
+                else copy.delete('thread');
+                return copy;
+              });
             }}
           />
         ) : null}
@@ -485,9 +583,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         </div>
         <Breadcrumb
           threadId={threadId}
-          trail={trail}
+          trail={visibleTrail}
           onProjectClick={backToProject}
-          onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
+          onTrailClick={index => {
+            const next = visibleTrail.slice(0, index + 1);
+            setTrail(next);
+            setSearchParams(params => {
+              const copy = new URLSearchParams(params);
+              writeNodeSelection(copy, next.at(-1) ?? null);
+              return copy;
+            });
+          }}
         />
       </header>
       <div className="flex min-h-0 flex-1 gap-4">
@@ -496,7 +602,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             to a sized parent; as a block wrapper it collapses to zero height. */}
         <div className="flex min-w-0 flex-1 flex-col">
           {activeView === 'activity' ? (
-            <ActivityPanel factoryProjectId={factoryProjectId} scopeLevel={scopeLevel} threadId={threadId} />
+            <ActivityPanel factoryProjectId={factoryProjectId} selection={selection} threadId={threadId} />
           ) : (
             body
           )}
