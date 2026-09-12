@@ -18,7 +18,7 @@ const contextValue = {
 } satisfies ToolCallContextValue;
 
 const meta = {
-  title: 'Chat/Tool Approvals',
+  title: 'AI/Tool Approvals',
   component: ToolApprovalButtons,
   args: {
     toolCallId: 'write-file-1',
