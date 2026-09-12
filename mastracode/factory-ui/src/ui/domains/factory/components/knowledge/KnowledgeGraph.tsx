@@ -35,8 +35,9 @@ import {
   deriveRecordElements,
   egoGraph,
   filterGraph,
-  recordPairEdges,
+  graphTraversalEdges,
   NO_FILTERS,
+  renderedGraphEdges,
   shouldShowLabel,
   toFlowGraph,
   toRecordFlow,
@@ -363,15 +364,14 @@ function KnowledgeGraphInner({
         .map(node => node.id)
         .sort()
         .join(','),
-      records.length > 0
-        ? records
-            .map(record => record.id)
-            .sort()
-            .join(',')
-        : payload.edges
-            .map(edge => edge.id)
-            .sort()
-            .join(','),
+      payload.edges
+        .map(edge => edge.id)
+        .sort()
+        .join(','),
+      records
+        .map(record => record.id)
+        .sort()
+        .join(','),
     ].join('|');
     const dataChanged = signature !== lastSignature.current;
     lastSignature.current = signature;
@@ -386,7 +386,7 @@ function KnowledgeGraphInner({
     // Warm start: an ego run begins from wherever the nodes already sit in the
     // project view, so the cluster expands out of its current shape.
     const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
-    const pairEdges = records.length > 0 ? recordPairEdges(records) : payload.edges;
+    const pairEdges = graphTraversalEdges(payload.edges, records);
     let filtered = filterGraph(payload.nodes, pairEdges, filters);
     if (focusedId) {
       const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, records);
@@ -434,12 +434,17 @@ function KnowledgeGraphInner({
         }),
       ],
       records.length > 0
-        ? recordEdges.map(edge => ({
-            source: edge.source,
-            target: edge.target,
-            // Stubs/spokes hug; node↔node record lines keep normal length.
-            hug: edge.source.startsWith('record:') || edge.target.startsWith('record:'),
-          }))
+        ? [
+            ...filtered.edges
+              .filter(edge => edge.type === 'contains')
+              .map(edge => ({ source: edge.source, target: edge.target })),
+            ...recordEdges.map(edge => ({
+              source: edge.source,
+              target: edge.target,
+              // Stubs/spokes hug; node↔node record lines keep normal length.
+              hug: edge.source.startsWith('record:') || edge.target.startsWith('record:'),
+            })),
+          ]
         : filtered.edges,
     );
     // MERGE into the active cache, never replace it: a filter subset run must
@@ -450,7 +455,10 @@ function KnowledgeGraphInner({
     const nodeFlow = toFlowGraph(filtered.nodes, filtered.edges, positions, focusedId, labelAll);
     if (records.length === 0) return nodeFlow; // pre-A11 payload fallback
     const recordFlow = toRecordFlow(recordNodes, recordEdges, positions);
-    return { nodes: [...nodeFlow.nodes, ...recordFlow.nodes], edges: recordFlow.edges };
+    return {
+      nodes: [...nodeFlow.nodes, ...recordFlow.nodes],
+      edges: renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true),
+    };
     // dragVersion re-runs the layout after a drag pin.
   }, [payload, filters, focusedId, dragVersion, arrivals, labelAll]);
 
@@ -641,13 +649,22 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           </Txt>
         ) : null}
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.rung ? RUNG_LABELS[node.rung] : 'Scope'}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Links</dt>
+          {node.isScope ? (
+            <>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Type</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind === 'scope' ? 'Structural scope' : node.kind}</dd>
+            </>
+          ) : (
+            <>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.rung ? RUNG_LABELS[node.rung] : '—'}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
+            </>
+          )}
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Connections</dt>
           <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
             {degree.incoming} in · {degree.outgoing} out
           </dd>
