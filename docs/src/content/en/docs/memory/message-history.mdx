@@ -46,22 +46,22 @@ npm install @mastra/memory@latest @mastra/libsql@latest
 Message history requires a storage adapter to persist conversations. Configure storage on your Mastra instance if you haven't already:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: 'file:./mastra.db',
   }),
-});
+})
 ```
 
 Instantiate a [`Memory`](/reference/memory/memory-class) instance in your agent:
 
 ```typescript title="src/mastra/agents/test-agent.ts"
-import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
   id: 'test-agent',
@@ -70,7 +70,7 @@ export const agent = new Agent({
       lastMessages: 10,
     },
   }),
-});
+})
 ```
 
 When you call the agent, messages are automatically saved to the database. You can specify a `threadId`, `resourceId`, and optional `metadata`:
@@ -136,7 +136,7 @@ export const agent = new Agent({
       messageHistory: { maxTokens: 8_000, atMaxRemoveTokens: 2_000 },
     },
   }),
-});
+})
 ```
 
 When remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (default: 25% of `maxTokens`). Removing history in chunks rather than one message at a time keeps the prompt prefix stable across several turns, so provider prompt caches stay warm. The current turn's input, the agent's responses, and system messages are never trimmed.
@@ -154,8 +154,8 @@ When memory is enabled, [Studio](/docs/studio/overview) uses message history to 
 Mastra can automatically generate descriptive thread titles from the conversation transcript when `generateTitle` is enabled. Use this option when you build a chat interface that renders conversation titles in a thread list or sidebar.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -167,7 +167,7 @@ export const supportAgent = new Agent({
       generateTitle: true,
     },
   }),
-});
+})
 ```
 
 Title generation runs asynchronously after the agent responds and doesn't affect response time.
@@ -175,8 +175,8 @@ Title generation runs asynchronously after the agent responds and doesn't affect
 To optimize cost or behavior, provide a smaller [`model`](/models) and custom `instructions`:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -191,7 +191,7 @@ export const supportAgent = new Agent({
       },
     },
   }),
-});
+})
 ```
 
 ## Accessing memory
@@ -199,8 +199,8 @@ export const supportAgent = new Agent({
 To access memory functions for querying, cloning, or deleting threads and messages, call `getMemory()` on an agent:
 
 ```typescript
-const agent = mastra.getAgentById('test-agent');
-const memory = await agent.getMemory();
+const agent = mastra.getAgentById('test-agent')
+const memory = await agent.getMemory()
 ```
 
 Use the `Memory` instance to query stored threads and messages or clone a conversation.
@@ -221,7 +221,7 @@ Use [`listThreads()`](/reference/memory/listThreads) to retrieve threads for a r
 const result = await memory.listThreads({
   filter: { resourceId: 'user-123' },
   perPage: false,
-});
+})
 ```
 
 Paginate through threads:
@@ -231,10 +231,10 @@ const result = await memory.listThreads({
   filter: { resourceId: 'user-123' },
   page: 0,
   perPage: 10,
-});
+})
 
-console.log(result.threads); // thread objects
-console.log(result.hasMore); // more pages available?
+console.log(result.threads) // thread objects
+console.log(result.hasMore) // more pages available?
 ```
 
 You can also filter by metadata and control sort order:
@@ -246,13 +246,13 @@ const result = await memory.listThreads({
     metadata: { status: 'active' },
   },
   orderBy: { field: 'createdAt', direction: 'DESC' },
-});
+})
 ```
 
 To fetch a single thread by ID, use [`getThreadById()`](/reference/memory/getThreadById):
 
 ```typescript
-const thread = await memory.getThreadById({ threadId: 'thread-123' });
+const thread = await memory.getThreadById({ threadId: 'thread-123' })
 ```
 
 ### Messages
@@ -265,7 +265,7 @@ Fetch a thread's history without pagination. Recall hides reminder signals by de
 const { messages } = await memory.recall({
   threadId: 'thread-123',
   perPage: false,
-});
+})
 ```
 
 Paginate through messages:
@@ -275,7 +275,7 @@ const { messages } = await memory.recall({
   threadId: 'thread-123',
   page: 0,
   perPage: 50,
-});
+})
 ```
 
 Filter by date range:
@@ -289,7 +289,7 @@ const { messages } = await memory.recall({
       end: new Date('2025-06-01'),
     },
   },
-});
+})
 ```
 
 Filter by shallow message metadata:
@@ -305,7 +305,7 @@ const { messages } = await memory.recall({
       archivedAt: null,
     },
   },
-});
+})
 ```
 
 Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`.
@@ -322,7 +322,7 @@ Fetch a single message by ID:
 const { messages } = await memory.recall({
   threadId: 'thread-123',
   include: [{ id: 'msg-123' }],
-});
+})
 ```
 
 Fetch multiple messages by ID with surrounding context:
@@ -338,7 +338,7 @@ const { messages } = await memory.recall({
       withNextMessages: 1,
     },
   ],
-});
+})
 ```
 
 Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup):
@@ -350,7 +350,7 @@ const { messages } = await memory.recall({
   threadConfig: {
     semanticRecall: true,
   },
-});
+})
 ```
 
 ### UI format
@@ -365,7 +365,7 @@ Thread cloning creates a copy of an existing thread with its messages. This is u
 const { thread, clonedMessages } = await memory.cloneThread({
   sourceThreadId: 'thread-123',
   title: 'Branched conversation',
-});
+})
 ```
 
 You can filter cloned messages by count or date range and specify custom thread IDs. Utility methods are also available to inspect clone relationships.
