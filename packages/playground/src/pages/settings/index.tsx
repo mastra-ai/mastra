@@ -24,11 +24,7 @@ export const StudioSettingsPage = () => {
           title="Mastra Connection"
           description="Configure the Mastra instance URL, API prefix, and request headers used by the studio."
         >
-          <SettingsCard>
-            <div className="p-4">
-              <StudioConfigForm initialConfig={{ baseUrl, headers, apiPrefix }} />
-            </div>
-          </SettingsCard>
+          <StudioConfigForm variant="factory" initialConfig={{ baseUrl, headers, apiPrefix }} />
         </SettingsSubsection>
       </div>
     </SettingsLayout>

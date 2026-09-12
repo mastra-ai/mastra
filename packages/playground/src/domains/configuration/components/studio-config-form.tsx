@@ -1,9 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { SettingsCard } from '@mastra/playground-ui/components/SettingsCard';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
@@ -12,9 +15,12 @@ import { HeaderListForm } from './header-list-form';
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
   onSave?: () => void;
+  variant?: 'default' | 'factory';
 }
 
-export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
+export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
+  const isFactoryLayout = variant === 'factory';
+  const FieldsContainer = isFactoryLayout ? SettingsCard : Fragment;
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -22,18 +28,18 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
     return Object.entries(initialConfig.headers).map(([name, value]) => ({ name, value }));
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    const url = formData.get('url') as string;
-    const rawApiPrefix = ((formData.get('apiPrefix') as string) ?? '').trim();
+    const formData = new FormData(event.currentTarget);
+    const url = readFormText(formData, 'url');
+    const rawApiPrefix = readFormText(formData, 'apiPrefix').trim();
     const apiPrefix = rawApiPrefix.length ? rawApiPrefix : undefined;
 
     const formHeaders: Record<string, string> = {};
-    for (let i = 0; i < headers.length; i++) {
-      const headerName = formData.get(`headers.${i}.name`) as string;
-      const headerValue = formData.get(`headers.${i}.value`) as string;
+    for (let headerIndex = 0; headerIndex < headers.length; headerIndex++) {
+      const headerName = readFormText(formData, `headers.${headerIndex}.name`);
+      const headerValue = readFormText(formData, `headers.${headerIndex}.value`);
       formHeaders[headerName] = headerValue;
     }
 
@@ -50,27 +56,56 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
     setHeaders(prev => prev.filter((_, i) => i !== index));
   };
 
+  const connectionFields = [
+    {
+      name: 'url',
+      label: 'Mastra instance URL',
+      placeholder: 'e.g: http://localhost:4111',
+      required: true,
+      defaultValue: initialConfig?.baseUrl,
+    },
+    {
+      name: 'apiPrefix',
+      label: 'API prefix',
+      placeholder: 'e.g: /api (default)',
+      defaultValue: initialConfig?.apiPrefix || '',
+    },
+  ];
+
+  const headersEditor = (
+    <HeaderListForm
+      headers={headers}
+      onAddHeader={handleAddHeader}
+      onRemoveHeader={handleRemoveHeader}
+      showHeading={!isFactoryLayout}
+    />
+  );
+
   return (
     <TooltipProvider delayDuration={0}>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <TextFieldBlock
-          name="url"
-          label="Mastra instance URL"
-          placeholder="e.g: http://localhost:4111"
-          required
-          defaultValue={initialConfig?.baseUrl}
-        />
+      <form onSubmit={handleSubmit} className={isFactoryLayout ? 'flex flex-col gap-4' : 'space-y-6'}>
+        <FieldsContainer>
+          {connectionFields.map(({ label, ...field }) => {
+            if (isFactoryLayout) {
+              return (
+                <SettingsRow key={field.name} variant="factory" label={label} htmlFor={`input-${field.name}`}>
+                  <Input {...field} id={`input-${field.name}`} className="w-full lg:max-w-96" />
+                </SettingsRow>
+              );
+            }
 
-        <TextFieldBlock
-          name="apiPrefix"
-          label="API prefix"
-          placeholder="e.g: /api (default)"
-          defaultValue={initialConfig?.apiPrefix || ''}
-        />
+            return <TextFieldBlock key={field.name} label={label} {...field} />;
+          })}
+          {isFactoryLayout ? (
+            <SettingsRow variant="factory" label="Headers">
+              <div className="w-full lg:max-w-96">{headersEditor}</div>
+            </SettingsRow>
+          ) : (
+            headersEditor
+          )}
+        </FieldsContainer>
 
-        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
-
-        <Button type="submit" className="mt-10! ml-auto">
+        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'}>
           <SaveIcon />
           Save Configuration
         </Button>
@@ -78,3 +113,9 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
     </TooltipProvider>
   );
 };
+
+function readFormText(formData: FormData, name: string) {
+  const value = formData.get(name);
+  if (typeof value !== 'string') throw new Error(`Missing text field: ${name}`);
+  return value;
+}

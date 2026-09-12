@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Improved the Studio Settings page with the same settings cards, section headings, and theme toggle as Factory.
+Improved the Studio Settings page with Factory's settings cards and theme toggle, with a separate row for the instance URL, API prefix, and request headers.
