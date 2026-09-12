@@ -107,7 +107,12 @@ async function createGovernanceHarness(perspective: Perspective) {
     accessProfile: async ({ builtInScopes }) => ({
       id: perspective,
       rootScopeAddress: builtInScopes.resource.address,
-      baselineScopes: [builtInScopes.org, builtInScopes.resource],
+      // reader/suggester must not vouch the org scope: the route re-materializes
+      // built-in scopes per request, which re-seeds the org owner grant on the
+      // resource — vouching org would grant real approval authority and make the
+      // proposal legitimately visible. Only the reviewer exercises that branch.
+      baselineScopes:
+        perspective === 'reviewer' ? [builtInScopes.org, builtInScopes.resource] : [builtInScopes.resource],
       intakeScopes: [
         {
           address: `thread:${perspective}`,
@@ -166,7 +171,20 @@ async function installRoutes(context: BrowserContext, perspective: Perspective) 
     if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
-    if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
+    if (url.pathname.endsWith('/attention')) return route.fulfill({
+      json: {
+        items: [],
+        kinds: {
+          'automation-failed': { open: 0, unread: 0, latest: null },
+          'supervisor-finding': { open: 0, unread: 0, latest: null },
+          'agent-waiting': { open: 0, unread: 0, latest: null },
+          mention: { open: 0, unread: 0, latest: null },
+          'automation-proposed': { open: 0, unread: 0, latest: null },
+          activity: { open: 0, unread: 0, latest: null },
+        },
+        hasMore: false,
+      },
+    });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
     return route.continue();
@@ -191,10 +209,13 @@ test.describe('Knowledge governance perspectives', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.describe('when the host vouches only readonly access', () => {
-    test('shows proposals without mutation actions', async ({ context }) => {
+    test('hides proposals whose proposer context is unreadable', async ({ context }) => {
       const page = await openApprovals(context, 'reader');
-      await expect(page.getByText('Rename the deployment guide')).toBeVisible();
-      await expect(page.getByText('Proposer: private')).toBeVisible();
+      // target readability without proposer-context readability or direct
+      // approval authority must be indistinguishable from an empty list
+      await expect(page.getByText('Rename the deployment guide')).toHaveCount(0);
+      await expect(page.getByText('Proposer: private')).toHaveCount(0);
+      await expect(page.getByText('No pending proposals.')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
       await capture(page, 'reader');
@@ -202,9 +223,12 @@ test.describe('Knowledge governance perspectives', () => {
   });
 
   test.describe('when the host vouches suggest access without edit authority', () => {
-    test('keeps review actions unavailable', async ({ context }) => {
+    test('hides proposals and keeps review actions unavailable', async ({ context }) => {
       const page = await openApprovals(context, 'suggester');
-      await expect(page.getByText('Rename the deployment guide')).toBeVisible();
+      // suggest is not approval authority, so the sealed proposer context
+      // keeps this proposal hidden exactly like the reader case
+      await expect(page.getByText('Rename the deployment guide')).toHaveCount(0);
+      await expect(page.getByText('No pending proposals.')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
       await capture(page, 'suggester');
@@ -214,6 +238,9 @@ test.describe('Knowledge governance perspectives', () => {
   test.describe('when the host vouches owner authority', () => {
     test('persists rejection and conflict re-review through Factory routes', async ({ context }) => {
       const page = await openApprovals(context, 'reviewer');
+      // the reviewer cannot read the private proposer context either, but
+      // direct approval authority on the target keeps the proposal visible
+      await expect(page.getByText('Rename the deployment guide')).toBeVisible();
       await page.getByRole('button', { name: 'Reject' }).click();
       await expect(page.getByText('No pending proposals.')).toBeVisible();
 

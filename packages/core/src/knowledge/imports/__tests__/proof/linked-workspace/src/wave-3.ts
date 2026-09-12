@@ -130,7 +130,7 @@ const initialScopes = [
     address: 'scope:private',
     name: 'Private',
     grants: [
-      { scopeRefAddress: 'principal:admin', role: 'owner' as const },
+      { scopeRefAddress: 'principal:admin', role: 'owner' as const, canSuggest: true },
       { scopeRefAddress: 'principal:other', role: 'owner' as const },
     ],
   },
@@ -356,6 +356,121 @@ const movedReplacementApproval = await knowledge.approveProposal({
 });
 invariant(movedReplacementApproval.status === 'approved', 'Current-scope admin could not approve the replacement');
 
+// --- Proposal visibility disjunction with target readability held constant ---
+// Sealed proposer context: readable only when vouched directly, never through
+// the project or private scopes.
+const sealedContext = await store.createNode({ name: 'Sealed proposer context', isScope: true, scopeIds: [] });
+const sealedTarget = await knowledge.getNode({ id: visibleNode.id, scopeIds: [owner] });
+invariant(sealedTarget, 'Owner lost the visible node');
+const sealedProposal = await knowledge.proposeNodeUpdate({
+  mutation: { id: visibleNode.id, version: sealedTarget.version, name: 'Sealed context rename' },
+  proposerContextScopeId: sealedContext.id,
+  vouchedScopeIds: [owner, sealedContext.id],
+});
+// Branch 1 (denial): the reader keeps target readability but cannot read the
+// proposer context and holds no approval authority — the proposal must be
+// indistinguishable from absent on list and single-id surfaces.
+const readerSealedList = await knowledge.listProposals({ vouchedScopeIds: [reader], limit: 10 });
+invariant(
+  readerSealedList.proposals.every(proposal => proposal.id !== sealedProposal.id),
+  'Target-only reader saw a proposal whose proposer context is sealed',
+);
+invariant(
+  (await knowledge.getProposal({ id: sealedProposal.id, vouchedScopeIds: [reader] })) === null,
+  'Target-only reader fetched a sealed-context proposal by id',
+);
+// Branch 2 (allow): the owner cannot read the sealed context either, but
+// holds direct edit authority on the target — the proposal stays visible.
+const ownerSealedList = await knowledge.listProposals({ vouchedScopeIds: [owner], limit: 50 });
+invariant(
+  ownerSealedList.proposals.some(proposal => proposal.id === sealedProposal.id),
+  'Direct approver lost a proposal because the proposer context is sealed',
+);
+invariant(
+  (await knowledge.getProposal({ id: sealedProposal.id, vouchedScopeIds: [owner] }))?.id === sealedProposal.id,
+  'Direct approver could not fetch a sealed-context proposal by id',
+);
+// Single-id review surfaces follow the same two branches once the proposal
+// conflicts: the suggester (target read + suggest, no proposer context, no
+// edit authority) cannot clone it, while the owner can re-review it.
+await knowledge.updateNode({
+  id: visibleNode.id,
+  version: sealedTarget.version,
+  name: 'Concurrent sealed rename',
+  vouchedScopeIds: [owner],
+});
+let sealedConflictObserved = false;
+try {
+  await knowledge.approveProposal({
+    id: sealedProposal.id,
+    reviewerContextScopeId: owner,
+    vouchedScopeIds: [owner],
+  });
+} catch (error) {
+  invariant(error instanceof Error && error.name === 'KnowledgeConflictError', 'Sealed proposal failed unexpectedly');
+  sealedConflictObserved = true;
+}
+invariant(sealedConflictObserved, 'Sealed proposal approval did not conflict');
+let suggesterSealedReReviewDenied = false;
+try {
+  await knowledge.reReviewProposal({
+    id: sealedProposal.id,
+    reviewerContextScopeId: suggester,
+    vouchedScopeIds: [suggester],
+  });
+} catch (error) {
+  invariant(
+    error instanceof Error && error.name === 'KnowledgeNotFoundError',
+    'Suggester sealed re-review failed unexpectedly',
+  );
+  suggesterSealedReReviewDenied = true;
+}
+invariant(suggesterSealedReReviewDenied, 'Suggester cloned a sealed-context proposal through re-review');
+const sealedReplacement = await knowledge.reReviewProposal({
+  id: sealedProposal.id,
+  reviewerContextScopeId: owner,
+  vouchedScopeIds: [owner],
+});
+invariant(sealedReplacement.status === 'pending', 'Owner could not re-review a sealed-context proposal');
+
+// --- Hidden proposal backlog: noninterference and bounded pagination ---
+const readerBeforeBacklog = await knowledge.listProposals({ vouchedScopeIds: [reader], limit: 10 });
+const hiddenBacklogIds: string[] = [];
+for (let index = 0; index < 60; index += 1) {
+  const backlogTarget = await store.createNode({ name: `Backlog target ${index}`, scopeIds: [privateScope] });
+  const backlogProposal = await knowledge.proposeNodeUpdate({
+    mutation: { id: backlogTarget.id, version: backlogTarget.version, name: `Backlog rename ${index}` },
+    proposerContextScopeId: sealedContext.id,
+    vouchedScopeIds: [admin, sealedContext.id],
+  });
+  hiddenBacklogIds.push(backlogProposal.id);
+}
+const readerAfterBacklog = await knowledge.listProposals({ vouchedScopeIds: [reader], limit: 10 });
+invariant(
+  JSON.stringify(readerAfterBacklog) === JSON.stringify(readerBeforeBacklog),
+  'Hidden proposal backlog changed the reader proposal page',
+);
+const backlogSet = new Set(hiddenBacklogIds);
+const seenProposalIds = new Set<string>();
+let cursor: string | undefined;
+let pageCount = 0;
+do {
+  const page: Awaited<ReturnType<typeof knowledge.listProposals>> = await knowledge.listProposals({
+    vouchedScopeIds: [owner],
+    limit: 2,
+    cursor,
+  });
+  for (const proposal of page.proposals) {
+    invariant(!backlogSet.has(proposal.id), 'Hidden backlog proposal leaked into the owner page');
+    invariant(!seenProposalIds.has(proposal.id), 'Proposal pagination repeated an entry');
+    seenProposalIds.add(proposal.id);
+  }
+  cursor = page.nextCursor;
+  pageCount += 1;
+  invariant(pageCount < 100, 'Proposal pagination did not terminate');
+} while (cursor);
+invariant(seenProposalIds.has(sealedReplacement.id), 'Visible actionable proposal was paged out by the hidden backlog');
+
 const worker = await readInWorker({ nodeId: visibleNode.id, principalScopeId: reader });
 const warmVisible = await worker.read();
 await store.reconcileStructure({
@@ -388,6 +503,12 @@ const result = {
   formerOwnerReplacementApprovalDenied: formerOwnerApprovalDenied,
   currentScopeAdminApprovedReplacement: movedReplacementApproval.status === 'approved',
   replacementRejected: true,
+  sealedContextHiddenFromTargetReader: true,
+  sealedContextVisibleThroughApprovalAuthority: true,
+  sealedReReviewDeniedWithoutProposerContext: suggesterSealedReReviewDenied,
+  sealedReReviewAllowedThroughApprovalAuthority: sealedReplacement.status === 'pending',
+  hiddenProposalBacklogNoninterference: true,
+  hiddenProposalBacklogPagination: true,
   warmCacheVisibleBeforeRevocation: warmVisible,
   warmCacheVisibleAfterRevocation: visibleAfterRevocation,
 };
