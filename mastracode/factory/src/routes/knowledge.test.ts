@@ -201,10 +201,10 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const { scopes: ids } = await h.knowledge.reconcileStructure({
       scopes: [
-        { address: 'org:acme', name: 'mastra' },
-        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: `org:${ORG}`, name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
         { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
-        { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+        { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: [`org:${ORG}`] },
         { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
       ],
     });
@@ -212,29 +212,101 @@ describe('KnowledgeRoutes', () => {
     const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
     expect(response.status).toBe(200);
     const body = (await response.json()) as KnowledgeScopeTreePayload;
+    // The identity rung whose address matches a reconciled scope node carries
+    // the structural match, so the client renders one merged entry.
+    expect(body.roots).toEqual([
+      { level: 'org', id: ORG, available: true, scopeNodeId: ids[`org:${ORG}`], name: 'mastra' },
+      { level: 'resource', id: h.projectId, available: true },
+    ]);
     const byName = new Map((body.scopeNodes ?? []).map(scopeNode => [scopeNode.name, scopeNode]));
     expect([...byName.keys()]).toEqual(['features', 'issues', 'mastra', 'memory', 'repo:mastra']);
-    expect(byName.get('features')).toMatchObject({ kind: 'domain', parentIds: [ids['org:acme']] });
+    expect(byName.get('features')).toMatchObject({
+      address: 'features',
+      kind: 'domain',
+      parentIds: [ids[`org:${ORG}`]],
+    });
+    expect(byName.get('mastra')).toMatchObject({ address: `org:${ORG}`, parentIds: [] });
     expect(byName.get('memory')).toMatchObject({ description: 'Memory scope', parentIds: [ids['features']] });
     expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
 
-    // Structural lens: selecting a scope node reads its members, not the identity window.
+    // Structural lens: the clicked scope node renders as its own graph root.
     const subgraph = await h.app.request(
-      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids['org:acme']}`,
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`org:${ORG}`]}`,
     );
     expect(subgraph.status).toBe(200);
     const subgraphBody = (await subgraph.json()) as KnowledgeGraphPayload;
+    expect(subgraphBody.nodes).toMatchObject([
+      { id: ids[`org:${ORG}`], name: 'mastra', isScope: true, scope: null, rung: null },
+    ]);
     expect(subgraphBody.edges).toEqual([]);
     expect(subgraphBody.records).toEqual([]);
     // Unknown or malformed scope nodes fail closed.
     expect(
       (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=not-a-uuid`)).status,
     ).toBe(404);
-    const unknown = await h.app.request(
-      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${crypto.randomUUID()}`,
+    expect(
+      (
+        await h.app.request(
+          `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${crypto.randomUUID()}`,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it('scopes structural member content to the project boundary and derives edges from member records', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+      ],
+    });
+
+    const alpha = await h.knowledge.createNode({
+      name: 'Alpha',
+      kind: 'concept',
+      scope: h.projectScope,
+      scopeAddresses: ['features'],
+    });
+    const beta = await h.knowledge.createNode({
+      name: 'Beta',
+      kind: 'concept',
+      scope: h.projectScope,
+      scopeAddresses: ['features'],
+    });
+    await record(h.knowledge, alpha, 'see [[Beta]] for the follow-up', h.projectScope);
+    // Same structural scope, but stamped at a sibling resource of the same
+    // org — an org-wide roll-up would include it, a project view must not.
+    const sibling = await h.knowledge.createNode({
+      name: 'Other project',
+      kind: 'concept',
+      scope: [...h.orgScope, 'resource:someone-else'],
+      scopeAddresses: ['features'],
+    });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids['features']}`,
     );
-    expect(unknown.status).toBe(200);
-    expect(((await unknown.json()) as KnowledgeGraphPayload).nodes).toEqual([]);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeGraphPayload;
+
+    const nodeIds = body.nodes.map(item => item.id);
+    expect(nodeIds).toContain(ids['features']);
+    expect(nodeIds).toContain(alpha.id);
+    expect(nodeIds).toContain(beta.id);
+    expect(nodeIds).not.toContain(sibling.id);
+    expect(body.nodes.find(item => item.id === ids['features'])).toMatchObject({ isScope: true, rung: null });
+
+    expect(body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: alpha.id }),
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: beta.id }),
+        expect.objectContaining({ type: 'wikilink', source: alpha.id, target: beta.id }),
+      ]),
+    );
+    expect(body.records).toHaveLength(1);
+    expect(body.records[0]).toMatchObject({ nodeIds: [alpha.id, beta.id] });
+    expect(body.nodes.find(item => item.id === alpha.id)?.recordCount).toBe(1);
   });
 
   it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {

@@ -88,16 +88,32 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
       return route.fulfill({
         json: {
           roots: [
-            { level: 'org', id: 'proof', available: true },
+            // The org rung's address is owned by a reconciled scope node —
+            // server attaches the structural match so the UI renders one
+            // merged entry instead of two labels for the same scope.
+            {
+              level: 'org',
+              id: 'proof',
+              available: true,
+              scopeNodeId: '11111111-1111-4111-8111-111111111111',
+              name: 'mastra',
+            },
             { level: 'resource', id: projectId, available: true },
           ],
           defaultLevel: 'resource',
           // The reconciled structural tree rides along — identity rungs stay
           // server-derived, scope nodes come from host reconciliation.
           scopeNodes: [
-            { id: '11111111-1111-4111-8111-111111111111', name: 'mastra', kind: 'org', parentIds: [] },
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              address: 'org:proof',
+              name: 'mastra',
+              kind: 'org',
+              parentIds: [],
+            },
             {
               id: '22222222-2222-4222-8222-222222222222',
+              address: 'features',
               name: 'features',
               kind: 'feature',
               description: 'Shipped Mastra features',
@@ -114,6 +130,19 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           json: {
             ...graph,
             nodes: [
+              {
+                // The clicked scope node renders as its own graph root.
+                id: '22222222-2222-4222-8222-222222222222',
+                name: 'features',
+                kind: 'feature',
+                scope: null,
+                rung: null,
+                isScope: true,
+                pinned: false,
+                recordCount: 0,
+                createdAt: '2026-08-28T10:00:00.000Z',
+                updatedAt: '2026-08-28T10:00:00.000Z',
+              },
               {
                 id: 'memory-scope',
                 name: 'memory',
@@ -139,18 +168,20 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
             ],
+            // Containment edges: the selected scope contains every member, so
+            // the lens is a connected tree instead of bare dots.
             edges: [
               {
-                id: 'wikilink:memory:subconscious',
-                source: 'memory-scope',
-                target: 'subconscious-scope',
-                type: 'wikilink',
+                id: 'contains:features:memory',
+                source: '22222222-2222-4222-8222-222222222222',
+                target: 'memory-scope',
+                type: 'contains',
               },
               {
-                id: 'wikilink:subconscious:memory',
-                source: 'subconscious-scope',
-                target: 'memory-scope',
-                type: 'wikilink',
+                id: 'contains:features:subconscious',
+                source: '22222222-2222-4222-8222-222222222222',
+                target: 'subconscious-scope',
+                type: 'contains',
               },
             ],
             records: [],
@@ -215,13 +246,24 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText('knowledge-appended')).toBeVisible();
 
   // Structural scopes render under the identity rungs and drive the bounded
-  // member subgraph by scope node id.
+  // member subgraph by scope node id. The org rung merged with its structural
+  // scope node: one entry, structural name, identity marker.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
-  await expect(scopeTree.getByRole('button', { name: 'mastra' })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: /mastra · your org/ })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: /Organization/ })).toBeHidden();
+  await expect(scopeTree.getByRole('button', { name: 'mastra', exact: true })).toBeHidden();
+
+  // The merged entry opens the structural lens for the matched scope node.
+  await scopeTree.getByRole('button', { name: /mastra · your org/ }).click();
+  await expect(page).toHaveURL(/scope=11111111-1111-4111-8111-111111111111/);
+
+  // The matched node left the structural tree; its children re-rooted there.
   await scopeTree.getByRole('button', { name: 'features' }).click();
   await expect(page).toHaveURL(/scope=22222222-2222-4222-8222-222222222222/);
   await expect(page.getByText('subconscious')).toBeVisible();
+  // The clicked scope node renders as its own graph root inside the lens.
+  await expect(page.locator('[data-testid="knowledge-graph-container"]').getByText('features')).toBeVisible();
 
   // Clicking a member scope drills down into it instead of opening a flyout.
   await page.locator('.react-flow__node[data-id="subconscious-scope"]').dispatchEvent('click');

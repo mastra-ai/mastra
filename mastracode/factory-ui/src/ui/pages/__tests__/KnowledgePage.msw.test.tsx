@@ -130,18 +130,21 @@ function stubKnowledgeRoute(
         scopeNodes: [
           {
             id: '11111111-1111-4111-8111-111111111111',
+            address: 'org:org-1',
             name: 'mastra',
             kind: 'org',
             parentIds: [],
           },
           {
             id: '22222222-2222-4222-8222-222222222222',
+            address: 'features',
             name: 'features',
             kind: 'feature',
             parentIds: ['11111111-1111-4111-8111-111111111111'],
           },
           {
             id: '33333333-3333-4333-8333-333333333333',
+            address: 'features:memory',
             name: 'memory',
             kind: 'feature',
             parentIds: ['22222222-2222-4222-8222-222222222222'],
@@ -289,8 +292,9 @@ describe('KnowledgePage', () => {
           ...graphFixture,
           nodes: [
             {
-              id: '33333333-3333-4333-8333-333333333333',
-              name: 'memory',
+              // The clicked scope node renders as its own graph root.
+              id: '22222222-2222-4222-8222-222222222222',
+              name: 'features',
               kind: 'feature',
               scope: null,
               rung: null,
@@ -326,8 +330,30 @@ describe('KnowledgePage', () => {
               updatedAt: '2026-08-13T03:00:00.000Z',
             },
           ],
-          edges: [],
-          records: [],
+          // Containment edges from the root to every member, plus the
+          // wikilink edge derived from member records.
+          edges: [
+            {
+              id: 'contains:2:4',
+              source: '22222222-2222-4222-8222-222222222222',
+              target: '44444444-4444-4444-8444-444444444444',
+              type: 'contains' as const,
+            },
+            {
+              id: 'contains:2:5',
+              source: '22222222-2222-4222-8222-222222222222',
+              target: '55555555-5555-4555-8555-555555555555',
+              type: 'contains' as const,
+            },
+          ],
+          records: [
+            {
+              id: 'record-5555',
+              nodeIds: ['55555555-5555-4555-8555-555555555555'],
+              pinned: false,
+              text: 'Extraction pipeline notes.',
+            },
+          ],
         });
       }),
     );
@@ -347,6 +373,9 @@ describe('KnowledgePage', () => {
     await user.click(within(scopes).getByRole('button', { name: 'features' }));
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(await screen.findByText('observational')).toBeVisible();
+    // The clicked scope node renders as its own graph root inside the lens.
+    const graphContainer = screen.getByTestId('knowledge-graph-container');
+    expect(await within(graphContainer).findByText('features')).toBeVisible();
     await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
     expect(subgraphParams.every(id => id !== '33333333-3333-4333-8333-333333333333')).toBe(true);
 
@@ -368,6 +397,66 @@ describe('KnowledgePage', () => {
     fireEvent.click(await screen.findByText('Memory Extraction'));
     expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
+  });
+
+  it('merges an identity rung with its structural scope node into one entry', async () => {
+    stubKnowledgeRoute();
+    const subgraphParams: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, () =>
+        HttpResponse.json({
+          roots: [
+            {
+              level: 'org',
+              id: 'org-1',
+              available: true,
+              scopeNodeId: '11111111-1111-4111-8111-111111111111',
+              name: 'mastra',
+            },
+            { level: 'resource', id: FACTORY_ID, available: true },
+          ],
+          defaultLevel: 'resource',
+          scopeNodes: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              address: 'org:org-1',
+              name: 'mastra',
+              kind: 'org',
+              parentIds: [],
+            },
+            {
+              id: '22222222-2222-4222-8222-222222222222',
+              address: 'features',
+              name: 'features',
+              kind: 'feature',
+              parentIds: ['11111111-1111-4111-8111-111111111111'],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        const scopeNodeId = new URL(request.url).searchParams.get('scopeNodeId');
+        if (scopeNodeId) subgraphParams.push(scopeNodeId);
+        return HttpResponse.json(graphFixture);
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    // One entry for org:org-1 — structural name with an identity marker, not
+    // two labels for the same scope.
+    const merged = await within(scopes).findByRole('button', { name: /mastra · your org/ });
+    expect(within(scopes).queryByRole('button', { name: /Organization/ })).not.toBeInTheDocument();
+    expect(within(scopes).queryByRole('button', { name: 'mastra' })).not.toBeInTheDocument();
+    // The matched node leaves the structural tree; its children re-root there.
+    expect(await within(scopes).findByRole('button', { name: 'features' })).toBeInTheDocument();
+
+    // The merged entry opens the structural lens for the matched scope node.
+    await user.click(merged);
+    await waitFor(() => expect(subgraphParams).toContain('11111111-1111-4111-8111-111111111111'));
+    expect(merged).toHaveAttribute('aria-pressed', 'true');
+    expect(merged).toHaveClass('bg-surface4');
   });
 
   it('redirects direct knowledge links when the server-side feature is disabled', async () => {
