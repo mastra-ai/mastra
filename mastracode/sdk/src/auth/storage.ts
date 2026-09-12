@@ -266,7 +266,10 @@ export class AuthStorage {
     }
 
     const credentials = await provider.login(callbacks);
-    this.set(providerId, { type: 'oauth', ...credentials });
+    // Route through the account registry: a legacy slot credential is adopted
+    // first, the new account is appended (or updated in place on id
+    // collision), and it becomes the active account.
+    await this.addAccount(providerId, credentials);
   }
 
   /**

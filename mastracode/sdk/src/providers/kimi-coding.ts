@@ -34,9 +34,17 @@ export function buildKimiCodingOAuthFetch(options: { credentialStore?: Credentia
     if (!isKimiCodingDeviceId(credential.deviceId)) {
       throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
     }
-    const deviceHeaders = getKimiCodingDeviceHeaders(credential.deviceId);
     const token = await store.getApiKey(PROVIDER_ID);
     if (!token) throw new ProviderAuthRequiredError('Failed to refresh the Kimi For Coding token.');
+    // Re-read the credential after the token resolves: a refresh-failure
+    // rotation inside getApiKey may have activated a different account, and
+    // the device headers must match the token actually in use.
+    store.reload();
+    const activeCredential = store.get(PROVIDER_ID);
+    if (!activeCredential || activeCredential.type !== 'oauth' || !isKimiCodingDeviceId(activeCredential.deviceId)) {
+      throw new ProviderAuthRequiredError('Kimi For Coding credentials are invalid. Please reconnect the account.');
+    }
+    const deviceHeaders = getKimiCodingDeviceHeaders(activeCredential.deviceId);
 
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
