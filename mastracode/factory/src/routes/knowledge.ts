@@ -1982,6 +1982,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               } satisfies KnowledgeGraphNode;
             }),
           );
+          const pinnedRecordIds = new Set(pinnedRecords.map(({ record }) => record.id));
+          const visibleRecords = new Map(recordWindow.map(record => [record.id, record]));
+          for (const { record } of pinnedRecords) visibleRecords.set(record.id, record);
+          const graphRecords: KnowledgeGraphRecord[] = [...visibleRecords.values()].flatMap(record => {
+            const nodeIds = [...(recordNodeIds.get(record.id) ?? [])];
+            if (nodeIds.length === 0) return [];
+            return [
+              {
+                id: this.#mintHandle(projectId, view.perspectiveKey, 'record', record.id),
+                nodeIds: nodeIds.map(nodeId => this.#mintHandle(projectId, view.perspectiveKey, 'node', nodeId)),
+                pinned: pinnedRecordIds.has(record.id),
+                text: record.text.slice(0, 2_000),
+              },
+            ];
+          });
           const terminalBounds: KnowledgeGraphPayload['page']['terminalBounds'] = [
             ...(recordsTruncated ? ['record-window' as const] : []),
             ...(edgesTruncated ? ['edge-window' as const] : []),
