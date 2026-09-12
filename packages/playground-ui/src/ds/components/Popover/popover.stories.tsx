@@ -26,7 +26,7 @@ export const Default: Story = {
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Dimensions</h4>
-            <p className="text-neutral3 text-sm">Set the dimensions for the layer.</p>
+            <p className="text-neutral3 text-ui-md">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
             <div className="grid grid-cols-3 items-center gap-4">
@@ -56,7 +56,7 @@ export const WithIconTrigger: Story = {
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Settings</h4>
-            <p className="text-neutral3 text-sm">Manage your preferences.</p>
+            <p className="text-neutral3 text-ui-md">Manage your preferences.</p>
           </div>
         </div>
       </PopoverContent>
@@ -71,7 +71,7 @@ export const AlignStart: Story = {
         <Button variant="outline">Align Start</Button>
       </PopoverTrigger>
       <PopoverContent align="start">
-        <p className="text-sm">This popover is aligned to the start.</p>
+        <p className="text-ui-md">This popover is aligned to the start.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -84,7 +84,7 @@ export const AlignEnd: Story = {
         <Button variant="outline">Align End</Button>
       </PopoverTrigger>
       <PopoverContent align="end">
-        <p className="text-sm">This popover is aligned to the end.</p>
+        <p className="text-ui-md">This popover is aligned to the end.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -97,7 +97,7 @@ export const SideTop: Story = {
         <Button variant="outline">Open Above</Button>
       </PopoverTrigger>
       <PopoverContent side="top">
-        <p className="text-sm">This popover opens above the trigger.</p>
+        <p className="text-ui-md">This popover opens above the trigger.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -110,7 +110,7 @@ export const SideRight: Story = {
         <Button variant="outline">Open Right</Button>
       </PopoverTrigger>
       <PopoverContent side="right">
-        <p className="text-sm">This popover opens to the right.</p>
+        <p className="text-ui-md">This popover opens to the right.</p>
       </PopoverContent>
     </Popover>
   ),
@@ -123,7 +123,7 @@ export const SimpleText: Story = {
         <Button variant="ghost">?</Button>
       </PopoverTrigger>
       <PopoverContent className="w-60">
-        <p className="text-neutral5 text-sm">This is helpful information about the feature.</p>
+        <p className="text-neutral5 text-ui-md">This is helpful information about the feature.</p>
       </PopoverContent>
     </Popover>
   ),

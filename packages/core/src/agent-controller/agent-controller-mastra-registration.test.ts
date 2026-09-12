@@ -12,6 +12,16 @@ describe('AgentController ↔ Mastra registration', () => {
     expect(mastra).toBeInstanceOf(Mastra);
   });
 
+  it('configures background tasks on its standalone internal Mastra', async () => {
+    const controller = createTestController({
+      storage: new InMemoryStore(),
+      backgroundTasks: { enabled: true },
+    });
+    await controller.init();
+
+    expect(controller.getMastra()?.backgroundTaskManager).toBeDefined();
+  });
+
   it('uses the parent Mastra when registered on one', async () => {
     const controller = createTestController({ storage: new InMemoryStore() });
 

@@ -476,6 +476,68 @@ tests
   });
 
   // ===========================================================================
+  // Concurrent prefetch
+  // ===========================================================================
+  describe('concurrent prefetch', () => {
+    it('should issue readdir calls concurrently for sibling directories', async () => {
+      // Wide tree: 10 sibling directories each with a file
+      for (let i = 0; i < 10; i++) {
+        const dir = path.join(tempDir, `dir${i}`);
+        await fs.mkdir(dir);
+        await fs.writeFile(path.join(dir, 'file.txt'), '');
+      }
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const originalReaddir = filesystem.readdir.bind(filesystem);
+      filesystem.readdir = async (p: string, options?: any) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        try {
+          return await originalReaddir(p, options);
+        } finally {
+          inFlight--;
+        }
+      };
+
+      const result = await formatAsTree(filesystem, '.');
+
+      // Sibling directories at the same level should be read concurrently
+      expect(maxInFlight).toBeGreaterThan(1);
+      expect(result.dirCount).toBe(10);
+      expect(result.fileCount).toBe(10);
+    });
+
+    it('should produce deterministic sorted output regardless of readdir completion order', async () => {
+      for (const name of ['zeta', 'alpha', 'mid']) {
+        const dir = path.join(tempDir, name);
+        await fs.mkdir(dir);
+        await fs.writeFile(path.join(dir, `${name}.txt`), '');
+      }
+
+      const originalReaddir = filesystem.readdir.bind(filesystem);
+      filesystem.readdir = async (p: string, options?: any) => {
+        // Randomize completion order
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 10));
+        return originalReaddir(p, options);
+      };
+
+      const result = await formatAsTree(filesystem, '.');
+
+      expect(result.tree).toBe(
+        `.
+alpha
+\talpha.txt
+mid
+\tmid.txt
+zeta
+\tzeta.txt`,
+      );
+    });
+  });
+
+  // ===========================================================================
   // dirsOnly Option (tree -d flag)
   // ===========================================================================
   describe('dirsOnly', () => {

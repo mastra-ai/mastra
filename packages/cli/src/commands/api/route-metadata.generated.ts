@@ -1365,6 +1365,24 @@ export const API_ROUTE_METADATA = {
       "listProperty": "clonedMessages"
     }
   },
+  "POST /memory/threads/:threadId/transfer": {
+    "method": "POST",
+    "path": "/memory/threads/:threadId/transfer",
+    "pathParams": [
+      "threadId"
+    ],
+    "queryParams": [
+      "agentId"
+    ],
+    "bodyParams": [
+      "resourceId"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/threads/:threadId/working-memory": {
     "method": "POST",
     "path": "/memory/threads/:threadId/working-memory",

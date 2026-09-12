@@ -8,11 +8,11 @@ import { BadgeWrapper } from '@mastra/playground-ui/domains/chat/components/badg
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@mastra/playground-ui/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@mastra/playground-ui/domains/chat/components/section-label';
+import type { ToolApprovalButtonsProps } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
+import { ToolApprovalButtons } from '@mastra/playground-ui/domains/chat/tools/badges/tool-approval-buttons';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
-import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
   WorkflowGraph,
   WorkflowRunContext,

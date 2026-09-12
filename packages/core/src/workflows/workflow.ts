@@ -300,6 +300,27 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
  * @param params.outputSchema Zod schema defining the output structure
  * @param params.execute Function that performs the step's operations
  * @returns A Step object that can be added to the workflow
+ *
+ * @example
+ * ```typescript
+ * import { createStep } from '@mastra/core/workflows';
+ * import { z } from 'zod';
+ *
+ * const greet = createStep({
+ *   id: 'greet',
+ *   inputSchema: z.string(),
+ *   outputSchema: z.string(),
+ *   execute: async ({ inputData }) => `Hello, ${inputData}!`,
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workflow documentation](https://mastra.ai/docs/workflows/overview)
+ * if packaged docs are unavailable.
  */
 export function createStep<
   TStepId extends string,
@@ -738,6 +759,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         messages,
         messageList,
         stepNumber,
+        runId: agentRunId,
         systemMessages,
         part,
         streamParts,
@@ -1055,6 +1077,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         phase,
+        runId: agentRunId,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
         messageList: processorMessageList,
@@ -1216,6 +1239,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
+                runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
                 model: model!,
@@ -1255,6 +1279,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };

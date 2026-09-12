@@ -442,11 +442,12 @@ describe('AgentController signal messages', () => {
       model: createTextStreamModel('World'),
     });
     const { controller, session } = await createController(storage, agent);
+    let activeRunId: string | null = 'run-1';
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
       stream: (async function* () {})(),
       unsubscribe: vi.fn(),
       abort: vi.fn(),
-      activeRunId: () => 'run-1',
+      activeRunId: () => activeRunId,
     });
     const thread = await session.thread.create();
 
@@ -468,6 +469,12 @@ describe('AgentController signal messages', () => {
     });
 
     const signal = session.sendSignal({ content: 'follow-up after abort' });
+    // The dying run finishes tearing down shortly after; only then may the
+    // follow-up start its own run.
+    setTimeout(() => {
+      activeRunId = null;
+      session.run.reset();
+    }, 50);
     await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
 
     // buildToolsets is only called in the new-run (idle) branch, proving
@@ -532,6 +539,97 @@ describe('AgentController signal messages', () => {
         ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
       }),
     );
+  });
+
+  it('keeps waiting when the aborted run takes longer than a second to tear down', async () => {
+    // A real deployment tears an aborted run down over several seconds: the
+    // model stream cancels, then the output processors (memory, billing) run
+    // on the partial result. A message steered in that window must not be
+    // dispatched until the run is really gone, or the dying run swallows it.
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-slow-teardown-agent',
+      name: 'abort-slow-teardown-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { controller, session } = await createController(storage, agent);
+    let activeRunId: string | null = 'run-1';
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => activeRunId,
+    });
+    const thread = await session.thread.create();
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    const buildToolsets = vi.spyOn(controller as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'steered after a slow abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'steered after a slow abort' });
+    // Past the old one-second cap, the run is still finalizing.
+    await new Promise(resolve => setTimeout(resolve, 1_400));
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(buildToolsets).not.toHaveBeenCalled();
+
+    activeRunId = null;
+    session.run.reset();
+
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'steered after a slow abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
+      }),
+    );
+  }, 10_000);
+
+  it('still dispatches after the bounded wait when the aborted run never finishes stopping', async () => {
+    vi.useFakeTimers();
+    try {
+      const storage = new InMemoryStore();
+      const agent = new Agent({
+        id: 'abort-stuck-teardown-agent',
+        name: 'abort-stuck-teardown-agent',
+        instructions: 'You are a test agent.',
+        model: createTextStreamModel('World'),
+      });
+      const { session } = await createController(storage, agent);
+      vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+        stream: (async function* () {})(),
+        unsubscribe: vi.fn(),
+        abort: vi.fn(),
+        activeRunId: () => 'run-1',
+      });
+      await session.thread.create();
+
+      session.run.ensureAbortController();
+      session.run.setRunId({ runId: 'run-1' });
+      session.abort();
+      const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+        accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+        signal: createSignal({ type: 'user-message', contents: 'steered into a stuck teardown' }),
+      });
+
+      const signal = session.sendSignal({ content: 'steered into a stuck teardown' });
+      await vi.advanceTimersByTimeAsync(29_000);
+      expect(sendSignal).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+      expect(sendSignal).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('propagates delayed wake failures to callers that opt into requireDelivery', async () => {

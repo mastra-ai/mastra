@@ -14,6 +14,7 @@ import type {
   SendContextValue,
   TasksContextValue,
 } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
 import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -37,7 +38,6 @@ import {
   scanOmInitialState,
 } from '@/services/om-parts-converter';
 import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
-import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
 
 /**
