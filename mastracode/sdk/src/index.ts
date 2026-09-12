@@ -66,6 +66,7 @@ import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import { AccountRotationProcessor, AccountStartNoticeProcessor } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
@@ -129,7 +130,9 @@ const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
 const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
-const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503]);
+// 504 included so gateway timeouts exhaust the transient retry budget before
+// the account-rotation processor classifies them as a persistent outage (hop).
+const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503, 504]);
 const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
@@ -920,6 +923,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     inputProcessors: () => [
       ...mastraCodeInputProcessors,
+      // Input-lane notice ONLY (no processAPIError — see the class doc): the
+      // runner walks input processors first in runProcessAPIError, so an
+      // input-lane processAPIError would rotate before transient retries run.
+      new AccountStartNoticeProcessor({ credentialStore: authStorage }),
       ...readPluginProcessors().input.map(entry => entry.value),
       ...(pluginSignalLane?.getInputProcessors() ?? []),
     ],
@@ -959,7 +966,24 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ],
       }),
       new PrefillErrorHandler(),
+      // Rotation runs last in the error lane: a transient error reaching here
+      // means StreamErrorRetryProcessor already spent its budget, which is the
+      // hop condition; quota/auth errors were never transient-matched and
+      // rotate immediately.
+      new AccountRotationProcessor({
+        credentialStore: authStorage,
+        // Same budget core enforces (maxProcessorRetries below): past it, core
+        // discards retry:true, so the processor no-ops instead of rotating.
+        maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES + 12,
+      }),
     ],
+    // Total budget for error-processor retries; transient retries
+    // (StreamErrorRetryProcessor, up to MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES)
+    // and account rotations share one counter, so the budget must cover the
+    // worst case of full transient retries plus a realistic pool rotation
+    // (≤ 8 accounts) with margin. After rotations begin, later accounts see
+    // fewer transient retries — accepted per the rotation design.
+    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES + 12,
   });
 
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];

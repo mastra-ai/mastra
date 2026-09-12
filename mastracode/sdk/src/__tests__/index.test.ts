@@ -1007,6 +1007,7 @@ describe('createMastraCode', () => {
       'provider-history-compat',
       'stream-error-retry-processor',
       'prefill-error-handler',
+      'mastracode-account-rotation',
     ]);
   });
 
@@ -1073,9 +1074,61 @@ describe('createMastraCode', () => {
     expect(typeof serverErrorPolicy.match).toBe('function');
     expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
+    // Gateway timeouts (504) exhaust the transient budget before the
+    // account-rotation processor may classify them as a persistent outage.
+    expect(serverErrorPolicy.match!(Object.assign(new Error('Gateway timeout'), { statusCode: 504 }))).toBe(true);
+    expect(serverErrorPolicy.match!(Object.assign(new Error('Server error'), { statusCode: 500 }))).toBe(true);
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+  });
+
+  it('registers account rotation in the error lane after stream error retries, and the start notice in the input lane only', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; inputProcessors?: unknown } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'mastracode-account-rotation'));
+
+    const errorLane = agentConfig?.errorProcessors?.map(processor => processor.id) ?? [];
+    expect(errorLane.indexOf('mastracode-account-rotation')).toBeGreaterThan(
+      errorLane.indexOf('stream-error-retry-processor'),
+    );
+
+    const inputLane = resolveInputProcessors() as Array<{ id?: string; processAPIError?: unknown }>;
+    const startNotice = inputLane.find(processor => processor.id === 'mastracode-account-start-notice');
+    expect(startNotice).toBeDefined();
+    // Load-bearing: an input-lane processAPIError would run BEFORE
+    // StreamErrorRetryProcessor (runProcessAPIError walks input → output →
+    // error lanes) and rotate on errors transient retries should own.
+    expect(startNotice!.processAPIError).toBeUndefined();
+  });
+
+  it('sets a shared error-processor retry budget that transient retries cannot starve', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { maxProcessorRetries?: number } | undefined)
+      .find(config => typeof config?.maxProcessorRetries === 'number');
+    const budget = agentConfig?.maxProcessorRetries;
+    expect(budget).toBe(22);
+
+    // Walk simulation: core stops honoring retry:true once retryCount reaches
+    // maxProcessorRetries. Worst-case interleaving for a realistic pool (8
+    // accounts): the full transient budget (10) is spent first, then every
+    // pool rotation consumes one shared retry. A rotation must never be
+    // starved by the transient budget alone, and a 2-account pool completes
+    // its full rotation (plus a revisit pass) with margin.
+    const transientRetries = 10;
+    const twoAccountPoolRotations = 1; // A → B switch; the failure on B declares exhaustion
+    expect(transientRetries + twoAccountPoolRotations).toBeLessThan(budget!);
+    const realisticPool = 8;
+    expect(transientRetries + realisticPool).toBeLessThanOrEqual(budget!);
   });
 
   it('prepends embedding input processors without replacing mandatory built-ins', async () => {
@@ -1095,6 +1148,7 @@ describe('createMastraCode', () => {
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
+      'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors()).toEqual([]);
   });
@@ -1152,6 +1206,7 @@ describe('createMastraCode', () => {
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
+      'mastracode-account-start-notice',
       'acme-input',
     ]);
     expect(resolveOutputProcessors()).toEqual([pluginOutput]);
@@ -1164,6 +1219,7 @@ describe('createMastraCode', () => {
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
+      'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors()).toEqual([]);
   });
@@ -1207,6 +1263,7 @@ describe('createMastraCode', () => {
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
+      'mastracode-account-start-notice',
       'acme-provider-input',
     ]);
     expect(resolveOutputProcessors()).toEqual([outputProcessor]);
@@ -1272,6 +1329,7 @@ describe('createMastraCode', () => {
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
+      'mastracode-account-start-notice',
     ]);
     expect(resolveOutputProcessors()).toEqual([]);
     // Warned once, not once per request: this is the hot path.

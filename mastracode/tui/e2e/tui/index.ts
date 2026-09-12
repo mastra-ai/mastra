@@ -1,4 +1,5 @@
 import { abortFollowupScenario } from './abort-followup.js';
+import { accountRotationScenario } from './account-rotation.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
@@ -342,6 +343,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
+  'account-rotation': accountRotationScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,

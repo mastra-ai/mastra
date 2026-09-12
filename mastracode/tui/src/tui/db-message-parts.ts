@@ -1,3 +1,4 @@
+import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
@@ -41,7 +42,16 @@ export interface OmRenderPart {
   data: Record<string, unknown>;
 }
 
-export type AssistantRenderPart = TextRenderPart | ThinkingRenderPart | ToolRenderPart | OmRenderPart;
+export interface AccountSwitchRenderPart extends AccountSwitchPartData {
+  kind: 'account-switch';
+}
+
+export type AssistantRenderPart =
+  | TextRenderPart
+  | ThinkingRenderPart
+  | ToolRenderPart
+  | OmRenderPart
+  | AccountSwitchRenderPart;
 
 function getParts(message: MastraDBMessage): MessagePart[] {
   const content = message.content;
@@ -63,6 +73,28 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-observation-failed': 'failed',
   'data-om-thread-update': 'thread-title',
 };
+
+const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
+
+function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.provider !== 'string' || typeof record.reason !== 'string') return null;
+  const endpoint = (value: unknown): { id: string; label: string } | null => {
+    if (!value || typeof value !== 'object') return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== 'string' || typeof entry.label !== 'string') return null;
+    return { id: entry.id, label: entry.label };
+  };
+  return {
+    kind: 'account-switch',
+    provider: record.provider,
+    from: endpoint(record.from),
+    to: endpoint(record.to),
+    reason: record.reason as AccountSwitchPartData['reason'],
+    at: typeof record.at === 'string' ? record.at : '',
+  };
+}
 
 /**
  * Walk a message's `content.parts` and project them into flat render items in
@@ -121,6 +153,11 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         break;
       }
       default: {
+        if (partType === ACCOUNT_SWITCH_PART_TYPE) {
+          const switchPart = accountSwitchRenderPart((part as { data?: unknown }).data);
+          if (switchPart) out.push(switchPart);
+          break;
+        }
         const event = OM_EVENT_BY_TYPE[part.type];
         if (event) {
           const data = ((part as { data?: Record<string, unknown> }).data ?? {}) as Record<string, unknown>;

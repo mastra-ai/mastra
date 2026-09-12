@@ -687,4 +687,42 @@ export class AuthStorage {
 
     return undefined;
   }
+
+  /**
+   * Force one refresh of the active OAuth account's tokens, regardless of
+   * expiry. The account-rotation error processor calls this when a provider
+   * rejects a not-yet-expired token (401/403) — server-side clock skew and
+   * refresh-token races surface that way. Returns the fresh access token, or
+   * undefined when the refresh fails or there is no OAuth credential.
+   * Shares the per-instance refresh dedupe with `getApiKey`.
+   */
+  async forceRefreshActiveAccount(providerId: string): Promise<string | undefined> {
+    this.reload();
+    const cred = this.get(providerId);
+    if (cred?.type !== 'oauth') return undefined;
+    const provider = getOAuthProvider(providerId);
+    if (!provider) return undefined;
+
+    const activeEntry = this.getActiveAccount(providerId);
+    const refreshKey = activeEntry ? `${providerId}:${activeEntry.id}` : providerId;
+    const pending = this.refreshPromises.get(refreshKey);
+    const refresh =
+      pending ??
+      (async (): Promise<OAuthCredentials | undefined> => {
+        try {
+          const fresh = await provider.refreshToken(cred);
+          this.persistActiveCredential(providerId, fresh);
+          return fresh;
+        } catch {
+          return undefined;
+        }
+      })();
+    if (!pending) this.refreshPromises.set(refreshKey, refresh);
+    try {
+      const creds = await refresh;
+      return creds ? provider.getApiKey(creds) : undefined;
+    } finally {
+      if (!pending) this.refreshPromises.delete(refreshKey);
+    }
+  }
 }

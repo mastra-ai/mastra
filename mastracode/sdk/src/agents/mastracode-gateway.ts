@@ -38,6 +38,7 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
+import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
 export const OPENAI_PREFIX = 'openai/';
@@ -71,10 +72,32 @@ export type MastraCodeGatewayOptions = {
   credentialStore?: CredentialStore;
 };
 
-const authStorage = new AuthStorage();
+/**
+ * Global file-backed credential store for local (TUI) model resolution.
+ *
+ * Constructed lazily, NOT at module scope: `AuthStorage`'s default path is
+ * resolved from `MASTRA_APP_DATA_DIR` at construction, and this module is
+ * routinely imported before test harnesses / embedders point that variable at
+ * an isolated directory — an import-time construction would permanently pin
+ * the developer's real app-data dir for every credential read.
+ */
+let authStorageSingleton: AuthStorage | undefined;
+let authStorageSingletonDir: string | undefined;
+
+function getGlobalAuthStorage(): AuthStorage {
+  // Keyed by the resolved app-data dir: in-process harnesses re-point
+  // MASTRA_APP_DATA_DIR per run inside one long-lived worker, so a store
+  // pinned to a previous dir must be discarded, not reused.
+  const dir = getAppDataDir();
+  if (!authStorageSingleton || authStorageSingletonDir !== dir) {
+    authStorageSingleton = new AuthStorage();
+    authStorageSingletonDir = dir;
+  }
+  return authStorageSingleton;
+}
 
 export function reloadAuthStorage() {
-  authStorage.reload();
+  getGlobalAuthStorage().reload();
 }
 
 export function stripMastraGatewayPrefix(modelId: string): string {
@@ -111,7 +134,7 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
  * Resolve the Anthropic API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getAnthropicApiKey(credentials: CredentialStore = authStorage): string | undefined {
+export function getAnthropicApiKey(credentials: CredentialStore = getGlobalAuthStorage()): string | undefined {
   const storedCred = credentials.get('anthropic');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
@@ -127,7 +150,7 @@ export function getAnthropicApiKey(credentials: CredentialStore = authStorage): 
  * Resolve the OpenAI API key.
  * Main slot → dedicated apikey: slot → env var.
  */
-export function getOpenAIApiKey(credentials: CredentialStore = authStorage): string | undefined {
+export function getOpenAIApiKey(credentials: CredentialStore = getGlobalAuthStorage()): string | undefined {
   const storedCred = credentials.get('openai-codex');
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
@@ -163,7 +186,10 @@ function getAuthProviderId(providerId: string): string {
   return providerId === 'openai' ? 'openai-codex' : providerId;
 }
 
-function getProviderAuthKey(providerId: string, credentials: CredentialStore = authStorage): string | undefined {
+function getProviderAuthKey(
+  providerId: string,
+  credentials: CredentialStore = getGlobalAuthStorage(),
+): string | undefined {
   const authProviderId = getAuthProviderId(providerId);
   const storedCred = credentials.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
@@ -287,11 +313,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#thinkingLevel = thinkingLevel;
     this.#customProviders = customProviders;
     this.#settingsPath = settingsPath;
-    this.#credentials = credentialStore ?? authStorage;
+    this.#credentials = credentialStore ?? getGlobalAuthStorage();
   }
 
   static getMastraGatewayApiKey(): string | undefined {
-    return authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    return getGlobalAuthStorage().getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   }
 
   /** @deprecated Renamed to {@link MastraCodeGateway.getMastraGatewayApiKey}. */
@@ -330,7 +356,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   static resolveProviderAuth(
     request: GatewayAuthRequest,
     mastraGatewayApiKey?: string,
-    credentials: CredentialStore = authStorage,
+    credentials: CredentialStore = getGlobalAuthStorage(),
   ): GatewayAuthResult | undefined {
     if (request.gatewayId === 'mastra' && mastraGatewayApiKey) {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
@@ -412,7 +438,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     };
 
     try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage });
+      const copilotModels = await getCopilotModelCatalog({ authStorage: getGlobalAuthStorage() });
       providers['github-copilot'] = {
         name: 'GitHub Copilot',
         apiKeyEnvVar: '',
