@@ -9,6 +9,7 @@ import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
 import { ClipboardCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { SyntheticEvent } from 'react';
 
 const COLUMNS = 'minmax(0, 2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto auto';
 import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-value';
@@ -27,6 +28,8 @@ export interface InboxFeedbackListProps {
   onSelect: (feedback: FeedbackItem) => void;
   selectedFeedbackId?: string;
 }
+
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 export function InboxFeedbackList({
   items,
@@ -99,13 +102,20 @@ export function InboxFeedbackList({
               const author = feedbackAuthorLabel(feedback);
 
               return (
-                <DataList.RowWrapper key={feedbackId ?? `${String(feedback.timestamp)}-${feedback.traceId}`}>
+                <DataList.RowWrapper
+                  key={feedbackId ?? `${String(feedback.timestamp)}-${feedback.traceId}`}
+                  {...getRowProps(index)}
+                  onSelectRow={feedback.traceId ? () => onSelect(feedback) : undefined}
+                >
                   <DataList.RowButton
                     colEnd={-2}
                     disabled={!feedback.traceId}
                     featured={feedbackId !== undefined && feedbackId === selectedFeedbackId}
-                    onClick={() => onSelect(feedback)}
-                    {...getRowProps(index)}
+                    tabIndex={-1}
+                    onClick={event => {
+                      event.stopPropagation();
+                      onSelect(feedback);
+                    }}
                   >
                     <DataList.TextCell className="min-w-0">
                       <span className="block truncate">{feedbackDisplayValue(feedback)}</span>
@@ -126,7 +136,7 @@ export function InboxFeedbackList({
                     </DataList.TextCell>
                     <DataList.TextCell>{format(feedback.timestamp, 'MMM d, h:mm a')}</DataList.TextCell>
                   </DataList.RowButton>
-                  <DataList.ActionsCell className="pl-2">
+                  <DataList.ActionsCell className="pl-2" onClick={stopPropagation}>
                     {feedbackId ? (
                       <Button
                         icon={<ClipboardCheck />}

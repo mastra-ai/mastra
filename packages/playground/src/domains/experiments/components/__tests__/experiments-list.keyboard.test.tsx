@@ -31,7 +31,9 @@ describe('ExperimentsList keyboard navigation', () => {
 
     const rows = interactiveRows();
     expect(rows.length).toBe(experiments.length);
-    expect(rows.every(row => row.tagName === 'A')).toBe(true);
+    // The RowWrapper is the focus target; the link inside is out of the tab order.
+    expect(rows.every(row => row.tagName === 'DIV')).toBe(true);
+    expect(rows.every(row => row.querySelector('a')?.tabIndex === -1)).toBe(true);
     expectRovingTabindex(rows);
   });
 
@@ -42,11 +44,12 @@ describe('ExperimentsList keyboard navigation', () => {
   });
 
   describe('when selection mode is active', () => {
-    it('keeps keyboard navigation on the inner row buttons', () => {
+    it('keeps keyboard navigation on the row wrappers', () => {
       renderList({ selection: { selectedExperimentIds: [], onToggleSelection: () => {} } });
       const rows = interactiveRows();
       expect(rows.length).toBe(experiments.length);
-      expect(rows.every(row => row.tagName === 'BUTTON')).toBe(true);
+      expect(rows.every(row => row.tagName === 'DIV')).toBe(true);
+      expect(rows.every(row => row.querySelector('button') !== null)).toBe(true);
       expectArrowNavigation(rows);
     });
 

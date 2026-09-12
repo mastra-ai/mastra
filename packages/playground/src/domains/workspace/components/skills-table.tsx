@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { AlertTriangle, BookOpen, CircleSlashIcon, Plus } from 'lucide-react';
+import type { SyntheticEvent } from 'react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 import { useLinkComponent } from '@/lib/framework';
@@ -35,6 +36,8 @@ const baseColumns = [
 ] as const;
 
 const columnsWithActions = [...baseColumns, { label: '', size: 'auto' }] as const;
+
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
 export function SkillsTable({
   skills,
@@ -127,11 +130,18 @@ export function SkillsTable({
             }
 
             return (
-              <DataList.RowWrapper key={skill.path}>
-                <DataList.RowButton colEnd={-2} onClick={onClick} {...getRowProps(index)}>
+              <DataList.RowWrapper key={skill.path} {...getRowProps(index)} onSelectRow={onClick}>
+                <DataList.RowButton
+                  colEnd={-2}
+                  tabIndex={-1}
+                  onClick={event => {
+                    event.stopPropagation();
+                    onClick();
+                  }}
+                >
                   {rowContent}
                 </DataList.RowButton>
-                <DataList.ActionsCell className="pl-2">
+                <DataList.ActionsCell className="pl-2" onClick={stopPropagation}>
                   {isDownloaded(skill) && (
                     <>
                       {onUpdateSkill && (

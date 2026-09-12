@@ -261,7 +261,9 @@ describe('WorkflowsList', () => {
 
       const rowElements = interactiveRows();
       expect(rowElements.length).toBeGreaterThan(1);
-      expect(rowElements.every(row => row.tagName === 'A')).toBe(true);
+      // The RowWrapper is the focus target; the link inside is out of the tab order.
+      expect(rowElements.every(row => row.tagName === 'DIV')).toBe(true);
+      expect(rowElements.every(row => row.querySelector('a')?.tabIndex === -1)).toBe(true);
       expect(rowElements.map(row => row.tabIndex)).toEqual([0, ...rowElements.slice(1).map(() => -1)]);
 
       await waitForMutationsIdle(queryClient);

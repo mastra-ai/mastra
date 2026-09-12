@@ -7,7 +7,8 @@ import {
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import type { SyntheticEvent } from 'react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -37,6 +38,75 @@ function formatDate(dateStr: string | Date | undefined | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
+
+type EnrichedDataset = DatasetRecord & { experimentCount: number; successPct: number | null };
+
+/**
+ * Wrapper owns focus/roving and activation so the whole row navigates; the
+ * link and the trailing experiments button stop propagation to avoid double
+ * activation.
+ */
+function DatasetRow({
+  dataset: ds,
+  rowProps,
+}: {
+  dataset: EnrichedDataset;
+  rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
+}) {
+  const { paths, Link } = useLinkComponent();
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
+  const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
+  const hasExperimentsAction = ds.experimentCount > 0;
+
+  return (
+    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+      <EntityList.RowLink
+        ref={linkRef}
+        colEnd={hasExperimentsAction ? -2 : -1}
+        to={paths.datasetLink(ds.id)}
+        LinkComponent={Link}
+        tabIndex={-1}
+        onClick={stopPropagation}
+      >
+        <EntityList.NameCell>{ds.name}</EntityList.NameCell>
+        <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
+        <EntityList.Cell>
+          {tags.length > 0 ? (
+            <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
+              {tags.slice(0, 2).map(tag => (
+                <ComputedTag key={tag} value={tag} className="shrink-0" />
+              ))}
+              {tags.length > 2 && <span className="text-neutral2 text-ui-xs shrink-0">+{tags.length - 2}</span>}
+            </div>
+          ) : (
+            <span className="text-neutral2">—</span>
+          )}
+        </EntityList.Cell>
+        <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
+        <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
+        {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
+      </EntityList.RowLink>
+
+      {hasExperimentsAction ? (
+        <Button
+          as={Link}
+          to={`/experiments?dataset=${ds.id}`}
+          variant="ghost"
+          size="sm"
+          className="h-full w-full rounded-lg p-0!"
+          onClick={stopPropagation}
+        >
+          <Badge variant={experimentsBadgeVariant} size="sm">
+            {ds.experimentCount} ({ds.successPct ?? 0}%)
+          </Badge>
+        </Button>
+      ) : null}
+    </EntityList.RowWrapper>
+  );
+}
+
 export function DatasetsList({
   datasets,
   experiments,
@@ -48,8 +118,6 @@ export function DatasetsList({
   hasNextPage,
   setEndOfListElement,
 }: DatasetsListProps) {
-  const { paths, Link } = useLinkComponent();
-
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
       const dsExperiments = experiments.filter(e => e.datasetId === ds.id);
@@ -90,54 +158,9 @@ export function DatasetsList({
         <EntityList.TopCell>Experiments</EntityList.TopCell>
       </EntityList.Top>
 
-      {filteredData.map((ds, index) => {
-        const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
-        const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
-        const hasExperimentsAction = ds.experimentCount > 0;
-
-        return (
-          <EntityList.RowWrapper key={ds.id}>
-            <EntityList.RowLink
-              colEnd={hasExperimentsAction ? -2 : -1}
-              to={paths.datasetLink(ds.id)}
-              LinkComponent={Link}
-              {...getRowProps(index)}
-            >
-              <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
-              <EntityList.Cell>
-                {tags.length > 0 ? (
-                  <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
-                    {tags.slice(0, 2).map(tag => (
-                      <ComputedTag key={tag} value={tag} className="shrink-0" />
-                    ))}
-                    {tags.length > 2 && <span className="text-neutral2 text-ui-xs shrink-0">+{tags.length - 2}</span>}
-                  </div>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </EntityList.Cell>
-              <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-              <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-              {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
-            </EntityList.RowLink>
-
-            {hasExperimentsAction ? (
-              <Button
-                as={Link}
-                to={`/experiments?dataset=${ds.id}`}
-                variant="ghost"
-                size="sm"
-                className="h-full w-full rounded-lg p-0!"
-              >
-                <Badge variant={experimentsBadgeVariant} size="sm">
-                  {ds.experimentCount} ({ds.successPct ?? 0}%)
-                </Badge>
-              </Button>
-            ) : null}
-          </EntityList.RowWrapper>
-        );
-      })}
+      {filteredData.map((ds, index) => (
+        <DatasetRow key={ds.id} dataset={ds} rowProps={getRowProps(index)} />
+      ))}
 
       <EntityList.NextPageLoading
         isLoading={isFetchingNextPage}
