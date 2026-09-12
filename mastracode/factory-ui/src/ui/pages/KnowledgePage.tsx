@@ -107,23 +107,26 @@ function ScopeTree({
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
 }) {
-  // Nest the reconciled structural tree under its parent scope nodes. Roots of
-  // the structural forest are nodes without parents (or whose parents are not
-  // in the payload window).
+  // ONE tree built from the scope nodes that exist — never from the declared
+  // structure plan or the host's rung config. The server materializes the
+  // identity chain (org → project → session) as ordinary scope nodes linked
+  // by membership edges, so nesting here is pure `parentIds`. A rung whose
+  // node exists renders merged (structural name + identity marker, structural
+  // lens); a rung whose node does NOT exist (adapter without structural scope
+  // nodes, or a failed vouch) falls back to a plain identity entry so the
+  // rung stays reachable. The multi-parent case renders under every parent.
   const roots = scopes?.roots ?? [];
-  // An identity rung whose address is owned by a reconciled scope node merges
-  // into ONE entry (structural name, identity marker) opening the structural
-  // lens — the same scope never renders under two labels. The matched scope
-  // node leaves the structural tree below; its children re-root.
-  const mergedByNodeId = new Map(roots.flatMap(root => (root.scopeNodeId ? [[root.scopeNodeId, root] as const] : [])));
-  const scopeNodes = (scopes?.scopeNodes ?? []).filter(node => !mergedByNodeId.has(node.id));
-  const byParent = new Map<string, KnowledgeScopeNode[]>();
+  const scopeNodes = scopes?.scopeNodes ?? [];
+  const markerByNodeId = new Map(
+    roots.flatMap(root => (root.scopeNodeId ? [[root.scopeNodeId, root.level] as const] : [])),
+  );
   const known = new Set(scopeNodes.map(node => node.id));
-  const structuralRoots: KnowledgeScopeNode[] = [];
+  const byParent = new Map<string, KnowledgeScopeNode[]>();
+  const treeRoots: KnowledgeScopeNode[] = [];
   for (const node of scopeNodes) {
     const parents = node.parentIds.filter(id => known.has(id));
     if (parents.length === 0) {
-      structuralRoots.push(node);
+      treeRoots.push(node);
       continue;
     }
     for (const parentId of parents) {
@@ -132,77 +135,55 @@ function ScopeTree({
       else byParent.set(parentId, [node]);
     }
   }
-  const renderScopeNode = (node: KnowledgeScopeNode, depth: number) => (
-    <div key={node.id}>
-      <button
-        type="button"
-        aria-pressed={selection?.scopeNodeId === node.id}
-        className={cn(
-          'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
-          selection?.scopeNodeId === node.id && 'bg-surface4 text-icon6 font-medium',
-        )}
-        style={{ paddingLeft: `${8 + depth * 12}px` }}
-        title={node.description ?? node.name}
-        onClick={() => onSelect({ scopeNodeId: node.id })}
-      >
-        {node.name}
-      </button>
-      {(byParent.get(node.id) ?? []).map(child => renderScopeNode(child, depth + 1))}
-    </div>
-  );
+  const rungLabel = (level: (typeof roots)[number]['level']) =>
+    level === 'resource' ? 'Project' : level === 'thread' ? 'Session' : 'Organization';
+  const markerLabel = (level: (typeof roots)[number]['level']) =>
+    level === 'resource' ? 'your project' : level === 'thread' ? 'your session' : 'your org';
+  const renderScopeNode = (node: KnowledgeScopeNode, depth: number) => {
+    const marker = markerByNodeId.get(node.id);
+    const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
+    return (
+      <div key={node.id}>
+        <button
+          type="button"
+          aria-pressed={pressed}
+          className={cn(
+            'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+            pressed && 'bg-surface4 text-icon6 font-medium',
+          )}
+          style={{ paddingLeft: `${8 + depth * 12}px` }}
+          title={node.description ?? node.name}
+          onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
+        >
+          {node.name}
+          {marker ? <span className="text-icon3"> · {markerLabel(marker)}</span> : null}
+        </button>
+        {(byParent.get(node.id) ?? []).map(child => renderScopeNode(child, depth + 1))}
+      </div>
+    );
+  };
+  const fallbackRungs = roots.filter(root => !root.scopeNodeId);
   return (
     <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
-        <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Your access</div>
-        {roots.map((root, index) => {
-          if (root.scopeNodeId) {
-            // Merged entry: structural name, identity marker, structural lens.
-            return (
-              <button
-                key={root.level}
-                type="button"
-                aria-pressed={selection?.scopeNodeId === root.scopeNodeId}
-                className={cn(
-                  'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
-                  selection?.scopeNodeId === root.scopeNodeId && 'bg-surface4 text-icon6 font-medium',
-                )}
-                style={{ paddingLeft: `${8 + index * 12}px` }}
-                title={root.name}
-                onClick={() => onSelect({ scopeNodeId: root.scopeNodeId! })}
-              >
-                {root.name}{' '}
-                <span className="text-icon3">
-                  · your {root.level === 'resource' ? 'project' : root.level === 'thread' ? 'session' : 'org'}
-                </span>
-              </button>
-            );
-          }
-          return (
-            <button
-              key={root.level}
-              type="button"
-              aria-pressed={selection?.scopeLevel === root.level}
-              className={cn(
-                'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
-                selection?.scopeLevel === root.level && 'bg-surface4 text-icon6 font-medium',
-              )}
-              style={{ paddingLeft: `${8 + index * 12}px` }}
-              onClick={() => onSelect({ scopeLevel: root.level })}
-            >
-              {root.level === 'resource' ? 'Project' : root.level === 'thread' ? 'Session' : 'Organization'}{' '}
-              {root.id.slice(0, 8)}
-            </button>
-          );
-        })}
-        {structuralRoots.length > 0 ? (
-          <div className="border-surface5 mt-2 flex flex-col gap-1 border-t pt-2">
-            <div className="text-icon3 text-[10px] font-semibold tracking-wider uppercase">Knowledge structure</div>
-            {structuralRoots.map(node => renderScopeNode(node, 0))}
-          </div>
-        ) : null}
+        {treeRoots.map(node => renderScopeNode(node, 0))}
+        {fallbackRungs.map(root => (
+          <button
+            key={root.level}
+            type="button"
+            aria-pressed={selection?.scopeLevel === root.level && !selection?.scopeNodeId}
+            className={cn(
+              'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+              selection?.scopeLevel === root.level && !selection?.scopeNodeId && 'bg-surface4 text-icon6 font-medium',
+            )}
+            onClick={() => onSelect({ scopeLevel: root.level })}
+          >
+            {rungLabel(root.level)} {root.id.slice(0, 8)}
+          </button>
+        ))}
       </div>
     </aside>
   );
@@ -269,7 +250,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         : threadId
           ? { scopeLevel: 'thread' }
           : undefined;
-  const scopeLevel = selection?.scopeLevel;
+  const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
+  // A merged entry's rung survives the `?scope=<uuid>` deep link through the
+  // scopes payload: the root whose scopeNodeId matches supplies the rung for
+  // activity/flyout context.
+  const markerRung = selection?.scopeNodeId
+    ? scopesQuery.data?.roots.find(root => root.scopeNodeId === selection.scopeNodeId)?.level
+    : undefined;
+  const scopeLevel = selection?.scopeLevel ?? markerRung;
   const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
@@ -281,7 +269,6 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // zooming) and resume after 10s of stillness — the layout never shifts
   // under someone mid-interaction.
   const { idle, onActivity } = useInteractionIdle(10_000);
-  const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
   const graphQuery = useKnowledgeGraph(scopesQuery.data ? factoryProjectId : undefined, selection, threadId, {
     paused: !idle,
   });
@@ -331,7 +318,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSelected(null);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
-      copy.set('scope', next.scopeLevel ?? next.scopeNodeId);
+      // Merged entries (scope node owning a rung's address) deep-link to the
+      // structural lens — one entry, one lens.
+      copy.set('scope', next.scopeNodeId ?? next.scopeLevel);
       return copy;
     });
   };

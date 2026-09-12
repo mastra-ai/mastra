@@ -42,12 +42,14 @@ export interface KnowledgeScopeTreePayload {
 }
 
 /**
- * What the explore view reads: an identity rung (org/resource/thread) or one
- * reconciled structural scope node by id.
+ * What the explore view reads: an identity rung (org/resource/thread), one
+ * reconciled structural scope node by id, or a merged entry carrying both
+ * (a scope node that owns a rung's address — structural lens plus the rung
+ * for activity/flyout context).
  */
 export type KnowledgeSelection =
   | { scopeLevel: KnowledgeRung; scopeNodeId?: never }
-  | { scopeNodeId: string; scopeLevel?: never };
+  | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
 
 export interface KnowledgeGraphNode {
   id: string;
