@@ -204,8 +204,6 @@ const memory = new Memory({
 })
 ```
 
-If the newest unobserved message contains an incomplete tool call — typically a client-executed call still waiting for its result — idle buffering can still observe the completed messages before it. It retains the incomplete message and everything after it. An older incomplete call buried under newer messages is treated as abandoned: the conversation already continued past it, so it doesn't block buffering. If the boundary would split related tool messages or advance the observation cursor past retained messages with equal or adjacent timestamps, the entire idle-buffer attempt is deferred instead of buffering a smaller prefix. Raw messages are still saved. Once the tool results arrive, a later completed turn can buffer the retained messages.
-
 `bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
