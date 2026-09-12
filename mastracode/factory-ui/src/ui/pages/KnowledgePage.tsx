@@ -17,7 +17,7 @@ import { KnowledgeApprovals } from '../domains/factory/components/knowledge/Know
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type { KnowledgeRung, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
@@ -350,6 +350,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const importerId = searchParams.get('importer') ?? undefined;
   const runId = searchParams.get('run') ?? undefined;
   const proposalId = searchParams.get('proposal') ?? undefined;
+  // `?scope=` is an identity rung ('org', 'resource', or 'thread' alongside
+  // ?thread=) or a scope-tree node id; without it the view resolves the
+  // project scope (or the session scope inside a thread).
+  const selection: { scopeLevel: 'org' | 'resource' | 'thread'; scopeNodeId?: never } | { scopeNodeId: string; scopeLevel?: never } =
+    requestedScopeId === 'org' || requestedScopeId === 'resource' || (requestedScopeId === 'thread' && threadId)
+      ? { scopeLevel: requestedScopeId }
+      : requestedScopeId
+        ? { scopeNodeId: requestedScopeId }
+        : threadId
+          ? { scopeLevel: 'thread' }
+          : { scopeLevel: 'resource' };
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
