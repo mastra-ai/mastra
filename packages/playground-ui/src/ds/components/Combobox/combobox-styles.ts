@@ -45,7 +45,7 @@ export function comboboxTriggerClass({
     buttonVariants({ variant: visualVariant, size }),
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`).
-    'w-full min-w-32 justify-between',
+    'w-full justify-between',
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-neutral3',
@@ -89,7 +89,7 @@ export const comboboxStyles = {
 
   /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
   popup: cn(
-    'w-max max-w-(--available-width) min-w-(--anchor-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
+    'w-max max-w-(--available-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
     'shadow-dialog',
     'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',

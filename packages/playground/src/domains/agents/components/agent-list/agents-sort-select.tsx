@@ -9,7 +9,7 @@ export interface AgentsSortSelectProps {
 export function AgentsSortSelect({ sort, onSortChange }: AgentsSortSelectProps) {
   return (
     <Select<AgentsSort> value={sort} onValueChange={onSortChange}>
-      <SelectTrigger aria-label="Sort agents" size="md" variant="ghost" className="w-auto min-w-36">
+      <SelectTrigger aria-label="Sort agents" size="md" variant="ghost" className="w-auto">
         <SelectValue />
       </SelectTrigger>
       <SelectContent align="end">

@@ -250,7 +250,9 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   aria-label={`${hiddenTabs.length} more tabs`}
-                  className="text-ui-sm text-neutral3 hover:bg-surface3 hover:text-neutral5 focus-visible:ring-accent1 flex items-center gap-1 rounded px-1.5 py-1 tabular-nums focus-visible:ring-1 focus-visible:outline-none"
+                  variant="ghost"
+                  size="xs"
+                  className="tabular-nums"
                 >
                   +{hiddenTabs.length}
                   <ChevronDown aria-hidden="true" className="size-3" />

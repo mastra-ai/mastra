@@ -4,7 +4,8 @@ import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { asChildRenderProps } from '@/lib/as-child';
+import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
+import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
 
 const DropdownMenuRoot = MenuPrimitive.Root;
@@ -26,26 +27,25 @@ const itemClass = cn(
 const positionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
 const popupClass = cn(
-  'z-50 max-h-[min(20rem,var(--available-height))] min-w-44 origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
+  'z-50 max-h-[min(20rem,var(--available-height))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
-type DropdownMenuTriggerProps = MenuPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
-  asChild?: boolean;
-};
+export type DropdownMenuTriggerProps = Omit<MenuPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
+/**
+ * The button that opens the menu. Renders a design-system `<Button>` by
+ * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
+ * to project the behavior onto your own element (then the look is yours).
+ */
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
-  ({ className, asChild, children, ...props }, ref) => {
+  ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
+    const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
+
     return (
-      <MenuPrimitive.Trigger
-        ref={ref}
-        className={cn('cursor-pointer outline-none', className)}
-        {...asChildRenderProps(asChild, children)}
-        {...props}
-      >
-        {asChild ? undefined : children}
+      <MenuPrimitive.Trigger ref={ref} className={resolved.className} render={resolved.render} {...props}>
+        {resolved.children}
       </MenuPrimitive.Trigger>
     );
   },
