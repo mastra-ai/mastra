@@ -23,7 +23,12 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
-import { logPlatformInfo, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
+import {
+  logPlatformInfo,
+  PlatformApiClient,
+  platformApiClientConfigFromEnv,
+  type PlatformApiClientConfig,
+} from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -38,6 +43,11 @@ interface JiraConnectionContext {
   connection: PlatformIntegrationConnection;
   api: JiraApiClient;
   siteUrl: string;
+}
+
+interface PlatformConnectionContextResponse {
+  connection_config: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface JiraIssueReference {
@@ -91,7 +101,9 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
   readonly #connection: PlatformIntegrationConnection;
   readonly #clientConfig: PlatformApiClientConfig;
+  readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #cloudIdByConnectionId = new Map<string, string>();
   readonly #siteUrlByConnectionId = new Map<string, string>();
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
@@ -110,6 +122,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       accountLabel: null,
     };
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
+    this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
   }
 
@@ -394,12 +407,29 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     return this.#connectionContext(this.#connection);
   }
 
+  async #cloudId(connectionId: string): Promise<string> {
+    const cached = this.#cloudIdByConnectionId.get(connectionId);
+    if (cached) return cached;
+
+    const context = await this.#platformClient.request<PlatformConnectionContextResponse>(
+      'GET',
+      `/v2/connections/${encodeURIComponent(connectionId)}/context`,
+    );
+    const cloudId = context.connection_config?.cloudId;
+    if (typeof cloudId !== 'string' || !UUID_PATTERN.test(cloudId)) {
+      throw new JiraApiError('Platform Jira connection context is missing a valid cloudId.', 502);
+    }
+    this.#cloudIdByConnectionId.set(connectionId, cloudId);
+    return cloudId;
+  }
+
   async #connectionContext(connection: PlatformIntegrationConnection): Promise<JiraConnectionContext> {
     const proxyBaseUrl = `${this.#clientConfig.baseUrl.replace(/\/+$/, '')}/v2/connections/${encodeURIComponent(
       connection.id,
     )}/proxy`;
+    const cloudId = await this.#cloudId(connection.id);
     const api = new JiraApiClient({
-      baseUrl: proxyBaseUrl,
+      baseUrl: `${proxyBaseUrl}/ex/jira/${encodeURIComponent(cloudId)}`,
       accessToken: this.#clientConfig.accessToken,
       ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
     });
