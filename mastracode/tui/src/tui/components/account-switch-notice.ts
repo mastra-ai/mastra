@@ -7,8 +7,8 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { accountSwitchNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { accountSwitchNoticeText, packFallbackNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { AccountSwitchPartData, PackFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
 
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -25,6 +25,22 @@ export class AccountSwitchNoticeComponent extends Container {
   constructor(data: AccountSwitchNoticeData) {
     super();
     this.textChild = new Text(formatAccountSwitchNotice(data), BOX_INDENT, 0);
+    this.addChild(this.textChild);
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
+  }
+}
+
+export type PackFallbackNoticeData = PackFallbackPartData;
+
+export class PackFallbackNoticeComponent extends Container {
+  private textChild: Text;
+
+  constructor(data: PackFallbackNoticeData) {
+    super();
+    this.textChild = new Text(theme.fg('muted', `  ⇄ ${packFallbackNoticeText(data)}`), BOX_INDENT, 0);
     this.addChild(this.textChild);
   }
 

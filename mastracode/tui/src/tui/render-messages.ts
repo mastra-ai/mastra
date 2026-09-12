@@ -17,7 +17,7 @@ import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
-import { AccountSwitchNoticeComponent } from './components/account-switch-notice.js';
+import { AccountSwitchNoticeComponent, PackFallbackNoticeComponent } from './components/account-switch-notice.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
@@ -1110,6 +1110,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         } else if (part.kind === 'account-switch') {
           flushAccumulated();
           state.chatContainer.addChild(new AccountSwitchNoticeComponent(part));
+        } else if (part.kind === 'pack-fallback') {
+          flushAccumulated();
+          state.chatContainer.addChild(new PackFallbackNoticeComponent(part));
         } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
           if (part.event === 'start') continue;

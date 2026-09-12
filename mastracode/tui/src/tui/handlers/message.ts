@@ -9,6 +9,9 @@
  * therefore delegated to `addUserMessage` / `renderSignalMessage`; this file
  * only drives the streaming assistant component and its tool boundaries.
  */
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { loadSettings, saveSettings, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
 import {
@@ -273,4 +276,47 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
     state.currentRunSystemReminderKeys.clear();
   }
   flushRender(state);
+}
+
+/**
+ * Thread stickiness for a pack hop (Q19): the rotation processor writes the
+ * landed pack into session state (PACK_FALLBACK_STATE_KEY) when a cascade
+ * advances; this handler consumes it on the typed `state_changed` event —
+ * data parts never ride controller message events, so this key is the live
+ * channel. Mirrors the manual /models switch: thread metadata +
+ * settings.models.activeModelPackId + a live session model switch, so the
+ * thread stays on the landed pack until the user switches manually.
+ */
+export async function handlePackFallbackState(
+  ectx: EventHandlerContext,
+  event: { state: Record<string, unknown>; changedKeys: string[] },
+): Promise<void> {
+  if (!event.changedKeys.includes(PACK_FALLBACK_STATE_KEY)) return;
+  const pending = event.state[PACK_FALLBACK_STATE_KEY] as PendingPackFallback | null | undefined;
+  // Already consumed (or never set): bail BEFORE clearing — clearing a null
+  // key re-emits state_changed with the same changedKey and would loop.
+  if (pending === null || pending === undefined) return;
+  // Consume first — a malformed or already-applied payload must never re-trigger.
+  await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+  if (typeof pending.toPackId !== 'string' || typeof pending.toModelId !== 'string') return;
+  if (pending.toModelId.length === 0 || pending.toPackId.length === 0) return;
+
+  const settings = loadSettings();
+  if (pending.toPackId.startsWith('custom:')) {
+    const customName = pending.toPackId.slice('custom:'.length);
+    const pack = settings.customModelPacks.find(p => p.name === customName);
+    if (pack) settings.models.modeDefaults = { ...pack.models };
+  } else {
+    settings.models.modeDefaults = {};
+  }
+  settings.onboarding.modePackId = pending.toPackId;
+  settings.models.activeModelPackId = pending.toPackId;
+  saveSettings(settings);
+
+  if (ectx.state.session.thread.getId()) {
+    await ectx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
+  }
+  await ectx.state.session.model.switch({ modelId: pending.toModelId });
+  ectx.updateStatusLine();
+  await ectx.refreshModelAuthStatus();
 }
