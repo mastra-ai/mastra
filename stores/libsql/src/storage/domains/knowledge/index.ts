@@ -2542,6 +2542,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       )
     )`;
     return { sql, args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds] };
+  }
+
   async #markProposalConflicted(
     tx: Transaction,
     proposal: KnowledgeProposal,
