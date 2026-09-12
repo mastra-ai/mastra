@@ -229,6 +229,15 @@ export function recordPairEdges(records: KnowledgeGraphRecord[]): KnowledgeGraph
   return edges;
 }
 
+/** Records replace payload wikilinks, never independent containment edges. */
+export function graphTraversalEdges(
+  payloadEdges: KnowledgeGraphEdge[],
+  records: KnowledgeGraphRecord[],
+): KnowledgeGraphEdge[] {
+  if (records.length === 0) return payloadEdges;
+  return [...payloadEdges.filter(edge => edge.type === 'contains'), ...recordPairEdges(records)];
+}
+
 export type NodeFlowNode = Node<{
   node: KnowledgeGraphNode;
   size: number;
@@ -253,6 +262,16 @@ export type KnowledgeFlowEdge = Edge<{
   /** The edge belongs to the record currently selected in the flyout. */
   focused?: boolean;
 }>;
+
+/** A11 record edges replace wikilinks only; containment remains visible. */
+export function renderedGraphEdges(
+  nodeEdges: KnowledgeFlowEdge[],
+  recordEdges: KnowledgeFlowEdge[],
+  hasRecords: boolean,
+): KnowledgeFlowEdge[] {
+  if (!hasRecords) return nodeEdges;
+  return [...nodeEdges.filter(edge => edge.data?.linkType === 'contains'), ...recordEdges];
+}
 
 /** Map A11 record elements into React Flow nodes/edges (positions from the layout). */
 export function toRecordFlow(
