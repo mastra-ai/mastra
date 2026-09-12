@@ -82,7 +82,7 @@ describe('Composer commands', () => {
 
     it('supports pointer selection and filters options by their value', () => {
       render(<CommandComposer />);
-      fireEvent.click(screen.getByRole('option', { name: /\/review / }));
+      fireEvent.click(screen.getByRole('option', { name: /^\/review/ }));
       fireEvent.change(messageInput(), { target: { value: '/review att' } });
       expect(screen.getAllByRole('option')).toHaveLength(1);
       fireEvent.click(screen.getByRole('option', { name: /Attachment previews/ }));
