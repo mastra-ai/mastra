@@ -46,6 +46,29 @@ describe('transformTools', () => {
       });
     });
 
+    it('should call a createTool tool with its arguments, not wrapped in context', async () => {
+      // createTool's execute is (inputData, context), so wrapping the arguments
+      // in { context: args } left every field undefined and failed the tool's
+      // own input validation (#23723).
+      let received: unknown;
+      const tool = createTool({
+        id: 'echoTool',
+        description: 'Echoes its input',
+        inputSchema: z.object({ message: z.string() }),
+        outputSchema: z.string(),
+        execute: async input => {
+          received = input;
+          return input.message;
+        },
+      });
+
+      const transformedTools = transformTools({ echoTool: tool });
+      const result = await transformedTools[0].execute({ message: 'Hello' });
+
+      expect(received).toEqual({ message: 'Hello' });
+      expect(result).toBe('Hello');
+    });
+
     it('should transform a tool with JSON schema parameters to OpenAI format', () => {
       // Create a test tool with direct JSON schema
       const tool = {

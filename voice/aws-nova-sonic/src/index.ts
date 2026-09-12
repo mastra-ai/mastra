@@ -1512,13 +1512,13 @@ export class NovaSonicVoice extends MastraVoice<
 
     try {
       // Execute tool
-      const result = await tool.execute(
-        { context: args, requestContext: this.requestContext },
-        {
-          toolCallId: toolUseId,
-          messages: [],
-        },
-      );
+      // The arguments are the first parameter and the request context belongs to
+      // the execute context, per ToolExecuteFunction in @mastra/core.
+      const result = await tool.execute(args, {
+        toolCallId: toolUseId,
+        messages: [],
+        requestContext: this.requestContext,
+      });
 
       // Send tool result back to the model
       await this.sendClientEvent({

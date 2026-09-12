@@ -41,25 +41,14 @@ export const transformTools = (tools?: TTools) => {
             throw new Error(`Tool ${name} has no execute function`);
           }
 
-          // For ToolAction, the first argument is a context object with the args in a 'context' property
-          if ('inputSchema' in tool) {
-            return await tool.execute(
-              { context: args },
-              {
-                toolCallId: 'unknown',
-                messages: [],
-              },
-            );
-          }
-          // For VercelTool, pass args directly
-          else {
-            // Create a minimal ToolExecutionOptions object with required properties
-            const options = {
-              toolCallId: 'unknown',
-              messages: [],
-            };
-            return await tool.execute(args, options);
-          }
+          // Both shapes take the arguments as the FIRST parameter: createTool's
+          // execute is (inputData, context), and a Vercel tool's is (args,
+          // options). Wrapping them in { context: args } left every field the
+          // tool reads undefined, or failed its input validation.
+          return await tool.execute(args, {
+            toolCallId: 'unknown',
+            messages: [],
+          });
         } catch (error) {
           console.error(`Error executing tool ${name}:`, error);
           throw error;
