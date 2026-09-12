@@ -4,7 +4,11 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getAvailableModePacks, getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
+import {
+  getAvailableModePacks,
+  getBuiltinModePack,
+  resolveModePackFallbackChain,
+} from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -396,6 +400,27 @@ async function runCustomPackEditFlow(
   }
 }
 
+/**
+ * Set (or clear, with null) a pack's fallback pack. Values come from the
+ * /models picker, which only lists known packs — write-time validation is the
+ * picker itself. Load-time dangling tolerance lives in settings parsing.
+ */
+export function setPackFallback(settings: GlobalSettings, packId: string, fallbackId: string | null): void {
+  // `??=` tolerates hand-built settings fixtures and pre-feature in-memory
+  // objects; settings loaded from disk always carry the default {}.
+  const fallbacks = (settings.models.packFallbacks ??= {});
+  if (fallbackId === null) {
+    delete fallbacks[packId];
+  } else {
+    fallbacks[packId] = fallbackId;
+  }
+}
+
+/** Picker candidates for a pack's fallback: every pack except the pack itself (and the "New Custom" pseudo-row). */
+export function fallbackPackCandidates(packs: ModePack[], packId: string): ModePack[] {
+  return packs.filter(p => p.id !== packId && p.id !== 'custom');
+}
+
 export function resetBuiltinPackOverrides(settings: GlobalSettings, packId: string): void {
   delete settings.models.modePackOverrides?.[packId];
   if (settings.models.activeModelPackId === packId) {
@@ -653,6 +678,161 @@ async function askImportCollision(
   });
 }
 
+/**
+ * Render the fallback chain a pack implies, e.g. "OpenAI → GitHub Copilot".
+ * Returns null when the pack has no fallback. The walk is the SDK's
+ * construction-capped one, so the display matches what a cascade would do.
+ */
+export function formatPackFallbackChain(settings: GlobalSettings, packs: ModePack[], packId: string): string | null {
+  const chain = resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, packId, settings.customModelPacks);
+  if (chain.length < 2) return null;
+  const nameOf = (id: string) => packs.find(p => p.id === id)?.name ?? id;
+  return chain
+    .slice(1)
+    .map(id => nameOf(id))
+    .join(' → ');
+}
+
+async function askFallbackTarget(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<string | null | undefined> {
+  const settings = loadSettings();
+  const current = settings.models.packFallbacks[pack.id];
+  const candidates = fallbackPackCandidates(packs, pack.id);
+
+  const items: SelectItem[] = candidates.map(p => ({
+    value: p.id,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('dim', ' (current)') : ''}`,
+  }));
+  if (current) {
+    items.unshift({
+      value: '__clear__',
+      label: `  Clear fallback  ${theme.fg('dim', 'Stop hopping away from this pack')}`,
+    });
+  }
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Fallback for ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    const chainPreview = (fallbackId: string | null): string => {
+      const preview: GlobalSettings = {
+        ...settings,
+        models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
+      };
+      setPackFallback(preview, pack.id, fallbackId);
+      const chain = formatPackFallbackChain(preview, packs, pack.id);
+      return chain
+        ? theme.fg('dim', `  When ${pack.name} is unavailable: ${pack.name} → ${chain}`)
+        : theme.fg('dim', `  No fallback — when ${pack.name} is unavailable the error surfaces.`);
+    };
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(chainPreview(item.value === '__clear__' ? null : item.value));
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value === '__clear__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(undefined);
+    };
+
+    detailText.setText(chainPreview(current ?? null));
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function runSetFallbackFlow(ctx: SlashCommandContext, packs: ModePack[]): Promise<void> {
+  const configurable = packs.filter(p => p.id !== 'custom');
+  const settings = loadSettings();
+
+  const packId = await new Promise<string | null>(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', 'Set fallback pack')), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = configurable.map(p => ({
+      value: p.id,
+      label: `  ${p.name}  ${theme.fg('dim', p.description)}`,
+    }));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelectionChange = item => {
+      const chain = formatPackFallbackChain(settings, packs, item.value);
+      detailText.setText(
+        chain
+          ? theme.fg('dim', `  Current fallback: ${chain}`)
+          : theme.fg('dim', '  No fallback configured for this pack.'),
+      );
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value);
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    detailText.setText(
+      formatPackFallbackChain(settings, packs, configurable[0]?.id ?? '')
+        ? theme.fg('dim', `  Current fallback: ${formatPackFallbackChain(settings, packs, configurable[0]!.id)}`)
+        : theme.fg('dim', '  No fallback configured for this pack.'),
+    );
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+
+  if (!packId) return;
+  const pack = packs.find(p => p.id === packId);
+  if (!pack) return;
+
+  const fallbackId = await askFallbackTarget(ctx, pack, packs);
+  if (fallbackId === undefined) return;
+
+  const next = loadSettings();
+  setPackFallback(next, pack.id, fallbackId);
+  saveSettings(next);
+  const fallbackName = fallbackId ? (packs.find(p => p.id === fallbackId)?.name ?? fallbackId) : null;
+  ctx.showInfo(fallbackName ? `Fallback for ${pack.name}: ${fallbackName}` : `Cleared the fallback for ${pack.name}`);
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   if (ctx.state.pendingNewThread) {
     await ctx.state.session.thread.create();
@@ -718,6 +898,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     value: '__import__',
     label: `  Import Pack  ${theme.fg('dim', 'Paste a shared pack config')}`,
   });
+  items.push({
+    value: '__fallback__',
+    label: `  Set fallback pack…  ${theme.fg('dim', 'Hop to another pack when one is unavailable')}`,
+  });
 
   return new Promise<void>(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
@@ -738,14 +922,33 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
         ctx.state.ui.requestRender();
         return;
       }
+      if (packId === '__fallback__') {
+        detailText.setText(
+          theme.fg(
+            'dim',
+            '  When every account serving a pack is unavailable, the turn hops to its fallback pack. Chains are allowed.',
+          ),
+        );
+        ctx.state.ui.requestRender();
+        return;
+      }
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
-      detailText.setText(getPackDetail(pack));
+      const fallbackChain = formatPackFallbackChain(settings, packs, packId);
+      detailText.setText(
+        getPackDetail(pack) + (fallbackChain ? `\n${theme.fg('dim', `  fallback → ${fallbackChain}`)}` : ''),
+      );
       ctx.state.ui.requestRender();
     };
 
     selectList.onSelect = async (item: SelectItem) => {
       closeOverlay();
+
+      if (item.value === '__fallback__') {
+        await runSetFallbackFlow(ctx, packs);
+        resolve();
+        return;
+      }
 
       if (item.value === '__import__') {
         const importStr = await askImportPackString(ctx);
