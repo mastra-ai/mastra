@@ -694,7 +694,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async getAccessEpoch(): Promise<number> {
     throw new KnowledgeUnsupportedError();
   }
-  async listScopeGrants(_input: { includeDeleted?: boolean } = {}): Promise<KnowledgeScopeGrant[]> {
+  async listScopeGrants(
+    _input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
+  ): Promise<KnowledgeScopeGrant[]> {
     throw new KnowledgeUnsupportedError();
   }
   async upsertScopeGrant(
