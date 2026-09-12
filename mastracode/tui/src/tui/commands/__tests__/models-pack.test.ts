@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deserializePack,
   fallbackPackCandidates,
+  formatFallbackChainPreview,
   formatPackFallbackChain,
   getOverriddenPackModes,
   handleModelsPackCommand,
@@ -326,6 +327,37 @@ describe('formatPackFallbackChain', () => {
     // One revisit total per cascade, so the A⇄B cycle renders A's single
     // revisit and then stops.
     expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBe('OpenAI → Anthropic');
+  });
+});
+
+describe('formatFallbackChainPreview', () => {
+  const packs: ModePack[] = [
+    { id: 'anthropic', name: 'Anthropic', description: '', models: {} },
+    { id: 'openai', name: 'OpenAI', description: '', models: {} },
+    { id: 'github-copilot', name: 'GitHub Copilot', description: '', models: {} },
+  ];
+  const anthropic = packs[0]!;
+
+  it('changes with the highlighted candidate, like moving the picker cursor', () => {
+    const settings = createSettings();
+    // An existing downstream chain: OpenAI already falls back to Copilot.
+    setPackFallback(settings, 'openai', 'github-copilot');
+
+    // Hovering "OpenAI" shows the full chain through its own fallback…
+    expect(formatFallbackChainPreview(settings, packs, anthropic, 'openai')).toBe(
+      'When Anthropic is unavailable: Anthropic → OpenAI → GitHub Copilot',
+    );
+    // …moving to "GitHub Copilot" shortens it…
+    expect(formatFallbackChainPreview(settings, packs, anthropic, 'github-copilot')).toBe(
+      'When Anthropic is unavailable: Anthropic → GitHub Copilot',
+    );
+    // …and landing on "Clear fallback" shows the no-fallback line.
+    expect(formatFallbackChainPreview(settings, packs, anthropic, null)).toBe(
+      'No fallback — when Anthropic is unavailable the error surfaces.',
+    );
+
+    // Hovering never mutates the real settings.
+    expect(settings.models.packFallbacks).toEqual({ openai: 'github-copilot' });
   });
 });
 
