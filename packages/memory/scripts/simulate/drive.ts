@@ -2,12 +2,8 @@ import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 
 import type { Memory } from '../../src';
-import {
-  CURATION_AGENT,
-  createCuratorAgent,
-  dispatchCuratorObservation,
-  resolveCuratorScope,
-} from '../../src/processors/observational-memory/subconscious/curate';
+import { createCuratorHandler } from '../../src/processors/observational-memory/subconscious/curate';
+import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import type { ResolvedSubconsciousConfig } from '../../src/processors/observational-memory/subconscious/types';
 import type { ReconstructedCycle } from './reconstruct';
 
@@ -55,17 +51,19 @@ function requestContextWithOrg(organizationId: string, knowledgeResourceId?: str
 export async function replayCycles(options: ReplayOptions): Promise<ReplayResult> {
   const store = await options.memory.getKnowledgeStore();
   if (!store) throw new Error('Replay requires a configured knowledge storage domain.');
-  const config = options.subconscious.observation.find(agent => agent.name === CURATION_AGENT);
-  if (!config) throw new Error(`Replay requires a Subconscious with a "${CURATION_AGENT}" observation agent.`);
+  const config = options.subconscious.observation.find(agent => agent.name === 'curate');
+  if (!config) throw new Error('Replay requires a Subconscious with a "curate" observation agent.');
 
   const requestContext = requestContextWithOrg(options.organizationId, options.knowledgeResourceId);
-  const context = {
-    threadId: options.threadId,
-    resourceId: options.resourceId,
+  const scopeIds = await resolveKnowledgeScopeIds(options.memory, {
+    agent: { threadId: options.threadId, resourceId: options.resourceId },
     requestContext,
-    mainAgent: options.mainAgent,
-  };
-  const scopeIds = await resolveCuratorScope(options.memory, context);
+  });
+  const handler = createCuratorHandler(
+    options.memory,
+    options.subconscious,
+    options.curatorMemory ?? options.memory,
+  );
   const curatorOutcomes: ReplayOutcome[] = [];
   const warnings: string[] = [];
 
@@ -76,16 +74,13 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
         options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=no-op`);
         continue;
       }
-      const agent = await createCuratorAgent(
-        options.memory,
-        options.curatorMemory ?? options.memory,
-        context,
-        scopeIds,
-        config,
-        options.subconscious,
-      );
-      const accepted = await dispatchCuratorObservation(agent, context, config, cycle.observations).accepted;
-      if (accepted.action === 'wake') await accepted.output.consumeStream();
+      await handler({
+        parentThreadId: options.threadId,
+        resourceId: options.resourceId,
+        observations: cycle.observations,
+        requestContext,
+        mainAgent: options.mainAgent,
+      });
       curatorOutcomes.push({ cycleIndex, sourceThreadId: options.threadId, outcome: 'ran' });
       options.onEvent?.(`CURATOR cycle=${cycleIndex} thread=${options.threadId} outcome=ran`);
     } catch (error) {
