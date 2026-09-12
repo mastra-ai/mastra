@@ -323,9 +323,9 @@ describe('formatPackFallbackChain', () => {
     setPackFallback(settings, 'anthropic', 'openai');
     setPackFallback(settings, 'openai', 'anthropic');
 
-    // Each pack appears at most twice (initial + one revisit), so the A⇄B
-    // cycle renders its full capped chain and then stops.
-    expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBe('OpenAI → Anthropic → OpenAI');
+    // One revisit total per cascade, so the A⇄B cycle renders A's single
+    // revisit and then stops.
+    expect(formatPackFallbackChain(settings, packs, 'anthropic')).toBe('OpenAI → Anthropic');
   });
 });
 
