@@ -1160,7 +1160,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#transaction(tx => this.#createRecord(tx, input));
   }
 
-  async #createRecord(tx: Transaction, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
+  async #createRecord(tx: Executor, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     const nodeId = nodeReferenceId(input.node);
@@ -1270,7 +1270,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #deleteRecord(
-    tx: Transaction,
+    tx: Executor,
     input: { id: string; version: number; deletedBy: string; importRunId?: string; expectedAccessEpoch?: number },
   ): Promise<KnowledgeRecord> {
     await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
@@ -2589,11 +2589,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         });
         for (const row of successors.rows) {
           const successor = parseOutbox(row);
+          if (successor.operation === 'delete') continue;
           if (!(await this.#isSemanticOutboxEntryVisible(tx, successor, scopeIds))) continue;
-          const invisiblePredecessorClause =
-            successor.operation === 'delete'
-              ? ''
-              : ` AND NOT EXISTS (SELECT 1 FROM json_each(scopeIds) WHERE value IN (${scopeIds.map(() => '?').join(',')}))`;
+          const invisiblePredecessorClause = ` AND NOT EXISTS (SELECT 1 FROM json_each(scopeIds) WHERE value IN (${scopeIds.map(() => '?').join(',')}))`;
           await tx.execute({
             sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='completed',completedAt=? WHERE documentId=? AND (status='pending' OR (status='processing' AND claimedAt <= ?)) AND (createdAt < ? OR (createdAt = ? AND id < ?))${invisiblePredecessorClause}`,
             args: [
@@ -2603,7 +2601,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
               successor.createdAt.toISOString(),
               successor.createdAt.toISOString(),
               successor.id,
-              ...(successor.operation === 'delete' ? [] : scopeIds),
+              ...scopeIds,
             ],
           });
         }
