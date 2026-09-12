@@ -276,7 +276,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     canEditSettings &&
                     setSettings({
                       ...settings,
-                      modelSettings: { ...settings?.modelSettings, requireToolApproval: value as boolean },
+                      modelSettings: { ...settings?.modelSettings, requireToolApproval: value },
                     })
                   }
                 />

@@ -178,7 +178,7 @@ function hasAppUi(meta?: Record<string, unknown>): boolean {
   if (!meta) return false;
   const ui = meta.ui as { resourceUri?: string } | undefined;
   if (typeof ui?.resourceUri === 'string' && ui.resourceUri.startsWith('ui://')) return true;
-  if (typeof meta['ui/resourceUri'] === 'string' && (meta['ui/resourceUri'] as string).startsWith('ui://')) return true;
+  if (typeof meta['ui/resourceUri'] === 'string' && meta['ui/resourceUri'].startsWith('ui://')) return true;
   return false;
 }
 
