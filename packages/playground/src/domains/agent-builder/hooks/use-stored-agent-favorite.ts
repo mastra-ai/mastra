@@ -48,7 +48,7 @@ export const useToggleStoredAgentFavorite = (agentId?: string) => {
       for (const [key, value] of listQueries) {
         previousLists.push([key, value]);
         if (!value?.agents) continue;
-        queryClient.setQueryData<ListStoredAgentsResponse>(key as readonly unknown[], {
+        queryClient.setQueryData<ListStoredAgentsResponse>(key, {
           ...value,
           agents: value.agents.map(a => (a.id === agentId ? applyFavoriteToAgent(a, favorited) : a)),
         });
