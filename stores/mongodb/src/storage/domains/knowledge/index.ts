@@ -1802,40 +1802,75 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const query = input.query.trim().toLowerCase();
     if (!query) return [];
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const results: SearchKnowledgeResult[] = [];
-    for (const node of await this.listNodes({ scopeIds, limit: 100 })) {
-      if (!node.name.toLowerCase().includes(query)) continue;
-      results.push({
-        type: 'node',
-        id: node.id,
-        recordId: node.id,
-        name: node.name,
-        text: node.name,
-        scopeIds: await this.#getNodeScopeIds(node.id),
-      });
+    let nodeCursor: { updatedAt: Date; id: string } | undefined;
+    while (results.length < limit) {
+      const rows = await (
+        await this.#collection(TABLE_KNOWLEDGE_NODES)
+      )
+        .find({
+          deletedAt: { $exists: false },
+          ...(nodeCursor
+            ? {
+                $or: [
+                  { updatedAt: { $lt: nodeCursor.updatedAt } },
+                  { updatedAt: nodeCursor.updatedAt, id: { $lt: nodeCursor.id } },
+                ],
+              }
+            : {}),
+        })
+        .sort({ updatedAt: -1, id: -1 })
+        .limit(100)
+        .toArray();
+      for (const row of rows) {
+        const node = nodeFromDocument(row);
+        const nodeScopeIds = await this.#getNodeScopeIds(node.id);
+        const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLowerCase();
+        if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query)) {
+          results.push({
+            type: 'node',
+            id: node.id,
+            recordId: node.id,
+            name: node.name,
+            text: node.name,
+            scopeIds: nodeScopeIds,
+          });
+          if (results.length >= limit) return results;
+        }
+      }
+      if (rows.length < 100) break;
+      const last = nodeFromDocument(rows.at(-1)!);
+      nodeCursor = { updatedAt: last.updatedAt, id: last.id };
     }
-    const rows = await (
-      await this.#collection(TABLE_KNOWLEDGE_RECORDS)
-    )
-      .find({ deletedAt: { $exists: false } })
-      .sort({ id: -1 })
-      .limit(1000)
-      .toArray();
-    for (const row of rows) {
-      const record = recordFromDocument(row);
-      if (!record.text.toLowerCase().includes(query) || !(await this.#isRecordVisible(record, scopeIds))) continue;
-      const parent = await this.getNode(record.nodeId);
-      if (!parent) continue;
-      results.push({
-        type: 'record',
-        id: record.id,
-        recordId: record.nodeId,
-        name: parent.name,
-        text: record.text,
-        scopeIds: await this.#getRecordScopeIds(record.id),
-      });
+    let recordCursor: string | undefined;
+    while (results.length < limit) {
+      const rows = await (
+        await this.#collection(TABLE_KNOWLEDGE_RECORDS)
+      )
+        .find({ deletedAt: { $exists: false }, ...(recordCursor ? { id: { $lt: recordCursor } } : {}) })
+        .sort({ id: -1 })
+        .limit(100)
+        .toArray();
+      for (const row of rows) {
+        const record = recordFromDocument(row);
+        if (!record.text.toLowerCase().includes(query) || !(await this.#isRecordVisible(record, scopeIds))) continue;
+        const parent = await this.getNode(record.nodeId);
+        if (!parent) continue;
+        results.push({
+          type: 'record',
+          id: record.id,
+          recordId: record.nodeId,
+          name: parent.name,
+          text: record.text,
+          scopeIds: await this.#getRecordScopeIds(record.id),
+        });
+        if (results.length >= limit) return results;
+      }
+      if (rows.length < 100) break;
+      recordCursor = String(rows.at(-1)!.id);
     }
-    return results.slice(0, Math.min(Math.max(input.limit ?? 20, 1), 100));
+    return results;
   }
 
   async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
