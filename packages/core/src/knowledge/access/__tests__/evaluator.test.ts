@@ -155,37 +155,32 @@ describe('Knowledge access frontier evaluator', () => {
     await expect(evaluator.evaluate([initial.scopes['principal:one']!])).resolves.toBe(before);
     expect(listGrants).toHaveBeenCalledTimes(1);
 
-    await secondStorage.reconcileStructure({
-      scopes: [
-        { address: 'principal:one', name: 'Principal' },
-        {
-          address: 'project:one',
-          name: 'Project',
-          grants: [{ scopeRefAddress: 'principal:one', role: 'edit' }],
-        },
-      ],
+    // Grants on existing scopes change through the governed grant APIs, which advance
+    // the shared access epoch; reconcile only seeds grants when it creates a scope.
+    await secondStorage.upsertScopeGrant({
+      scopeNodeId: initial.scopes['project:one']!,
+      scopeRefId: initial.scopes['principal:one']!,
+      role: 'edit',
     });
     const after = await evaluator.evaluate([initial.scopes['principal:one']!]);
 
     expect(after.accessEpoch).toBe(2);
     expect(after.scopes[initial.scopes['project:one']!]).toMatchObject({ edit: true });
 
-    await secondStorage.reconcileStructure({
-      scopes: [
-        { address: 'principal:one', name: 'Principal' },
-        {
-          address: 'team:one',
-          name: 'Team',
-        },
-        {
-          address: 'project:one',
-          name: 'Project',
-          grants: [{ scopeRefAddress: 'team:one', role: 'edit' }],
-        },
-      ],
+    const team = await secondStorage.reconcileStructure({
+      scopes: [{ address: 'team:one', name: 'Team' }],
+    });
+    await secondStorage.removeScopeGrant({
+      scopeNodeId: initial.scopes['project:one']!,
+      scopeRefId: initial.scopes['principal:one']!,
+    });
+    await secondStorage.upsertScopeGrant({
+      scopeNodeId: initial.scopes['project:one']!,
+      scopeRefId: team.scopes['team:one']!,
+      role: 'edit',
     });
     const revoked = await evaluator.evaluate([initial.scopes['principal:one']!]);
-    expect(revoked.accessEpoch).toBe(3);
+    expect(revoked.accessEpoch).toBe(5);
     expect(revoked.scopes[initial.scopes['project:one']!]).toBeUndefined();
     expect(listGrants).toHaveBeenCalledTimes(3);
   });

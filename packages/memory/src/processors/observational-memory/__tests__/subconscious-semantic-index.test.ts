@@ -176,18 +176,9 @@ describe('knowledge semantic index descriptions', () => {
     expect(semanticResult?.metadata).not.toHaveProperty('scope_ids');
     expect(semanticResult?.metadata).not.toHaveProperty('scope_key');
 
-    await store.reconcileStructure({
-      scopes: [
-        { address: 'principal:semantic', name: 'Semantic reader' },
-        { address: 'principal:hidden', name: 'Hidden reader' },
-        { address: 'team:semantic', name: 'Semantic team' },
-        { address: 'scope:semantic', name: 'Semantic content' },
-        {
-          address: 'scope:hidden',
-          name: 'Hidden content',
-          grants: [{ scopeRefAddress: 'principal:hidden', role: 'readonly' }],
-        },
-      ],
+    await store.removeScopeGrant({
+      scopeNodeId: structure.scopes['team:semantic']!,
+      scopeRefId: structure.scopes['principal:semantic']!,
     });
     await expect(coordinator.search('handbook', principalScopeIds, 1)).resolves.toEqual([]);
   });
@@ -257,18 +248,9 @@ describe('knowledge semantic index descriptions', () => {
       records: [expect.objectContaining({ id: record.id, scopeIds: [sharedScopeId] })],
     });
 
-    await store.reconcileStructure({
-      scopes: [
-        { address: 'principal:reader', name: 'Reader' },
-        { address: 'principal:private', name: 'Private reader' },
-        { address: 'team:readers', name: 'Readers' },
-        { address: 'scope:shared', name: 'Shared' },
-        {
-          address: 'scope:private',
-          name: 'Private',
-          grants: [{ scopeRefAddress: 'principal:private', role: 'readonly' }],
-        },
-      ],
+    await store.removeScopeGrant({
+      scopeNodeId: structure.scopes['team:readers']!,
+      scopeRefId: structure.scopes['principal:reader']!,
     });
     await expect(tools.knowledge_search!.execute?.({ query: 'handbook' }, {} as never)).resolves.toEqual({
       query: 'handbook',
