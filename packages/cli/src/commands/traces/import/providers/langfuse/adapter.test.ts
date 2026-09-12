@@ -56,11 +56,17 @@ describe('mapLangfuseSourceTrace', () => {
       input: '{"question":"hello"}',
       output: { answer: 'hi' },
       model: 'gpt-4o-mini',
+      providedModelName: 'openai/gpt-4o-mini',
+      internalModelId: 'internal-model-1',
       inputUsage: 10,
       outputUsage: 4,
+      totalUsage: 14,
+      inputCost: 0.001,
       modelParameters: { temperature: 0.2, top_p: 0.9, ignored: true },
       metadata: { customer: 'acme' },
       tags: ['child-tag'],
+      createdAt: '2026-08-20T10:00:00.000Z',
+      bookmarked: true,
     });
 
     const record = mapLangfuseSourceTrace(sourceTrace([child, observation({ tags: ['trace-tag'] })]), {
@@ -100,9 +106,22 @@ describe('mapLangfuseSourceTrace', () => {
         langfuseProjectId: 'project-1',
         langfuseType: 'GENERATION',
         langfuseMetadata: { customer: 'acme' },
+        langfuse: {
+          providedModelName: 'openai/gpt-4o-mini',
+          internalModelId: 'internal-model-1',
+          totalUsage: 14,
+          inputCost: 0.001,
+        },
       },
     });
     expect(record.trace.spans[1]?.tags).toBeUndefined();
+    expect(record.trace.spans[1]?.metadata.langfuse).toEqual({
+      parentObservationId: 'root',
+      providedModelName: 'openai/gpt-4o-mini',
+      internalModelId: 'internal-model-1',
+      totalUsage: 14,
+      inputCost: 0.001,
+    });
   });
 
   it('orders siblings by their actual time and uses the observation ID to break ties', () => {
@@ -155,6 +174,49 @@ describe('mapLangfuseSourceTrace', () => {
     if (record.kind !== 'trace') return;
     expect(record.trace.spans[0]?.attributes).toMatchObject({
       usage: { inputTokens: 7, outputTokens: 3 },
+    });
+  });
+
+  it('does not duplicate a provided model name used as the canonical fallback', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([observation({ type: 'GENERATION', model: null, providedModelName: 'fallback-model' })]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans[0]?.attributes).toMatchObject({ model: 'fallback-model' });
+    expect(record.trace.spans[0]?.metadata.langfuse).not.toHaveProperty('providedModelName');
+  });
+
+  it('keeps model and usage fields in metadata when the span type has no canonical destination', () => {
+    const record = mapLangfuseSourceTrace(
+      sourceTrace([
+        observation({
+          model: 'custom-model',
+          modelParameters: { custom: true },
+          usageDetails: { customUnits: 12 },
+          inputUsage: 7,
+          outputUsage: 5,
+          totalCost: 0.01,
+          completionStartTime: '2026-08-20T10:00:01.000Z',
+        }),
+      ]),
+      { importId: 'import-1', ...mappedWindow },
+    );
+
+    expect(record.kind).toBe('trace');
+    if (record.kind !== 'trace') return;
+    expect(record.trace.spans[0]?.metadata).toMatchObject({
+      langfuse: {
+        model: 'custom-model',
+        modelParameters: { custom: true },
+        usageDetails: { customUnits: 12 },
+        inputUsage: 7,
+        outputUsage: 5,
+        totalCost: 0.01,
+        completionStartTime: '2026-08-20T10:00:01.000Z',
+      },
     });
   });
 

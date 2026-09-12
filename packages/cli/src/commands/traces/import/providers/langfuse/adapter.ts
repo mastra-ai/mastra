@@ -325,7 +325,7 @@ function mapObservationToSpan(
     endedAt: isEvent ? observation.startTime : observation.endTime!,
     isEvent,
     attributes: buildAttributes(observation, spanType),
-    metadata: buildMetadata(observation, trace, importId),
+    metadata: buildMetadata(observation, trace, importId, spanType),
     tags: index === 0 && observation.tags ? observation.tags : undefined,
     input: parseIo(observation.input),
     output: parseIo(observation.output),
@@ -536,7 +536,18 @@ function buildMetadata(
   observation: TimestampedObservation,
   trace: OrderedLangfuseTrace,
   importId: string,
+  spanType: TraceImportSpan['spanType'],
 ): Record<string, unknown> {
+  const hasModelAttributes =
+    spanType === 'rag_embedding' ||
+    spanType === 'model_generation' ||
+    spanType === 'model_step' ||
+    spanType === 'model_inference';
+  const hasGenerationAttributes =
+    spanType === 'model_generation' || spanType === 'model_step' || spanType === 'model_inference';
+
+  // Keep source-only context, but avoid a second copy of values represented by
+  // this span type's canonical Mastra attributes.
   return definedRecord({
     source: 'langfuse',
     importSource: 'langfuse-api-v2',
@@ -555,27 +566,26 @@ function buildMetadata(
       level: observation.level ?? undefined,
       statusMessage: observation.statusMessage ?? undefined,
       version: observation.version ?? undefined,
-      environment: observation.environment ?? undefined,
-      createdAt: observation.createdAt ?? undefined,
-      updatedAt: observation.updatedAt ?? undefined,
       release: observation.release ?? undefined,
       traceName: observation.traceName ?? undefined,
-      bookmarked: observation.bookmarked ?? undefined,
-      public: observation.public ?? undefined,
-      model: observation.model ?? undefined,
-      providedModelName: observation.providedModelName ?? undefined,
+      model: hasModelAttributes ? undefined : (observation.model ?? undefined),
+      providedModelName:
+        observation.providedModelName &&
+        (!hasModelAttributes || (observation.model != null && observation.providedModelName !== observation.model))
+          ? observation.providedModelName
+          : undefined,
       internalModelId: observation.internalModelId ?? undefined,
       modelId: observation.modelId ?? undefined,
-      modelParameters: observation.modelParameters ?? undefined,
-      usageDetails: observation.usageDetails ?? undefined,
-      inputUsage: observation.inputUsage ?? undefined,
-      outputUsage: observation.outputUsage ?? undefined,
+      modelParameters: hasGenerationAttributes ? undefined : (observation.modelParameters ?? undefined),
+      usageDetails: hasModelAttributes ? undefined : (observation.usageDetails ?? undefined),
+      inputUsage: hasModelAttributes ? undefined : (observation.inputUsage ?? undefined),
+      outputUsage: hasModelAttributes ? undefined : (observation.outputUsage ?? undefined),
       totalUsage: observation.totalUsage ?? undefined,
       costDetails: observation.costDetails ?? undefined,
       inputCost: observation.inputCost ?? undefined,
       outputCost: observation.outputCost ?? undefined,
-      totalCost: observation.totalCost ?? undefined,
-      completionStartTime: observation.completionStartTime ?? undefined,
+      totalCost: hasGenerationAttributes ? undefined : (observation.totalCost ?? undefined),
+      completionStartTime: hasGenerationAttributes ? undefined : (observation.completionStartTime ?? undefined),
       inputPrice: observation.inputPrice ?? undefined,
       outputPrice: observation.outputPrice ?? undefined,
       totalPrice: observation.totalPrice ?? undefined,
@@ -586,7 +596,6 @@ function buildMetadata(
       promptVersion: observation.promptVersion ?? undefined,
       latency: observation.latency ?? undefined,
       timeToFirstToken: observation.timeToFirstToken ?? undefined,
-      tags: observation.tags ?? undefined,
       derivedEndTime: observation.mastraImportDerivedEndTime ?? undefined,
       derivedEndTimeSourceObservationId: observation.mastraImportDerivedEndTimeSourceObservationId ?? undefined,
     }),
