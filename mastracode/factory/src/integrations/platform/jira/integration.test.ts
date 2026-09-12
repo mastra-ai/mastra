@@ -12,6 +12,7 @@ import {
 } from './integration.js';
 
 const PLATFORM_BASE = 'https://integrations.example.com';
+const JIRA_CLOUD_ID = 'a436116f-02ce-4520-8fbb-7301462a1674';
 const connection = { type: 'oauth' as const, accessToken: 'platform-managed' };
 
 function integration(connectionId = 'a1b_acme'): PlatformJiraIntegration {
@@ -43,10 +44,16 @@ function issue(key = 'ENG-42', projectId = '1') {
   };
 }
 
-function stubRoutes(routes: Array<[string, string, () => Response]>): ReturnType<typeof vi.fn> {
+function stubRoutes(
+  routes: Array<[string, string, () => Response]>,
+  cloudId: unknown = JIRA_CLOUD_ID,
+): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const target = String(input);
     const method = init?.method ?? 'GET';
+    if (target.endsWith('/context')) {
+      return json({ connection_config: { cloudId }, metadata: null });
+    }
     if (target.includes('/rest/api/3/serverInfo')) {
       const site = target.includes('a1b_beta') ? 'beta' : 'acme';
       return json({ baseUrl: `https://${site}.atlassian.net` });
@@ -93,7 +100,7 @@ describe('PlatformJiraIntegration construction', () => {
     const fetchMock = stubRoutes([
       [
         'GET',
-        'connection%2F1/proxy/rest/api/3/project/search',
+        'connection%2F1/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/project/search',
         () => json({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: true }),
       ],
     ]);
@@ -103,10 +110,30 @@ describe('PlatformJiraIntegration construction', () => {
 
     await jira.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
 
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain(`${PLATFORM_BASE}/v2/connections`);
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
-      expect.arrayContaining([expect.stringContaining('/v2/connections/connection%2F1/proxy/')]),
+    const requestedUrls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls).not.toContain(`${PLATFORM_BASE}/v2/connections`);
+    expect(requestedUrls).toEqual(
+      expect.arrayContaining([
+        `${PLATFORM_BASE}/v2/connections/connection%2F1/context`,
+        expect.stringContaining(
+          `/v2/connections/connection%2F1/proxy/ex/jira/${JIRA_CLOUD_ID}/rest/api/3/project/search`,
+        ),
+      ]),
     );
+  });
+
+  it('rejects a Platform Jira context without a valid cloudId before proxying to Atlassian', async () => {
+    const fetchMock = stubRoutes([], 'not-a-cloud-id');
+
+    await expect(
+      integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' }),
+    ).rejects.toMatchObject({
+      status: 502,
+      message: 'Platform Jira connection context is missing a valid cloudId.',
+    } satisfies Partial<JiraApiError>);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });
 
@@ -115,7 +142,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     stubRoutes([
       [
         'GET',
-        'a1b_acme/proxy/rest/api/3/project/search',
+        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/project/search',
         () => json({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: true }),
       ],
     ]);
@@ -132,7 +159,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
 
   it('pages selected projects through the configured Jira connection', async () => {
     const fetchMock = stubRoutes([
-      ['POST', 'a1b_acme/proxy/rest/api/3/search/jql', () => json({ issues: [issue('ENG-42', '1')] })],
+      ['POST', 'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/search/jql', () => json({ issues: [issue('ENG-42', '1')] })],
     ]);
     const sourceIds = [encodeSourceId('a1b_acme', '1')];
 
@@ -206,10 +233,10 @@ describe('PlatformJiraIntegration over integrations v2', () => {
 
   it('fetches issue detail and comments through the connection encoded in the issue reference', async () => {
     stubRoutes([
-      ['GET', 'a1b_beta/proxy/rest/api/3/issue/OPS-7?', () => json(issue('OPS-7', '2'))],
+      ['GET', 'a1b_beta/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/OPS-7?', () => json(issue('OPS-7', '2'))],
       [
         'GET',
-        'a1b_beta/proxy/rest/api/3/issue/OPS-7/comment',
+        'a1b_beta/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/OPS-7/comment',
         () =>
           json({
             comments: [
@@ -244,10 +271,10 @@ describe('PlatformJiraIntegration over integrations v2', () => {
 
   it('uses the configured connection for an unqualified issue key', async () => {
     stubRoutes([
-      ['GET', 'a1b_acme/proxy/rest/api/3/issue/ENG-42?', () => json(issue())],
+      ['GET', 'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42?', () => json(issue())],
       [
         'GET',
-        'a1b_acme/proxy/rest/api/3/issue/ENG-42/comment',
+        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42/comment',
         () => json({ comments: [], startAt: 0, maxResults: 50, total: 0 }),
       ],
     ]);
@@ -270,7 +297,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     stubRoutes([
       [
         'POST',
-        'a1b_acme/proxy/rest/api/3/issue/ENG-42/comment',
+        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42/comment',
         () => json({ id: 'c-1', created: '2026-07-03T00:00:00Z' }),
       ],
     ]);
