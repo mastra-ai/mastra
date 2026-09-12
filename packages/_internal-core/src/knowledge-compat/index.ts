@@ -11,6 +11,8 @@ export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
 export interface KnowledgeScopeNodeSummary {
   /** UUID of the `isScope` node. */
   id: string;
+  /** Canonical address the scope node was reconciled from (e.g. `features:memory`). */
+  address: string;
   name: string;
   kind?: string;
   description?: string;
