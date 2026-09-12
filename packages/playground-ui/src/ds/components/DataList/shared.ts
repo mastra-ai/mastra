@@ -17,6 +17,7 @@ export const dataListRowOuterStyles = [
  */
 export const dataListRowStateStyles = [
   'hover:bg-surface3 active:bg-surface4',
+  'focus-visible:bg-surface3 has-focus-visible:bg-surface3',
   'data-featured:bg-surface3 has-data-featured:bg-surface3 has-data-selected:bg-surface3',
   'data-featured:hover:bg-surface4 has-data-featured:hover:bg-surface4 has-data-selected:hover:bg-surface4',
   'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
