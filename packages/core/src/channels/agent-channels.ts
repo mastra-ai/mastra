@@ -649,18 +649,29 @@ export class AgentChannels {
               // permanently actionable.
               const resolveResolvedMessage = (kind: 'approved' | 'denied', byUser?: string): PostableMessage => {
                 if (!toolDisplayFn) return builtInResolved(kind, byUser);
-                const result = toolDisplayFn(
-                  {
-                    kind,
-                    toolCallId,
-                    toolName: toolName ?? '',
-                    displayName,
-                    argsSummary,
-                    args: toolArgs,
-                    byUser,
-                  },
-                  { mode: renderMode, platform },
-                );
+                let result: ReturnType<ToolDisplayFn>;
+                try {
+                  result = toolDisplayFn(
+                    {
+                      kind,
+                      toolCallId,
+                      toolName: toolName ?? '',
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                      byUser,
+                    },
+                    { mode: renderMode, platform },
+                  );
+                } catch (err) {
+                  // A throwing renderer must not leave the Approve/Deny buttons in place.
+                  this.log(
+                    'warn',
+                    `toolDisplay threw rendering '${kind}' for ${displayName}; using built-in card`,
+                    err,
+                  );
+                  return builtInResolved(kind, byUser);
+                }
                 if (result == null || result.kind !== 'post') return builtInResolved(kind, byUser);
                 if (result.message == null || isBlankToolMessage(result.message)) {
                   return builtInResolved(kind, byUser);
@@ -669,7 +680,7 @@ export class AgentChannels {
               };
 
               if (!approved) {
-                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || undefined;
                 try {
                   await adapter.editMessage(chatThread.id, messageId, resolveResolvedMessage('denied', byUser));
                 } catch (err) {
@@ -719,7 +730,9 @@ export class AgentChannels {
               }
 
               // Immediately edit the card to show "Approved" and remove the buttons
-              const approvedByUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
+              const approvedByUser = chatThread.isDM
+                ? undefined
+                : event.user.fullName || event.user.userName || undefined;
               try {
                 await adapter.editMessage(chatThread.id, messageId, resolveResolvedMessage('approved', approvedByUser));
               } catch (err) {

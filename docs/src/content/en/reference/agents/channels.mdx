@@ -320,13 +320,19 @@ toolDisplay: event => {
     return { kind: 'post', message: '✓ Aprobado, ejecutando…' }
   }
 
-  return undefined // every other event keeps its built-in rendering
+  if (event.kind === 'result') {
+    return { kind: 'post', message: `✓ ${event.displayName} completado` }
+  }
+
+  // `approval` falls back to the built-in card; `running` and `error` are
+  // suppressed, because `undefined` only falls back for approval-related events.
+  return undefined
 }
 ```
 
 An approved tool then runs and emits a `result` event, which edits the same
-message again. A denied tool does not run, so the `denied` message is the card's
-resting state.
+message again, so handle `result` too or the resolved card is never updated. A
+denied tool does not run, so the `denied` message is the card's resting state.
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'

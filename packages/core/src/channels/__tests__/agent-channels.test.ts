@@ -680,9 +680,10 @@ describe('AgentChannels', () => {
         (channels as any).dispatchApproval = dispatchApproval;
         (channels as any).dispatchDecline = dispatchDecline;
 
-        const click = (actionId: string) =>
+        const click = (actionId: string, user?: Record<string, unknown>) =>
           (channels.sdk as any).processAction({
             ...makeActionEvent(adapter, actionId),
+            ...(user ? { user } : {}),
             thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
           });
 
@@ -794,6 +795,50 @@ describe('AgentChannels', () => {
         await click('tool_deny:tool-call-1');
 
         expect(editedText()).toContain('Denied');
+      });
+
+      it('falls back to the built-in card and still dispatches when the renderer throws on deny', async () => {
+        const toolDisplay = vi.fn((event: any) => {
+          if (event.kind === 'denied') throw new Error('renderer exploded');
+          return undefined;
+        });
+        const { adapter, click, editedText, logger, dispatchDecline } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        // A denied tool never runs, so nothing else would ever edit this card.
+        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        expect(editedText()).toContain('Denied');
+        expect(editedText()).not.toContain('tool_deny:tool-call-1');
+        expect(dispatchDecline).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('toolDisplay threw'), expect.anything());
+      });
+
+      it('falls back to the built-in card and still dispatches when the renderer throws on approve', async () => {
+        const toolDisplay = vi.fn((event: any) => {
+          if (event.kind === 'approved') throw new Error('renderer exploded');
+          return undefined;
+        });
+        const { adapter, click, editedText, dispatchApproval } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(adapter.editMessage).toHaveBeenCalledTimes(1);
+        expect(editedText()).toContain('Approved');
+        expect(editedText()).not.toContain('tool_approve:tool-call-1');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('leaves byUser undefined when the platform provides no name, instead of inventing one', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click, editedText, seenEvents } = await setupApprovalAction(toolDisplay);
+
+        await click('tool_deny:tool-call-1', { userId: 'anon-1' });
+        await click('tool_approve:tool-call-1', { userId: 'anon-1' });
+
+        expect(seenEvents.find(e => e.kind === 'denied').byUser).toBeUndefined();
+        expect(editedText()).toContain('Denied');
+        expect(editedText()).not.toContain('by User');
       });
 
       it('omits byUser in a DM', async () => {
