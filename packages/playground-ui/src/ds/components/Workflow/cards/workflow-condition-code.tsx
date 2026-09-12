@@ -1,3 +1,5 @@
+import { Highlight, themes } from 'prism-react-renderer';
+import type { WorkflowConditionCodeCondition } from '../types';
 import {
   Dialog,
   DialogBody,
@@ -5,12 +7,9 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Highlight, themes } from 'prism-react-renderer';
-
-import type { WorkflowConditionCodeCondition } from './types';
+} from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { cn } from '@/utils/cn';
 
 export interface WorkflowConditionCodeProps {
   condition: WorkflowConditionCodeCondition;
@@ -21,23 +20,25 @@ export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCo
   <div className="px-3">
     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <pre
+        <button
+          type="button"
           className={cn(
-            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-ui-sm bg-surface4! whitespace-pre-wrap wrap-break-word',
+            'relative w-full cursor-pointer rounded-lg bg-surface4! p-3 text-left font-mono text-ui-sm wrap-break-word whitespace-pre-wrap',
             className,
           )}
+          aria-label="View condition function"
           onClick={onOpen}
           style={style}
         >
           {tokens.map((line, i) => (
-            <div key={i} {...getLineProps({ line })}>
+            <span key={i} {...getLineProps({ line })} className="block">
               <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
               {line.map((token, key) => (
                 <span key={key} {...getTokenProps({ token })} />
               ))}
-            </div>
+            </span>
           ))}
-        </pre>
+        </button>
       )}
     </Highlight>
   </div>
@@ -51,7 +52,7 @@ export interface WorkflowConditionDialogProps {
 
 export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: WorkflowConditionDialogProps) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-[30rem]">
+    <DialogContent style={{ maxWidth: '30rem' }}>
       <DialogHeader>
         <DialogTitle className="sr-only">Condition Function</DialogTitle>
         <DialogDescription>View the condition function code</DialogDescription>

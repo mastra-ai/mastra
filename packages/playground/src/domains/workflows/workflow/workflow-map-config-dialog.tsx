@@ -7,10 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { WorkflowCodeContent } from '@mastra/playground-ui/components/Workflow';
 import { Eye } from 'lucide-react';
 import { useState } from 'react';
-
-import { CodeDialogContent } from './workflow-code-dialog-content';
 
 export interface WorkflowMapConfigDialogProps {
   stepName: string;
@@ -33,7 +32,7 @@ export function WorkflowMapConfigDialog({ stepName, mapConfig }: WorkflowMapConf
             <DialogDescription>View the map configuration for this step</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <CodeDialogContent data={mapConfig} />
+            <WorkflowCodeContent data={mapConfig} />
           </DialogBody>
         </DialogContent>
       </Dialog>

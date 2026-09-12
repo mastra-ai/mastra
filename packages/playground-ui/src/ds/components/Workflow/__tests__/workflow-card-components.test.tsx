@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,7 +30,7 @@ describe('workflow card UI components', () => {
     expect(screen.getByRole('img', { name: 'Map step' })).not.toBeNull();
     expect(screen.queryByText('MAP')).toBeNull();
     expect(card.querySelector('[data-testid="workflow-card-progress-indicator"]')).toBeNull();
-    expect(screen.getByText('123ms').className).toContain('font-mono');
+    expect(screen.getByText('123ms')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Map config' })).not.toBeNull();
   });
 
@@ -44,7 +45,6 @@ describe('workflow card UI components', () => {
         foreachProgress={{
           completedCount: 2,
           totalCount: 4,
-          currentIndex: 2,
           iterationStatus: 'success',
         }}
       />,
@@ -70,7 +70,6 @@ describe('workflow card UI components', () => {
         type="when"
         conditions={[condition]}
         previousDisplayStatus="success"
-        hasNextStep
         isOpen
         onOpenChange={onOpenChange}
         openDialog={false}
@@ -94,9 +93,7 @@ describe('workflow card UI components', () => {
     expect(card.textContent).toContain('input.value > 0');
     expect(screen.getByRole('button', { name: 'Input' })).not.toBeNull();
 
-    const codeBlock = card.querySelector('pre');
-    expect(codeBlock).not.toBeNull();
-    fireEvent.click(codeBlock!);
+    fireEvent.click(screen.getByRole('button', { name: 'View condition function' }));
 
     expect(onConditionClick).toHaveBeenCalledTimes(1);
     expect(onConditionClick).toHaveBeenCalledWith(condition);

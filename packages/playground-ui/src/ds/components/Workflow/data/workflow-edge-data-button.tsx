@@ -1,10 +1,9 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Database } from 'lucide-react';
 import { useState } from 'react';
-
-import { CodeDialogContent } from '../workflow-code-dialog-content';
+import { WorkflowCodeContent } from './workflow-code-dialog-content';
+import { Button } from '@/ds/components/Button';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import { Txt } from '@/ds/components/Txt';
 
 export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;
@@ -39,12 +38,12 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
           <DialogHeader>
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
-          <DialogBody className="max-h-[700px] overflow-auto">
+          <DialogBody className="overflow-auto" style={{ maxHeight: 700 }}>
             <div className="border-border1 bg-surface2 min-w-0 rounded-lg border p-3">
               <Txt variant="ui-sm" className="text-neutral5 mb-2 block">
                 {dataLabel}
               </Txt>
-              <CodeDialogContent data={output} />
+              <WorkflowCodeContent data={output} />
             </div>
           </DialogBody>
         </DialogContent>

@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WorkflowEdgeDataButton } from '../workflow-edge-data-button';
+import { WorkflowEdgeDataButton } from '../data/workflow-edge-data-button';
 
 afterEach(() => cleanup());
 
@@ -29,5 +30,16 @@ describe('WorkflowEdgeDataButton', () => {
     const { container } = render(<WorkflowEdgeDataButton previousStepId="a" />);
 
     expect(container.textContent).toBe('');
+  });
+
+  describe('when a step returns a falsy payload', () => {
+    it.each([false, 0, '', null])('keeps %j available for inspection', output => {
+      render(<WorkflowEdgeDataButton previousStepId="check-order" output={output} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Data' }));
+
+      expect(screen.getByRole('dialog')).not.toBeNull();
+      expect(screen.getByText('check-order output')).not.toBeNull();
+    });
   });
 });

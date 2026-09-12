@@ -10,6 +10,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { WorkflowCardCondition as Condition } from '@mastra/playground-ui/components/Workflow';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
@@ -19,7 +20,6 @@ import { Highlight, themes } from 'prism-react-renderer';
 import { Fragment, useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
-import type { Condition } from './utils';
 import { getConditionIconAndColor } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 

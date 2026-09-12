@@ -1,13 +1,12 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { WorkflowGraphCanvas } from '@mastra/playground-ui/components/Workflow';
+import { useNodesState, useEdgesState } from '@xyflow/react';
 
 import { useEffect, useState } from 'react';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { constructNodesAndEdges } from './utils';
 import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
-import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
@@ -28,7 +27,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
     if (open) {
       const timer = setTimeout(() => {
         setIsMounted(true);
-      }, 500); // Delay to ensure modal is fully rendered
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [open]);
@@ -36,22 +35,14 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
   return (
     <div className="bg-surface1 relative h-full w-full">
       {isMounted ? (
-        <ReactFlow
+        <WorkflowGraphCanvas
+          variant="nested"
           nodes={nodes}
           edges={styledEdges}
           edgeTypes={edgeTypes}
-          fitView
-          fitViewOptions={{
-            maxZoom: 1,
-          }}
-          minZoom={0.01}
-          maxZoom={1}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
-        >
-          <ZoomSlider position="bottom-left" />
-          <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} color="var(--border1)" />
-        </ReactFlow>
+        />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
           <Spinner />

@@ -1,11 +1,11 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { BADGE_COLORS, WorkflowCodeContent } from '@mastra/playground-ui/components/Workflow';
+
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { BADGE_COLORS } from '../workflow/components/workflow-card-badge-utils';
-import { CodeDialogContent } from '../workflow/workflow-code-dialog-content';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 
 /**
@@ -48,7 +48,9 @@ export function WorkflowStepDetailContent() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {stepDetail.type === 'map-config' && stepDetail.mapConfig && <CodeDialogContent data={stepDetail.mapConfig} />}
+        {stepDetail.type === 'map-config' && stepDetail.mapConfig && (
+          <WorkflowCodeContent data={stepDetail.mapConfig} />
+        )}
         {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
           <div className="h-full min-h-[400px]">
             <ReactFlowProvider key={`nested-graph-${stepDetail.nestedGraph.fullStep}`}>
