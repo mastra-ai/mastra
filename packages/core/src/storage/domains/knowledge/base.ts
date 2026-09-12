@@ -269,6 +269,8 @@ export interface KnowledgeStructureReconcileResult {
 export interface KnowledgeScopeNodeSummary {
   /** UUID of the `isScope` node. */
   id: string;
+  /** Canonical structural address of the scope (for example `org:acme` or `features:memory`). */
+  address: string;
   name: string;
   kind?: string;
   description?: string;

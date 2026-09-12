@@ -547,7 +547,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
     const scopes = await this.#client.execute({
-      sql: `SELECT id,name,kind,description FROM "${TABLE_KNOWLEDGE_NODES}" WHERE isScope AND deletedAt IS NULL ORDER BY name LIMIT ?`,
+      sql: `SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a.scopeNodeId=n.id WHERE n.isScope AND n.deletedAt IS NULL ORDER BY n.name LIMIT ?`,
       args: [MAX_KNOWLEDGE_SCOPE_NODES],
     });
     if (scopes.rows.length === 0) return [];
@@ -564,6 +564,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     return scopes.rows.map(row => ({
       id: String(row.id),
+      address: String(row.address),
       name: String(row.name),
       ...(row.kind == null ? {} : { kind: String(row.kind) }),
       ...(row.description == null ? {} : { description: String(row.description) }),
