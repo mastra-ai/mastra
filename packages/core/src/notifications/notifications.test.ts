@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
@@ -351,14 +352,27 @@ describe('notification inbox', () => {
     const tool = createNotificationInboxTool({ storage });
 
     const page = (await tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)) as {
-      notifications: { id: string }[];
+      notifications: { id: string; status: string }[];
       markedSeen: number;
     };
     expect(page.notifications).toHaveLength(2);
     expect(page.markedSeen).toBe(1);
+    // The returned status reflects what storage actually holds for each record.
+    const byId = Object.fromEntries(page.notifications.map(notification => [notification.id, notification]));
+    expect(byId.ok!.status).toBe('seen');
+    expect(byId.bad!.status).toBe('pending');
     await expect(storage.getNotification({ threadId: 'thread-1', id: 'bad' })).resolves.toMatchObject({
       status: 'pending',
     });
+  });
+
+  it('rejects search without a query at the schema level', () => {
+    const tool = createNotificationInboxTool({ storage: new InMemoryNotificationsStorage() });
+    const schema = tool.inputSchema as z.ZodType;
+    expect(schema.safeParse({ action: 'search' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'search', query: '  ' }).success).toBe(false);
+    expect(schema.safeParse({ action: 'search', query: 'launch' }).success).toBe(true);
+    expect(schema.safeParse({ action: 'list' }).success).toBe(true);
   });
 
   it('resolves priority-aware default delivery decisions', async () => {

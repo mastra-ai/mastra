@@ -5,21 +5,27 @@ import { createNotificationSignal } from './signals';
 import type { NotificationsStorage } from './storage';
 import type { NotificationRecord, NotificationStatus } from './types';
 
-const notificationActionSchema = z.object({
-  action: z.enum(['list', 'read', 'markSeen', 'dismiss', 'archive', 'search']),
-  threadId: z.string().optional(),
-  id: z.string().optional(),
-  status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded', 'failed']).optional(),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  source: z.string().optional(),
-  query: z.string().optional(),
-  limit: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Maximum records to return. Defaults to 20; the response reports hasMore when more remain.'),
-});
+const notificationActionSchema = z
+  .object({
+    action: z.enum(['list', 'read', 'markSeen', 'dismiss', 'archive', 'search']),
+    threadId: z.string().optional(),
+    id: z.string().optional(),
+    status: z.enum(['pending', 'delivered', 'seen', 'dismissed', 'archived', 'discarded', 'failed']).optional(),
+    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+    source: z.string().optional(),
+    query: z.string().optional(),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum records to return. Defaults to 20; the response reports hasMore when more remain.'),
+  })
+  .superRefine((input, ctx) => {
+    if (input.action === 'search' && !input.query?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['query'], message: 'notification-inbox search requires query' });
+    }
+  });
 
 type NotificationInboxAction = z.infer<typeof notificationActionSchema>;
 
@@ -50,7 +56,7 @@ const toInboxProjection = (notification: NotificationRecord) => {
  * the agent transitions to 'seen' so the pending backlog drains as the agent triages it.
  * Without this, summarized notifications stayed 'pending' forever (the summary digest is
  * consumed without any per-record transition) and every list returned the full backlog.
- * Returns the number of records whose status write succeeded.
+ * Returns the ids of the records whose status write succeeded.
  */
 async function markViewedNotificationsSeen({
   notifications,
@@ -58,15 +64,14 @@ async function markViewedNotificationsSeen({
 }: {
   notifications: NotificationRecord[];
   storage: NotificationsStorage;
-}): Promise<number> {
+}): Promise<Set<string>> {
+  const readable = notifications.filter(isReadable);
   const results = await Promise.allSettled(
-    notifications
-      .filter(isReadable)
-      .map(notification =>
-        storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' }),
-      ),
+    readable.map(notification =>
+      storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' }),
+    ),
   );
-  return results.filter(result => result.status === 'fulfilled').length;
+  return new Set(readable.filter((_, index) => results[index]!.status === 'fulfilled').map(n => n.id));
 }
 
 async function deliverNotifications({
@@ -143,7 +148,6 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
       }
 
       if (input.action === 'list' || input.action === 'search') {
-        if (input.action === 'search' && !input.query) throw new Error('notification-inbox search requires query');
         // Fetch one past the page so the response can report whether the inbox has more.
         const limit = input.limit ?? DEFAULT_LIST_LIMIT;
         const notifications = await storage.listNotifications({
@@ -157,15 +161,15 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
           limit: limit + 1,
         });
         const page = notifications.slice(0, limit);
-        const markedSeen = await markViewedNotificationsSeen({ notifications: page, storage });
+        const seenIds = await markViewedNotificationsSeen({ notifications: page, storage });
         return {
           notifications: page.map(notification =>
-            isReadable(notification)
+            seenIds.has(notification.id)
               ? { ...toInboxProjection(notification), status: 'seen' as const }
               : toInboxProjection(notification),
           ),
           hasMore: notifications.length > limit,
-          markedSeen,
+          markedSeen: seenIds.size,
         };
       }
 
