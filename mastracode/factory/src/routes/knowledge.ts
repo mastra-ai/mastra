@@ -2196,14 +2196,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             return [
               {
                 id: this.#mintHandle(projectId, view.perspectiveKey, 'record', record.id),
-                nodeIds: nodeIds.map(nodeId =>
-                  this.#mintHandle(
-                    projectId,
-                    view.perspectiveKey,
-                    scopeNodeIdSet.has(nodeId) ? 'scope' : 'node',
-                    nodeId,
-                  ),
-                ),
+                nodeIds: nodeIds.map(nodeId => this.#mintHandle(projectId, view.perspectiveKey, 'node', nodeId)),
                 pinned: pinnedRecordIds.has(record.id),
                 text: record.text.slice(0, 2_000),
               },
