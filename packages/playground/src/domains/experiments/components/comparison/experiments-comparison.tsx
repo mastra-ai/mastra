@@ -114,7 +114,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="text-neutral4 py-8 text-center text-sm">No comparison data</div>;
+    return <div className="text-neutral4 text-ui-md py-8 text-center">No comparison data</div>;
   }
 
   return (

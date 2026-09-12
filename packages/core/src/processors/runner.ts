@@ -1507,6 +1507,7 @@ export class ProcessorRunner {
             messages: processableMessages,
             messageList,
             stepNumber,
+            runId: args.runId,
             steps,
             systemMessages: currentSystemMessages,
             rotateResponseMessageId: args.rotateResponseMessageId
@@ -1567,6 +1568,7 @@ export class ProcessorRunner {
 
       const inputData = {
         messages: processableMessages,
+        runId: args.runId,
         stepNumber,
         steps,
         messageId: stepInput.messageId,

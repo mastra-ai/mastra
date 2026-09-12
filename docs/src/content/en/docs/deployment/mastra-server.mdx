@@ -150,9 +150,15 @@ To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-route
 
 ## Graceful shutdown and rolling deploys
 
-By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
+By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
 
-Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. Keep enough time after the drain for shutdown cleanup.
+Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both plus shutdown cleanup.
+
+If you call `mastra.shutdown()` yourself, pass `drainTimeout` to control how long it waits for in-flight workflow runs:
+
+```typescript
+await mastra.shutdown({ drainTimeout: 30_000 })
+```
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

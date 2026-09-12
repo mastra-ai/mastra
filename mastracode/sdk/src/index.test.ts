@@ -40,6 +40,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
     async init() {}
 
+    onSessionCreated() {
+      return () => {};
+    }
+
+    onSessionDeleted() {
+      return () => {};
+    }
+
     getMastra() {
       return undefined;
     }

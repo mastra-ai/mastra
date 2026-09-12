@@ -1,14 +1,20 @@
 import type { ScoringHookInput } from '../evals';
 import type { Mastra } from '../mastra';
+import { unwrapMastraTracingProxy } from '../observability/context';
 
 const scorerHookOwnerTokens = new WeakMap<ScoringHookInput, object>();
 const mastraScorerHookTokens = new WeakMap<Mastra, object>();
 
 function getScorerHookToken(mastra: Mastra): object {
-  let token = mastraScorerHookTokens.get(mastra);
+  // A tracing proxy is the same emitting Mastra as its target, so ownership is
+  // keyed on the underlying instance. Without this, durable scorer dispatch —
+  // which receives the step-context proxy — mints a token the real instance's
+  // hook never matches, and every live score is silently dropped (#23465).
+  const key = unwrapMastraTracingProxy(mastra);
+  let token = mastraScorerHookTokens.get(key);
   if (!token) {
     token = {};
-    mastraScorerHookTokens.set(mastra, token);
+    mastraScorerHookTokens.set(key, token);
   }
   return token;
 }

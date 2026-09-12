@@ -199,7 +199,7 @@ export function BuilderAddSkillDialog({
           <div className="flex min-h-0 flex-1 gap-4">
             {/* Skills list */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">
+              <div className="text-neutral4 text-ui-sm mb-2 font-medium tracking-wide uppercase">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
               </div>
               <ScrollArea className="border-border1 flex-1 rounded-lg border">
@@ -210,7 +210,7 @@ export function BuilderAddSkillDialog({
                 ) : displaySkills.length === 0 ? (
                   <div className="text-neutral4 flex flex-col items-center justify-center py-8">
                     <Package className="mb-2 h-8 w-8" />
-                    <p className="text-sm">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
+                    <p className="text-ui-md">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
                 ) : (
                   <div className="space-y-1 p-2">
@@ -231,17 +231,17 @@ export function BuilderAddSkillDialog({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-neutral6 truncate text-sm font-medium">{skill.name}</span>
+                                <span className="text-neutral6 text-ui-md truncate font-medium">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="bg-accent1/20 text-accent1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                                  <span className="bg-accent1/20 text-accent1 text-ui-xs inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
                                 )}
                               </div>
-                              <div className="text-neutral4 truncate text-xs">{skill.topSource}</div>
+                              <div className="text-neutral4 text-ui-sm truncate">{skill.topSource}</div>
                             </div>
-                            <div className="text-neutral3 flex shrink-0 items-center gap-1 text-xs">
+                            <div className="text-neutral3 text-ui-sm flex shrink-0 items-center gap-1">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -259,7 +259,7 @@ export function BuilderAddSkillDialog({
               {!selectedSkill ? (
                 <div className="text-neutral4 flex flex-1 flex-col items-center justify-center">
                   <Package className="mb-2 h-8 w-8" />
-                  <p className="text-sm">Select a skill to preview</p>
+                  <p className="text-ui-md">Select a skill to preview</p>
                 </div>
               ) : (
                 <>
@@ -269,8 +269,8 @@ export function BuilderAddSkillDialog({
                         <SkillIcon className="text-neutral4 h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-neutral6 truncate font-semibold">{selectedSkill.name}</h3>
-                        <div className="text-neutral4 mt-1 flex items-center gap-3 text-xs">
+                        <h3 className="text-neutral6 text-ui-md truncate font-semibold">{selectedSkill.name}</h3>
+                        <div className="text-neutral4 text-ui-sm mt-1 flex items-center gap-3">
                           <span className="flex items-center gap-1">
                             <GithubIcon className="h-3 w-3" />
                             {selectedSkill.topSource}
@@ -308,7 +308,7 @@ export function BuilderAddSkillDialog({
                   ) : (
                     <div className="text-neutral4 flex flex-1 flex-col items-center justify-center">
                       <Package className="mb-2 h-8 w-8" />
-                      <p className="text-sm">Preview unavailable</p>
+                      <p className="text-ui-md">Preview unavailable</p>
                     </div>
                   )}
                 </>
@@ -319,7 +319,7 @@ export function BuilderAddSkillDialog({
           {selectedSkill && (
             <div className="border-border1 flex flex-col gap-3 border-t pt-4">
               {installError && (
-                <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                <div className="text-ui-md rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-400">
                   {installError}
                 </div>
               )}

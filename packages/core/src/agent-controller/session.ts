@@ -8,6 +8,8 @@ import type {
   CreatedAgentSignal,
 } from '../agent/signals';
 import type {
+  AgentSignalActiveBehavior,
+  AgentSignalIdleBehavior,
   AgentThreadSubscription,
   MastraBrowser,
   SendAgentNotificationSignalOptions,
@@ -283,6 +285,7 @@ export interface SessionMachinery {
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;
@@ -960,7 +963,10 @@ export class SessionThread {
         }
       }
     } catch {
-      session.resetTokenUsage();
+      // A transient metadata read failure must NOT destroy the running tally:
+      // resetting here would replace measured token usage with a false zero.
+      // Preserve the existing in-memory tally and leave other settings at their
+      // current values.
     }
   }
 }
@@ -3342,6 +3348,41 @@ export class Session<TState = unknown> {
     return true;
   }
 
+  /** Persist a signal to an explicit conversation without changing this session's current thread. */
+  sendSignalToThread(
+    input: AgentSignalInput,
+    target: { resourceId: string; threadId: string },
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
+    const signal = createSignal(input);
+    const accepted = Promise.resolve().then(async () => {
+      const resourceId = this.identity.getResourceId();
+      const thread = target.resourceId === resourceId ? await this.thread.getById({ threadId: target.threadId }) : null;
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new Error(`Thread not found: ${target.threadId}`);
+      }
+
+      const result = this.machinery.getAgent().sendSignal(signal, {
+        ...target,
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      });
+      const settled = await result.accepted;
+
+      if (settled.action === 'persist') {
+        await result.persisted;
+        if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
+          const message = signal.toDBMessage(target);
+          this.emit({ type: 'message_start', message });
+          this.emit({ type: 'message_end', message });
+        }
+      }
+
+      return { accepted: true as const };
+    });
+
+    return { id: signal.id, type: signal.type, accepted };
+  }
+
   /**
    * Send a signal to this session's current agent/thread. Creates a thread when
    * the session is not yet bound. When a run is already active the signal is
@@ -3353,11 +3394,12 @@ export class Session<TState = unknown> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
-          ifActive?: { attributes?: AgentSignalAttributes };
-          ifIdle?: { attributes?: AgentSignalAttributes };
+          ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+          ifIdle?: { behavior?: AgentSignalIdleBehavior; attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          untilIdle?: boolean | { maxIdleMs?: number };
           /**
            * Provider options attached to the resulting prompt turn. Surfaces as
            * `providerOptions` on the `UserModelMessage` sent to the model and as
@@ -3367,9 +3409,12 @@ export class Session<TState = unknown> {
           providerOptions?: MastraProviderMetadata;
         },
     options?: {
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: { behavior?: AgentSignalIdleBehavior; attributes?: AgentSignalAttributes };
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      untilIdle?: boolean | { maxIdleMs?: number };
       /**
        * When true, the returned `accepted` promise awaits the agent's real
        * acceptance decision (`wake`/`deliver`/…) and propagates routing or
@@ -3398,9 +3443,10 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
     const requireDelivery = options?.requireDelivery ?? false;
-    const ifActive = 'content' in input ? input.ifActive : undefined;
-    const ifIdle = 'content' in input ? input.ifIdle : undefined;
+    const ifActive = options?.ifActive ?? ('content' in input ? input.ifActive : undefined);
+    const ifIdle = options?.ifIdle ?? ('content' in input ? input.ifIdle : undefined);
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
     // After `abort()` the AbortController is cleared immediately but the run id
@@ -3441,25 +3487,38 @@ export class Session<TState = unknown> {
       // run that is already on its way out. Routing a signal to it would hand
       // the message to a run that `completeDeferredAbort()` then terminates.
       if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
-        this.approval.respond({
-          decision: 'decline',
-          declineContext: {
-            reason: 'interrupted_by_user_message',
-            message: 'The pending tool approval was declined because the user sent a new message.',
-          },
-        });
+        if (signal.type === 'user') {
+          this.approval.respond({
+            decision: 'decline',
+            declineContext: {
+              reason: 'interrupted_by_user_message',
+              message: 'The pending tool approval was declined because the user sent a new message.',
+            },
+          });
+        }
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
           ifIdle,
         });
+        const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
+        const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
+        if (settled?.action === 'persist') {
+          await result.persisted;
+          const message = signal.toDBMessage({
+            resourceId: this.identity.getResourceId(),
+            threadId,
+          });
+          this.emit({ type: 'message_start', message });
+          this.emit({ type: 'message_end', message });
+        }
         if (requireDelivery) {
-          const settled = await result.accepted;
+          const acceptedResult = settled ?? (await result.accepted);
           return {
             accepted: true as const,
-            runId: 'runId' in settled ? settled.runId : undefined,
-            action: settled.action,
+            runId: 'runId' in acceptedResult ? acceptedResult.runId : undefined,
+            action: acceptedResult.action,
           };
         }
         return { accepted: true as const, runId: await settleRunId(result) };
@@ -3502,6 +3561,7 @@ export class Session<TState = unknown> {
         requestContext: requestContextInput,
         tracingContext,
         tracingOptions,
+        untilIdle,
       });
 
       const result = agent.sendSignal(signal, {
@@ -3529,6 +3589,9 @@ export class Session<TState = unknown> {
         throw error;
       }
       void result.accepted.catch(() => {});
+      if (ifIdle?.behavior === 'persist') {
+        await result.persisted;
+      }
       return { accepted: true as const, runId: undefined };
     });
 
@@ -3585,12 +3648,14 @@ export class Session<TState = unknown> {
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
+    untilIdle,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
+    untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
     const messageInput = this.createMessageInput({ content, files });
 
@@ -3611,6 +3676,7 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
+      untilIdle,
     });
     if (wasActive) {
       await signal.accepted;

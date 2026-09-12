@@ -15,6 +15,7 @@
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import {
   SandboxNotReadyError,
+  SandboxUnsupportedFeatureError,
   WORKSPACE_TOOLS,
   Workspace,
   createWorkspaceTools,
@@ -1412,6 +1413,17 @@ describe('DaytonaSandbox', () => {
         { source: Buffer.from('hello'), destination: '/home/daytona/app/a.txt' },
         { source: Buffer.from([1, 2, 3]), destination: '/home/daytona/app/b.bin' },
       ]);
+    });
+
+    it('writeFiles rejects an explicit per-file mode without uploading', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      mockSandbox.fs.uploadFiles.mockClear();
+
+      await expect(
+        sandbox.writeFiles([{ path: '/home/daytona/app/a.txt', content: 'hello', mode: 0o600 }]),
+      ).rejects.toThrow(SandboxUnsupportedFeatureError);
+      expect(mockSandbox.fs.uploadFiles).not.toHaveBeenCalled();
     });
   });
 

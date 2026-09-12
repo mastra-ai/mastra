@@ -1,6 +1,6 @@
 ---
 title: 'Reference: ValkeyStreamsPubSub | PubSub'
-description: "ValkeyStreamsPubSub is a PubSub and LeaseProvider implementation backed by Valkey Streams through Valkey GLIDE."
+description: 'ValkeyStreamsPubSub is a PubSub and LeaseProvider implementation backed by Valkey Streams through Valkey GLIDE.'
 packages:
   - '@mastra/core'
   - '@mastra/valkey-streams'
@@ -98,6 +98,14 @@ export const mastra = new Mastra({
     defaultValue: '5',
   },
   {
+    name: 'inFlightTimeoutMs',
+    type: 'number',
+    description:
+      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
     name: 'logger',
     type: '{ debug?: Function; warn?: Function }',
     description: 'Optional diagnostic logger.',
@@ -111,6 +119,10 @@ export const mastra = new Mastra({
 `ValkeyStreamsPubSub` supports pull delivery and doesn't support numeric replay offsets. Grouped subscribers compete for events through a shared consumer group. Subscribers without a group receive fan-out delivery through private consumer groups.
 
 Use `startFrom: "latest"` to skip retained entries when a group is first created. The default, `"earliest"`, reads retained entries first.
+
+When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
+
+A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
 
 ## Cleanup and shutdown
 

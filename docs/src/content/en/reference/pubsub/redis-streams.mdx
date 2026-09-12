@@ -22,6 +22,8 @@ Each topic maps to a Redis stream key. Subscriptions with a group use a Redis co
 npm install @mastra/redis-streams
 ```
 
+Requires Redis 7.0 or later. The reclaim loop relies on `XCLAIM` removing trimmed entries from the pending list, which earlier versions don't do.
+
 ## Usage example
 
 Provide a Redis connection URL.
@@ -108,6 +110,14 @@ export const mastra = new Mastra({
     defaultValue: '5',
   },
   {
+    name: 'inFlightTimeoutMs',
+    type: 'number',
+    description:
+      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
     name: 'logger',
     type: '{ debug?: Function; warn?: Function }',
     description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
@@ -183,6 +193,8 @@ await pubsub.close()
 ## Redelivery and reclaim
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
+
+A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
 
 ## Distributed leasing
 

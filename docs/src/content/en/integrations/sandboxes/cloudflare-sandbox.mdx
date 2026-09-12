@@ -69,6 +69,8 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 Relative paths are resolved under `/workspace`. Absolute paths must also resolve within `/workspace`. Each file is sent as its own bridge request, and the bridge caps a single file at 32 MiB.
 
+The Cloudflare sandbox cannot set per-file permissions, so a `writeFiles` call that includes a `mode` is rejected rather than silently ignored.
+
 ```typescript
 await workspace.sandbox?.writeFiles?.([
   { path: 'src/index.ts', content: "console.log('hello')\n" },

@@ -3,7 +3,9 @@ import { ObservabilityStorage } from './base';
 import {
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
+  parseQueryThreadsInput,
   parseTraceQueryRequest,
+  planThreadQuery,
   planTraceQuery,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_LITERAL_UNITS,
@@ -14,6 +16,8 @@ import {
   TRACE_QUERY_DEFAULT_TIMEOUT_MS,
   TRACE_QUERY_MAX_STRING_BYTES,
   TRACE_QUERY_MAX_TIMEOUT_MS,
+  queryThreadsInputSchema,
+  queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
   traceQueryGroupResponseSchema,
   traceQueryRequestSchema,
@@ -33,6 +37,12 @@ const baseRequest = {
 
 function parsed(request: unknown = baseRequest) {
   return parseTraceQueryRequest(request);
+}
+
+const baseThreadRequest = { traces: baseRequest };
+
+function parsedThreads(request: unknown = baseThreadRequest) {
+  return parseQueryThreadsInput(request);
 }
 
 function validationError(fn: () => unknown): TraceQueryValidationError {
@@ -153,6 +163,11 @@ describe('planTraceQuery', () => {
       planTraceQuery(parsed({ timeRange: { from: '2026-08-02T00:00:00Z', to: '2026-08-01T00:00:00Z' } })),
     );
     expect(reversed.issues).toEqual([expect.objectContaining({ code: 'invalid_time_range', path: ['timeRange'] })]);
+
+    expect(planTraceQuery(parsed()).timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
 
     const tooLarge = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
@@ -958,6 +973,251 @@ describe('planTraceQuery', () => {
   });
 });
 
+describe('queryThreads input and planning', () => {
+  const traceExists = { op: 'exists', path: 'traceId' } as const;
+
+  it('normalizes defaults and rejects grouping, aggregation, and malformed thread predicates', () => {
+    expect(parsedThreads()).toEqual({ traces: baseRequest, page: { limit: 100 } });
+    expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, page: { limit: '10' } }).success).toBe(false);
+
+    for (const property of ['timeRange', 'group', 'groupBy', 'by', 'having']) {
+      expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, [property]: {} }).success, property).toBe(false);
+    }
+
+    for (const where of [
+      traceExists,
+      { op: 'and', args: [] },
+      { traces: {} },
+      { traces: { some: traceExists, none: traceExists } },
+    ]) {
+      expect(queryThreadsInputSchema.safeParse({ ...baseThreadRequest, where }).success).toBe(false);
+    }
+  });
+
+  it('builds separate eligibility and thread predicates with fixed identity ordering', () => {
+    const plan = planThreadQuery(
+      parsedThreads({
+        traces: {
+          ...baseRequest,
+          where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+        },
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  scores: {
+                    some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                  },
+                },
+              },
+            },
+            { traces: { none: { feedback: { some: { op: 'exists', path: 'comment' } } } } },
+          ],
+        },
+        page: { limit: 25 },
+      }),
+    );
+
+    expect(plan).toMatchObject({
+      result: 'threads',
+      traces: {
+        timeRange: {
+          from: '2026-08-01T00:00:00.000Z',
+          to: '2026-09-01T00:00:00.000Z',
+        },
+        where: { type: 'comparison', field: 'environment', operator: 'eq', value: 'production' },
+      },
+      where: {
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'some',
+            predicate: { type: 'relation', collection: 'scores', quantifier: 'some' },
+          },
+          {
+            type: 'relation',
+            collection: 'traces',
+            quantifier: 'none',
+            predicate: { type: 'relation', collection: 'feedback', quantifier: 'some' },
+          },
+        ],
+      },
+      orderBy: { field: 'threadId', direction: 'asc' },
+      limit: 25,
+      binding: expect.any(String),
+    });
+  });
+
+  it('validates the nested trace time range and nested trace predicates', () => {
+    const invalidRange = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: baseRequest.timeRange.to, to: baseRequest.timeRange.from } },
+        }),
+      ),
+    );
+    expect(invalidRange.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_time_range', path: ['traces', 'timeRange'] }),
+    );
+
+    expect(planThreadQuery(parsedThreads()).traces.timeRange).toEqual({
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-09-01T00:00:00.000Z',
+    });
+
+    const tooLarge = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+        }),
+      ),
+    );
+    expect(tooLarge.issues[0]).toMatchObject({
+      code: 'time_range_too_large',
+      path: ['traces', 'timeRange'],
+    });
+
+    const invalidField = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          ...baseThreadRequest,
+          where: {
+            traces: {
+              some: { scores: { some: { op: 'eq', left: { path: 'unknown' }, right: { literal: 'secret' } } } },
+            },
+          },
+        }),
+      ),
+    );
+    expect(invalidField.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'field_not_allowed',
+        path: ['where', 'traces', 'some', 'scores', 'some', 'left', 'path'],
+      }),
+    );
+    expect(JSON.stringify(invalidField.issues)).not.toContain('secret');
+  });
+
+  it('shares node and literal budgets across eligibility and thread qualification', () => {
+    const values = Array.from({ length: TRACE_QUERY_MAX_SET_VALUES }, (_, index) => `value-${index}`);
+    const membership = { op: 'in', value: { path: 'traceId' }, set: values } as const;
+    const eligibilityArgs = Array.from({ length: 7 }, () => membership);
+    const threadArgs = Array.from({ length: 4 }, () => ({ traces: { some: membership } }) as const);
+
+    const literalError = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: threadArgs },
+        }),
+      ),
+    );
+    expect(literalError.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+
+    const eligibilityNodes = Array.from({ length: 50 }, () => traceExists);
+    const threadNodes = Array.from({ length: 50 }, () => ({ traces: { some: traceExists } }) as const);
+    const nodeError = validationError(() =>
+      parsedThreads({
+        traces: { ...baseRequest, where: { op: 'and', args: eligibilityNodes } },
+        where: { op: 'and', args: threadNodes },
+      }),
+    );
+    expect(nodeError.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+  });
+
+  it('shares the related-clause budget across both scopes', () => {
+    const scoreClause = { scores: { some: { op: 'exists', path: 'scorerId' } } } as const;
+    const eligibilityArgs = Array.from({ length: 4 }, () => scoreClause);
+    const threadClause = { traces: { some: scoreClause } } as const;
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: [threadClause, threadClause] },
+        }),
+      ),
+    ).not.toThrow();
+
+    const error = validationError(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'and', args: eligibilityArgs } },
+          where: { op: 'and', args: [threadClause, threadClause, threadClause] },
+        }),
+      ),
+    );
+    expect(error.issues).toContainEqual(expect.objectContaining({ code: 'predicate_too_complex' }));
+  });
+
+  it('rejects adversarial recursion inside a thread quantifier before schema recursion', () => {
+    let nested: unknown = { op: 'not' };
+    for (let index = 0; index < 10_000; index += 1) nested = { op: 'not', arg: nested };
+
+    const error = validationError(() => parsedThreads({ ...baseThreadRequest, where: { traces: { some: nested } } }));
+    expect(error.issues[0]).toMatchObject({ code: 'predicate_too_complex' });
+  });
+});
+
+describe('thread-query cursors', () => {
+  it('round-trips thread keys and rejects changed query or authorization state', () => {
+    const plan = planThreadQuery(parsedThreads(), { authorizationBinding: 'scope-a' });
+    const cursor = encodeTraceQueryCursor(plan, { result: 'threads', threadId: 'thread-2' });
+
+    expect(
+      planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: cursor } }), {
+        authorizationBinding: 'scope-a',
+      }),
+    ).toMatchObject({ cursor: { threadId: 'thread-2' } });
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          ...baseThreadRequest,
+          where: { traces: { some: { op: 'exists', path: 'threadId' } } },
+          page: { after: cursor },
+        }),
+        { authorizationBinding: 'scope-a' },
+      ),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+
+    expect(() =>
+      planThreadQuery(
+        parsedThreads({
+          traces: { ...baseRequest, where: { op: 'exists', path: 'environment' } },
+          page: { after: cursor },
+        }),
+        { authorizationBinding: 'scope-a' },
+      ),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+
+    expect(() =>
+      planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: cursor } }), {
+        authorizationBinding: 'scope-b',
+      }),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+
+  it('does not exchange cursors with legacy grouped trace queries', () => {
+    const legacyPlan = planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }));
+    const legacyCursor = encodeTraceQueryCursor(legacyPlan, { result: 'groups', threadId: 'thread-1' });
+    expect(() => planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: legacyCursor } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+    );
+
+    const threadPlan = planThreadQuery(parsedThreads());
+    const threadCursor = encodeTraceQueryCursor(threadPlan, { result: 'threads', threadId: 'thread-1' });
+    expect(() =>
+      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, page: { after: threadCursor } })),
+    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+});
+
 describe('trace-query cursors', () => {
   it('uses locale-independent ordering and stable cursor bindings', () => {
     expect(['Ω', 'é', 'a', 'A'].sort(compareTraceQueryStrings)).toEqual(['A', 'a', 'é', 'Ω']);
@@ -1043,7 +1303,7 @@ describe('trace-query execution timeout contract', () => {
 });
 
 describe('trace-query responses and storage capability', () => {
-  it('enforces fixed trace and group projections', () => {
+  it('enforces fixed trace, legacy group, and thread projections', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
@@ -1064,12 +1324,22 @@ describe('trace-query responses and storage capability', () => {
       traceQueryGroupResponseSchema.safeParse({ groups: [{ threadId: 'thread-1', count: 1 }], page: { next: null } })
         .success,
     ).toBe(false);
+    expect(
+      queryThreadsResultSchema.safeParse({ threads: [{ threadId: 'thread-1' }], page: { next: null } }).success,
+    ).toBe(true);
+    expect(
+      queryThreadsResultSchema.safeParse({ threads: [{ threadId: 'thread-1', count: 1 }], page: { next: null } })
+        .success,
+    ).toBe(false);
   });
 
-  it('fails closed for stores that do not implement advanced trace queries', async () => {
+  it('fails closed for stores that do not implement advanced trace or thread queries', async () => {
     const storage = new ObservabilityStorage();
     await expect(storage.queryTraces(planTraceQuery(parsed()))).rejects.toMatchObject({
       id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED',
+    });
+    await expect(storage.queryThreads(planThreadQuery(parsedThreads()))).rejects.toMatchObject({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
     });
   });
 });
