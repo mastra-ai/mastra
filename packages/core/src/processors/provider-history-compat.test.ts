@@ -5,6 +5,7 @@ import { MessageList } from '../agent/message-list';
 import {
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
@@ -1097,5 +1098,180 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropic-strip-foreign-signed-reasoning (reactive cross-provider backstop)
+// ---------------------------------------------------------------------------
+
+describe('anthropicStripForeignSignedReasoning', () => {
+  const KIMI = 'kimi-for-coding';
+  const ANTHROPIC = 'anthropic.messages';
+
+  const createSignatureError = () =>
+    new APICallError({
+      message: 'Invalid `signature` in `thinking` block',
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'messages.1.content.0: Invalid `signature` in `thinking` block' },
+      }),
+      isRetryable: false,
+    });
+
+  /** A persisted assistant turn with signed thinking, stamped with the provider that produced it. */
+  const stampedSignedAssistant = (
+    provider: string,
+    options: { signature?: string; redactedData?: string; text?: string } = {},
+  ) => {
+    const anthropic: Record<string, unknown> = {};
+    if (options.signature !== undefined) anthropic.signature = options.signature;
+    if (options.redactedData !== undefined) anthropic.redactedData = options.redactedData;
+    return {
+      id: `msg-${provider}-${options.signature ?? options.redactedData ?? 'unsigned'}`,
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        metadata: { provider },
+        parts: [
+          {
+            type: 'reasoning' as const,
+            text: options.text ?? 'thinking that was signed',
+            ...(Object.keys(anthropic).length > 0 ? { providerMetadata: { anthropic } } : {}),
+          },
+          { type: 'text' as const, text: 'the visible answer' },
+        ],
+      },
+      createdAt: new Date(),
+    };
+  };
+
+  const reasoningPartOf = (messages: ReturnType<MessageList['get']['all']['db']>, id: string) => {
+    const message = messages.find(m => m.id === id)!;
+    return message.content.parts.find(p => p.type === 'reasoning') as
+      | { providerMetadata?: { anthropic?: Record<string, unknown> } }
+      | undefined;
+  };
+
+  it('strips the signature from a turn stamped with a different provider and requests a retry', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    // One combined `response` per provider turn so each becomes its own stamped message.
+    messageList.add(
+      [stampedSignedAssistant(KIMI, { signature: 'kimi-sig' }), createUserMessage('continue on claude')],
+      'response',
+    );
+    messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+
+    const args = makeArgs({ error: createSignatureError(), messageList, messages: messageList.get.all.db() });
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    // Kimi turn is foreign to the Anthropic target: signature removed, text kept.
+    const kimi = reasoningPartOf(messageList.get.all.db(), `msg-${KIMI}-kimi-sig`);
+    expect(kimi?.providerMetadata?.anthropic?.signature).toBeUndefined();
+    // The target provider's own turn keeps its signature.
+    const anthropic = reasoningPartOf(messageList.get.all.db(), `msg-${ANTHROPIC}-anthropic-sig`);
+    expect(anthropic?.providerMetadata?.anthropic?.signature).toBe('anthropic-sig');
+  });
+
+  it('is symmetric: drops a target-stamped Anthropic signature when retrying back to Kimi', () => {
+    const messages = [
+      stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' }),
+      createUserMessage('back to kimi'),
+      stampedSignedAssistant(KIMI, { signature: 'kimi-sig' }),
+    ] as any;
+
+    const changed = anthropicStripForeignSignedReasoning.fix!(messages);
+
+    expect(changed).toBe(true);
+    const anthropicPart = messages[0].content.parts.find((p: any) => p.type === 'reasoning');
+    expect(anthropicPart.providerMetadata.anthropic.signature).toBeUndefined();
+    const kimiPart = messages[2].content.parts.find((p: any) => p.type === 'reasoning');
+    expect(kimiPart.providerMetadata.anthropic.signature).toBe('kimi-sig');
+  });
+
+  it('strips redactedData the same way', () => {
+    const messages = [
+      stampedSignedAssistant(KIMI, { redactedData: 'kimi-redacted' }),
+      stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' }),
+    ] as any;
+
+    const changed = anthropicStripForeignSignedReasoning.fix!(messages);
+
+    expect(changed).toBe(true);
+    expect(messages[0].content.parts[0].providerMetadata.anthropic.redactedData).toBeUndefined();
+  });
+
+  it('returns false when the request is retried to the same provider (same-provider replay)', () => {
+    // The only signed turn belongs to the target provider, so nothing is foreign.
+    const messages = [
+      stampedSignedAssistant(KIMI, { signature: 'kimi-sig' }),
+      stampedSignedAssistant(KIMI, { signature: 'kimi-sig-2' }),
+    ] as any;
+    expect(anthropicStripForeignSignedReasoning.fix!(messages)).toBe(false);
+    expect(messages[0].content.parts[0].providerMetadata.anthropic.signature).toBe('kimi-sig');
+    expect(messages[1].content.parts[0].providerMetadata.anthropic.signature).toBe('kimi-sig-2');
+  });
+
+  it('returns false when no turn is stamped (pre-rename history is indeterminate)', () => {
+    const message = stampedSignedAssistant(KIMI, { signature: 'kimi-sig' }) as any;
+    delete message.content.metadata.provider;
+    const messages = [message];
+    expect(anthropicStripForeignSignedReasoning.fix!(messages)).toBe(false);
+    expect(messages[0].content.parts[0].providerMetadata.anthropic.signature).toBe('kimi-sig');
+  });
+
+  it('leaves unsigned reasoning untouched', () => {
+    // Kimi turn with NO signature + trailing Anthropic target → nothing to strip.
+    const messages = [
+      stampedSignedAssistant(KIMI),
+      stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' }),
+    ] as any;
+    expect(anthropicStripForeignSignedReasoning.fix!(messages)).toBe(false);
+    // The unsigned Kimi reasoning part keeps its (empty) metadata and text.
+    expect(messages[0].content.parts[0].providerMetadata).toBeUndefined();
+    expect(messages[0].content.parts[0].text).toBe('thinking that was signed');
+  });
+
+  it('does not retry a second time (retryCount > 0)', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+    messageList.add([createUserMessage('go to claude')], 'input');
+    messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+
+    const args = makeArgs({
+      error: createSignatureError(),
+      messageList,
+      messages: messageList.get.all.db(),
+      retryCount: 1,
+    });
+    const result = await handler.processAPIError(args);
+    expect(result).toBeUndefined();
+  });
+
+  it('matches the "cannot be modified" continuation error too', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([stampedSignedAssistant(KIMI, { signature: 'kimi-sig' })], 'response');
+    messageList.add([createUserMessage('go to claude')], 'input');
+    messageList.add([stampedSignedAssistant(ANTHROPIC, { signature: 'anthropic-sig' })], 'response');
+
+    const modifiedError = new APICallError({
+      message: '`thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified',
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'messages.2: thinking blocks in the latest assistant message cannot be modified' },
+      }),
+      isRetryable: false,
+    });
+    const args = makeArgs({ error: modifiedError, messageList, messages: messageList.get.all.db() });
+    const result = await handler.processAPIError(args);
+    expect(result).toEqual({ retry: true });
   });
 });

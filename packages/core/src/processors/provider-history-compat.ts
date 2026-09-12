@@ -2,6 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -509,6 +510,85 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
   },
 };
 
+/**
+ * Replays of signed `thinking`/`redacted_thinking` blocks to a provider other
+ * than the one that signed them are rejected — Anthropic returns
+ * `Invalid \`signature\` in \`thinking\` block` (and, when dropping the block
+ * leaves a `tool_use` leading a modified continuation, the accompanying
+ * "thinking blocks in the latest assistant message cannot be modified").
+ *
+ * Several providers are served through `@ai-sdk/anthropic` and therefore write
+ * their reasoning metadata under the same `anthropic` key — Kimi For Coding
+ * talks to `api.kimi.com` over the Anthropic wire format — so a signature's
+ * `anthropic` key alone cannot tell which provider signed it. The durable
+ * provenance is the `provider` each assistant turn was stamped with by
+ * `buildResponseModelMetadata`, which only the persisted message list carries.
+ *
+ * `dropCrossProviderSignedReasoning` already removes foreign signed reasoning
+ * preemptively at the message-list seam. This rule is the reactive backstop:
+ * it strips the signature (and redacted payload) off the *persisted* turns
+ * that provably came from another provider, so a retry succeeds and the thread
+ * stays repaired on later turns. It only touches turns stamped with a
+ * different provider — it never guesses provenance from the signature or key
+ * alone, and never touches the unstamped (pre-rename) history those stamps
+ * can't disambiguate.
+ */
+export const anthropicStripForeignSignedReasoning: CompatRule = {
+  name: 'anthropic-strip-foreign-signed-reasoning',
+  errorPatterns: [/signature.*thinking/i, /thinking.*cannot be modified/i],
+  fix(messages) {
+    const targetProvider = inferTargetProviderFromStamps(messages);
+
+    let changed = false;
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      const provider = getStampedProvider(message.content);
+      if (provider === undefined || provider === targetProvider) continue;
+
+      for (const part of message.content.parts ?? []) {
+        if (stripReasoningSignature(part)) changed = true;
+      }
+    }
+    return changed;
+  },
+};
+
+function getStampedProvider(content: MastraMessageContentV2 | undefined): string | undefined {
+  const provider = content?.metadata?.provider;
+  return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
+}
+
+/**
+ * The current request's provider, read back from the stamps themselves: the
+ * most recent assistant turn in the thread is the one that provoked the error,
+ * so its stamp names the provider the next retry will go to. `undefined` when
+ * no turn is stamped, in which case provenance is indeterminate and the rule
+ * must not guess.
+ */
+function inferTargetProviderFromStamps(messages: MastraDBMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const provider = messages[i]!.role === 'assistant' ? getStampedProvider(messages[i]!.content) : undefined;
+    if (provider) return provider;
+  }
+  return undefined;
+}
+
+/**
+ * Remove the `anthropic` signature / redacted payload from a signed reasoning
+ * part, leaving the unsigned text (Anthropic's converter already discards
+ * unsigned reasoning at the boundary). Returns `true` when something was
+ * removed. No-op on anything that is not a signed reasoning part.
+ */
+function stripReasoningSignature(part: MastraMessagePart): boolean {
+  if (part.type !== 'reasoning') return false;
+  const anthropic = part.providerMetadata?.anthropic as { signature?: unknown; redactedData?: unknown } | undefined;
+  if (!anthropic) return false;
+  if (anthropic.signature === undefined && anthropic.redactedData === undefined) return false;
+  delete anthropic.signature;
+  delete anthropic.redactedData;
+  return true;
+}
+
 const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
 const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
 
@@ -570,6 +650,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   cerebrasStripReasoningContent,
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
+  anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
 ];
 
@@ -601,6 +682,12 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **anthropic-strip-foreign-signed-reasoning** — reactive backstop that
+ *   strips the signature / redacted payload off persisted reasoning from a
+ *   provider other than the one the request is going to, after a replayed
+ *   foreign signature is rejected (`Invalid \`signature\` in \`thinking\`
+ *   block`). Uses the per-turn `provider` stamp, never the `anthropic` key,
+ *   because several providers write that key.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
