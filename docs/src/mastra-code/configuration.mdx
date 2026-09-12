@@ -117,9 +117,11 @@ When a request fails on the active account, Mastra Code automatically rotates to
 
 - **Rate limits and quota exhaustion** (HTTP 429, 402, or provider usage-limit errors) rotate immediately.
 - **Auth failures** (HTTP 401/403) first force one token refresh of the current account; if the refreshed token still fails, the pool rotates.
-- **Server errors and network outages** rotate only after the normal transient retry budget is spent.
+- **Server errors and network outages** first exhaust the normal transient retry budget; if the provider still can't serve the request, the error surfaces (and, when a fallback model pack is configured, the turn hops to it).
 
 Rotation walks accounts in the order they were added and wraps around; each account is tried at most once per request, so a request never burns the whole pool on one failure. When every account in the pool has been tried, the error surfaces normally.
+
+Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
 
 Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too.
 

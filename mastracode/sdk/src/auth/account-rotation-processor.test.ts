@@ -23,6 +23,7 @@ import {
   AccountStartNoticeProcessor,
   classifyRotationError,
 } from './account-rotation-processor.js';
+import { ProviderAuthRequiredError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { AuthStorage } from './storage.js';
 
@@ -140,7 +141,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     'rotates to the next account on %d, persists the switch part, swaps the slot',
     async statusCode => {
       const seeded = makeTwoAccountStorage();
-      const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+      const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
       const args = makeArgs({ error: apiError(statusCode) });
 
       const result = await processor.processAPIError(args as any);
@@ -174,7 +175,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('rotates on a usage-limit message error', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({
       error: apiError(400, { message: 'Usage limit reached for your Claude Max plan' }),
     });
@@ -189,7 +190,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     const refreshToken = vi
       .spyOn(anthropicOAuthProvider, 'refreshToken')
       .mockResolvedValue({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(401) });
 
     const result = await processor.processAPIError(args as any);
@@ -206,7 +207,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
   it('rotates on 401 when the forced refresh also fails', async () => {
     const seeded = makeTwoAccountStorage();
     vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('refresh rejected'));
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(401) });
 
     expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
@@ -217,12 +218,53 @@ describe('AccountRotationProcessor.processAPIError', () => {
     });
   });
 
+  it('identifies the provider from the controller session for wrapper-thrown auth errors (no url/modelId)', async () => {
+    // ProviderAuthRequiredError is thrown by the fetch wrappers before any
+    // HTTP request exists — no url, no modelId. The session modelId is the
+    // only provider signal; without it this error could never rotate.
+    const seeded = makeTwoAccountStorage();
+    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockRejectedValue(new Error('refresh rejected'));
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const requestContext = {
+      get: (key: string) => (key === 'controller' ? { session: { modelId: 'anthropic/claude-fable-5' } } : undefined),
+    };
+    const args = makeArgs({
+      error: new ProviderAuthRequiredError('Not logged in to Anthropic.'),
+      requestContext,
+    });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-b' });
+    expect(args.writer.custom.mock.calls[0][0].data).toMatchObject({ reason: 'auth-failed' });
+
+    // Without any provider signal the same error is a no-op.
+    const seeded2 = makeTwoAccountStorage();
+    const processor2 = new AccountRotationProcessor({ credentialStore: seeded2.storage, maxProcessorRetries: 22 });
+    const bare = makeArgs({ error: new ProviderAuthRequiredError('Not logged in to Anthropic.') });
+    expect(await processor2.processAPIError(bare as any)).toEqual({ retry: false });
+    expect(readAuthJson(seeded2.authPath)[PROVIDER]).toMatchObject({ access: 'token-a' });
+  });
+
+  it('does not rotate or emit a part once the shared retry budget is spent', async () => {
+    // Core discards retry:true when processorRetryCount >= maxProcessorRetries
+    // (llm-execution-step canRetryError); rotating anyway would record a
+    // switch that never happens.
+    const seeded = makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+    const args = makeArgs({ error: apiError(429), retryCount: 22 });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
+    expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(args.rotateResponseMessageId).not.toHaveBeenCalled();
+    expect(readAuthJson(seeded.authPath)[PROVIDER]).toMatchObject({ access: 'token-a' });
+  });
+
   it('forces the 401 refresh only once per request per provider', async () => {
     const seeded = makeTwoAccountStorage();
     const refreshToken = vi
       .spyOn(anthropicOAuthProvider, 'refreshToken')
       .mockResolvedValue({ access: 'token-a-fresh', refresh: 'refresh-a-fresh', expires: FUTURE });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(401) });
 
     // First 401: refresh succeeds → retry same account.
@@ -238,7 +280,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('declares the pool exhausted when every account has been tried', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const state: Record<string, unknown> = {};
 
     // First failure rotates A → B.
@@ -254,7 +296,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('hops on a persistent outage (5xx that exhausted the transient budget)', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(500) });
 
     expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
@@ -269,7 +311,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('does nothing on 400 and on unknown providers', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     const badRequest = makeArgs({ error: apiError(400) });
     expect(await processor.processAPIError(badRequest as any)).toEqual({ retry: false });
@@ -283,7 +325,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('identifies the provider from the error url host and falls back to the model id', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     const byModelId = makeArgs({ error: apiError(429, { url: null, modelId: 'mastracode/anthropic/claude-fable-5' }) });
     expect(await processor.processAPIError(byModelId as any)).toEqual({ retry: true });
@@ -301,7 +343,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
       getStoredApiKey: () => undefined,
       getApiKey: async () => undefined,
     };
-    const processor = new AccountRotationProcessor({ credentialStore: deployedStore });
+    const processor = new AccountRotationProcessor({ credentialStore: deployedStore, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(429) });
 
     expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
@@ -310,7 +352,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
 
   it('clears tracking on a fresh request (tried-set is request-scoped)', async () => {
     const seeded = makeTwoAccountStorage();
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
     // Request 1: rotate A → B.
     await processor.processAPIError(makeArgs({ error: apiError(429) }) as any);
@@ -333,7 +375,7 @@ describe('AccountRotationProcessor.processAPIError', () => {
     const storage = new AuthStorage(join(dir, 'auth.json'));
     storage.addAccount(PROVIDER, { access: 'only-token', refresh: 'only-refresh', expires: FUTURE }, { label: 'Solo' });
 
-    const processor = new AccountRotationProcessor({ credentialStore: storage });
+    const processor = new AccountRotationProcessor({ credentialStore: storage, maxProcessorRetries: 22 });
     const args = makeArgs({ error: apiError(429) });
     expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
     expect(args.writer.custom).not.toHaveBeenCalled();

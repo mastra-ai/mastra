@@ -237,6 +237,10 @@ export const accountRotationScenario: McE2eScenario = {
     if (!outbound.some(request => request.bearer === ACCOUNT_A_ACCESS && request.deviceId === ACCOUNT_A_DEVICE)) {
       throw new Error(`Expected account A's requests to carry its device header, saw: ${JSON.stringify(outbound)}`);
     }
+    const firstB = outbound.findIndex(request => request.bearer === ACCOUNT_B_ACCESS);
+    if (firstB === -1 || outbound.slice(firstB).some(request => request.bearer === ACCOUNT_A_ACCESS)) {
+      throw new Error(`Expected no account A request after the rotation, saw: ${JSON.stringify(outbound)}`);
+    }
 
     // On disk: the isolated auth.json slot now holds account B's tokens.
     const auth = JSON.parse(readFileSync(join(scenarioAppDataDir, 'auth.json'), 'utf-8')) as Record<string, any>;

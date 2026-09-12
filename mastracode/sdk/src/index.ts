@@ -970,7 +970,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
       // rotate immediately.
-      new AccountRotationProcessor({ credentialStore: authStorage }),
+      new AccountRotationProcessor({
+        credentialStore: authStorage,
+        // Same budget core enforces (maxProcessorRetries below): past it, core
+        // discards retry:true, so the processor no-ops instead of rotating.
+        maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES + 12,
+      }),
     ],
     // Total budget for error-processor retries; transient retries
     // (StreamErrorRetryProcessor, up to MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES)
