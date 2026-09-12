@@ -93,7 +93,8 @@ describe('messageHistory history', () => {
     expect((await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: 3 } })).messages).toEqual([]);
     // A different budget invalidates the persisted boundary.
     expect(
-      (await memory.getContext({ threadId: 'thread', memoryConfig: { messageHistory: { maxTokens: 10000 } } })).messages,
+      (await memory.getContext({ threadId: 'thread', memoryConfig: { messageHistory: { maxTokens: 10000 } } }))
+        .messages,
     ).toHaveLength(15);
   });
 

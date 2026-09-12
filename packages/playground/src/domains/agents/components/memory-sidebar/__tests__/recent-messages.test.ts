@@ -8,18 +8,15 @@ describe('Recent message settings', () => {
     [0, undefined],
     [0, { maxTokens: 4000 }],
     [false, { maxTokens: 4000 }],
-  ] as const)(
-    'when history is disabled by lastMessages=%j messageHistory=%j',
-    (lastMessages, messageHistory) => {
-      it('does not show an enabled message window', () => {
-        expect(getRecentMessagesSettings(lastMessages, messageHistory)).toEqual({
-          enabled: false,
-          maxMessages: undefined,
-          description: 'Recent message history is not included in context.',
-        });
+  ] as const)('when history is disabled by lastMessages=%j messageHistory=%j', (lastMessages, messageHistory) => {
+    it('does not show an enabled message window', () => {
+      expect(getRecentMessagesSettings(lastMessages, messageHistory)).toEqual({
+        enabled: false,
+        maxMessages: undefined,
+        description: 'Recent message history is not included in context.',
       });
-    },
-  );
+    });
+  });
 
   describe('when history has a message window configured', () => {
     it('describes the effective message count', () => {

@@ -123,7 +123,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       <div className="border-border1 border-b p-4">
         <h3 className="text-neutral5 text-ui-md font-medium">Recent Messages</h3>
-        <p className="text-neutral3 text-ui-sm mt-1">{getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}</p>
+        <p className="text-neutral3 text-ui-sm mt-1">
+          {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
+        </p>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
