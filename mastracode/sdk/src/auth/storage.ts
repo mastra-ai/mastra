@@ -274,13 +274,16 @@ export class AuthStorage {
   }
 
   /**
-   * Login to an OAuth provider.
+   * Login to an OAuth provider. Resolves to the registered account record.
+   * Pass `activate: false` to add the account without making it active (the
+   * first account for a provider is always activated — a provider with
+   * accounts must have an active one).
    */
   async login(
     providerId: OAuthProviderId,
     callbacks: OAuthLoginCallbacks,
-    opts?: { replaceAccountId?: string },
-  ): Promise<void> {
+    opts?: { replaceAccountId?: string; activate?: boolean },
+  ): Promise<OAuthAccountRecord> {
     const provider = getOAuthProvider(providerId);
     if (!provider) {
       throw new Error(`Unknown OAuth provider: ${providerId}`);
@@ -289,8 +292,8 @@ export class AuthStorage {
     const credentials = await provider.login(callbacks);
     // Route through the account registry: the new account is appended (or
     // updated in place — by id collision or an explicit replaceAccountId for
-    // re-authentication) and becomes the active account.
-    await this.addAccount(providerId, credentials, opts);
+    // re-authentication) and becomes the active account unless activate:false.
+    return this.addAccount(providerId, credentials, opts);
   }
 
   /**
@@ -361,7 +364,8 @@ export class AuthStorage {
   }
 
   /**
-   * Register OAuth credentials as an account for a provider, making it active.
+   * Register OAuth credentials as an account for a provider, making it active
+   * unless `activate: false` is passed.
    *
    * With `replaceAccountId` (re-authentication of a picked account), the
    * target entry's tokens are replaced in place — id re-keyed to the new
@@ -370,11 +374,16 @@ export class AuthStorage {
    * never matches the new token hash. Otherwise, when the new credentials
    * hash to an existing entry's id (same refresh token), that entry is
    * updated in place; a genuinely new account is appended and activated.
+   *
+   * `activate: false` only applies to the plain add path (re-authentication
+   * always activates its target): the new/updated entry keeps the active
+   * state it had, and the previously active account stays active. The first
+   * account of a provider is activated regardless.
    */
   async addAccount(
     providerId: string,
     creds: OAuthCredentials,
-    opts?: { label?: string; replaceAccountId?: string },
+    opts?: { label?: string; replaceAccountId?: string; activate?: boolean },
   ): Promise<OAuthAccountRecord> {
     this.reload();
     const entries = this.accountEntries(providerId);
@@ -436,6 +445,16 @@ export class AuthStorage {
         active: false,
         ...creds,
       };
+    }
+
+    // activate:false (add-another): keep the current active account. The
+    // first account of a provider always activates — a non-empty registry
+    // must have an active entry. An id collision with the already-active
+    // entry also falls through to activateInMemory so its fresh tokens move
+    // into the legacy slot (tokens are single-homed).
+    if (opts?.activate === false && freshEntries.length > 0 && !existing?.active) {
+      this.save();
+      return { ...(this.data[this.accountKeyFor(id)] as OAuthAccountRecord) };
     }
 
     const activated = this.activateInMemory(providerId, id);

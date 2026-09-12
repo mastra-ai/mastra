@@ -101,18 +101,40 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
     terminal.write('Account B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Logged in to Anthropic/i, terminal, 8_000);
 
-    // Both accounts listed, B active.
+    // The manager reopens after the add — and the new account is NOT
+    // activated: Account A keeps the active marker.
+    await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) accounts/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account B/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Add another account/i, terminal, 8_000);
+
+    // On disk: two accounts, A still active, slot still holds A's tokens.
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const a=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const keys=Object.keys(a).filter(k=>k.startsWith("accounts:anthropic:")); console.log("ADD_COUNT="+keys.length); console.log("ADD_ACTIVE="+keys.map(k=>a[k].label+":"+a[k].active).join(",")); console.log("ADD_SLOT_ACCESS="+(a.anthropic&&a.anthropic.access));'`,
+    );
+    await runtime.waitForScreenText(/ADD_COUNT=2/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_ACTIVE=Account A:true,Account B:false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ADD_SLOT_ACCESS=mc-multi-a-access/i, terminal, 8_000);
+
+    // Activate Account B from the manager.
     terminal.submit('/login');
     await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Account A/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Account A\s*✓ active/i, terminal, 8_000);
+    terminal.write('\x1b[B');
+    await runtime.waitForScreenText(/→ Account B/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Switched Anthropic \(Claude Pro\/Max\) to Account B/i, terminal, 8_000);
 
     // Re-authenticate account A in place: fresh tokens (rotated refresh
     // token) must replace A's entry — same label, same position, now active —
     // without appending a third account.
+    terminal.submit('/login');
+    await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
     // Rows: [Account A, Account B, Add another, Re-authenticate…, Remove…, Back].
     terminal.write('\x1b[B');
     terminal.write('\x1b[B');
