@@ -264,6 +264,36 @@ describe('NotificationsMongoDB', () => {
     expect(updated.summarySignalId).toBe('summary-1');
   });
 
+  it('updates the status of many notifications in one write, scoped to the thread', async () => {
+    for (const id of ['a', 'b', 'c']) {
+      await store.createNotification({ id, threadId: 'thread-1', source: 'email', kind: 'dm', summary: id });
+    }
+    await store.createNotification({ id: 'a', threadId: 'thread-2', source: 'email', kind: 'dm', summary: 'other' });
+
+    const updated = await store.updateNotificationsStatus({
+      threadId: 'thread-1',
+      ids: ['a', 'b', 'missing'],
+      status: 'seen',
+    });
+
+    expect(updated.map(notification => notification.id).sort()).toEqual(['a', 'b']);
+    for (const notification of updated) {
+      expect(notification.status).toBe('seen');
+      expect(notification.seenAt).toBeInstanceOf(Date);
+      expect(notification.summary).toBe(notification.id);
+    }
+    await expect(store.getNotification({ threadId: 'thread-1', id: 'a' })).resolves.toMatchObject({ status: 'seen' });
+    await expect(store.getNotification({ threadId: 'thread-1', id: 'c' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(store.getNotification({ threadId: 'thread-2', id: 'a' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(store.updateNotificationsStatus({ threadId: 'thread-1', ids: [], status: 'seen' })).resolves.toEqual(
+      [],
+    );
+  });
+
   it('lists due pending notifications sorted by earliest due time with agent/resource filters and limit', async () => {
     const now = new Date('2026-01-01T12:00:00.000Z');
 

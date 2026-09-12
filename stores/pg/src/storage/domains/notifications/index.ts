@@ -11,6 +11,7 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
   TABLE_NAMES,
   PruneOptions,
   PruneResult,
@@ -444,6 +445,30 @@ export class NotificationsPG extends NotificationsStorage {
     const updated = await this.#getNotification(this.#db.client, { threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     return updated;
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    if (input.ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, unknown> = {
+      status: input.status,
+      ...statusTimestamp(input.status, now),
+      updatedAt: now,
+    };
+    const columns = Object.keys(assignments);
+    const setClause = columns
+      .map((column, index) => `"${parseSqlIdentifier(column, 'column name')}" = $${index + 1}`)
+      .join(', ');
+    const idPlaceholders = input.ids.map((_, index) => `$${columns.length + 2 + index}`).join(', ');
+
+    const schemaName = getSchemaName(this.#schema);
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    const rows = await this.#db.client.manyOrNone(
+      `UPDATE ${tableName} SET ${setClause} WHERE "threadId" = $${columns.length + 1} AND "id" IN (${idPlaceholders}) RETURNING *`,
+      [...Object.values(assignments), input.threadId, ...input.ids],
+    );
+    return rows.map(rowToNotification);
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {

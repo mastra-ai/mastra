@@ -62,22 +62,26 @@ const toInboxProjection = (notification: NotificationRecord) => {
  * the agent transitions to 'seen' so the pending backlog drains as the agent triages it.
  * Without this, summarized notifications stayed 'pending' forever (the summary digest is
  * consumed without any per-record transition) and every list returned the full backlog.
- * Returns the ids of the records whose status write succeeded.
+ * Returns the ids of the records whose status write succeeded; a failed write leaves the
+ * page readable with its stored statuses rather than failing the whole listing.
  */
 async function markViewedNotificationsSeen({
+  threadId,
   notifications,
   storage,
 }: {
+  threadId: string;
   notifications: NotificationRecord[];
   storage: NotificationsStorage;
 }): Promise<Set<string>> {
-  const readable = notifications.filter(isReadable);
-  const results = await Promise.allSettled(
-    readable.map(notification =>
-      storage.updateNotification({ threadId: notification.threadId, id: notification.id, status: 'seen' }),
-    ),
-  );
-  return new Set(readable.filter((_, index) => results[index]!.status === 'fulfilled').map(n => n.id));
+  const ids = notifications.filter(isReadable).map(notification => notification.id);
+  if (ids.length === 0) return new Set();
+  try {
+    const updated = await storage.updateNotificationsStatus({ threadId, ids, status: 'seen' });
+    return new Set(updated.map(notification => notification.id));
+  } catch {
+    return new Set();
+  }
 }
 
 async function deliverNotifications({
@@ -167,7 +171,7 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
           limit: limit + 1,
         });
         const page = notifications.slice(0, limit);
-        const seenIds = await markViewedNotificationsSeen({ notifications: page, storage });
+        const seenIds = await markViewedNotificationsSeen({ threadId, notifications: page, storage });
         return {
           notifications: page.map(notification =>
             seenIds.has(notification.id)

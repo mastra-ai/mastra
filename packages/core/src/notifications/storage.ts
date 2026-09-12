@@ -7,6 +7,7 @@ import type {
   NotificationRecord,
   NotificationStatus,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
 } from './types';
 
 export abstract class NotificationsStorage extends StorageDomain {
@@ -19,6 +20,19 @@ export abstract class NotificationsStorage extends StorageDomain {
   abstract listDueNotifications(input: ListDueNotificationsInput): Promise<NotificationRecord[]>;
   abstract getNotification(input: { threadId: string; id: string }): Promise<NotificationRecord | null>;
   abstract updateNotification(input: UpdateNotificationInput): Promise<NotificationRecord>;
+
+  /**
+   * Set the same status on many notifications of one thread in a single write.
+   * Returns the records that were updated; ids that do not exist are skipped.
+   * Adapters should override this with a native bulk update — the default issues one
+   * `updateNotification` per id (omitting any that fail) so existing adapters keep working.
+   */
+  async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    const results = await Promise.allSettled(
+      input.ids.map(id => this.updateNotification({ threadId: input.threadId, id, status: input.status })),
+    );
+    return results.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+  }
 }
 
 const cloneDate = (value?: Date) => (value ? new Date(value) : undefined);
@@ -183,6 +197,24 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
     };
     this.#notifications.set(notificationKey(next.threadId, next.id), next);
     return cloneRecord(next);
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    const now = new Date();
+    const updated: NotificationRecord[] = [];
+    for (const id of input.ids) {
+      const existing = this.#notifications.get(notificationKey(input.threadId, id));
+      if (!existing) continue;
+      const next: NotificationRecord = {
+        ...existing,
+        status: input.status,
+        ...statusTimestamp(input.status, now),
+        updatedAt: now,
+      };
+      this.#notifications.set(notificationKey(next.threadId, next.id), next);
+      updated.push(cloneRecord(next));
+    }
+    return updated;
   }
 
   async dangerouslyClearAll(): Promise<void> {

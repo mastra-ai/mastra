@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
-import { InMemoryNotificationsStorage } from './storage';
+import { InMemoryNotificationsStorage, NotificationsStorage } from './storage';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
@@ -143,6 +143,50 @@ describe('notification inbox', () => {
     });
 
     await expect(storage.listNotifications({ threadId: 'thread-1' })).resolves.toHaveLength(2);
+  });
+
+  it('updates the status of many notifications in one call, scoped to the thread', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    for (const id of ['a', 'b', 'c']) {
+      await storage.createNotification({ id, threadId: 'thread-1', source: 'email', kind: 'dm', summary: id });
+    }
+    await storage.createNotification({ id: 'a', threadId: 'thread-2', source: 'email', kind: 'dm', summary: 'other' });
+
+    const updated = await storage.updateNotificationsStatus({
+      threadId: 'thread-1',
+      ids: ['a', 'b', 'missing'],
+      status: 'seen',
+    });
+    expect(updated.map(notification => notification.id).sort()).toEqual(['a', 'b']);
+    expect(updated.every(notification => notification.status === 'seen' && notification.seenAt)).toBe(true);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'c' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(storage.getNotification({ threadId: 'thread-2', id: 'a' })).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(storage.updateNotificationsStatus({ threadId: 'thread-1', ids: [], status: 'seen' })).resolves.toEqual(
+      [],
+    );
+  });
+
+  it('falls back to per-record updates for adapters without a native bulk status write', async () => {
+    class LegacyStorage extends InMemoryNotificationsStorage {
+      override updateNotificationsStatus = NotificationsStorage.prototype.updateNotificationsStatus;
+    }
+    const storage = new LegacyStorage();
+    await storage.createNotification({ id: 'a', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'a' });
+    await storage.createNotification({ id: 'b', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'b' });
+    const single = vi.spyOn(storage, 'updateNotification');
+
+    const updated = await storage.updateNotificationsStatus({
+      threadId: 'thread-1',
+      ids: ['a', 'missing', 'b'],
+      status: 'dismissed',
+    });
+    expect(single).toHaveBeenCalledTimes(3);
+    expect(updated.map(notification => notification.id)).toEqual(['a', 'b']);
+    expect(updated.every(notification => notification.status === 'dismissed')).toBe(true);
   });
 
   it('creates individual and summary notification signals', async () => {
@@ -340,15 +384,40 @@ describe('notification inbox', () => {
     expect(allSeen.hasMore).toBe(false);
   });
 
-  it('reports how many viewed notifications were actually marked seen when a status write fails', async () => {
+  it('marks the viewed page seen with a single bulk status write', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    await storage.createNotification({ id: 'a', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'a' });
+    await storage.createNotification({ id: 'b', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'b' });
+    await storage.createNotification({ id: 'c', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'c' });
+    await storage.updateNotification({ threadId: 'thread-1', id: 'c', status: 'archived' });
+    const bulk = vi.spyOn(storage, 'updateNotificationsStatus');
+    const single = vi.spyOn(storage, 'updateNotification');
+    const tool = createNotificationInboxTool({ storage });
+
+    const page = (await tool.execute?.({ action: 'search', query: 'dm' }, {
+      agent: { threadId: 'thread-1' },
+    } as any)) as {
+      notifications: { id: string; status: string }[];
+      markedSeen: number;
+    };
+    expect(page.markedSeen).toBe(2);
+    expect(bulk).toHaveBeenCalledTimes(1);
+    expect(bulk).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      ids: expect.arrayContaining(['a', 'b']),
+      status: 'seen',
+    });
+    expect(bulk.mock.calls[0]![0].ids).toHaveLength(2);
+    expect(single).not.toHaveBeenCalled();
+    const byId = Object.fromEntries(page.notifications.map(notification => [notification.id, notification.status]));
+    expect(byId).toEqual({ a: 'seen', b: 'seen', c: 'archived' });
+  });
+
+  it('returns the page with stored statuses when the bulk seen write fails', async () => {
     const storage = new InMemoryNotificationsStorage();
     await storage.createNotification({ id: 'ok', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'ok' });
     await storage.createNotification({ id: 'bad', threadId: 'thread-1', source: 'email', kind: 'dm', summary: 'bad' });
-    const update = storage.updateNotification.bind(storage);
-    vi.spyOn(storage, 'updateNotification').mockImplementation(async input => {
-      if (input.id === 'bad') throw new Error('write failed');
-      return update(input);
-    });
+    vi.spyOn(storage, 'updateNotificationsStatus').mockRejectedValue(new Error('write failed'));
     const tool = createNotificationInboxTool({ storage });
 
     const page = (await tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)) as {
@@ -356,11 +425,9 @@ describe('notification inbox', () => {
       markedSeen: number;
     };
     expect(page.notifications).toHaveLength(2);
-    expect(page.markedSeen).toBe(1);
+    expect(page.markedSeen).toBe(0);
     // The returned status reflects what storage actually holds for each record.
-    const byId = Object.fromEntries(page.notifications.map(notification => [notification.id, notification]));
-    expect(byId.ok!.status).toBe('seen');
-    expect(byId.bad!.status).toBe('pending');
+    expect(page.notifications.every(notification => notification.status === 'pending')).toBe(true);
     await expect(storage.getNotification({ threadId: 'thread-1', id: 'bad' })).resolves.toMatchObject({
       status: 'pending',
     });

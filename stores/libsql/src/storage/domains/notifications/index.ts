@@ -10,6 +10,7 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
+  UpdateNotificationsStatusInput,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -20,6 +21,7 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
@@ -331,6 +333,32 @@ export class NotificationsLibSQL extends NotificationsStorage {
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
     return updated;
+  }
+
+  override async updateNotificationsStatus(input: UpdateNotificationsStatusInput): Promise<NotificationRecord[]> {
+    if (input.ids.length === 0) return [];
+
+    const now = new Date();
+    const assignments: Record<string, string> = { status: input.status, updatedAt: now.toISOString() };
+    for (const [column, value] of Object.entries(statusTimestamp(input.status, now))) {
+      assignments[column] = value.toISOString();
+    }
+    const setClause = Object.keys(assignments)
+      .map(column => `"${column}" = ?`)
+      .join(', ');
+
+    const result = await this.#db.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `UPDATE "${TABLE_NOTIFICATIONS}" SET ${setClause} WHERE "threadId" = ? AND "id" IN (${input.ids.map(() => '?').join(', ')}) RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
+            args: [...Object.values(assignments), input.threadId, ...input.ids],
+          }),
+        ),
+      `bulk update notification status in table ${TABLE_NOTIFICATIONS}`,
+    );
+
+    return (result.rows ?? []).map(row => rowToNotification(row as Record<string, unknown>));
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
