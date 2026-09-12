@@ -80,8 +80,12 @@ export function LogDetailsView({
             <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>
               {traceId && (
                 <ButtonsGroup spacing="close" className="w-full min-w-0">
-                  <Button size="md" className="min-w-0 flex-1 overflow-hidden" onClick={() => onTraceClick?.(traceId)}>
-                    <ArrowRightIcon />
+                  <Button
+                    size="md"
+                    className="min-w-0 flex-1 overflow-hidden"
+                    icon={<ArrowRightIcon />}
+                    onClick={() => onTraceClick?.(traceId)}
+                  >
                     <span>Trace</span>
                     <span className="text-ui-sm text-neutral2 ml-auto min-w-0 truncate"># {traceId}</span>
                   </Button>
@@ -95,8 +99,8 @@ export function LogDetailsView({
                     className="min-w-0 flex-1 overflow-hidden"
                     disabled={!traceId || !onSpanClick}
                     onClick={() => traceId && onSpanClick?.(traceId, spanId)}
+                    icon={<ArrowRightIcon />}
                   >
-                    <ArrowRightIcon />
                     <span>Span</span>
                     <span className="text-ui-sm text-neutral2 ml-auto min-w-0 truncate"># {spanId}</span>
                   </Button>

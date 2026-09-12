@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Loader2, Settings, X } from 'lucide-react';
+import { Loader2, Settings, X, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
@@ -111,11 +111,17 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
+            icon={<Settings />}
           >
-            <Settings className="h-4 w-4" />
             Settings
           </Button>
-          <Button variant="ghost" onClick={handleLogout} disabled={isPending} className="w-full justify-start">
+          <Button
+            icon={<LogOut />}
+            variant="ghost"
+            onClick={handleLogout}
+            disabled={isPending}
+            className="w-full justify-start"
+          >
             {isPending ? 'Signing out...' : 'Sign out'}
           </Button>
         </div>

@@ -4,6 +4,7 @@ import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor'
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import CodeMirror from '@uiw/react-codemirror';
+import { Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
@@ -91,7 +92,7 @@ export const WorkflowTracingRunOptions = ({
       />
 
       <div className="flex items-center justify-end">
-        <Button type="button" onClick={handleSave}>
+        <Button icon={<Check />} type="button" onClick={handleSave}>
           Save
         </Button>
       </div>

@@ -19,6 +19,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { X, Check } from 'lucide-react';
 import { useAgentPlan } from '@/domains/agents/hooks/use-agent-plan';
 
 export interface SubmitPlanToolProps {
@@ -167,6 +168,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
           <PlanControls>
             <PlanActionGroup>
               <Button
+                icon={<Check />}
                 type="button"
                 size="sm"
                 variant="primary"
@@ -183,6 +185,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
             </span>
             <PlanActionGroup>
               <Button
+                icon={<X />}
                 type="button"
                 size="sm"
                 aria-label="Reject the plan"

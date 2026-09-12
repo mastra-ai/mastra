@@ -34,8 +34,8 @@ export function AgentToolsDetails({ agentName, tools }: AgentToolsDetailsProps) 
             size="sm"
             className="pointer-events-auto"
             aria-label={`Show ${toolCount} for ${agentName}`}
+            icon={<ToolsIcon aria-hidden="true" />}
           >
-            <ToolsIcon aria-hidden="true" />
             <span>{toolEntries.length}</span>
           </Button>
         }

@@ -136,7 +136,7 @@ export function DatasetsList({
         experimentFilter === 'all' ||
         (experimentFilter === 'with' && ds.experimentCount > 0) ||
         (experimentFilter === 'without' && ds.experimentCount === 0);
-      const matchesTag = tagFilter === 'all' || (Array.isArray(ds.tags) && (ds.tags as string[]).includes(tagFilter));
+      const matchesTag = tagFilter === 'all' || (Array.isArray(ds.tags) && ds.tags.includes(tagFilter));
       return matchesSearch && matchesExperiment && matchesTag;
     });
   }, [enrichedDatasets, search, experimentFilter, tagFilter]);

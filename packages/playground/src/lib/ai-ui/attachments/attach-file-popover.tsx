@@ -3,7 +3,6 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 
 import { CloudUpload, Link, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -103,10 +102,7 @@ export const AttachFilePopover = () => {
               placeholder="https://placehold.co/600x400/png"
             />
           </div>
-          <Button type="submit" className="h-8!" variant="default">
-            <Icon>
-              <Link />
-            </Icon>
+          <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
             Add
           </Button>
         </form>

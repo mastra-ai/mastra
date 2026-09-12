@@ -34,8 +34,8 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
       />
 
       {selectedEntity && selectedEntity.value !== 'all' && (
-        <Button onClick={onReset} disabled={isLoading} size="sm" variant="default">
-          <XIcon className="size-3" /> Reset
+        <Button onClick={onReset} disabled={isLoading} size="sm" variant="default" icon={<XIcon />}>
+          Reset
         </Button>
       )}
     </ButtonsGroup>

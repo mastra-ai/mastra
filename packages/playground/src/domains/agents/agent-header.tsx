@@ -23,8 +23,14 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       </Breadcrumb>
 
       <HeaderAction>
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank" variant="ghost" size="md">
-          <DocsIcon />
+        <Button
+          as={Link}
+          to="https://mastra.ai/en/docs/agents/overview"
+          target="_blank"
+          variant="ghost"
+          size="md"
+          icon={<DocsIcon />}
+        >
           Agents documentation
         </Button>
       </HeaderAction>

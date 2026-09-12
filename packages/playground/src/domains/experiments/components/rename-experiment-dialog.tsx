@@ -4,6 +4,7 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@m
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
@@ -72,10 +73,15 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={() => onOpenChange(false)} disabled={updateExperiment.isPending}>
+              <Button
+                icon={<X />}
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={updateExperiment.isPending}
+              >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={!canSave}>
+              <Button icon={<Check />} type="submit" variant="primary" disabled={!canSave}>
                 {updateExperiment.isPending ? 'Saving...' : 'Save'}
               </Button>
             </div>

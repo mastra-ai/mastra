@@ -34,8 +34,8 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             size="sm"
             className="pointer-events-auto"
             aria-label={`Show ${agentCount} for ${agentName}`}
+            icon={<AgentIcon aria-hidden="true" />}
           >
-            <AgentIcon aria-hidden="true" />
             <span>{agentEntries.length}</span>
           </Button>
         }

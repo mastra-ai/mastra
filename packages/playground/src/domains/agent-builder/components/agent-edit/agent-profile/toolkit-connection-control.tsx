@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useQueryClient } from '@tanstack/react-query';
-import { Settings } from 'lucide-react';
+import { Settings, Plug } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { UseFormSetValue } from 'react-hook-form';
@@ -223,6 +223,7 @@ export const ToolkitConnectionControl = ({
   if (activeConnections.length === 0) {
     return (
       <Button
+        icon={<Plug />}
         type="button"
         variant="outline"
         size="sm"

@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { PlayCircle } from 'lucide-react';
+import { PlayCircle, X } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useParams } from 'react-router';
 
@@ -110,7 +110,11 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
               iconSlot={<PlayCircle />}
               titleSlot="Item not found"
               descriptionSlot={`No loaded result for item "${itemId}".`}
-              actionSlot={<Button onClick={close}>Close</Button>}
+              actionSlot={
+                <Button icon={<X />} onClick={close}>
+                  Close
+                </Button>
+              }
             />
           </div>
         </div>

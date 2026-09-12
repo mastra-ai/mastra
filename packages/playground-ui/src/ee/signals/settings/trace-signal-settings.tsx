@@ -1,5 +1,5 @@
 import type { TraceSignalDefinition } from '@mastra/client-js';
-import { Settings } from 'lucide-react';
+import { Settings, ArchiveRestore, Archive, Pencil, LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 
 import { useTraceIntelligence } from '../use-trace-intelligence';
@@ -131,7 +131,13 @@ function TraceSignalSettingsContent() {
               {active.length} of {limit} active organization definitions
             </p>
           </div>
-          <Button size="sm" variant="primary" disabled={!canManage || atLimit} onClick={openCreateForm}>
+          <Button
+            icon={<LayoutGrid />}
+            size="sm"
+            variant="primary"
+            disabled={!canManage || atLimit}
+            onClick={openCreateForm}
+          >
             Create signal
           </Button>
         </div>
@@ -153,10 +159,17 @@ function TraceSignalSettingsContent() {
                 <p className="text-ui-xs text-neutral3 truncate">{definition.description || definition.name}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button size="sm" variant="ghost" disabled={!canManage} onClick={() => openEditForm(definition)}>
+                <Button
+                  icon={<Pencil />}
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canManage}
+                  onClick={() => openEditForm(definition)}
+                >
                   Edit
                 </Button>
                 <Button
+                  icon={<Archive />}
                   size="sm"
                   variant="ghost"
                   disabled={
@@ -195,6 +208,7 @@ function TraceSignalSettingsContent() {
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
                 <span className="text-ui-sm text-neutral3">{definition.displayLabel}</span>
                 <Button
+                  icon={<ArchiveRestore />}
                   size="sm"
                   variant="ghost"
                   disabled={

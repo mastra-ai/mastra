@@ -4,8 +4,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  CopyIcon,
+  Globe,
+  LockIcon,
+  Pencil,
+  Settings2,
+  Check,
+} from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
@@ -271,15 +282,15 @@ export function SkillEditDialog({
         </span>
         <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              <Pencil className="h-3.5 w-3.5" /> Edit
+            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} icon={<Pencil />}>
+              Edit
             </Button>
           )}
           {isViewMode && !isOwner && onCopy && skill && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => onCopy(skill)}>
-                  <CopyIcon className="h-3.5 w-3.5" /> Copy
+                <Button variant="outline" size="sm" onClick={() => onCopy(skill)} icon={<CopyIcon />}>
+                  Copy
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Make your own private copy you can edit</TooltipContent>
@@ -308,7 +319,13 @@ export function SkillEditDialog({
                   </SelectContent>
                 </Select>
               )}
-              <Button variant="primary" size="sm" onClick={handleSave} disabled={!name.trim() || isPending}>
+              <Button
+                icon={isExistingSkill ? <Check /> : <SkillIcon />}
+                variant="primary"
+                size="sm"
+                onClick={handleSave}
+                disabled={!name.trim() || isPending}
+              >
                 {isPending ? 'Saving...' : isExistingSkill ? 'Save' : 'Create'}
               </Button>
             </>
