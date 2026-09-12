@@ -330,7 +330,7 @@ export function ExperimentResultsPanel({
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
+  const experimentStatus = experiment.status;
   const {
     data: results,
     isLoading,
