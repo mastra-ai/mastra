@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
@@ -20,6 +21,7 @@ import {
   PromptBlockEditSidebar,
   PromptBlockVersionCombobox,
   usePromptBlockEditForm,
+  DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -214,6 +216,7 @@ function CmsPromptBlocksEditPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
+  const { isCmsAvailable } = useIsCmsAvailable();
   const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
@@ -281,6 +284,7 @@ function CmsPromptBlocksEditPage() {
             variant="ghost"
             activeVersionId={activeVersionId}
           />
+          {isCmsAvailable && <DeletePromptBlockAction blockId={blockId} blockName={block.name} />}
         </div>
       </RouteHeaderActions>
       <CmsPromptBlocksEditForm
