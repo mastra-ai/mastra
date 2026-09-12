@@ -2,7 +2,6 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
 import type {
   Processor,
   ProcessAPIErrorArgs,
@@ -526,52 +525,42 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
  *
  * `dropCrossProviderSignedReasoning` already removes foreign signed reasoning
  * preemptively at the message-list seam. This rule is the reactive backstop:
- * it strips the signature (and redacted payload) off the *persisted* turns
- * that provably came from another provider, so a retry succeeds and the thread
- * stays repaired on later turns. It only touches turns stamped with a
- * different provider — it never guesses provenance from the signature or key
- * alone, and never touches the unstamped (pre-rename) history those stamps
- * can't disambiguate.
+ * it strips the signature (and redacted payload) off the *persisted* turn that
+ * provoked the rejection, so a retry succeeds and the thread stays repaired on
+ * later turns.
+ *
+ * `ProcessAPIErrorArgs` does not carry the model, so the true target provider
+ * is unavailable here. What *is* provable from the stamps is the signer: the
+ * most recent assistant turn is the one the failing request was continuing, and
+ * the rejection is itself proof that its signatures are not valid for whoever
+ * rejected it. So the rule strips the signature off that turn only, and never
+ * touches any other turn — it cannot guess at (and must not destroy) the
+ * signatures that belong to the provider the request is actually going to.
+ *
+ * Scope: this repairs the "replayed foreign signature" rejection. It does not
+ * recover the trailing `tool_use`-first continuation shape (where the seam has
+ * already dropped the thinking and Anthropic then rejects the modified
+ * continuation) — stripping a signature cannot put a thinking block back.
  */
 export const anthropicStripForeignSignedReasoning: CompatRule = {
   name: 'anthropic-strip-foreign-signed-reasoning',
   errorPatterns: [/signature.*thinking/i, /thinking.*cannot be modified/i],
   fix(messages) {
-    const targetProvider = inferTargetProviderFromStamps(messages);
-
-    let changed = false;
-    for (const message of messages) {
+    // The most recent assistant turn is the one that provoked the error; its
+    // stamp names the signer, which is provably foreign to whoever rejected it.
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]!;
       if (message.role !== 'assistant') continue;
-      const provider = getStampedProvider(message.content);
-      if (provider === undefined || provider === targetProvider) continue;
 
+      let changed = false;
       for (const part of message.content.parts ?? []) {
         if (stripReasoningSignature(part)) changed = true;
       }
+      return changed;
     }
-    return changed;
+    return false;
   },
 };
-
-function getStampedProvider(content: MastraMessageContentV2 | undefined): string | undefined {
-  const provider = content?.metadata?.provider;
-  return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
-}
-
-/**
- * The current request's provider, read back from the stamps themselves: the
- * most recent assistant turn in the thread is the one that provoked the error,
- * so its stamp names the provider the next retry will go to. `undefined` when
- * no turn is stamped, in which case provenance is indeterminate and the rule
- * must not guess.
- */
-function inferTargetProviderFromStamps(messages: MastraDBMessage[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const provider = messages[i]!.role === 'assistant' ? getStampedProvider(messages[i]!.content) : undefined;
-    if (provider) return provider;
-  }
-  return undefined;
-}
 
 /**
  * Remove the `anthropic` signature / redacted payload from a signed reasoning
@@ -683,11 +672,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
  * - **anthropic-strip-foreign-signed-reasoning** — reactive backstop that
- *   strips the signature / redacted payload off persisted reasoning from a
- *   provider other than the one the request is going to, after a replayed
- *   foreign signature is rejected (`Invalid \`signature\` in \`thinking\`
- *   block`). Uses the per-turn `provider` stamp, never the `anthropic` key,
- *   because several providers write that key.
+ *   strips the signature / redacted payload off the persisted turn that
+ *   provoked a replayed-signature rejection (`Invalid \`signature\` in
+ *   \`thinking\` block`), so the retry succeeds. Only the offending (most
+ *   recent assistant) turn is touched; other turns' signatures are kept. It
+ *   does not recover the trailing `tool_use`-first continuation shape.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
