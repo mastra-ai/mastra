@@ -83,7 +83,7 @@ export function TraceColumnsMenu({
             </Button>
           }
         />
-        <DropdownMenu.Content align="end">
+        <DropdownMenu.Content align="end" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
           {STANDARD_COLUMNS.map(column => (
             <DropdownMenu.CheckboxItem

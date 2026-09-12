@@ -89,7 +89,7 @@ export const comboboxStyles = {
 
   /** Popup container — concentric with rounded-xl + p-1 (8px items inside 12px container). */
   popup: cn(
-    'w-max max-w-(--available-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
+    'w-max max-w-(--available-width) min-w-(--anchor-width) rounded-xl border border-border1 bg-surface3 text-neutral4',
     'shadow-dialog',
     'origin-(--transform-origin)',
     'transition-[transform,scale,opacity] duration-150 ease-out',

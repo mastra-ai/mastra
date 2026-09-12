@@ -526,7 +526,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     )}
                   </Button>
                 </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="start">
+                <DropdownMenu.Content align="start" className={cn('min-w-48')}>
                   {/* Status */}
                   <DropdownMenu.Sub>
                     <DropdownMenu.SubTrigger>

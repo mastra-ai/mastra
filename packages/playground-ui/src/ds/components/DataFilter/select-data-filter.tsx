@@ -237,7 +237,7 @@ export function SelectDataFilter({
           )}
         </Button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align={align}>
+      <DropdownMenu.Content align={align} className={cn('min-w-48')}>
         {/* Search */}
         <div className={cn('px-2 pb-2')}>
           <div
