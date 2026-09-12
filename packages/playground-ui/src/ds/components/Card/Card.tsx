@@ -79,7 +79,7 @@ export function CardLink({ className, appearance, elevation, LinkComponent: Link
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex flex-col space-y-1.5 p-4 pb-0', className)} {...props} />
+  <div ref={ref} className={cn('flex flex-col space-y-1.5 p-3 pb-0', className)} {...props} />
 ));
 CardHeader.displayName = 'CardHeader';
 
@@ -107,8 +107,8 @@ CardDescription.displayName = 'CardDescription';
 const cardContentVariants = cva('', {
   variants: {
     density: {
-      default: 'p-4',
-      compact: 'p-3',
+      default: 'p-3',
+      compact: 'p-2',
     },
   },
   defaultVariants: {
@@ -129,6 +129,6 @@ CardContent.displayName = 'CardContent';
 export type CardFooterProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('flex items-center p-4 pt-0', className)} {...props} />
+  <div ref={ref} className={cn('flex items-center p-3 pt-0', className)} {...props} />
 ));
 CardFooter.displayName = 'CardFooter';

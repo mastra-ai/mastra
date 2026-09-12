@@ -204,11 +204,11 @@ export function BuilderAddSkillDialog({
               </div>
               <ScrollArea className="border-border1 flex-1 rounded-lg border">
                 {isLoadingPopular || isSearching ? (
-                  <div className="flex items-center justify-center py-8">
+                  <div className="flex items-center justify-center py-5">
                     <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-neutral4 flex flex-col items-center justify-center py-8">
+                  <div className="text-neutral4 flex flex-col items-center justify-center py-5">
                     <Package className="mb-2 h-8 w-8" />
                     <p className="text-ui-md">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>

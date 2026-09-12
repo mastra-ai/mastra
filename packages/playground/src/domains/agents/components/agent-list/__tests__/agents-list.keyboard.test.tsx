@@ -1,4 +1,5 @@
 import type { GetAgentResponse } from '@mastra/client-js';
+import { fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { AgentsList } from '../agents-list';
@@ -42,6 +43,17 @@ describe('AgentsList keyboard navigation', () => {
     renderList();
 
     expectArrowNavigation(interactiveRows());
+  });
+
+  it('focuses the first row on ArrowDown from the page body, then moves down', () => {
+    renderList();
+    const rows = interactiveRows();
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(rows[0]);
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(rows[1]);
   });
 
   it('keeps row links navigable (href preserved on the focus target)', () => {

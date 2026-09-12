@@ -46,7 +46,7 @@ export function SettingsRowLayout({
       data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
       className={cn(
         isSectionLayout
-          ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-4 group-data-[variant=factory]/section:py-3 group-data-[variant=flat]/section:p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-8'
+          ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
         layout === 'standalone' && 'gap-3 sm:flex-row sm:items-center sm:justify-between',
         layout === 'factory' && 'gap-2 px-4 py-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4',
@@ -58,9 +58,10 @@ export function SettingsRowLayout({
         <LabelElement
           htmlFor={htmlFor}
           className={cn(
-            'text-ui-md',
+            isSectionLayout ? 'text-ui-smd leading-ui-sm' : 'text-ui-md',
             layout === 'standalone' && 'font-medium',
-            layout !== 'standalone' && 'leading-ui-md text-neutral5',
+            layout !== 'standalone' && 'text-neutral5',
+            layout === 'factory' && 'leading-ui-md',
             isSectionLayout &&
               'group-data-[variant=factory]/section:font-medium group-data-[variant=flat]/section:font-medium',
             viewOnly && 'text-neutral3',
@@ -73,7 +74,7 @@ export function SettingsRowLayout({
           <DescriptionElement
             className={cn(
               'text-neutral3',
-              isSectionLayout ? 'mt-1 max-w-[62ch] text-ui-md leading-ui-md text-pretty' : 'flex flex-col gap-0.5',
+              isSectionLayout ? 'mt-1 max-w-[62ch] text-ui-sm leading-ui-sm text-pretty' : 'flex flex-col gap-0.5',
               layout === 'standalone' && 'text-ui-md',
               layout === 'factory' && 'text-ui-sm',
             )}

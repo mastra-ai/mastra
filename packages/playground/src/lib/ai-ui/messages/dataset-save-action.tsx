@@ -146,7 +146,7 @@ function DatasetSaveDialog({
             />
           </div>
         </DialogBody>
-        <DialogFooter className="px-6">
+        <DialogFooter className="px-4">
           <Button variant="default" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

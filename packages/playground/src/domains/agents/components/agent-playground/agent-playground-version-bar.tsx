@@ -291,7 +291,7 @@ export function AgentPlaygroundVersionBar({
                 />
               </div>
             </DialogBody>
-            <DialogFooter className="px-6">
+            <DialogFooter className="px-4">
               <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
                 Cancel
               </Button>

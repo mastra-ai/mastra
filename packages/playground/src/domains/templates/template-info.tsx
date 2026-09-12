@@ -20,7 +20,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
   return (
     <>
-      <div className={cn('grid mt-8 items-center')}>
+      <div className={cn('grid mt-5 items-center')}>
         <div
           className={cn(
             'text-header-lg flex items-center gap-3',

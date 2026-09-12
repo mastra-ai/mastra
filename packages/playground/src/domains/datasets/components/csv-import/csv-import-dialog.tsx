@@ -402,7 +402,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'importing':
         return (
-          <div className="flex flex-col items-center gap-4 py-8">
+          <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
               <div className="text-neutral1 text-header-sm font-medium">Importing items...</div>
@@ -415,7 +415,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
       case 'complete':
         return (
-          <div className="flex flex-col items-center gap-4 py-8">
+          <div className="flex flex-col items-center gap-4 py-5">
             <div className="text-header-xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
               <div className="text-neutral1 text-header-sm font-medium">Import Complete</div>
@@ -508,7 +508,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
         <DialogBody className="max-h-[50vh] min-h-[200px] overflow-y-auto">{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="flex justify-end gap-2 px-6 pt-4">{renderFooter()}</DialogFooter>
+        <DialogFooter className="flex justify-end gap-2 px-4 pt-4">{renderFooter()}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

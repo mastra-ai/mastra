@@ -392,7 +392,7 @@ export function ScorerMiniEditor({
 
       <ScrollArea className="flex-1">
         {isLoadingScorer ? (
-          <div className="flex items-center justify-center p-8">
+          <div className="flex items-center justify-center p-5">
             <Spinner className="mr-2" /> Loading scorer...
           </div>
         ) : (
@@ -482,7 +482,7 @@ export function ScorerMiniEditor({
               </div>
 
               {testItems.length === 0 && (
-                <div className="border-border1 rounded-lg border border-dashed p-6 text-center">
+                <div className="border-border1 rounded-lg border border-dashed p-4 text-center">
                   <Txt variant="ui-sm" className="text-icon3">
                     No test items yet. Add items with expected scoring direction to verify your scorer works correctly.
                   </Txt>

@@ -40,7 +40,7 @@ export function TemplateForm({
 }: TemplateFormProps) {
   return (
     <Container>
-      <div className="mx-auto my-4 grid max-w-[40rem] gap-8 p-4 lg:p-8">
+      <div className="mx-auto my-4 grid max-w-[40rem] gap-5 p-4 lg:p-5">
         <h2
           className={cn(
             'text-neutral4 text-header-sm font-semibold flex items-center gap-2',
@@ -103,8 +103,8 @@ export function TemplateForm({
                 And
               </div>
 
-              <h3 className="text-neutral4 text-ui-lg">Set AI Model for Template Installation</h3>
-              <p className="text-neutral3 text-ui-md mt-2 mb-8">
+              <h3 className="text-neutral4 text-ui-md">Set AI Model for Template Installation</h3>
+              <p className="text-neutral3 text-ui-md mt-2 mb-5">
                 This model will be used by the workflow to process and install the template
               </p>
 

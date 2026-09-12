@@ -250,7 +250,7 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
     >
       <div
         ref={contentRef}
-        className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-ui-md"
+        className="[&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-md [&_h3]:leading-ui-md [&_p]:text-ui-md [&_p]:leading-ui-md"
       >
         <MarkdownRenderer className="text-neutral6">{children}</MarkdownRenderer>
       </div>

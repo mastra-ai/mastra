@@ -20,7 +20,7 @@ describe('Section', () => {
     const heading = screen.getByRole('heading', { name: 'Overview' });
     const headerClasses = heading.closest('[data-slot="section-header"]')?.className.split(' ');
 
-    expect(heading.className).toContain('group-data-[variant=default]/section:font-bold');
+    expect(heading.className).toContain('group-data-[variant=default]/section:font-medium');
     expect(headerClasses).toContain('group-data-[variant=default]/section:grid');
     expect(headerClasses).not.toContain('px-4');
     expect(screen.getByText('Section content').closest('[data-slot="section"]')?.dataset.variant).toBe('default');
@@ -102,10 +102,10 @@ describe('Section', () => {
     expect(flatHeaderClasses).toContain('group-data-[variant=flat]/section:flex');
     expect(flatHeaderClasses).not.toContain('px-4');
     expect(screen.getByText('Factory row').closest('[data-slot="section-row"]')?.className).toContain(
-      'group-data-[variant=factory]/section:px-4',
+      'group-data-[variant=factory]/section:px-3',
     );
     expect(screen.getByText('Flat row').closest('[data-slot="section-row"]')?.className).toContain(
-      'group-data-[variant=flat]/section:p-4',
+      'group-data-[variant=flat]/section:p-3',
     );
   });
 
@@ -158,9 +158,9 @@ describe('Section', () => {
     );
 
     expect(screen.getByText('Auto-approve tools').closest('[data-slot="section"]')?.dataset.variant).toBe('factory');
-    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-ui-lg');
-    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-ui-md');
-    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-ui-md');
+    expect(screen.getByRole('heading', { name: 'Behavior' }).className).toContain('text-ui-md');
+    expect(screen.getByText('Choose how agents handle tools.').className).toContain('text-ui-sm');
+    expect(screen.getByText('Run tool calls without asking.').className).toContain('text-ui-sm');
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 });

@@ -13,7 +13,7 @@ export function DataListNoMatch({
   return (
     <div
       className={cn(
-        'col-span-full flex flex-col items-center justify-center gap-2 rounded-lg bg-surface2 py-12 text-neutral3',
+        'col-span-full flex flex-col items-center justify-center gap-2 rounded-lg bg-surface2 py-8 text-neutral3',
         className,
       )}
       {...props}

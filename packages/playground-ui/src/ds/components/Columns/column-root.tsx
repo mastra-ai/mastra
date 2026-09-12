@@ -12,7 +12,7 @@ export function ColumnRoot({ children, className, withLeftSeparator, withRightSe
     <div className="flex w-full overflow-y-auto">
       {withLeftSeparator && <Separator />}
 
-      <div className={cn(`grid w-full content-start gap-8 overflow-y-auto`, className)}>{children}</div>
+      <div className={cn(`grid w-full content-start gap-4 overflow-y-auto`, className)}>{children}</div>
 
       {withRightSeparator && <Separator />}
     </div>
@@ -20,5 +20,5 @@ export function ColumnRoot({ children, className, withLeftSeparator, withRightSe
 }
 
 function Separator() {
-  return <div className={cn('mx-[1.5vw] w-[3px] shrink-0 bg-surface5')}></div>;
+  return <div className={cn('mx-3 w-[3px] shrink-0 bg-surface5')}></div>;
 }

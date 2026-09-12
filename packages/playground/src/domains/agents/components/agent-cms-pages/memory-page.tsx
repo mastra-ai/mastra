@@ -22,7 +22,7 @@ export function MemoryPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Memory"
@@ -38,7 +38,7 @@ export function MemoryPage() {
         </div>
 
         {!isEnabled && (
-          <div className="py-12">
+          <div className="py-8">
             <EmptyState
               iconSlot={<MemoryIcon height={40} width={40} />}
               titleSlot="Memory is not enabled"

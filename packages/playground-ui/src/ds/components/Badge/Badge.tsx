@@ -73,7 +73,7 @@ const badgeSizeStyles = {
     indicator: 'size-1',
   },
   md: {
-    badge: 'h-[22px] gap-1 text-ui-sm',
+    badge: 'h-5 gap-1 text-ui-sm',
     withoutLeadingVisual: 'px-2',
     withLeadingVisual: 'pl-1.5 pr-2',
     indicator: 'size-1.5',

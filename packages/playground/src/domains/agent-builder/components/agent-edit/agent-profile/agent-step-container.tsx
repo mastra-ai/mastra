@@ -81,7 +81,7 @@ export const AgentStepContainer = ({
       >
         {panelOverlay}
         {title && (
-          <div className="border-border1 border-b px-6 pt-6 pb-4" data-testid="agent-step-title-section">
+          <div className="border-border1 border-b px-4 pt-4 pb-4" data-testid="agent-step-title-section">
             <h2 className="text-neutral6 text-header-xl pb-1 font-semibold">{title}</h2>
             {description && <div className="text-neutral3 w-1/2">{description}</div>}
           </div>
@@ -91,7 +91,7 @@ export const AgentStepContainer = ({
         </div>
         {showLastStepCtas ? (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-6 pb-6"
+            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
             data-testid="agent-step-footer"
           >
             {backButton}
@@ -108,7 +108,7 @@ export const AgentStepContainer = ({
           </div>
         ) : (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-6 pb-6"
+            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-4 pb-4"
             data-testid="agent-step-footer"
           >
             {backButton}

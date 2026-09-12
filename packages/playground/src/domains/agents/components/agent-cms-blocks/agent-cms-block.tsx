@@ -122,7 +122,7 @@ const SaveAsPromptBlockDialog = ({
               </Txt>
             )}
           </DialogBody>
-          <DialogFooter className="px-6 pt-4">
+          <DialogFooter className="px-4 pt-4">
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

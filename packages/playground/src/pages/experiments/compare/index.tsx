@@ -63,7 +63,7 @@ function CompareExperimentsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-neutral4 py-5 text-center">
             <p>Select two experiments to compare.</p>
             <p className="text-ui-md mt-2">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentIdA}'}&contender=
@@ -92,7 +92,7 @@ function CompareExperimentsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-neutral4 py-5 text-center">
             <p>Experiments must belong to the same dataset ({datasetId}) to be compared.</p>
             <p className="text-ui-md mt-2 flex items-center justify-center gap-2">
               One of
@@ -112,7 +112,7 @@ function CompareExperimentsPage() {
       <MainContentContent>
         {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
         <div className="grid w-full content-start">
-          <div className="flex items-center justify-between gap-4 px-6 py-3">
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
               <Txt as="h1" variant="ui-lg" className="text-neutral6 font-medium">
                 Experiments comparison

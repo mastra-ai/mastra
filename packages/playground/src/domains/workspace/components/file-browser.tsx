@@ -308,11 +308,11 @@ export function FileBrowser({
       {/* File List */}
       <div className="max-h-[400px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8">
             <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : error ? (
-          <div className="px-4 py-12 text-center">
+          <div className="px-4 py-8 text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
@@ -320,7 +320,7 @@ export function FileBrowser({
             <p className="text-neutral4 text-ui-sm mx-auto max-w-sm">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
-          <div className="text-neutral4 text-ui-md py-12 text-center">
+          <div className="text-neutral4 text-ui-md py-8 text-center">
             {isRoot ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
@@ -555,7 +555,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       {/* Content */}
       <div className="bg-surface2 h-full max-h-[500px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8">
             <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
           </div>
         ) : isImage ? (

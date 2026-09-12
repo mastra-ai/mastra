@@ -106,7 +106,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="hover:bg-surface3 flex items-start gap-4 px-6 py-5 transition-colors md:items-center"
+            className="hover:bg-surface3 flex items-start gap-4 px-4 py-3 transition-colors md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
@@ -152,7 +152,7 @@ export function AgentBuilderListSkeleton({ rows = 4, rowTestId }: AgentBuilderLi
   return (
     <div className="bg-surface2 border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-6 py-5" data-testid={rowTestId}>
+        <div key={i} className="flex items-center gap-4 px-4 py-3" data-testid={rowTestId}>
           <div className="min-w-0 flex-1 space-y-2">
             <div className="bg-surface3 h-3.5 w-48 animate-pulse rounded" />
             <div className="bg-surface3 h-3 w-72 max-w-full animate-pulse rounded" />

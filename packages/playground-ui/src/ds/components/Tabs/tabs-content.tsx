@@ -25,7 +25,7 @@ export const TabContent = ({ children, value, flush = false, keepMounted = false
       keepMounted={keepMounted}
       data-slot="tabs-content"
       data-flush={flush || undefined}
-      className={cn('ring-offset-background grid overflow-y-auto py-3', focusRing.visible, className)}
+      className={cn('ring-offset-background grid overflow-y-auto py-2', focusRing.visible, className)}
     >
       <div data-slot="tabs-content-body" className="contents">
         {!keepMounted || selected || visited ? children : null}

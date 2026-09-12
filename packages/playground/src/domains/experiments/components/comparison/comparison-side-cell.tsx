@@ -46,7 +46,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-neutral3 text-ui-md py-8 text-center">Not present in this experiment</p>;
+    return <p className="text-neutral3 text-ui-md py-5 text-center">Not present in this experiment</p>;
   }
 
   const outputStr = formatValue(data.output);

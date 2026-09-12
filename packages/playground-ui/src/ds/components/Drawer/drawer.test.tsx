@@ -226,7 +226,7 @@ describe('Drawer', () => {
     expect(document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]')).toBeNull();
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
     expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
-    expect(viewport?.classList.contains('p-3')).toBe(true);
+    expect(viewport?.classList.contains('p-2')).toBe(true);
     expect(viewport?.classList.contains('inset-0')).toBe(false);
     expect(viewport?.classList.contains('right-0')).toBe(true);
     expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(true);

@@ -491,11 +491,11 @@ export function ExperimentResultsPanel({
 
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-5">
             <Spinner className="h-5 w-5" />
           </div>
         ) : !results || results.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="px-4 py-5 text-center">
             <Txt variant="ui-sm" className="text-neutral2">
               No results yet
             </Txt>
