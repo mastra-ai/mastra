@@ -79,6 +79,14 @@ export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'con
 
 export type KnowledgeProposalApprovalCapability = 'append' | 'edit' | 'delete' | 'createChildren' | 'manageAccess';
 
+/**
+ * Per-approval-capability scope sets for the direct-write-authority branch of
+ * proposal visibility: a proposal is visible to a caller who can satisfy every
+ * target's approval capability on at least one of that target's scopes. Omitted
+ * capabilities fail closed (the caller holds them nowhere).
+ */
+export type KnowledgeProposalApprovalScopeIds = Partial<Record<KnowledgeProposalApprovalCapability, KnowledgeScopeIds>>;
+
 export interface KnowledgeProposalTarget {
   type: 'node' | 'record';
   id: string;
@@ -116,6 +124,7 @@ export interface CreateKnowledgeProposalInput {
 
 export interface ListKnowledgeProposalsInput {
   scopeIds: KnowledgeScopeIds;
+  approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
   status?: KnowledgeProposalStatus;
   limit?: number;
   cursor?: string;
@@ -703,7 +712,11 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async getProposal(_id: string): Promise<KnowledgeProposal | null> {
     throw new KnowledgeUnsupportedError();
   }
-  async getVisibleProposal(_input: { id: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeProposal | null> {
+  async getVisibleProposal(_input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
+  }): Promise<KnowledgeProposal | null> {
     throw new KnowledgeUnsupportedError();
   }
   async listProposals(_input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
