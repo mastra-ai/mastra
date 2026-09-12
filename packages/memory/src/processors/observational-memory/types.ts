@@ -104,6 +104,18 @@ export interface ObservationConfig {
   model?: ObservationalMemoryModel;
 
   /**
+   * Controls how observer/provider failures affect the main agent turn.
+   *
+   * - `'abort'` preserves the existing retry schedule and aborts the turn after failure.
+   * - `'continue'` makes one observer/provider attempt, emits the failure for diagnosis, and keeps the failed input pending.
+   *
+   * Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal.
+   *
+   * @default 'abort'
+   */
+  onFailure?: 'abort' | 'continue';
+
+  /**
    * Token count of unobserved messages that triggers observation.
    * When unobserved message tokens exceed this, the Observer is called.
    *
@@ -555,6 +567,12 @@ export interface DataOmObservationFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this observation cycle. */
+    failurePolicy: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-provider';
+
     /** The OM record ID */
     recordId: string;
 
@@ -736,6 +754,12 @@ export interface DataOmBufferingFailedPart {
 
     /** Error message */
     error: string;
+
+    /** Resolved failure policy for this observation cycle. */
+    failurePolicy: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-provider';
 
     /** The OM record ID */
     recordId: string;
@@ -1113,6 +1137,7 @@ export interface ObservationalMemoryConfig {
  */
 export interface ResolvedObservationConfig {
   model: ObservationalMemoryModel;
+  onFailure: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */

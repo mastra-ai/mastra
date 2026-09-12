@@ -163,6 +163,8 @@ export interface WithRetryOptions {
   label: string;
   /** Optional abort signal — cancels both in-flight attempts and backoff waits. */
   abortSignal?: AbortSignal;
+  /** Internal retry override. Omit to use the shared retry schedule. */
+  maxRetries?: number;
 }
 
 /**
@@ -174,7 +176,7 @@ export interface WithRetryOptions {
  * @internal
  */
 export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions): Promise<T> {
-  const { label, abortSignal } = opts;
+  const { label, abortSignal, maxRetries = RETRY_CONFIG.maxRetries } = opts;
   let attempt = 0;
   // total tries = maxRetries + 1 (the initial attempt isn't a "retry")
   while (true) {
@@ -185,7 +187,7 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
       return await fn();
     } catch (error) {
       if (isAbortError(error) || abortSignal?.aborted) throw error;
-      if (attempt >= RETRY_CONFIG.maxRetries || !isTransientLLMError(error)) {
+      if (attempt >= maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${

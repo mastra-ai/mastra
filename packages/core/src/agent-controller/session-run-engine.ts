@@ -1099,8 +1099,10 @@ export class SessionRunEngine {
             });
           }
 
-          this.abortForOmFailure({ operationType, stage: 'run', error });
-          return { message: state.currentMessage };
+          if (payload.failurePolicy !== 'continue' || payload.failureKind !== 'observer-provider') {
+            this.abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }
@@ -1146,8 +1148,10 @@ export class SessionRunEngine {
             error,
           });
 
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
-          return { message: state.currentMessage };
+          if (payload.failurePolicy !== 'continue' || payload.failureKind !== 'observer-provider') {
+            this.abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: state.currentMessage };
+          }
         }
         break;
       }

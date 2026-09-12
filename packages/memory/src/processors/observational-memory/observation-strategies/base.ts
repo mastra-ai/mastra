@@ -5,7 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
-import { formatOmError } from '../error';
+import { formatOmError, getOmFailureMetadata } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -140,6 +140,7 @@ export abstract class ObservationStrategy {
             operationType: 'observation',
             startedAt: new Date().toISOString(),
             error: formatOmError(error),
+            ...getOmFailureMetadata(error, this.observationConfig.onFailure),
             recordId: record.id,
             threadId,
           },

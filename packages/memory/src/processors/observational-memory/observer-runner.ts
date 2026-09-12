@@ -10,7 +10,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError } from './error';
+import { formatOmError, ObserverProviderError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -359,11 +359,16 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  throw error;
+                  if (abortSignal?.aborted) throw error;
+                  throw new ObserverProviderError(error);
                 }
               }, abortSignal),
           }),
-        { label: 'observer', abortSignal },
+        {
+          label: 'observer',
+          abortSignal,
+          maxRetries: this.observationConfig.onFailure === 'continue' ? 0 : undefined,
+        },
       );
     };
 
@@ -670,11 +675,16 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  throw error;
+                  if (abortSignal?.aborted) throw error;
+                  throw new ObserverProviderError(error);
                 }
               }, abortSignal),
           }),
-        { label: 'observer-multi-thread', abortSignal },
+        {
+          label: 'observer-multi-thread',
+          abortSignal,
+          maxRetries: this.observationConfig.onFailure === 'continue' ? 0 : undefined,
+        },
       );
     };
 
