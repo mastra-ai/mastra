@@ -166,9 +166,8 @@ export class KnowledgeScopeGovernance {
       targetId: node.id,
     });
     if (node.isScope) {
-      const retainedGrant = (await this.storage.listScopeGrants({ includeDeleted: true })).find(
+      const retainedGrant = (await this.storage.listScopeGrants({ scopeNodeId: node.id, includeDeleted: true })).find(
         grant =>
-          grant.scopeNodeId === node.id &&
           Boolean(frontier.scopes[grant.scopeRefId]) &&
           (grant.role === 'owner' ||
             (grant.role === 'mirror' && Boolean(frontier.scopes[grant.scopeRefId]?.manageAccess))),
@@ -210,7 +209,7 @@ export class KnowledgeScopeGovernance {
         } satisfies KnowledgeScopeGrant;
       }),
     );
-    const currentGrants = (await this.storage.listScopeGrants()).filter(grant => grant.scopeNodeId === node.id);
+    const currentGrants = await this.storage.listScopeGrants({ scopeNodeId: node.id });
     const sortGrants = (grants: KnowledgeScopeGrant[]) =>
       grants.map(grant => ({ ...grant })).sort((left, right) => left.scopeRefId.localeCompare(right.scopeRefId));
     if (
