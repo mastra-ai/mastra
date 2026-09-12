@@ -7,12 +7,14 @@ import {
   ComposerBox,
   ComposerInput,
   ComposerRing,
+  ComposerSuggestions,
+  useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -31,13 +33,11 @@ import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAge
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { commandRequiresReadySession, matchCommandOptions, matchCommands } from '../services/commands';
+import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
 import { StatusLine } from './StatusLine';
-import { ComposerImageAttachments, ComposerSuggestions } from './ComposerParts';
-import type { ComposerSuggestionItem } from './ComposerParts';
+import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerSpotlight } from './useComposerSpotlight';
 import { useComposerImages } from './useComposerImages';
 import type { PendingImage } from './useComposerImages';
@@ -60,26 +60,6 @@ const composerVariantMaxHeight: Record<ComposerVariant, string> = {
 type ComposerProps = {
   variant?: ComposerVariant;
 };
-
-type ComposerSuggestion =
-  | { kind: 'command'; command: SlashCommand }
-  | { kind: 'option'; command: SlashCommand; option: SlashCommandOption };
-
-function toComposerSuggestionItem(suggestion: ComposerSuggestion): ComposerSuggestionItem {
-  if (suggestion.kind === 'command') {
-    return {
-      id: `command:${suggestion.command.name}`,
-      label: `/${suggestion.command.name}`,
-      description: suggestion.command.description,
-    };
-  }
-  return {
-    id: `option:${suggestion.command.name}:${suggestion.option.value}`,
-    label: suggestion.option.label,
-    description: suggestion.option.description,
-    active: suggestion.option.active,
-  };
-}
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
   const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
@@ -116,7 +96,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
-  // A queued kickoff echo reads as working before the session connects; steering needs the run itself.
   const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
@@ -129,14 +108,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const spotlightRef = useComposerSpotlight();
   const modeSwitchPendingRef = useRef(false);
-  const optionMatch = planFeedback.pending ? undefined : matchCommandOptions(commands, draft);
-  const matchingCommands = planFeedback.pending || optionMatch ? [] : matchCommands(commands, draft);
-  const suggestions: ComposerSuggestion[] = optionMatch
-    ? optionMatch.options.map(option => ({ kind: 'option', command: optionMatch.command, option }))
-    : matchingCommands.map(command => ({ kind: 'command', command }));
-  const suggestionItems = suggestions.map(toComposerSuggestionItem);
-  const showSuggestions = suggestions.length > 0;
-  const [activeSuggestion, setActiveSuggestion] = useState(0);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const textareaDisabled = composerDisabled && !chatPreparing;
@@ -149,15 +120,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
 
-  const updateDraft = (next: string) => {
-    setComposerDraft(next);
-    setActiveSuggestion(0);
-  };
-
-  const applyCommand = (command: SlashCommand) => {
-    updateDraft(`/${command.name} `);
-    inputRef.current?.focus();
-  };
+  const updateDraft = setComposerDraft;
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -202,7 +165,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const steer = async (text: string) => {
     if (!text.trim()) return;
     const localId = localUser(text, true);
-    // A steer claims no room and no park, so it re-attaches the reader here instead.
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
@@ -229,16 +191,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     submitInput(text);
   };
 
-  const selectSuggestion = (suggestion: ComposerSuggestion) => {
-    if (suggestion.kind === 'command') {
-      applyCommand(suggestion.command);
-      return;
-    }
-    if (sendDisabled) return;
-    submitInput(`/${suggestion.command.name} ${suggestion.option.value}`);
-  };
+  const commandMenu = useComposerCommands({
+    commands,
+    value: draft,
+    onValueChange: updateDraft,
+    inputRef,
+    enabled: !planFeedback.pending,
+    onSubmit: text => {
+      if (!sendDisabled) submitInput(text);
+    },
+  });
 
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Tab' && e.shiftKey && kind !== 'factory' && modes.length > 1) {
       e.preventDefault();
       if (modeSwitchPendingRef.current) return;
@@ -259,46 +224,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       );
       return;
     }
-    if (e.key === 'Escape' && optionMatch) {
-      e.preventDefault();
-      updateDraft(`/${optionMatch.command.name}`);
-      return;
-    }
-    if (showSuggestions) {
-      const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
-      const current = suggestions[safeIndex];
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveSuggestion(i => (i + 1) % suggestions.length);
-        return;
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveSuggestion(i => (i - 1 + suggestions.length) % suggestions.length);
-        return;
-      } else if (e.key === 'Tab') {
-        e.preventDefault();
-        if (current) selectSuggestion(current);
-        return;
-      } else if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (!current) return;
-        if (current.kind === 'option') {
-          selectSuggestion(current);
-          return;
-        }
-        const exact = draft.toLowerCase() === `/${current.command.name}` && suggestions.length === 1;
-        if (exact && !current.command.options?.length) {
-          onSubmit(e);
-          return;
-        }
-        applyCommand(current.command);
-        return;
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        updateDraft('');
-        return;
-      }
-    }
+    commandMenu.inputProps.onKeyDown(e);
+    if (e.defaultPrevented) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit(e);
@@ -357,21 +284,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             aria-hidden="true"
             className="composer-spotlight-surface pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[inherit] bg-(--composer-surface)"
           />
-          <ComposerSuggestions
-            items={suggestionItems}
-            activeIndex={activeSuggestion}
-            contextLabel={optionMatch ? `/${optionMatch.command.name}` : undefined}
-            onBack={optionMatch ? () => updateDraft(`/${optionMatch.command.name}`) : undefined}
-            onSelect={index => {
-              const suggestion = suggestions[index];
-              if (suggestion) selectSuggestion(suggestion);
-            }}
-          />
+          <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
+            {...commandMenu.inputProps}
             ref={inputRef}
-            value={draft}
-            onChange={e => updateDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
             onPaste={onPaste}
             placeholder={placeholder}
