@@ -2767,11 +2767,9 @@ export class KnowledgePG extends KnowledgeStorage {
         });
         for (const row of successors.rows) {
           const successor = parseOutbox(row);
+          if (successor.operation === 'delete') continue;
           if (!(await this.#isSemanticOutboxEntryVisible(tx, successor, scopeIds))) continue;
-          const invisiblePredecessorClause =
-            successor.operation === 'delete'
-              ? ''
-              : ` AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`;
+          const invisiblePredecessorClause = ` AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`;
           await tx.execute({
             sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='completed',completedAt=? WHERE documentId=? AND (status='pending' OR (status='processing' AND claimedAt <= ?)) AND (createdAt < ? OR (createdAt = ? AND id < ?))${invisiblePredecessorClause}`,
             args: [
@@ -2781,7 +2779,7 @@ export class KnowledgePG extends KnowledgeStorage {
               successor.createdAt.toISOString(),
               successor.createdAt.toISOString(),
               successor.id,
-              ...(successor.operation === 'delete' ? [] : scopeIds),
+              ...scopeIds,
             ],
           });
         }

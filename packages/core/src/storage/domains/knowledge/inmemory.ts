@@ -923,6 +923,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           this.#recordScopeIds(record.id),
         );
       }
+      for (const mentions of this.#db.knowledgeMentions.values()) {
+        if (!mentions.delete(source.id)) continue;
+        mentions.add(target.id);
+      }
       for (const address of this.#db.knowledgeNodeAddresses.values()) {
         if (address.nodeId === source.id) address.nodeId = target.id;
       }
