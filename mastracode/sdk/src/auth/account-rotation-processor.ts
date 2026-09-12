@@ -21,6 +21,9 @@
  */
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 
+import { listResolvableModePacks } from '../agents/model.js';
+import { resolveModePackFallbackChain } from '../onboarding/packs.js';
+import { findModePackForModel, loadSettings, resolveModePackModels } from '../onboarding/settings.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import type { CredentialStore } from './types.js';
 
@@ -89,6 +92,38 @@ const NETWORK_MESSAGE_PATTERN =
   /fetch failed|network error|socket hang up|getaddrinfo|econnrefused|enotfound|etimedout|connection (?:refused|reset|closed|timed out)|other side closed|write epipe/i;
 
 const MAX_CAUSE_DEPTH = 4;
+
+/** Persisted data-part type for a fallback-pack hop. */
+export const PACK_FALLBACK_PART_TYPE = 'data-mastracode-pack-fallback' as const;
+
+/**
+ * Payload of a pack-fallback part: the pack the cascade is leaving, the pack
+ * core's fallback array advances to, and why. Labels and pack ids only —
+ * never credential material.
+ */
+export interface PackFallbackPartData {
+  from: { packId: string; label: string };
+  to: { packId: string; label: string };
+  reason: 'pool-exhausted' | 'persistent-outage';
+  at: string;
+}
+
+/**
+ * Session-state key the processor sets when a pack hop happens. The TUI
+ * listens for it on the typed `state_changed` controller event (data parts
+ * never ride controller message events) and applies thread stickiness.
+ */
+export const PACK_FALLBACK_STATE_KEY = 'mastracodePendingPackFallback' as const;
+
+/** Payload written to session state under PACK_FALLBACK_STATE_KEY. */
+export interface PendingPackFallback {
+  fromPackId: string;
+  toPackId: string;
+  /** Landed pack's model for the mode the cascade is serving. */
+  toModelId: string;
+  reason: 'pool-exhausted' | 'persistent-outage';
+  at: string;
+}
 
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
@@ -273,6 +308,12 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
   return `Switched ${provider} account: ${from} → ${data.to.label} (${reason})`;
 }
 
+/** Transcript line for a pack-fallback hop; shared by the live info event and the TUI's history render. */
+export function packFallbackNoticeText(data: PackFallbackPartData): string {
+  const reason = REASON_TEXT[data.reason] ?? data.reason;
+  return `Switched model pack: ${data.from.label} → ${data.to.label} (${reason})`;
+}
+
 async function emitAccountSwitchPart(
   args: Pick<ProcessAPIErrorArgs, 'writer' | 'requestContext'> | Pick<ProcessInputArgs, 'writer' | 'requestContext'>,
   data: AccountSwitchPartData,
@@ -358,7 +399,13 @@ export class AccountRotationProcessor implements Processor {
       return this.declarePoolUnavailable(args, providerId, 'persistent-outage');
     }
 
-    if (accounts.length < 2) return { retry: false };
+    // A pool smaller than 2 has nothing to rotate to — it is exhausted by
+    // definition once a rotate-classified error arrives. Route through the
+    // pool-exhausted path so the notices (and any pack hop) still fire; with
+    // no registry at all this announces only a configured pack hop.
+    if (accounts.length < 2) {
+      return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
+    }
 
     const tried = getTriedInstances(state);
     const active = store.getActiveAccount?.(providerId) ?? accounts.find(account => account.active);
@@ -396,13 +443,111 @@ export class AccountRotationProcessor implements Processor {
    * into a pack hop. Silent (no part) when the provider has no registry at
    * all — there are no accounts to declare unavailable.
    */
+  /**
+   * Emit the pack-fallback part when a configured chain has a next pack.
+   * The cascade is computed once per request from the session's pack and
+   * cached in processor state; the position advances per hop, so a second
+   * hop in the same turn reports B→C even though the session modelId still
+   * points at pack A (stickiness lands TUI-side only after the part renders).
+   * Returns nothing — core's fallback array does the hop on retry:false.
+   */
+  private async emitPackFallbackPart(
+    args: ProcessAPIErrorArgs,
+    reason: 'pool-exhausted' | 'persistent-outage',
+  ): Promise<void> {
+    interface PackCascade {
+      packs: Array<{ packId: string; label: string }>;
+      models: Record<string, Record<string, string>>;
+      position: number;
+    }
+    let cascade = args.state.packCascade as PackCascade | null | undefined;
+    if (cascade === undefined) {
+      const controller = args.requestContext?.get('controller') as
+        | { session?: { modelId?: unknown; modeId?: unknown } }
+        | undefined;
+      const modelId = controller?.session?.modelId;
+      const modeId = controller?.session?.modeId;
+      if (typeof modelId !== 'string' || modelId.length === 0) {
+        args.state.packCascade = null;
+        return;
+      }
+      const settings = loadSettings();
+      const packs = listResolvableModePacks(settings);
+      const activePack = findModePackForModel(
+        settings,
+        packs,
+        modelId,
+        typeof modeId === 'string' && modeId.length > 0 ? modeId : 'build',
+      );
+      const chain = activePack
+        ? resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, activePack.id, settings.customModelPacks)
+        : [];
+      if (chain.length < 2) {
+        args.state.packCascade = null;
+        return;
+      }
+      cascade = {
+        packs: chain.map(packId => ({ packId, label: packs.find(pack => pack.id === packId)?.name ?? packId })),
+        models: Object.fromEntries(
+          chain.map(packId => {
+            const pack = packs.find(candidate => candidate.id === packId);
+            return [packId, pack ? resolveModePackModels(settings, pack) : {}];
+          }),
+        ),
+        position: 0,
+      };
+      args.state.packCascade = cascade;
+    }
+    if (!cascade) return;
+
+    const from = cascade.packs[cascade.position];
+    const to = cascade.packs[cascade.position + 1];
+    if (!from || !to) return;
+    cascade.position++;
+
+    const controller = args.requestContext?.get('controller') as
+      | {
+          session?: { modeId?: unknown };
+          setState?: (updates: Record<string, unknown>) => Promise<void>;
+          emitEvent?: (event: { type: 'info'; message: string }) => void;
+        }
+      | undefined;
+    const modeId = typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build';
+    const toModelId = cascade.models[to.packId]?.[modeId];
+    const at = new Date().toISOString();
+    if (toModelId) {
+      // Thread stickiness trigger — must land before the info event so the
+      // TUI never renders a hop it cannot stick. Cleared by the TUI handler.
+      await controller?.setState?.({
+        [PACK_FALLBACK_STATE_KEY]: {
+          fromPackId: from.packId,
+          toPackId: to.packId,
+          toModelId,
+          reason,
+          at,
+        } satisfies PendingPackFallback,
+      });
+    }
+
+    const data: PackFallbackPartData = { from, to, reason, at };
+    await args.writer?.custom({ type: PACK_FALLBACK_PART_TYPE, data });
+    // Live visibility: data parts never ride controller message events, so
+    // emit the same line as an info event (see emitAccountSwitchPart).
+    controller?.emitEvent?.({ type: 'info', message: packFallbackNoticeText(data) });
+  }
+
   private async declarePoolUnavailable(
     args: ProcessAPIErrorArgs,
     providerId: string,
     reason: 'pool-exhausted' | 'persistent-outage',
   ): Promise<{ retry: boolean }> {
     const accounts = this.options.credentialStore.listAccounts?.(providerId) ?? [];
-    if (accounts.length === 0) return { retry: false };
+    if (accounts.length === 0) {
+      // No account registry (API-key-only provider): nothing rotated, but the
+      // hop still happens — announce the pack fallback before core advances.
+      await this.emitPackFallbackPart(args, reason);
+      return { retry: false };
+    }
 
     const tried = getTriedInstances(args.state);
     for (const account of accounts) tried.add(account.id);
@@ -417,6 +562,8 @@ export class AccountRotationProcessor implements Processor {
       reason,
       at: new Date().toISOString(),
     });
+
+    await this.emitPackFallbackPart(args, reason);
 
     return { retry: false };
   }

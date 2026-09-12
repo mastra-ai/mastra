@@ -1153,6 +1153,21 @@ export function resolveModePackModels(
   return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
 }
 
+/**
+ * The pack a session's current model came from: the pack whose model for the
+ * session's mode (builtin overrides applied) is exactly the session model id.
+ * Sessions on a manual /model override match no pack — callers treat that as
+ * "no fallback chain".
+ */
+export function findModePackForModel(
+  settings: GlobalSettings,
+  packs: Array<{ id: string; models: Record<string, string> }>,
+  modelId: string,
+  modeId: string,
+): { id: string; models: Record<string, string> } | undefined {
+  return packs.find(pack => resolveModePackModels(settings, pack)[modeId] === modelId);
+}
+
 export function resolveModelDefaults(
   settings: GlobalSettings,
   builtinPacks: Array<{ id: string; models: Record<string, string> }>,

@@ -109,6 +109,21 @@ export function getBuiltinModePack(packId: string): (ModePack & { providerId: st
   };
 }
 
+/**
+ * All builtin mode packs regardless of provider access (descriptions use the
+ * apikey variant). For resolution-time lookups — fallback chains must resolve
+ * even when an access probe is stale; actual auth failures surface through
+ * the provider call itself.
+ */
+export function listBuiltinModePacks(): ModePack[] {
+  return BUILTIN_MODE_PACKS.map(pack => ({
+    id: pack.id,
+    name: pack.name,
+    description: pack.description('apikey'),
+    models: { ...pack.models },
+  }));
+}
+
 /** A pack id is known when it is a builtin mode pack or a saved custom pack. */
 export function isKnownModePackId(packId: string, savedCustomPacks: Array<{ name: string }> = []): boolean {
   if (BUILTIN_MODE_PACKS.some(pack => pack.id === packId)) return true;
