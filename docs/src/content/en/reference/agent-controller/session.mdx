@@ -777,19 +777,15 @@ Respond with [`session.respondToToolApproval()`](#tool-approvals).
 
 ### `session.displayState.get()`
 
-Return the current `AgentControllerDisplayState` snapshot for UI rendering.
+Return the current `AgentControllerDisplayState` snapshot for UI rendering. `threadId` identifies the thread represented by the snapshot and is `undefined` while the session is unbound.
 
 ```typescript
 const displayState = session.displayState.get()
 ```
 
-### `session.displayState.restoreTasks(tasks)`
+The session restores `tasks` from native thread storage when it binds or reopens a thread, independently of message history. New and cloned threads start with empty tasks and zero token usage. Keep historical task receipts in the transcript without writing them back into the current snapshot.
 
-Restore the task portion of the snapshot after a UI replays persisted task tool history. This is a pure update of the snapshot and doesn't emit an event, so re-render explicitly after calling it.
-
-```typescript
-session.displayState.restoreTasks(replayedTasks)
-```
+Read cumulative token totals from `tokenUsage`. A `usage_update` event describes one step, not the cumulative total.
 
 After every event, the session emits `display_state_changed` with the latest snapshot. Subscribe with [`session.subscribe()`](#identity-and-events) or read the current value from `session.displayState.get()`.
 

@@ -42,8 +42,7 @@ function createState(): TUIState {
         set: vi.fn(),
       },
       displayState: {
-        get: () => ({ isRunning: false }),
-        restoreTasks: vi.fn(),
+        get: () => ({ isRunning: false, tasks: [] }),
       },
       mode: {
         resolve: vi.fn(() => ({ id: 'build', metadata: {} })),

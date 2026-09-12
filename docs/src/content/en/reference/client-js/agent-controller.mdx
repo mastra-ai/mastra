@@ -129,7 +129,7 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     type: '() => void',
     isOptional: true,
     description:
-      'Called each time the stream is re-established after a drop. The server does not replay events missed while disconnected, so re-sync from here with `session.state()` and, for the message gap, `session.listMessages()`.',
+      'Called each time the stream is re-established after a drop. Each connection starts with the current display snapshot, but missed message events are not replayed. Use `session.listMessages(threadId)` to recover the message gap and `session.state()` to refresh the mode and model.',
   },
   {
     name: 'reconnect',
@@ -181,7 +181,11 @@ interface PlanResume {
 
 ### `state(options?)`
 
-Returns the session's current mode, model, and thread for initial UI hydration and re-syncing after a reconnect. Pass `{ threadId }` to read the state for a specific thread.
+Returns the active session's mode, model, thread, and runtime snapshot for initial UI hydration. The snapshot includes current tasks, cumulative token usage, queued follow-ups, memory progress, and buffering flags.
+
+Pass `{ threadId }` to require that the snapshot belongs to that thread. This doesn't switch the session: a different owned thread returns HTTP `409`, and a missing thread or one owned by another resource returns HTTP `404`. Use [`switchThread(threadId)`](#switchthreadthreadid) to change the active thread before reading its snapshot.
+
+When multiple clients share a session, don't automatically recover from `409` by switching back. Switching changes the shared session's active thread and aborts any current run. Let the user choose when to switch.
 
 Returns: `Promise<AgentControllerSessionState>`
 
@@ -256,6 +260,8 @@ Sends a notification signal to the session. The agent's delivery policy decides 
 Returns: `Promise<SendNotificationResult>`
 
 ## Events
+
+Every connection, including a reconnect, starts with `display_state_changed` containing the current runtime snapshot and its `threadId`, rather than a replay of historical events. Read cumulative totals from `displayState.tokenUsage`, not from the per-step `usage_update` event.
 
 `onEvent` receives every event the session emits, discriminated by `event.type`:
 

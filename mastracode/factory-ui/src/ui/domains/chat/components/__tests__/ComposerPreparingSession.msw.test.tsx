@@ -1,10 +1,13 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { MastraClient } from '@mastra/client-js';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import assert from 'node:assert';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { releaseSession, renderThread, SESSION_ID, stubPreparingSession } from './composer-session-test-fixture';
 
 describe('Composer while a session prepares its workspace', () => {
   it('sends the message straight away and shows it while the workspace comes up', async () => {
@@ -35,6 +38,89 @@ describe('Composer while a session prepares its workspace', () => {
 
     await waitFor(() => expect(session.delivered).toEqual(['fix the login bug', 'follow up']));
     expect(session.steerAttempts).toBe(0);
+  });
+
+  it('blocks the first tab after another tab rebinds its session without fighting to reclaim the thread', async () => {
+    const session = stubPreparingSession();
+    const user = userEvent.setup();
+    const { client } = renderThread();
+    await releaseSession(session.finishWorkspace, client);
+
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'keep this unsent draft');
+
+    const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}`;
+    let activeThreadId = SESSION_ID;
+    const createdThreads: string[] = [];
+    const conflictedReads = vi.fn();
+    const onSwitch = vi.fn();
+    let releaseConflict: (() => void) | undefined;
+    const conflictGate = new Promise<void>(resolve => {
+      releaseConflict = resolve;
+    });
+    server.use(
+      http.post<never, { threadId: string }>(
+        `${TEST_BASE_URL}/api/agent-controller/code/sessions`,
+        async ({ request }) => {
+          const body = await request.json();
+          activeThreadId = body.threadId;
+          createdThreads.push(activeThreadId);
+          return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId });
+        },
+      ),
+      http.get(sessionUrl, async ({ request }) => {
+        if (new URL(request.url).searchParams.get('threadId') !== activeThreadId) {
+          conflictedReads();
+          await conflictGate;
+          return HttpResponse.json({ error: 'Thread is not active in this session' }, { status: 409 });
+        }
+        return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId });
+      }),
+      http.post(`${sessionUrl}/thread`, () => {
+        onSwitch();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    const secondTab = new MastraClient({ baseUrl: TEST_BASE_URL, retries: 0 })
+      .getAgentController('code')
+      .session(SESSION_ID);
+    await secondTab.create({ threadId: 'other-tab-thread' });
+    await session.emit({ type: 'thread_changed', threadId: 'other-tab-thread', previousThreadId: SESSION_ID });
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: { threadId: 'other-tab-thread', tasks: [] },
+    });
+    await session.emit({
+      type: 'task_updated',
+      tasks: [{ id: 'foreign', content: 'Foreign task', status: 'pending', activeForm: 'Working elsewhere' }],
+    });
+    await waitFor(() => expect(message).toBeDisabled());
+    expect(screen.getByText('Reconnecting…')).toBeVisible();
+    await waitFor(() => expect(conflictedReads).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Foreign task')).not.toBeInTheDocument();
+    releaseConflict?.();
+
+    expect(await screen.findByText(/Session switched threads/)).toBeVisible();
+    expect(screen.getByText(/Continue in the other tab or reload/)).toBeVisible();
+    expect(message).toBeDisabled();
+    expect(message).toHaveValue('keep this unsent draft');
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    fireEvent.keyDown(message, { key: 'Enter' });
+    expect(session.posted).toEqual([]);
+
+    vi.useFakeTimers();
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(conflictedReads).toHaveBeenCalledTimes(1);
+      expect(createdThreads).toEqual(['other-tab-thread']);
+      expect(onSwitch).not.toHaveBeenCalled();
+      expect(activeThreadId).toBe('other-tab-thread');
+      expect(session.posted).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('delivers a message once when the sender navigates away before the workspace is ready', async () => {

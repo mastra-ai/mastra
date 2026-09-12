@@ -14,7 +14,13 @@ export function ConnectionActivity() {
   const { phase } = useChatTranscript();
   const preparingThreadId = usePreparingThreadId();
 
-  // A dropped stream makes every other status stale, the composer's working ring included.
+  if (status === 'conflict')
+    return (
+      <span className={cn(statusItem, 'text-accent2 [&_svg]:text-accent2')} role="status" aria-live="polite">
+        <Circle size={10} className="shrink-0" /> Session switched threads. Continue in the other tab or reload to
+        reopen this thread.
+      </span>
+    );
   if (status === 'reconnecting')
     return (
       <span className={statusItem} role="status" aria-live="polite">
@@ -32,14 +38,12 @@ export function ConnectionActivity() {
         <Circle size={10} /> Disconnected
       </span>
     );
-  // preparing message sets busy; preparation status takes precedence
   if (preparingThreadId)
     return (
       <span className={statusItem} role="status" aria-live="polite">
         <Circle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
       </span>
     );
-  // Spinning composer ring is the visible cue; this keeps the state announced.
   if (phase === 'working')
     return (
       <span className="sr-only" role="status" aria-live="polite">

@@ -1,11 +1,10 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, TokenUsage } from '@mastra/core/agent-controller';
 
 import type { OMBudgets } from './om';
 
-export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
-export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+export type OMPhase = OMBudgets['status'];
 export type GoalSnapshot = Pick<
   Extract<AgentControllerEvent, { type: 'goal_evaluation' }>['payload'],
   'objective' | 'status' | 'iteration' | 'maxRuns' | 'passed' | 'reason'
@@ -32,16 +31,10 @@ export const initialChatRuntime: ChatRuntimeState = {
   _decodeStartedAt: 0,
 };
 
-type RuntimeAction =
-  | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
+type RuntimeAction = { type: 'event'; event: AgentControllerEvent } | { type: 'reset' };
 
 export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
-  if (action.type === 'reset') {
-    const matchingSnapshot =
-      action.threadId !== undefined && action.state?.threadId === action.threadId ? action.state : undefined;
-    return { ...initialChatRuntime, usage: matchingSnapshot?.tokenUsage, omProgress: matchingSnapshot?.omProgress };
-  }
+  if (action.type === 'reset') return initialChatRuntime;
 
   const event = action.event;
   if (!isKnownAgentControllerEvent(event)) return state;
@@ -67,34 +60,20 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
             ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
             : Math.round(instantaneous);
       }
-      return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };
+      return { ...state, tokensPerSec, _decodeStartedAt: 0 };
     }
     case 'display_state_changed':
       return {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
         usage: event.displayState.tokenUsage ?? state.usage,
+        followUpCount: event.displayState.queuedFollowUps ?? state.followUpCount,
+        omPhase: event.displayState.omProgress?.status ?? state.omPhase,
         bufferingMessages: event.displayState.bufferingMessages ?? false,
         bufferingObservations: event.displayState.bufferingObservations ?? false,
       };
     case 'goal_evaluation':
       return { ...state, goal: event.payload };
-    case 'follow_up_queued':
-      return { ...state, followUpCount: event.count };
-    case 'om_observation_start':
-      return { ...state, omPhase: 'observing' };
-    case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
-    case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
-    case 'om_observation_end':
-    case 'om_observation_failed':
-    case 'om_reflection_end':
-    case 'om_reflection_failed':
-    case 'om_buffering_end':
-    case 'om_buffering_failed':
-    case 'om_activation':
-      return { ...state, omPhase: 'idle' };
     default:
       return state;
   }

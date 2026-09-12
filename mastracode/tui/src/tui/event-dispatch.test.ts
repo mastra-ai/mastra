@@ -5,7 +5,11 @@ import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
 
-function createMockAgentController(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
+function createMockAgentController(
+  initialState: Record<string, unknown> = {},
+  previousTasks: TaskItemSnapshot[] = [],
+  tasks: TaskItemSnapshot[] = [],
+) {
   let state = { ...initialState };
   const setState = vi.fn(async (updates: Record<string, unknown>) => {
     state = { ...state, ...updates };
@@ -22,7 +26,7 @@ function createMockAgentController(initialState: Record<string, unknown> = {}, p
       displayState: {
         get: () => ({
           isRunning: false,
-          tasks: [],
+          tasks,
           previousTasks,
           omProgress: { status: 'idle', pendingTokens: 0 },
           modifiedFiles: new Map(),
@@ -77,7 +81,6 @@ describe('dispatchEvent thread lifecycle', () => {
 
   beforeEach(() => {
     controller = createMockAgentController({
-      tasks: [{ content: 'Old task', status: 'in_progress', activeForm: 'Working' }],
       activePlan: { title: 'Old plan', plan: '# Plan', approvedAt: '2026-01-01' },
       sandboxAllowedPaths: ['/tmp/allowed'],
       currentModelId: 'openai/gpt-5.4',
@@ -124,8 +127,10 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
   });
 
-  it('clears per-thread state on thread_changed', async () => {
+  it('preserves hydrated tasks while clearing ephemeral state on thread_changed', async () => {
     state.latestRequestPromptTokens = 90_000;
+    const tasks = state.session.displayState.get().tasks;
+    tasks.push({ id: 'reopened', content: 'Reopened task', status: 'pending', activeForm: 'Resuming task' });
 
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
@@ -134,9 +139,10 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.latestRequestPromptTokens).toBeUndefined();
+    expect(state.taskProgress?.updateTasks).toHaveBeenCalledWith(tasks);
+    expect(state.session.state.get()).not.toHaveProperty('tasks');
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
-        tasks: [],
         activePlan: null,
         sandboxAllowedPaths: [],
       }),
@@ -153,9 +159,10 @@ describe('dispatchEvent thread lifecycle', () => {
     );
 
     expect(state.latestRequestPromptTokens).toBeUndefined();
+    expect(state.taskProgress?.updateTasks).toHaveBeenCalledWith([]);
+    expect(state.session.state.get()).not.toHaveProperty('tasks');
     expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
-        tasks: [],
         activePlan: null,
         sandboxAllowedPaths: [],
       }),
@@ -212,26 +219,6 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(state.taskToolInsertIndex).toBe(-1);
   });
 
-  it('clears taskProgress UI component on thread_changed', async () => {
-    await dispatchEvent(
-      { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,
-      ectx,
-      state,
-    );
-
-    expect((state.taskProgress as any).updateTasks).toHaveBeenCalledWith([]);
-  });
-
-  it('clears taskProgress UI component on thread_created', async () => {
-    await dispatchEvent(
-      { type: 'thread_created', thread: { id: 'brand-new', title: 'Brand New' } } as any,
-      ectx,
-      state,
-    );
-
-    expect((state.taskProgress as any).updateTasks).toHaveBeenCalledWith([]);
-  });
-
   it('leaves the status line alone when the observer renames another thread of the session', async () => {
     await dispatchEvent(
       { type: 'om_thread_title_updated', cycleId: 'cycle-1', threadId: 'other-thread', newTitle: 'Log parser rewrite' },
@@ -264,7 +251,7 @@ describe('dispatchEvent task updates', () => {
       { id: 'task-2', content: 'Task 2', status: 'in_progress' as const, activeForm: 'Working on task 2' },
       { id: 'task-3', content: 'Task 3', status: 'pending' as const, activeForm: 'Working on task 3' },
     ];
-    const state = createMockTUIState(createMockAgentController({}, previousTasks));
+    const state = createMockTUIState(createMockAgentController({}, previousTasks, tasks));
     const ectx = createMockEctx();
 
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
@@ -277,7 +264,7 @@ describe('dispatchEvent task updates', () => {
 
   it('renders a completed-task receipt when all tasks complete live', async () => {
     const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
-    const state = createMockTUIState(createMockAgentController());
+    const state = createMockTUIState(createMockAgentController({}, [], tasks));
     const ectx = createMockEctx();
 
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);

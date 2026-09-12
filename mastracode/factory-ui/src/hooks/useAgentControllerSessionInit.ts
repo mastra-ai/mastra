@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
 import type { FactorySessionState } from '../ui/domains/chat/context/ChatSessionContext';
@@ -6,25 +6,14 @@ import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
+import { isSessionThreadConflict } from './useAgentControllerSessionSync';
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
   resourceId: string;
-  /**
-   * Session scope. The Factory feeds its per-worktree project path in here;
-   * the same value is also written back into the session as a `projectPath`
-   * tag so the server side can round-trip it.
-   */
   scope?: string;
-  /**
-   * The session's conventional thread id (=== its sessionId for factory and
-   * user workspaces). When set, session creation is an exact-thread
-   * get-or-create: it binds the existing thread or (re)creates it with this
-   * id, healing sessions whose thread provisioning was interrupted or whose
-   * backing storage was reset. Without it, a missing thread would silently
-   * bind the session to a fresh random-id thread the route can never load.
-   */
   sessionThreadId?: string;
+  initialThreadId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
@@ -35,10 +24,12 @@ export function useAgentControllerSessionInit({
   resourceId,
   scope,
   sessionThreadId,
+  initialThreadId,
   factorySessionState,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
+  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
@@ -53,16 +44,27 @@ export function useAgentControllerSessionInit({
       'init',
       factorySessionState,
       sessionThreadId ?? null,
+      initialThreadId ?? null,
     ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
-      const created = await activeSession.create({
-        tags: scope ? { projectPath: scope } : undefined,
-        threadId: sessionThreadId,
-      });
-      // Factory sessions have no scope but still need their state seeded —
-      // server-side gates (the transition tool, factory-phase processor)
-      // resolve the session address from `factoryProjectId` in state.
+      let threadId: string | null;
+      const openingExistingThread = initialThreadId !== undefined && initialThreadId !== sessionThreadId;
+      if (openingExistingThread) {
+        try {
+          await activeSession.state({ threadId: initialThreadId });
+        } catch (error) {
+          if (!isSessionThreadConflict(error)) throw error;
+          await activeSession.switchThread(initialThreadId);
+        }
+        threadId = initialThreadId;
+      } else {
+        const created = await activeSession.create({
+          tags: scope ? { projectPath: scope } : undefined,
+          threadId: sessionThreadId,
+        });
+        threadId = created.threadId ?? null;
+      }
       if (scope || factorySessionState) {
         try {
           await activeSession.setState({ ...(scope ? { projectPath: scope } : {}), ...factorySessionState });
@@ -70,10 +72,20 @@ export function useAgentControllerSessionInit({
           // Continue connecting; session.state() remains the source of truth.
         }
       }
-      return { threadId: created.threadId ?? null };
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(
+          agentControllerId,
+          resourceId,
+          scope,
+          initialThreadId ?? sessionThreadId,
+        ),
+        exact: true,
+      });
+      return { threadId };
     },
     enabled: enabled && Boolean(session),
     staleTime: Infinity,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,

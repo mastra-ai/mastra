@@ -27,9 +27,6 @@ export function useRouteThreadSync() {
     resourceId,
     scope: projectPath,
     baseUrl,
-    // Thread-switch is a mutation that talks to the sandbox — keep it on
-    // sandboxReady (= sessionEnabled) so it never fires before session
-    // metadata resolves.
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
@@ -39,9 +36,6 @@ export function useRouteThreadSync() {
     resourceId,
     scope: projectPath,
     baseUrl,
-    // The session client is used for prefetch reads (listMessages) inside the
-    // fallback-for-scope-change branch — safe to build as soon as the resource
-    // is addressable.
     enabled: resourceReady,
   });
   const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
@@ -94,7 +88,14 @@ export function useRouteThreadSync() {
 
   useEffect(() => {
     latestRouteThreadId.current = routeThreadId;
-    if (!sessionEnabled || status !== 'ready' || !threadsQuery.isSuccess) return;
+    if (!sessionEnabled || !threadsQuery.isSuccess) return;
+    const missingRouteThread =
+      status === 'error' && routeThreadId && !threadsQuery.data.some(thread => thread.id === routeThreadId);
+    if (missingRouteThread) {
+      switchToRouteThread(routeThreadId, false);
+      return;
+    }
+    if (status !== 'ready') return;
     const sessionKeyChanged = previousSessionKey.current !== undefined && previousSessionKey.current !== sessionKey;
     previousSessionKey.current = sessionKey;
     if (!routeThreadId || threadId === routeThreadId) return;

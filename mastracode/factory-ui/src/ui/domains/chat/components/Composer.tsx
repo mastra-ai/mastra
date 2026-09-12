@@ -119,7 +119,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   // A queued kickoff echo reads as working before the session connects; steering needs the run itself.
   const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
-  const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
+  const blocked =
+    status === 'conflict' || (onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId);
   const draftConfigNotReady =
     onUserDraft && (modesLoading || modesError !== undefined || modelLoading || modelError !== undefined);
   const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
+import { TASK_STATE_TYPE } from '../tools/builtin/task-tools';
 import type { Session } from './session';
 import { createTestSession } from './test-utils';
 import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
@@ -1480,15 +1481,6 @@ describe('resetThreadDisplayState', () => {
     expect(session.displayState.get().tokenUsage).toEqual(createEmptyTokenUsage());
   });
 
-  it('preserves isRunning across thread_created', () => {
-    emit(session, { type: 'agent_start' });
-    expect(session.displayState.get().isRunning).toBe(true);
-
-    emit(session, { type: 'thread_created', thread: { id: 'new', title: 'New' } } as any);
-    // isRunning is NOT reset by resetThreadDisplayState
-    expect(session.displayState.get().isRunning).toBe(true);
-  });
-
   it('resets omProgress on thread_changed', () => {
     emit(session, { type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
     expect(session.displayState.get().omProgress.status).toBe('observing');
@@ -1502,6 +1494,167 @@ describe('resetThreadDisplayState', () => {
     session.setTokenUsage({ promptTokens: 200, completionTokens: 100, totalTokens: 300 });
     emit(session, { type: 'thread_changed', threadId: 'other', previousThreadId: 'old' });
     expect(session.displayState.get().tokenUsage.totalTokens).toBe(300);
+  });
+});
+
+describe('native task hydration', () => {
+  it('restores each thread independently, including silent switches and empty new, cloned, and deleted threads', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createSession(storage);
+    const taskStore = await storage.getStore('threadState');
+    const firstId = session.thread.requireId();
+    const firstTasks = [{ id: 'a', content: 'First task', status: 'in_progress', activeForm: 'Working on first' }];
+    await taskStore.setState({ threadId: firstId, type: TASK_STATE_TYPE, value: firstTasks });
+    const second = await session.thread.create();
+    const secondTasks = [{ id: 'b', content: 'Second task', status: 'pending', activeForm: 'Working on second' }];
+    await taskStore.setState({ threadId: second.id, type: TASK_STATE_TYPE, value: secondTasks });
+    const snapshots: { threadId?: string; taskIds: string[] }[] = [];
+    const changedThreads: string[] = [];
+    session.subscribe(event => {
+      if (event.type === 'thread_changed') changedThreads.push(event.threadId);
+      if (event.type === 'display_state_changed') {
+        snapshots.push({
+          threadId: event.displayState.threadId,
+          taskIds: event.displayState.tasks.map(task => task.id),
+        });
+      }
+    });
+
+    await session.thread.switch({ threadId: firstId });
+    expect(session.displayState.get()).toMatchObject({ threadId: firstId, tasks: firstTasks, previousTasks: [] });
+    expect(snapshots.at(-1)).toEqual({ threadId: firstId, taskIds: ['a'] });
+
+    await session.thread.switch({ threadId: second.id, emitEvent: false });
+    expect(session.displayState.get()).toMatchObject({ threadId: second.id, tasks: secondTasks, previousTasks: [] });
+    expect(changedThreads).toEqual([firstId]);
+    await session.thread.switch({ threadId: firstId });
+    expect(session.displayState.get().tasks).toEqual(firstTasks);
+
+    const empty = await session.thread.create();
+    expect(session.displayState.get()).toMatchObject({ threadId: empty.id, tasks: [], previousTasks: [] });
+    await session.thread.switch({ threadId: firstId });
+    await session.thread.switch({ threadId: empty.id });
+    expect(session.displayState.get()).toMatchObject({ threadId: empty.id, tasks: [], previousTasks: [] });
+
+    const cloned = await session.thread.clone({ sourceThreadId: firstId });
+    expect(session.displayState.get()).toMatchObject({ threadId: cloned.id, tasks: [], previousTasks: [] });
+    await session.thread.switch({ threadId: firstId });
+    await session.thread.delete({ threadId: firstId });
+    expect(session.displayState.get()).toMatchObject({ threadId: undefined, tasks: [], previousTasks: [] });
+  });
+
+  it('never labels previous-thread tasks or usage with the destination while hydration is pending', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createSession(storage);
+    const taskStore = await storage.getStore('threadState');
+    const firstId = session.thread.requireId();
+    const firstTasks = [{ id: 'a', content: 'First task', status: 'in_progress', activeForm: 'Working on first' }];
+    await taskStore.setState({ threadId: firstId, type: TASK_STATE_TYPE, value: firstTasks });
+    await session.thread.setSetting({
+      key: 'tokenUsage',
+      value: { promptTokens: 70, completionTokens: 30, totalTokens: 100 },
+    });
+    const second = await session.thread.create();
+    const secondTasks = [{ id: 'b', content: 'Second task', status: 'pending', activeForm: 'Working on second' }];
+    await taskStore.setState({ threadId: second.id, type: TASK_STATE_TYPE, value: secondTasks });
+    await session.thread.setSetting({
+      key: 'tokenUsage',
+      value: { promptTokens: 150, completionTokens: 50, totalTokens: 200 },
+    });
+    await session.thread.switch({ threadId: firstId });
+
+    let releaseHydration!: () => void;
+    const hydrationGate = new Promise<void>(resolve => {
+      releaseHydration = resolve;
+    });
+    let markHydrating!: () => void;
+    const hydrating = new Promise<void>(resolve => {
+      markHydrating = resolve;
+    });
+    const memory = await storage.getStore('memory');
+    const getThreadById = memory.getThreadById.bind(memory);
+    const readThread = vi.spyOn(memory, 'getThreadById').mockImplementation(async input => {
+      if (input.threadId === second.id) {
+        markHydrating();
+        await hydrationGate;
+      }
+      return getThreadById(input);
+    });
+    const snapshots: { threadId?: string; taskIds: string[]; totalTokens: number }[] = [];
+    session.subscribe(event => {
+      if (event.type === 'display_state_changed') {
+        snapshots.push({
+          threadId: event.displayState.threadId,
+          taskIds: event.displayState.tasks.map(task => task.id),
+          totalTokens: event.displayState.tokenUsage.totalTokens,
+        });
+      }
+    });
+    session.emit({ type: 'agent_start' });
+    const switching = session.thread.switch({ threadId: second.id });
+    await hydrating;
+    try {
+      session.emit({ type: 'state_changed', state: {}, changedKeys: [] });
+      expect(session.displayState.get().isRunning).toBe(true);
+      expect(snapshots.at(-1)).toEqual({ threadId: firstId, taskIds: ['a'], totalTokens: 100 });
+    } finally {
+      releaseHydration();
+      await switching;
+      readThread.mockRestore();
+    }
+
+    expect(session.displayState.get()).toMatchObject({
+      threadId: second.id,
+      tasks: secondTasks,
+      previousTasks: [],
+      tokenUsage: { totalTokens: 200 },
+    });
+    expect(snapshots.at(-1)).toEqual({ threadId: second.id, taskIds: ['b'], totalTokens: 200 });
+    for (const snapshot of snapshots.filter(snapshot => snapshot.threadId === second.id)) {
+      expect(snapshot.taskIds).not.toContain('a');
+      expect(snapshot.totalTokens).not.toBe(100);
+    }
+  });
+
+  it('does not expose source usage while restoring a cross-resource clone’s settings', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createSession(storage);
+    const memory = await storage.getStore('memory');
+    await memory.saveThread({
+      thread: {
+        id: 'external-source',
+        resourceId: 'external-resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          projectPath: '/project',
+          observationThreshold: 500,
+          tokenUsage: { promptTokens: 70, completionTokens: 30, totalTokens: 100 },
+        },
+      },
+    });
+    const snapshots: { threadId?: string; totalTokens: number }[] = [];
+    session.subscribe(event => {
+      if (event.type === 'display_state_changed') {
+        snapshots.push({
+          threadId: event.displayState.threadId,
+          totalTokens: event.displayState.tokenUsage.totalTokens,
+        });
+      }
+    });
+
+    const cloned = await session.thread.cloneToCurrentResource({
+      threadId: 'external-source',
+      expectedResourceId: 'external-resource',
+      expectedProjectPath: '/project',
+    });
+    expect(session.displayState.get()).toMatchObject({
+      threadId: cloned.id,
+      tasks: [],
+      tokenUsage: { totalTokens: 0 },
+    });
+    expect(snapshots.at(-1)).toEqual({ threadId: cloned.id, totalTokens: 0 });
+    expect(snapshots).not.toContainEqual({ threadId: cloned.id, totalTokens: 100 });
   });
 });
 
@@ -1550,19 +1703,6 @@ describe('display_state_changed emission', () => {
     emit(session, { type: 'display_state_changed', displayState: session.displayState.get() });
     expect(events.length).toBe(1);
     expect(events[0]!.type).toBe('display_state_changed');
-  });
-
-  it('restores replayed task display state without emitting any event', () => {
-    const tasks = [{ id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' }];
-
-    session.displayState.restoreTasks(tasks);
-
-    // restoreTasks is a pure session-state mutation: it updates the snapshot but
-    // does not touch the AgentController event bus (the UI re-renders explicitly after a
-    // replay). No task_updated and no display_state_changed should fire.
-    expect(session.displayState.get().tasks).toEqual(tasks);
-    expect(session.displayState.get().previousTasks).toEqual([]);
-    expect(events).toEqual([]);
   });
 
   it('emits display_state_changed for each event in a sequence', () => {

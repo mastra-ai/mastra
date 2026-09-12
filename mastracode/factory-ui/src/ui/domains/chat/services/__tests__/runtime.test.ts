@@ -10,15 +10,6 @@ function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessa
 }
 
 describe('chat runtime status', () => {
-  it('discards snapshot telemetry when resetting without a destination thread', () => {
-    const reset = runtimeReducer(initialChatRuntime, {
-      type: 'reset',
-      state: { tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 } },
-    });
-
-    expect(reset.usage).toBeUndefined();
-  });
-
   it.each(['bufferingMessages', 'bufferingObservations'] as const)(
     'tracks %s from display state, ahead of lifecycle start events',
     bufferingFlag => {
@@ -41,6 +32,7 @@ describe('chat runtime status', () => {
       });
 
       expect(omWork(started)).toEqual(backgroundWork);
+      expect(started.omPhase).toBe('idle');
 
       for (const displayState of [{ [bufferingFlag]: false }, {}]) {
         const settled = runtimeReducer(buffering, {
@@ -60,9 +52,75 @@ describe('chat runtime status', () => {
     });
 
     expect(omWork(buffering)).toEqual({ messages: 'idle', observations: 'idle' });
+    expect(buffering.omPhase).toBe('idle');
   });
 
-  it('keeps display-state telemetry available until newer usage arrives', () => {
+  it('keeps snapshot queue and memory work authoritative over raw lifecycle events', () => {
+    let state = runtimeReducer(initialChatRuntime, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          queuedFollowUps: 2,
+          omProgress: {
+            status: 'observing',
+            pendingTokens: 1000,
+            threshold: 1000,
+            thresholdPercent: 100,
+            observationTokens: 0,
+            reflectionThreshold: 2000,
+            reflectionThresholdPercent: 0,
+            projectedMessageRemoval: 0,
+            projectedReflectionSavings: 0,
+          },
+        },
+      },
+    });
+    expect(omWork(state)).toEqual({ messages: 'blocking', observations: 'idle' });
+    expect(state.followUpCount).toBe(2);
+
+    const rawEvents: AgentControllerEvent[] = [
+      {
+        type: 'om_observation_end',
+        cycleId: 'observation-1',
+        durationMs: 100,
+        tokensObserved: 1000,
+        observationTokens: 100,
+      },
+      { type: 'om_reflection_start', cycleId: 'reflection-1', tokensToReflect: 2000 },
+      { type: 'follow_up_queued', count: 9 },
+    ];
+    for (const event of rawEvents) {
+      state = runtimeReducer(state, { type: 'event', event });
+      expect(omWork(state)).toEqual({ messages: 'blocking', observations: 'idle' });
+      expect(state.followUpCount).toBe(2);
+    }
+
+    state = runtimeReducer(state, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          queuedFollowUps: 0,
+          omProgress: {
+            status: 'idle',
+            pendingTokens: 0,
+            threshold: 1000,
+            thresholdPercent: 0,
+            observationTokens: 100,
+            reflectionThreshold: 2000,
+            reflectionThresholdPercent: 5,
+            projectedMessageRemoval: 0,
+            projectedReflectionSavings: 0,
+          },
+        },
+      },
+    });
+    expect(omWork(state)).toEqual({ messages: 'idle', observations: 'idle' });
+    expect(state.followUpCount).toBe(0);
+  });
+
+  it('keeps cumulative usage separate from step usage and partial snapshots', () => {
     const displayState = runtimeReducer(initialChatRuntime, {
       type: 'event',
       event: {
@@ -89,7 +147,7 @@ describe('chat runtime status', () => {
     });
 
     expect(updated.omProgress?.pendingTokens).toBe(320);
-    expect(updated.usage).toMatchObject({ completionTokens: 55, totalTokens: 76 });
+    expect(updated.usage).toEqual(displayState.usage);
 
     const partialSnapshot = runtimeReducer(updated, {
       type: 'event',

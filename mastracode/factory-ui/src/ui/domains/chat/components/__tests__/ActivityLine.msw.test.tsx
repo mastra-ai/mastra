@@ -27,7 +27,6 @@ function assistantText(text: string) {
   };
 }
 
-/** Let the workspace come up so the session is bound and its stream is open. */
 async function ready(finishWorkspace: () => void, client: QueryClient) {
   finishWorkspace();
   await waitForMutationsIdle(client);
@@ -51,8 +50,6 @@ describe('ActivityLine', () => {
     await ready(session.finishWorkspace, client);
     await send(user);
 
-    // An ask_user waits on its suspension prompt; until that lands the transcript shows no row,
-    // so the line is the only thing standing between the user and a blank screen.
     await session.emit({ type: 'tool_start', toolCallId: 'call-ask', toolName: 'ask_user', args: {} });
     await waitForMutationsIdle(client);
 
@@ -84,11 +81,11 @@ describe('ActivityLine', () => {
     const { client } = renderThread();
     await ready(session.finishWorkspace, client);
     await send(user);
+    await screen.findByText('Thinking');
 
-    await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
+    await session.emit({ type: 'message_update', message: assistantText('Auth') });
 
-    // Streamed prose is split into per-word spans to fade in, so match the rendered text as a whole.
-    await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'));
+    await screen.findByText('Auth');
     await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });
 

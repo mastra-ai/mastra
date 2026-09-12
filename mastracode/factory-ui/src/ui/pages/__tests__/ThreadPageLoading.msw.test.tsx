@@ -1,14 +1,8 @@
-/**
- * Regression coverage for the ThreadPage loading shell: while an uncached
- * user-session thread resolves, the app frame (sidebar + header) must stay
- * mounted with a centered spinner in the main slot only — clicking around the
- * sidebar must never blank the whole shell (the old early-return behavior).
- */
-import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import type { AgentControllerSessionState, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -44,24 +38,21 @@ function deferred() {
   return { promise, resolve };
 }
 
-/**
- * Stubs the whole network surface of the user-session thread route, gating
- * only `/web/user-sessions/:sessionId` (the fetch that used to unmount the
- * shell while pending).
- */
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
   messages = [],
+  tasksByThread = {},
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
+  tasksByThread?: Record<string, AgentControllerSessionState['tasks']>;
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
-  const onSwitchThread = vi.fn<(threadId: string) => void>();
   let activeThreadId = initialThreadId;
+  const threadIds = new Set([initialThreadId, ...threads.map(thread => thread.id)]);
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -98,30 +89,43 @@ function stubThreadRoute({
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    // The gated fetch: the user-session lookup that resolves the workspace.
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
       return HttpResponse.json({ session: userSession });
     }),
-    // Agent-controller session surface mounted once the session resolves.
-    http.post(`${AC}/sessions`, () =>
-      HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId }),
-    ),
-    http.get(`${AC}/sessions/:resourceId`, () =>
-      HttpResponse.json({
+    http.post(`${AC}/sessions`, async ({ request }) => {
+      const body: unknown = await request.json();
+      if (typeof body === 'object' && body !== null && 'threadId' in body && typeof body.threadId === 'string') {
+        activeThreadId = body.threadId;
+        threadIds.add(body.threadId);
+      }
+      return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId });
+    }),
+    http.get(`${AC}/sessions/:resourceId`, ({ request }) => {
+      const requestedThreadId = new URL(request.url).searchParams.get('threadId');
+      if (requestedThreadId && !threadIds.has(requestedThreadId)) {
+        return HttpResponse.json({ error: 'Thread not found' }, { status: 404 });
+      }
+      if (requestedThreadId && requestedThreadId !== activeThreadId) {
+        return HttpResponse.json({ error: 'Thread is not active in this session' }, { status: 409 });
+      }
+      return HttpResponse.json({
         controllerId: 'code',
         resourceId: SESSION_ID,
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: activeThreadId,
+        tasks: tasksByThread[activeThreadId],
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-      }),
-    ),
+      });
+    }),
     http.post(`${AC}/sessions/:resourceId/thread`, async ({ request }) => {
       const body: unknown = await request.json();
       if (typeof body === 'object' && body !== null && 'threadId' in body && typeof body.threadId === 'string') {
+        if (!threadIds.has(body.threadId)) {
+          return HttpResponse.json({ error: 'Thread not found' }, { status: 404 });
+        }
         activeThreadId = body.threadId;
-        onSwitchThread(body.threadId);
       }
       return HttpResponse.json({ ok: true });
     }),
@@ -134,26 +138,27 @@ function stubThreadRoute({
         }),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
+    http.get(`${AC}/sessions/:resourceId/threads`, () =>
+      HttpResponse.json({ threads: [...threadIds].map(id => ({ id })) }),
+    ),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
-    // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
   );
 
-  return { sessionGate, messagesGate, onSwitchThread };
+  return { sessionGate, messagesGate, getActiveThreadId: () => activeThreadId, getThreadIds: () => [...threadIds] };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
   });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { ...renderWithProviders(<RouterProvider router={router} />), router };
 }
 
 describe('ThreadPage loading shell', () => {
@@ -162,16 +167,11 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     renderThreadRoute();
 
-    // Pending phase: the shell is up — sidebar navigation renders alongside
-    // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
-    // The thread chrome itself is not mounted yet.
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
 
-    // Resolved phase: spinner swaps for the thread main content; the sidebar
-    // never unmounted.
     sessionGate.resolve();
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
@@ -184,10 +184,6 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await screen.findByRole('region', { name: 'Factory session' });
-    // The messages-loading window is now covered by the session-prepare step
-    // loader (with "Loading messages" as its active tail step) rather than
-    // the old skeleton bars — keeps the composer's spinning ring meaningful
-    // across the whole preparing window.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
@@ -231,19 +227,53 @@ describe('ThreadPage loading shell', () => {
     expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
   });
 
-  it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
-    const { sessionGate, onSwitchThread } = stubThreadRoute({
+  it('binds the route thread only after its session metadata resolves', async () => {
+    const { sessionGate, getActiveThreadId } = stubThreadRoute({
       initialThreadId: 'thread-1',
       threads: [{ id: 'thread-1' }, { id: ROUTE_THREAD_ID }],
     });
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
 
-    // Thread-switch is gated on `sandboxReady`, which is session metadata
-    // resolving — so hold the session query to hold the switch.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(onSwitchThread).not.toHaveBeenCalled();
+    expect(getActiveThreadId()).toBe('thread-1');
 
     sessionGate.resolve();
-    await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
+    await waitFor(() => expect(getActiveThreadId()).toBe(ROUTE_THREAD_ID));
+  });
+
+  it('does not recreate a deleted thread when its saved URL is opened', async () => {
+    const session = stubThreadRoute({ initialThreadId: 'previous-thread' });
+    session.sessionGate.resolve();
+    session.messagesGate.resolve();
+    const { router } = renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/deleted-thread`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/new`));
+    expect(session.getThreadIds()).toEqual(['previous-thread']);
+    expect(session.getActiveThreadId()).toBe('previous-thread');
+  });
+
+  it('rebinds the requested thread when navigating A to B and back to A', async () => {
+    const session = stubThreadRoute({
+      initialThreadId: 'thread-a',
+      threads: [{ id: 'thread-a' }, { id: 'thread-b' }],
+      tasksByThread: {
+        'thread-a': [{ id: 'a', content: 'Task from A', status: 'pending', activeForm: 'Working on A' }],
+        'thread-b': [{ id: 'b', content: 'Task from B', status: 'pending', activeForm: 'Working on B' }],
+      },
+    });
+    session.sessionGate.resolve();
+    session.messagesGate.resolve();
+    const { router } = renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-a`);
+    await screen.findByText('Task from A');
+
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-b`));
+    await screen.findByText('Task from B');
+    expect(screen.queryByText('Task from A')).not.toBeInTheDocument();
+
+    await act(() => router.navigate(-1));
+    await screen.findByText('Task from A');
+    expect(screen.queryByText('Task from B')).not.toBeInTheDocument();
+    expect(session.getActiveThreadId()).toBe('thread-a');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled();
   });
 });

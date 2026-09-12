@@ -20948,6 +20948,9 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
         activeForm: string;
       }[]
     | undefined;
+  queuedFollowUps?: number | undefined;
+  bufferingMessages?: boolean | undefined;
+  bufferingObservations?: boolean | undefined;
   omProgress?:
     | {
         status: string;

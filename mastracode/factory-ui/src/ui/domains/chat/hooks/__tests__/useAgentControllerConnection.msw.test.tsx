@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { waitFor } from '@testing-library/react';
+import { QueryClient } from '@tanstack/react-query';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -10,6 +11,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { useCreateAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
@@ -273,32 +275,105 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
-    const encoder = new TextEncoder();
+  it.each(['task_updated', 'display_state_changed'] as const)(
+    'keeps newer tasks when a %s event overtakes a state refetch',
+    async eventType => {
+      const encoder = new TextEncoder();
+      const onEvent = vi.fn();
+      let emit: (event: AgentControllerEvent) => void = () => {};
+      let stateReads = 0;
+      let releaseRefetch: (() => void) | undefined;
+      const refetchGate = new Promise<void>(resolve => {
+        releaseRefetch = resolve;
+      });
+
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+          HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+        ),
+        http.get(sessionUrl, async ({ request }) => {
+          stateReads += 1;
+          expect(new URL(request.url).searchParams.get('threadId')).toBe('thread-1');
+          if (stateReads > 1) await refetchGate;
+          return HttpResponse.json({
+            controllerId,
+            resourceId,
+            modeId: 'build',
+            modelId: 'openai/gpt-4o-mini',
+            threadId: 'thread-1',
+            tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
+          });
+        }),
+        http.get(
+          `${sessionUrl}/stream`,
+          () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                },
+                cancel() {},
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+      );
+
+      const { result, client } = renderHookWithProviders(() =>
+        useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
+      );
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+
+      void client.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+        exact: true,
+      });
+      await waitFor(() => expect(stateReads).toBe(2));
+
+      const liveTasks = [
+        { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
+      ];
+      emit(
+        eventType === 'task_updated'
+          ? { type: 'task_updated', tasks: liveTasks }
+          : { type: 'display_state_changed', displayState: { threadId: 'thread-1', tasks: liveTasks } },
+      );
+      await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+
+      releaseRefetch?.();
+      await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    },
+  );
+
+  it('accepts the locally created thread after reset without treating its early snapshot as a conflict', async () => {
     const onEvent = vi.fn();
+    const onReadState = vi.fn();
+    const onCreateThread = vi.fn();
+    const encoder = new TextEncoder();
     let emit: (event: AgentControllerEvent) => void = () => {};
-    let stateReads = 0;
-    let releaseRefetch: (() => void) | undefined;
-    const refetchGate = new Promise<void>(resolve => {
-      releaseRefetch = resolve;
+    let releaseCreate: (() => void) | undefined;
+    const createGate = new Promise<void>(resolve => {
+      releaseCreate = resolve;
     });
+    const nextThread = {
+      id: 'new-local-thread',
+      resourceId,
+      title: 'New work',
+      createdAt: new Date('2026-09-11T00:00:00Z'),
+      updatedAt: new Date('2026-09-11T00:00:00Z'),
+    };
+    const nextSnapshot: AgentControllerEvent = {
+      type: 'display_state_changed',
+      displayState: { threadId: nextThread.id, tasks: [] },
+    };
 
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
-        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+        HttpResponse.json({ controllerId, resourceId, threadId: 'original-thread' }),
       ),
-      http.get(sessionUrl, async ({ request }) => {
-        stateReads += 1;
-        expect(new URL(request.url).searchParams.get('threadId')).toBe('thread-1');
-        if (stateReads > 1) await refetchGate;
-        return HttpResponse.json({
-          controllerId,
-          resourceId,
-          modeId: 'build',
-          modelId: 'openai/gpt-4o-mini',
-          threadId: 'thread-1',
-          tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
-        });
+      http.get(sessionUrl, () => {
+        onReadState();
+        return HttpResponse.json({ controllerId, resourceId, threadId: 'original-thread' });
       }),
       http.get(
         `${sessionUrl}/stream`,
@@ -313,27 +388,93 @@ describe('useAgentControllerConnection', () => {
             { headers: { 'content-type': 'text/event-stream' } },
           ),
       ),
+      http.post(`${sessionUrl}/threads`, async () => {
+        onCreateThread();
+        emit({ type: 'thread_created', thread: nextThread });
+        emit(nextSnapshot);
+        emit({ type: 'info', message: 'Creating the local thread' });
+        await createGate;
+        return HttpResponse.json(nextThread);
+      }),
     );
 
-    const { result, client } = renderHookWithProviders(() =>
-      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent }),
-    );
+    const { result } = renderHookWithProviders(() => {
+      const [displayThreadId, reset] = useState('original-thread');
+      const connection = useAgentControllerConnection({ ...hookArgs, displayThreadId, onEvent });
+      const createThread = useCreateAgentControllerThreadMutation(hookArgs);
+      return {
+        ...connection,
+        createAndReset: async () => {
+          const thread = await createThread.mutateAsync(undefined);
+          reset(thread.id);
+        },
+      };
+    });
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
-    void client.invalidateQueries({
-      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
-      exact: true,
+    let creating = Promise.resolve();
+    act(() => {
+      creating = result.current.createAndReset();
     });
-    await waitFor(() => expect(stateReads).toBe(2));
+    await waitFor(() => expect(onEvent).toHaveBeenCalledWith({ type: 'info', message: 'Creating the local thread' }));
+    expect(onCreateThread).toHaveBeenCalledTimes(1);
+    expect(result.current.threadId).toBe('original-thread');
+    expect(result.current.status).toBe('ready');
+    expect(onEvent).not.toHaveBeenCalledWith(nextSnapshot);
+    expect(onEvent).not.toHaveBeenCalledWith({ type: 'thread_created', thread: nextThread });
+    expect(onReadState).toHaveBeenCalledTimes(1);
 
-    const liveTasks = [
-      { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
-    ];
-    emit({ type: 'task_updated', tasks: liveTasks });
-    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+    releaseCreate?.();
+    await act(() => creating);
+    act(() => emit(nextSnapshot));
+    await waitFor(() => expect(onEvent).toHaveBeenCalledWith(nextSnapshot));
+    expect(result.current.threadId).toBe(nextThread.id);
+    expect(result.current.status).not.toBe('conflict');
+    expect(onReadState).toHaveBeenCalledTimes(1);
+  });
 
-    releaseRefetch?.();
-    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
+  it('surfaces an inactive thread immediately and stops reconnect polling without rebinding', async () => {
+    const onCreate = vi.fn();
+    const onReadState = vi.fn();
+    const onStream = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () => {
+        onCreate();
+        return HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' });
+      }),
+      http.get(sessionUrl, ({ request }) => {
+        onReadState();
+        expect(new URL(request.url).searchParams.get('threadId')).toBe('thread-1');
+        return HttpResponse.json({ error: 'Thread is not active in this session' }, { status: 409 });
+      }),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 10, retryDelay: 1 } } });
+    const { result } = renderHookWithProviders(
+      () => useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() }),
+      { client },
+    );
+    await waitFor(() => expect(result.current.status).toBe('conflict'));
+    expect(result.current.state).toBeUndefined();
+    expect(result.current.threadId).toBe('thread-1');
+
+    vi.useFakeTimers();
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(result.current.status).toBe('conflict');
+      expect(onReadState).toHaveBeenCalledTimes(1);
+      expect(onCreate).toHaveBeenCalledTimes(1);
+      expect(onStream).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {

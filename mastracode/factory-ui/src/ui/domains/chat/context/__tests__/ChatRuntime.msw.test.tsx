@@ -1,4 +1,4 @@
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,12 +15,11 @@ import { OperationalMemoryStatus } from '../../components/StatusLine/Operational
 import { QueuedFollowUps } from '../../components/StatusLine/QueuedFollowUps';
 import { Transcript } from '../../components/Transcript';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
-import type { SessionStateSnapshot } from '../../services/runtime';
 import { useChatCommands } from '../ChatCommandsProvider';
 import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
 import { useChatTranscript } from '../useChatTranscript';
 
-const snapshot: SessionStateSnapshot = {
+const snapshot: Pick<AgentControllerSessionState, 'threadId' | 'tokenUsage' | 'omProgress'> = {
   threadId: SESSION_ID,
   tokenUsage: { promptTokens: 21, completionTokens: 34, totalTokens: 55 },
   omProgress: {
@@ -53,7 +52,7 @@ const goalEvent: AgentControllerEvent = {
   },
 };
 
-function RuntimeSurface({ resetState }: { resetState?: SessionStateSnapshot }) {
+function RuntimeSurface() {
   const { reset } = useChatTranscript();
   const { runComposerCommand } = useChatCommands();
   return (
@@ -65,12 +64,12 @@ function RuntimeSurface({ resetState }: { resetState?: SessionStateSnapshot }) {
       <Transcript />
       <button onClick={() => void runComposerCommand('/cost')}>Cost</button>
       <button onClick={() => void runComposerCommand('/om')}>Memory phase</button>
-      <button onClick={() => reset('next-thread', resetState)}>Reset thread</button>
+      <button onClick={() => reset('next-thread')}>Reset thread</button>
     </>
   );
 }
 
-function renderRuntime(resetState?: SessionStateSnapshot) {
+function renderRuntime() {
   const session = stubPreparingSession();
   server.use(
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`, ({ params }) =>
@@ -86,7 +85,7 @@ function renderRuntime(resetState?: SessionStateSnapshot) {
             <MainSidebarProvider storageKey="runtime-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
-                  <RuntimeSurface resetState={resetState} />
+                  <RuntimeSurface />
                 </OverlaysProvider>
               </ChatSessionTestProvider>
             </MainSidebarProvider>
@@ -110,12 +109,13 @@ describe('chat runtime consumers', () => {
     await session.emit({
       type: 'display_state_changed',
       displayState: {
+        threadId: SESSION_ID,
+        queuedFollowUps: 2,
         bufferingObservations: true,
         tokenUsage: { promptTokens: 30, completionTokens: 45, totalTokens: 75 },
       },
     });
     await session.emit(goalEvent);
-    await session.emit({ type: 'follow_up_queued', count: 2 });
     await session.emit({ type: 'om_buffering_start' });
 
     expect(await screen.findByText('Fix the failing build')).toBeInTheDocument();
@@ -123,30 +123,31 @@ describe('chat runtime consumers', () => {
     expect(screen.getByText('pursuing goal')).toBeInTheDocument();
     expect(await screen.findByText('2 queued')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Consolidating observations in the background/ })).toBeInTheDocument();
+    await session.emit({
+      type: 'usage_update',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    });
     await user.click(screen.getByRole('button', { name: 'Cost' }));
     expect(await screen.findByText('Tokens — prompt: 30, completion: 45, total: 75')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Memory phase' }));
-    expect(await screen.findByText('Observational memory phase: buffering')).toBeInTheDocument();
+    expect(await screen.findByText('Observational memory phase: idle')).toBeInTheDocument();
   });
 
-  it.each([
-    { scenario: 'no snapshot', resetState: undefined, restoreSnapshot: false },
-    { scenario: 'matching thread', resetState: { ...snapshot, threadId: 'next-thread' }, restoreSnapshot: true },
-    { scenario: 'another thread', resetState: snapshot, restoreSnapshot: false },
-    { scenario: 'missing thread ID', resetState: { ...snapshot, threadId: undefined }, restoreSnapshot: false },
-  ])('resets transcript and runtime together with $scenario', async ({ resetState, restoreSnapshot }) => {
-    const session = renderRuntime(resetState);
+  it('clears the previous thread and rejects its late snapshot after reset', async () => {
+    const session = renderRuntime();
     const user = userEvent.setup();
     await screen.findByRole('button', { name: /Memory budgets/ });
     await session.emit(goalEvent);
-    await session.emit({ type: 'follow_up_queued', count: 2 });
-    await session.emit({ type: 'om_reflection_start' });
     await session.emit({
       type: 'display_state_changed',
-      displayState: { ...snapshot, bufferingObservations: true },
+      displayState: { ...snapshot, queuedFollowUps: 2, bufferingObservations: true },
     });
     await session.emit({ type: 'info', message: 'Previous thread notice' });
     await screen.findByText('Previous thread notice');
+    expect(screen.getByText('Fix the failing build')).toBeInTheDocument();
+    expect(screen.getByText('pursuing goal')).toBeInTheDocument();
+    expect(screen.getByText('2 queued')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Consolidating observations in the background/ })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Reset thread' }));
 
     await waitFor(() => expect(screen.queryByText('Previous thread notice')).not.toBeInTheDocument());
@@ -159,11 +160,57 @@ describe('chat runtime consumers', () => {
     await user.click(screen.getByRole('button', { name: 'Memory phase' }));
     expect(await screen.findByText('Observational memory phase: idle')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cost' }));
+    expect(await screen.findByText('No token usage recorded yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Memory budgets/ })).not.toBeInTheDocument();
+
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: { ...snapshot, queuedFollowUps: 9, bufferingObservations: true },
+    });
+    await session.emit({ type: 'info', message: 'Late snapshot delivered' });
+    await screen.findByText('Late snapshot delivered');
+    await user.click(screen.getByRole('button', { name: 'Cost' }));
+    expect(screen.queryByText(/total: 55/)).not.toBeInTheDocument();
+    expect(screen.queryByText('9 queued')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Memory budgets/ })).not.toBeInTheDocument();
     expect(
-      await screen.findByText(
-        restoreSnapshot ? 'Tokens — prompt: 21, completion: 34, total: 55' : 'No token usage recorded yet.',
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Memory budgets/ }) !== null).toBe(restoreSnapshot);
+      screen.queryByRole('button', { name: /Consolidating observations in the background/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(['another-thread', undefined])('ignores snapshot telemetry for thread %s', async threadId => {
+    const session = renderRuntime();
+    const user = userEvent.setup();
+    await screen.findByRole('button', { name: /Memory budgets/ });
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: { ...snapshot, queuedFollowUps: 2, bufferingObservations: true },
+    });
+    expect(await screen.findByText('2 queued')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Consolidating observations in the background/ })).toBeInTheDocument();
+    let verifiedThreadId: string | undefined;
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`, ({ request, params }) => {
+        verifiedThreadId = new URL(request.url).searchParams.get('threadId') ?? undefined;
+        return HttpResponse.json({ controllerId: 'code', resourceId: params.resourceId, ...snapshot });
+      }),
+    );
+
+    await session.emit({
+      type: 'display_state_changed',
+      displayState: {
+        threadId,
+        queuedFollowUps: 9,
+        bufferingObservations: false,
+        tokenUsage: { promptTokens: 999, completionTokens: 999, totalTokens: 1998 },
+      },
+    });
+    await waitFor(() => expect(verifiedThreadId).toBe(SESSION_ID));
+    await user.click(screen.getByRole('button', { name: 'Cost' }));
+
+    expect(await screen.findByText(/prompt: 21, completion: 34, total: 55/)).toBeInTheDocument();
+    expect(screen.queryByText('9 queued')).not.toBeInTheDocument();
+    expect(screen.getByText('2 queued')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Consolidating observations in the background/ })).toBeInTheDocument();
   });
 });

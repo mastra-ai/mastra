@@ -1,13 +1,13 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
+import { useContext, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
-import type { ChatRuntimeState, SessionStateSnapshot } from '../services/runtime';
+import type { ChatRuntimeState } from '../services/runtime';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
@@ -42,9 +42,9 @@ export function ChatTranscriptProvider({
     transcriptApi.onEvent(event);
     dispatchRuntime({ type: 'event', event });
   };
-  const reset = (nextThreadId?: string, state?: SessionStateSnapshot) => {
+  const reset = (nextThreadId: string) => {
     transcriptApi.reset(nextThreadId);
-    dispatchRuntime({ type: 'reset', threadId: nextThreadId, state });
+    dispatchRuntime({ type: 'reset' });
   };
   const mergeWindow = useEffectEvent((messages: MastraDBMessage[]) => transcriptApi.mergeWindow(messages));
   useEffect(() => {
@@ -59,8 +59,12 @@ export function ChatTranscriptProvider({
   };
 
   return (
-    <ChatConnectionProvider onEvent={onEvent}>
-      <ChatRuntimeValueProvider runtime={runtime} threadId={transcriptApi.transcript.threadId ?? threadId}>
+    <ChatConnectionProvider
+      initialThreadId={threadId}
+      threadId={transcriptApi.transcript.threadId ?? threadId}
+      onEvent={onEvent}
+    >
+      <ChatRuntimeValueProvider runtime={runtime}>
         <ChatTranscriptValueProvider
           threadId={threadId}
           viewerId={viewerId}
@@ -75,33 +79,24 @@ export function ChatTranscriptProvider({
   );
 }
 
-function ChatRuntimeValueProvider({
-  children,
-  runtime,
-  threadId,
-}: {
-  children: ReactNode;
-  runtime: ChatRuntimeState;
-  threadId?: string;
-}) {
+function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; runtime: ChatRuntimeState }) {
   const { state } = useChatConnection();
-  const sessionState = !threadId || state?.threadId === threadId ? state : undefined;
-  return (
-    <ChatRuntimeContext.Provider
-      value={{
-        usage: runtime.usage ?? sessionState?.tokenUsage,
-        followUpCount: runtime.followUpCount,
-        omProgress: runtime.omProgress ?? sessionState?.omProgress,
-        omPhase: runtime.omPhase,
-        bufferingMessages: runtime.bufferingMessages,
-        bufferingObservations: runtime.bufferingObservations,
-        goal: runtime.goal,
-        tokensPerSec: runtime.tokensPerSec,
-      }}
-    >
-      {children}
-    </ChatRuntimeContext.Provider>
+  const usage = runtime.usage ?? state?.tokenUsage;
+  const omProgress = runtime.omProgress ?? state?.omProgress;
+  const runtimeValue = useMemo(
+    () => ({
+      usage,
+      followUpCount: runtime.followUpCount,
+      omProgress,
+      omPhase: runtime.omPhase,
+      bufferingMessages: runtime.bufferingMessages,
+      bufferingObservations: runtime.bufferingObservations,
+      goal: runtime.goal,
+      tokensPerSec: runtime.tokensPerSec,
+    }),
+    [runtime, usage, omProgress],
   );
+  return <ChatRuntimeContext.Provider value={runtimeValue}>{children}</ChatRuntimeContext.Provider>;
 }
 
 function ChatTranscriptValueProvider({
@@ -131,14 +126,14 @@ function ChatTranscriptValueProvider({
   const effectiveTranscript: TranscriptState = {
     ...transcript,
     threadId: effectiveThreadId,
-    tasks: connection.state?.tasks ?? transcript.tasks,
   };
   const busy = connection.state?.running === true || effectiveTranscript.pending;
   const historyInitializing = Boolean(messagesThreadId) && !messagesError && !initialHistoryReady;
   const initializing = sandboxPreparing || messagesInitializing || historyInitializing;
+  const connectionFailed = connection.status === 'error' || connection.status === 'conflict';
   const phase = chatSessionPhase({
     sessionError: Boolean(sessionError),
-    threadError: messagesError || connection.status === 'error',
+    threadError: messagesError || connectionFailed,
     hasThread: Boolean(effectiveThreadId),
     running: connection.state?.running === true,
     initializing,

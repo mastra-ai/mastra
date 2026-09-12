@@ -222,6 +222,7 @@ export interface ThreadDataStore {
   }): Promise<AgentControllerThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
+  getTasks(input: { threadId: string }): Promise<TaskItemSnapshot[]>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
   listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
@@ -332,6 +333,7 @@ export interface SessionMachinery {
 export class SessionThread {
   /** The active thread id, or null when the session is not bound to a thread. */
   #threadId: string | null = null;
+  #bindingVersion = 0;
   /** Gateway to the host's shared thread storage, injected via {@link connect}. */
   #store: ThreadDataStore | undefined;
   /** Reads the session's current resourceId (sibling identity state). */
@@ -346,7 +348,10 @@ export class SessionThread {
    */
   #session: Session | undefined;
 
-  constructor(getResourceId: () => string) {
+  constructor(
+    getResourceId: () => string,
+    private readonly onThreadChanged: () => void,
+  ) {
     this.#getResourceId = getResourceId;
   }
 
@@ -389,18 +394,23 @@ export class SessionThread {
 
   /** Bind the session to a thread. */
   set({ threadId }: { threadId: string }): void {
+    if (this.#threadId === threadId) return;
+    this.#bindingVersion++;
     this.#threadId = threadId;
+    this.onThreadChanged();
   }
 
   /** Clear the session's thread binding. */
   clear(): void {
+    this.#bindingVersion++;
     this.#threadId = null;
+    this.onThreadChanged();
   }
 
   /** Clear the session's thread binding and release its lock when one is held. */
   async clearAndReleaseLock(): Promise<void> {
     const threadId = this.#threadId;
-    this.#threadId = null;
+    this.clear();
     if (threadId) {
       await this.#store?.releaseLock(threadId);
     }
@@ -756,8 +766,7 @@ export class SessionThread {
 
     this.cleanupSubscription();
     this.set({ threadId: clonedThread.id });
-    await this.loadMetadata();
-    session.resetTokenUsage();
+    await this.loadMetadata({ restoreRuntimeState: false });
     session.emit({ type: 'thread_created', thread: clonedThread });
     await this.ensureCurrentSubscription();
 
@@ -768,39 +777,34 @@ export class SessionThread {
   async switch({ threadId, emitEvent = true }: { threadId: string; emitEvent?: boolean }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
+    const bindingVersion = ++this.#bindingVersion;
+    const acquireTargetLock = this.#threadId !== threadId;
+    if (acquireTargetLock) await store?.acquireLock(threadId);
+
+    let loaded: { thread: AgentControllerThread | null; tasks: TaskItemSnapshot[] };
+    try {
+      loaded = await this.#readMetadata(threadId);
+      if (store?.hasStorage() && (!loaded.thread || loaded.thread.resourceId !== this.#getResourceId())) {
+        throw new Error(`Thread not found: ${threadId}`);
+      }
+    } catch (error) {
+      if (acquireTargetLock && this.#threadId !== threadId) await store?.releaseLock(threadId);
+      throw error;
+    }
+    if (bindingVersion !== this.#bindingVersion) {
+      if (acquireTargetLock && this.#threadId !== threadId) await store?.releaseLock(threadId);
+      return;
+    }
+
+    const previousThreadId = this.#threadId;
     session.abort();
     this.cleanupSubscription();
-
-    // Acquire lock on new thread before releasing old one.
-    // Lock operations must be adjacent (no intermediate awaits) so callers
-    // can rely on a single microtask tick to observe both acquire and release.
-    await store?.acquireLock(threadId);
-    const previousThreadId = this.#threadId;
-    if (previousThreadId) {
-      await store?.releaseLock(previousThreadId);
-    }
-
-    // Verify the thread exists and belongs to this session's resourceId before
-    // binding to it, so a session can never switch onto a thread owned by
-    // another resource. Release the just-acquired lock if the check fails so we
-    // never leave a foreign thread locked.
-    if (store?.hasStorage()) {
-      try {
-        await this.#requireOwnedThread({ threadId });
-      } catch (err) {
-        // Release the just-acquired foreign lock and restore the previous
-        // thread's lock so the still-bound session is not left unlocked.
-        await store.releaseLock(threadId).catch(() => {});
-        if (previousThreadId) {
-          await store.acquireLock(previousThreadId).catch(() => {});
-        }
-        throw err;
-      }
-    }
-
     this.set({ threadId });
-
-    await this.loadMetadata();
+    await Promise.all([
+      this.#restoreMetadata(threadId, loaded.thread, loaded.tasks),
+      previousThreadId && previousThreadId !== threadId ? store?.releaseLock(previousThreadId) : undefined,
+    ]);
+    if (this.#threadId !== threadId) return;
 
     if (emitEvent) {
       session.emit({ type: 'thread_changed', threadId, previousThreadId });
@@ -835,48 +839,58 @@ export class SessionThread {
     session.emit({ type: 'thread_deleted', threadId });
   }
 
-  /**
-   * Hydrate the session's per-thread settings from the active thread's metadata:
-   * token usage, the persisted mode (restored first), the per-mode model, and
-   * observer/reflector model ids + thresholds. Best-effort: on any failure the
-   * token tally is reset and the rest is left at defaults.
-   */
-  async loadMetadata(): Promise<void> {
-    const session = this.#owner;
-    const store = this.#store;
+  async loadMetadata({ restoreRuntimeState = true }: { restoreRuntimeState?: boolean } = {}): Promise<void> {
     const threadId = this.#threadId;
-    if (!threadId || !store?.hasStorage()) {
-      session.resetTokenUsage();
+    if (!threadId || !this.#store?.hasStorage()) {
+      this.#owner.resetTokenUsage();
+      this.#owner.displayState.resetThread();
       return;
     }
 
+    const bindingVersion = this.#bindingVersion;
+    const { thread, tasks } = await this.#readMetadata(threadId, restoreRuntimeState);
+    if (bindingVersion !== this.#bindingVersion) return;
+    await this.#restoreMetadata(threadId, thread, tasks, restoreRuntimeState);
+  }
+
+  async #readMetadata(threadId: string, restoreRuntimeState = true) {
+    const store = this.#store;
+    if (!store?.hasStorage()) return { thread: null, tasks: [] };
+    const [thread, tasks] = await Promise.all([
+      store.getById({ threadId }),
+      restoreRuntimeState ? store.getTasks({ threadId }) : [],
+    ]);
+    return { thread, tasks };
+  }
+
+  async #restoreMetadata(
+    threadId: string,
+    thread: AgentControllerThread | null,
+    tasks: TaskItemSnapshot[],
+    restoreRuntimeState = true,
+  ): Promise<void> {
+    const session = this.#owner;
+    const store = this.#store;
+    const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
+    if (restoreRuntimeState && savedUsage) {
+      session.setTokenUsage({
+        ...createEmptyTokenUsage(),
+        ...savedUsage,
+        promptTokens: savedUsage.promptTokens ?? 0,
+        completionTokens: savedUsage.completionTokens ?? 0,
+        totalTokens: savedUsage.totalTokens ?? 0,
+        cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
+        cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
+      });
+    } else {
+      session.resetTokenUsage();
+    }
+    session.displayState.resetThread({ threadId, tasks, tokenUsage: session.getTokenUsage() });
+    if (!store?.hasStorage()) return;
+
     try {
-      const thread = await store.getById({ threadId });
-
-      // Load token usage
-      const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
-      if (savedUsage) {
-        session.setTokenUsage({
-          ...createEmptyTokenUsage(),
-          ...savedUsage,
-          promptTokens: savedUsage.promptTokens ?? 0,
-          completionTokens: savedUsage.completionTokens ?? 0,
-          totalTokens: savedUsage.totalTokens ?? 0,
-          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
-          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
-        });
-      } else {
-        session.resetTokenUsage();
-      }
-
-      const meta = thread?.metadata as Record<string, unknown> | undefined;
+      const meta = thread?.metadata;
       const updates: Record<string, unknown> = {};
-
-      // Restore the saved mode FIRST so we resolve currentModelId for the
-      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
-      // and then never overwrite it when the saved mode has no per-mode
-      // override persisted (e.g. user only ever used the mode's default
-      // model), leaving the wrong mode's model active on restart.
       let previousModeIdForEmit: string | undefined;
       if (meta?.currentModeId) {
         const savedModeId = meta.currentModeId as string;
@@ -887,10 +901,6 @@ export class SessionThread {
         }
       }
 
-      // Resolve the model for the (now-restored) current mode and apply it to
-      // the session (source of truth for the selected model).
-      // Order: per-mode thread metadata → mode's defaultModelId → legacy
-      // global currentModelId (set by create()).
       const currentModeId = session.mode.get();
       const modeModelKey = `modeModelId_${currentModeId}`;
       if (meta?.[modeModelKey]) {
@@ -912,7 +922,6 @@ export class SessionThread {
         });
       }
 
-      // Restore observer/reflector model IDs
       if (meta?.observerModelId) {
         updates.observerModelId = meta.observerModelId;
       }
@@ -930,27 +939,26 @@ export class SessionThread {
       }
 
       if (Object.keys(updates).length > 0) {
-        await session.state.set(updates as Record<string, unknown>);
+        await session.state.set(updates);
+        if (this.#threadId !== threadId) return;
       }
 
-      // Restore restart-surviving preferences (thinking level, notifications).
-      // Applied one key at a time so an invalid persisted value fails schema
-      // validation without discarding the mode/model/OM restoration above or
-      // the other, still-valid preference.
       for (const key of PERSISTED_STATE_KEYS) {
         const value = meta?.[key];
         if (value === undefined) continue;
         try {
-          await session.state.set({ [key]: value } as Record<string, unknown>);
+          await session.state.set({ [key]: value });
         } catch {
           // Persisted preference no longer valid for the current state schema.
         }
+        if (this.#threadId !== threadId) return;
       }
 
       if (!hasObservationThreshold) {
         const observationThreshold = session.om.observer.threshold();
         if (observationThreshold !== undefined) {
           await this.setSetting({ key: 'observationThreshold', value: observationThreshold });
+          if (this.#threadId !== threadId) return;
         }
       }
       if (!hasReflectionThreshold) {
@@ -960,7 +968,7 @@ export class SessionThread {
         }
       }
     } catch {
-      session.resetTokenUsage();
+      // Stored preferences may be incompatible with the current configuration.
     }
   }
 }
@@ -2273,21 +2281,22 @@ export class SessionDisplayState {
   }
 
   /**
-   * Restore task display state after a UI replays persisted task-tool history.
-   * Updates the snapshot without emitting a live `task_updated` event, since no
-   * task tool just ran. The caller dispatches `display_state_changed`.
-   */
-  restoreTasks(tasks: TaskItemSnapshot[]): void {
-    this.#state.previousTasks = [...this.#state.tasks];
-    this.#state.tasks = [...tasks];
-  }
-
-  /**
    * Reset display fields scoped to a thread. Called on thread switch/creation.
    * Also clears the session's follow-up queue (mirrored by `queuedFollowUps`).
    */
-  resetThread(): void {
+  resetThread({
+    threadId = this.deps.getThreadId() ?? undefined,
+    tasks = [],
+    tokenUsage = createEmptyTokenUsage(),
+  }: {
+    threadId?: string;
+    tasks?: TaskItemSnapshot[];
+    tokenUsage?: TokenUsage;
+  } = {}): void {
     const ds = this.#state;
+    ds.threadId = threadId;
+    ds.isRunning = false;
+    ds.tokenUsage = tokenUsage;
     ds.activeTools = new Map();
     ds.toolInputBuffers = new Map();
     ds.pendingApproval = null;
@@ -2297,7 +2306,7 @@ export class SessionDisplayState {
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
     ds.modifiedFiles = new Map();
-    ds.tasks = [];
+    ds.tasks = tasks;
     ds.previousTasks = [];
     ds.omProgress = defaultOMProgressState();
     ds.bufferingMessages = false;
@@ -2647,12 +2656,14 @@ export class SessionDisplayState {
 
       // ── Thread lifecycle ───────────────────────────────────────────────
       case 'thread_changed':
-        this.resetThread();
+        if (ds.threadId !== event.threadId) {
+          this.resetThread({ threadId: event.threadId });
+        }
         ds.tokenUsage = this.deps.getTokenUsage();
         break;
 
       case 'thread_created':
-        this.resetThread();
+        this.resetThread({ threadId: event.thread.id });
         ds.tokenUsage = createEmptyTokenUsage();
         break;
 
@@ -2913,7 +2924,13 @@ export class Session<TState = unknown> {
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
-    this.thread = new SessionThread(() => this.identity.getResourceId());
+    this.thread = new SessionThread(
+      () => this.identity.getResourceId(),
+      () => {
+        this.resetTokenUsage();
+        this.displayState.resetThread();
+      },
+    );
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),

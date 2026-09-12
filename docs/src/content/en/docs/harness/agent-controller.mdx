@@ -478,7 +478,9 @@ subscription.unsubscribe()
 
 `subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff.
 
-The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
+Every stream connection, including a reconnect, starts with a `display_state_changed` event carrying the current thread's tasks, cumulative token usage, queued follow-ups, and memory progress.
+
+Message history isn't part of that snapshot. Recover messages missed during a disconnect with `session.listMessages(threadId)`. For the current mode, model, and runtime state, call `session.state()` instead of the server-side `session.displayState.get()`.
 
 Send work with `session.sendMessage(content)`, or `session.sendMessage({ content, files })` to attach base64-encoded files. The reply arrives as `message_*` events on the subscription, not as the return value of the call. Answer a `tool_approval_required` event with `session.approveTool(toolCallId, approved)`, and a `tool_suspended` event with `session.respondToToolSuspension(toolCallId, resumeData)`.
 

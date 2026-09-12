@@ -329,7 +329,6 @@ const taskSnapshotSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'completed']),
   activeForm: z.string(),
 });
-type SessionTaskSnapshot = z.infer<typeof taskSnapshotSchema>;
 const sessionStateResponseSchema = z.object({
   controllerId: z.string(),
   resourceId: z.string(),
@@ -339,6 +338,9 @@ const sessionStateResponseSchema = z.object({
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
   tasks: z.array(taskSnapshotSchema).optional(),
+  queuedFollowUps: z.number().optional(),
+  bufferingMessages: z.boolean().optional(),
+  bufferingObservations: z.boolean().optional(),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: tokenUsageSchema.optional(),
   settings: sessionSettingsSchema.optional(),
@@ -579,6 +581,9 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               scheduleHeartbeat();
             }, 25_000);
           };
+
+          // Snapshot + subscribe must stay synchronous, before workspace replay.
+          controller.enqueue(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
 
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
@@ -843,7 +848,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   queryParamSchema: sessionStateQuerySchema,
   responseSchema: sessionStateResponseSchema,
   summary: 'Get session state',
-  description: 'Returns the current mode, model, thread, and durable tasks for initial UI hydration.',
+  description: 'Returns the current session thread and runtime snapshot for initial UI hydration.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
@@ -851,18 +856,16 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const ds = session.displayState.get();
-      const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
-      const storage = mastra.getStorage();
-      if (requestedThreadId) {
-        const memory = await storage?.getStore('memory');
+      if (requestedThreadId !== undefined) {
+        const memory = await mastra.getStorage()?.getStore('memory');
         const thread = await memory?.getThreadById({ threadId: requestedThreadId, resourceId });
         if (!thread) throw new HTTPException(404, { message: `thread "${requestedThreadId}" not found` });
       }
-      const threadState = threadId ? await storage?.getStore('threadState') : undefined;
-      const storedTasks = threadId ? await threadState?.getState<unknown>({ threadId, type: 'task' }) : undefined;
-      const parsedTasks = taskSnapshotSchema.array().safeParse(storedTasks);
-      const tasks: SessionTaskSnapshot[] = parsedTasks.success ? parsedTasks.data : [];
+      const ds = session.displayState.get();
+      const threadId = ds.threadId;
+      if (requestedThreadId !== undefined && requestedThreadId !== threadId) {
+        throw new HTTPException(409, { message: 'Requested thread is not the active session thread' });
+      }
       const om = ds.omProgress;
       const reflectionSavings =
         om.buffered.reflection.inputObservationTokens - om.buffered.reflection.observationTokens;
@@ -878,7 +881,10 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
-        tasks,
+        tasks: ds.tasks,
+        queuedFollowUps: ds.queuedFollowUps,
+        bufferingMessages: ds.bufferingMessages,
+        bufferingObservations: ds.bufferingObservations,
         omProgress: {
           status: om.status,
           pendingTokens: om.pendingTokens,

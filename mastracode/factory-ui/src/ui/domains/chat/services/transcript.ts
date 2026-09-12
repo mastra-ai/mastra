@@ -1,6 +1,6 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
-import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
@@ -100,13 +100,11 @@ export interface TranscriptState {
   entries: TimelineEntry[];
   pending: boolean;
   threadId?: string;
-  tasks: AgentControllerTaskSnapshot[];
 }
 
 export const initialTranscript: TranscriptState = {
   entries: [],
   pending: false,
-  tasks: [],
 };
 
 let noticeSeq = 0;
@@ -271,9 +269,6 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return state;
     case 'thread_changed':
       return { ...state, threadId: event.threadId };
-
-    case 'task_updated':
-      return { ...state, tasks: event.tasks };
 
     case 'notification':
       return {

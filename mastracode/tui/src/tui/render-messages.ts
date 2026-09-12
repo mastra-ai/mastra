@@ -725,20 +725,6 @@ function getTaskResultTasks(result: unknown): TaskItemInput[] | undefined {
   return Array.isArray(tasks) ? (tasks as TaskItemInput[]) : undefined;
 }
 
-function areTasksEqual(left: readonly TaskItemSnapshot[] | undefined, right: readonly TaskItemSnapshot[]): boolean {
-  if (!left || left.length !== right.length) return false;
-  return left.every((task, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      task.id === other.id &&
-      task.content === other.content &&
-      task.status === other.status &&
-      task.activeForm === other.activeForm
-    );
-  });
-}
-
 function applyTaskPatchFallback(
   tasks: TaskItemSnapshot[],
   args: unknown,
@@ -870,11 +856,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
-  // Local accumulator for detecting task clears during visible history reconstruction.
-  // Startup only replays task state from the bounded message window. If no task
-  // snapshot exists in that window, keep the existing display-state snapshot.
   let previousTasksAcc: TaskItemSnapshot[] = [];
-  let hasReplayedTaskState = false;
 
   for (const message of messages) {
     if (message.role === 'user' || message.role === 'signal') {
@@ -1019,11 +1001,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             );
           }
 
-          // Successful task transition tools render through the pinned task UI,
-          // not as regular tool result boxes.
           let replacedWithInline = false;
           if (isTaskMutationTool(toolName) && hasResult && !resultIsError) {
-            hasReplayedTaskState = true;
             const nextTasks = applyTaskToolResult(previousTasksAcc, toolName, toolArgs, resultValue, resultIsError);
             const transition = renderTaskTransitionFromHistory(state, previousTasksAcc, nextTasks);
             previousTasksAcc = transition.tasks;
@@ -1033,7 +1012,6 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           if (toolName === 'task_check' && hasResult && !resultIsError) {
             const resultTasks = getTaskResultTasks(resultValue);
             if (resultTasks) {
-              hasReplayedTaskState = true;
               previousTasksAcc = assignTaskIds(resultTasks, previousTasksAcc);
             }
           }
@@ -1159,24 +1137,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     }
   }
 
-  // Restore or clear the pinned task list from history replay when the bounded
-  // window contains a task snapshot. Otherwise, keep the existing display-state
-  // snapshot instead of clobbering older tasks that are outside the render window.
-  if (hasReplayedTaskState) {
-    if (state.taskProgress) {
-      state.taskProgress.updateTasks(previousTasksAcc);
-    }
-    const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
-    if (!areTasksEqual(currentTasks, previousTasksAcc)) {
-      try {
-        await state.session.state.set({ tasks: previousTasksAcc });
-      } catch {
-        // Custom controller state schemas may not accept TUI replayed task state.
-        // Keep the reconstructed task list local to display state in that case.
-      }
-    }
-    state.session.displayState.restoreTasks(previousTasksAcc);
-  }
+  state.taskProgress?.updateTasks(state.session.displayState.get().tasks);
 
   reconcileChatBoundarySpacers(state.chatContainer);
   pruneChatContainer(state);

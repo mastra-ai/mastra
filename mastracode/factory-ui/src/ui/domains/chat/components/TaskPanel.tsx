@@ -1,16 +1,16 @@
 import { TaskList } from '@mastra/playground-ui/components/ai/task-list';
 
-import { useChatTranscript } from '../context/useChatTranscript';
+import { useChatConnection } from '../context/useChatConnection';
 
 export function TaskPanel() {
-  const { transcript } = useChatTranscript();
-  const hasVisibleTasks = transcript.tasks.some(task => task.status !== 'completed');
+  const { state } = useChatConnection();
+  const tasks = state?.tasks;
 
-  if (!hasVisibleTasks) return null;
+  if (!tasks?.some(task => task.status !== 'completed')) return null;
 
   return (
     <div role="region" aria-label="Current tasks" data-testid="task-panel">
-      <TaskList tasks={transcript.tasks} />
+      <TaskList tasks={tasks} />
     </div>
   );
 }

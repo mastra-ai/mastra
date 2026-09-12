@@ -3,28 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { stateSchema } from './schema.js';
 
 describe('stateSchema', () => {
-  it('preserves task ids in controller state', () => {
-    const parsed = stateSchema.parse({
-      tasks: [
-        {
-          id: 'tests',
-          content: 'Write tests',
-          status: 'pending',
-          activeForm: 'Writing tests',
-        },
-      ],
-    });
-
-    expect(parsed.tasks).toEqual([
-      {
-        id: 'tests',
-        content: 'Write tests',
-        status: 'pending',
-        activeForm: 'Writing tests',
-      },
-    ]);
-  });
-
   // Regression: the legacy controller validates its state against this schema and
   // assigns the parsed result back to state. Zod strips unknown keys, so if
   // currentModelId/modeId are not declared here, the seeded model is silently

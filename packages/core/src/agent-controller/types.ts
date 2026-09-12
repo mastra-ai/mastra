@@ -630,6 +630,9 @@ export type AgentControllerSubagentHistoryEntry = Omit<ActiveSubagentState, 'sta
  * then emits a `display_state_changed` event so UIs can react.
  */
 export interface AgentControllerDisplayState {
+  /** The thread represented by this snapshot; undefined while the session is unbound. */
+  threadId?: string;
+
   // ── Agent lifecycle ──────────────────────────────────────────────────
   /** Whether an agent operation is currently in progress */
   isRunning: boolean;

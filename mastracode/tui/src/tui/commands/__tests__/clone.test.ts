@@ -24,7 +24,7 @@ describe('resetUIAfterClone', () => {
       messageComponentsById: new Map([['assistant-1', segment.component]]),
       allShellComponents: [{}],
       session: {
-        displayState: { clearModifiedFiles: vi.fn() },
+        displayState: { clearModifiedFiles: vi.fn(), get: () => ({ tasks: [] }) },
         state: { set: vi.fn(async () => {}) },
       },
       previousPlanSnapshot: {},

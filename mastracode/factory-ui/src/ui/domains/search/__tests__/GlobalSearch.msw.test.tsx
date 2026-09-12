@@ -71,6 +71,8 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     workItemRequests: 0,
   };
   const failRepositories = new Set(options.failRepositories ?? []);
+  const threadsByResource = new Map<string, string>();
+  const routedThreadIds = ['thread-work-linked', 'thread-review-linked', 'session-unlinked', 'session-user'];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -188,20 +190,32 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       },
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, async ({ request }) => {
-      const resourceId = resourceIdFromRequestBody(await request.json());
-      return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-search' });
+      const body: unknown = await request.json();
+      const resourceId = resourceIdFromRequestBody(body);
+      const threadId =
+        typeof body === 'object' && body !== null && 'threadId' in body && typeof body.threadId === 'string'
+          ? body.threadId
+          : (threadsByResource.get(resourceId) ?? 'thread-search');
+      threadsByResource.set(resourceId, threadId);
+      return HttpResponse.json({ controllerId: 'code', resourceId, threadId });
     }),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params }) =>
-      HttpResponse.json({
+    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params, request }) => {
+      const threadId = threadsByResource.get(String(params.resourceId)) ?? 'thread-search';
+      const requestedThreadId = new URL(request.url).searchParams.get('threadId');
+      if (requestedThreadId && requestedThreadId !== threadId) {
+        const knownThread = routedThreadIds.includes(requestedThreadId);
+        return HttpResponse.json({ error: 'Thread is not active' }, { status: knownThread ? 409 : 404 });
+      }
+      return HttpResponse.json({
         controllerId: 'code',
         resourceId: params.resourceId,
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
-        threadId: 'thread-search',
+        threadId,
         running: options.running ?? false,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-      }),
-    ),
+      });
+    }),
     http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${AGENT_CONTROLLER_API}/models`, () =>
       HttpResponse.json({
@@ -219,11 +233,9 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
-    // Every thread a test routes to must be listed, or the chat falls back to another one and
-    // remounts the page frame under the open dialog.
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () =>
       HttpResponse.json({
-        threads: ['thread-work-linked', 'thread-review-linked', 'session-unlinked', 'session-user'].map(id => ({
+        threads: routedThreadIds.map(id => ({
           id,
           title: id,
           updatedAt: '2026-07-29T12:00:00.000Z',
@@ -240,7 +252,16 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/thread`, () => HttpResponse.json({ ok: true })),
+    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/thread`, async ({ params, request }) => {
+      const body: unknown = await request.json();
+      if (typeof body === 'object' && body !== null && 'threadId' in body && typeof body.threadId === 'string') {
+        if (!routedThreadIds.includes(body.threadId)) {
+          return HttpResponse.json({ error: 'Thread not found' }, { status: 404 });
+        }
+        threadsByResource.set(String(params.resourceId), body.threadId);
+      }
+      return HttpResponse.json({ ok: true });
+    }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/abort`, () => {
       state.abortRequests += 1;
       return HttpResponse.json({});
@@ -731,8 +752,6 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
 
-    // Abort renders once the run reports itself live, so it also marks the point where the chat
-    // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
     await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 
     const navigation = screen.getByRole('navigation', { name: 'Main' });

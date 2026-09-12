@@ -75,12 +75,6 @@ export interface MastraCodeState {
   };
   smartEditing: boolean;
   notifications: 'bell' | 'system' | 'both' | 'off';
-  tasks: Array<{
-    id?: string;
-    content: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    activeForm: string;
-  }>;
   sandboxAllowedPaths: string[];
   pluginSkillPaths: string[];
   pluginCommandPaths: string[];
@@ -162,17 +156,6 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (ephemeral per-thread, cleared on thread switch/creation)
-  tasks: z
-    .array(
-      z.object({
-        id: z.string().optional(),
-        content: z.string(),
-        status: z.enum(['pending', 'in_progress', 'completed']),
-        activeForm: z.string(),
-      }),
-    )
-    .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
   // Asset directories contributed by active plugins.

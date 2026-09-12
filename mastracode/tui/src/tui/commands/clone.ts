@@ -55,10 +55,10 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.allShellComponents = [];
   state.session.displayState.clearModifiedFiles();
   // Clear per-thread ephemeral state from the global controller state
-  await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+  await state.session.state.set({ activePlan: null, sandboxAllowedPaths: [] });
   state.previousPlanSnapshot = undefined;
   if (state.taskProgress) {
-    state.taskProgress.updateTasks([]);
+    state.taskProgress.updateTasks(state.session.displayState.get().tasks);
   }
   state.taskToolInsertIndex = -1;
 

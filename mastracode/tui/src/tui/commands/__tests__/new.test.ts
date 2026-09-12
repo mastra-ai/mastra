@@ -99,7 +99,6 @@ describe('handleNewCommand', () => {
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.allShellComponents).toEqual([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
-      tasks: [],
       activePlan: null,
       sandboxAllowedPaths: [],
     });

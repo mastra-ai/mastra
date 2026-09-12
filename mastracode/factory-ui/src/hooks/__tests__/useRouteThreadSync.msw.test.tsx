@@ -117,8 +117,8 @@ describe('useRouteThreadSync', () => {
           threadId: LATEST_THREAD_ID,
         }),
       ),
-      http.post(`${API}/sessions/:resourceId/thread`, async ({ request }) => {
-        const body = (await request.json()) as { threadId?: string };
+      http.post<never, { threadId?: string }>(`${API}/sessions/:resourceId/thread`, async ({ request }) => {
+        const body = await request.json();
         onSwitchThread(body.threadId);
         return HttpResponse.json({ ok: true });
       }),
@@ -136,7 +136,7 @@ describe('useRouteThreadSync', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Location').textContent).toBe(`/factories/factory-1/threads/${LATEST_THREAD_ID}`),
     );
-    expect(onSwitchThread).toHaveBeenCalledWith(LATEST_THREAD_ID);
+    await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(LATEST_THREAD_ID));
     expect(transcript.pushNotice).not.toHaveBeenCalled();
   });
 });

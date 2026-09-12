@@ -25,7 +25,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // Clear file tracking in display state (thread_created will also reset this)
   state.session.displayState.get().modifiedFiles.clear();
   // Clear per-thread ephemeral state from the global controller state
-  await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+  await state.session.state.set({ activePlan: null, sandboxAllowedPaths: [] });
   state.previousPlanSnapshot = undefined;
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);

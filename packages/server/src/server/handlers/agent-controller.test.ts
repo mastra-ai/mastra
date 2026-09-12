@@ -452,6 +452,137 @@ describe('agent-controller routes', () => {
   });
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
+    it('sends isolated current-thread snapshots on initial subscription and reconnect without later events', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-snapshot',
+        id: 'user-snapshot',
+        ownerId: 'code',
+      });
+      const threadId = session.thread.requireId();
+      const tasks = [
+        { id: 'fix', content: 'Fix the bug', status: 'in_progress' as const, activeForm: 'Fixing the bug' },
+      ];
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'task_updated', tasks });
+      session.setTokenUsage({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+      session.emit({
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+      });
+      session.emit({ type: 'follow_up_queued', count: 2 });
+      session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
+      session.emit({
+        type: 'om_status',
+        recordId: 'record-1',
+        threadId,
+        stepNumber: 1,
+        generationCount: 1,
+        windows: {
+          active: { messages: { tokens: 300, threshold: 1000 }, observations: { tokens: 200, threshold: 2000 } },
+          buffered: {
+            observations: {
+              status: 'running',
+              chunks: 1,
+              messageTokens: 150,
+              projectedMessageRemoval: 120,
+              observationTokens: 30,
+            },
+            reflection: { status: 'running', inputObservationTokens: 100, observationTokens: 40 },
+          },
+        },
+      });
+
+      const stream = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-snapshot',
+      });
+      if (!(stream instanceof ReadableStream)) throw new Error('Expected a session event stream');
+      const reader = stream.getReader();
+      const initial = await reader.read();
+      await reader.cancel();
+
+      expect(initial.value).toMatchObject({
+        type: 'display_state_changed',
+        displayState: {
+          threadId,
+          isRunning: true,
+          tasks,
+          tokenUsage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+          queuedFollowUps: 2,
+          bufferingMessages: true,
+          bufferingObservations: true,
+          omProgress: { pendingTokens: 300, observationTokens: 200 },
+          activeTools: { 'call-1': { name: 'read', status: 'running' } },
+        },
+      });
+      const initialJson = JSON.stringify(initial.value);
+
+      session.setTokenUsage({ promptTokens: 150, completionTokens: 30, totalTokens: 180 });
+      session.emit({
+        type: 'usage_update',
+        usage: { promptTokens: 50, completionTokens: 10, totalTokens: 60 },
+      });
+      session.emit({ type: 'follow_up_queued', count: 1 });
+      session.emit({
+        type: 'task_updated',
+        tasks: [{ ...tasks[0]!, status: 'completed' }],
+      });
+      session.emit({ type: 'tool_end', toolCallId: 'call-1', result: 'contents', isError: false });
+      const reconnected = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-snapshot',
+      });
+      if (!(reconnected instanceof ReadableStream)) throw new Error('Expected a session event stream');
+      const reconnectedReader = reconnected.getReader();
+      const resumed = await reconnectedReader.read();
+      await reconnectedReader.cancel();
+
+      expect(resumed.value).toMatchObject({
+        type: 'display_state_changed',
+        displayState: {
+          threadId,
+          isRunning: true,
+          tasks: [{ id: 'fix', status: 'completed' }],
+          tokenUsage: { promptTokens: 150, completionTokens: 30, totalTokens: 180 },
+          queuedFollowUps: 1,
+          bufferingMessages: true,
+          bufferingObservations: true,
+          omProgress: { pendingTokens: 300, observationTokens: 200 },
+          activeTools: { 'call-1': { name: 'read', status: 'completed' } },
+        },
+      });
+      expect(JSON.stringify(initial.value)).toBe(initialJson);
+
+      session.emit({ type: 'agent_end', reason: 'complete' });
+      const nextThread = await session.thread.create({ title: 'Next thread' });
+      const switched = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-snapshot',
+      });
+      if (!(switched instanceof ReadableStream)) throw new Error('Expected a session event stream');
+      const switchedReader = switched.getReader();
+      const nextSnapshot = await switchedReader.read();
+      await switchedReader.cancel();
+
+      expect(nextSnapshot.value).toMatchObject({
+        type: 'display_state_changed',
+        displayState: {
+          threadId: nextThread.id,
+          tasks: [],
+          tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          queuedFollowUps: 0,
+          bufferingMessages: false,
+          bufferingObservations: false,
+          omProgress: { pendingTokens: 0, observationTokens: 0 },
+        },
+      });
+    });
+
     it('delivers session events to the SSE stream', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -601,6 +732,7 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
+      await reader.read(); // Initial snapshot precedes live tool events.
 
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -672,38 +804,100 @@ describe('agent-controller routes', () => {
       ] as const;
       const threadState = await mastra.getStorage()!.getStore('threadState');
       await threadState!.setState({ threadId, type: 'task', value: tasks });
+      await session.thread.create({ title: 'Another thread' });
+      await session.thread.switch({ threadId });
 
-      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+      const res = await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
         threadId,
-      } as any)) as { tasks?: unknown };
+      });
 
       expect(res.tasks).toEqual(tasks);
     });
 
-    it('returns tasks for the explicitly requested thread instead of the session current thread', async () => {
+    it('rejects an inactive owned thread without returning active telemetry or rebinding the session', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
-      const currentThreadId = session.thread.requireId();
-      const requestedThread = await session.thread.create({ title: 'Requested thread' });
-      await session.thread.switch({ threadId: currentThreadId });
-      const tasks = [
-        { id: 'requested', content: 'Requested task', status: 'pending', activeForm: 'Working on requested task' },
-      ] as const;
-      const threadState = await mastra.getStorage()!.getStore('threadState');
-      await threadState!.setState({ threadId: requestedThread.id, type: 'task', value: tasks });
+      const inactiveThreadId = session.thread.requireId();
+      const activeThread = await session.thread.create({ title: 'Active thread' });
+      session.emit({ type: 'agent_start' });
+      session.setTokenUsage({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+      session.emit({ type: 'usage_update', usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 } });
+      const before = structuredClone(session.displayState.get());
 
-      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-1',
+          threadId: inactiveThreadId,
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+
+      expect(session.thread.requireId()).toBe(activeThread.id);
+      expect(session.displayState.get()).toEqual(before);
+    });
+
+    it('returns live task, usage, OM, and queue state from the same current-thread snapshot', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const threadId = session.thread.requireId();
+      const tasks = [
+        { id: 'live', content: 'Live task', status: 'in_progress' as const, activeForm: 'Working on live task' },
+      ];
+      session.emit({ type: 'task_updated', tasks });
+      session.setTokenUsage({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+      session.emit({ type: 'usage_update', usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 } });
+      session.emit({ type: 'follow_up_queued', count: 2 });
+      session.emit({
+        type: 'om_status',
+        recordId: 'record-1',
+        threadId,
+        stepNumber: 1,
+        generationCount: 1,
+        windows: {
+          active: { messages: { tokens: 300, threshold: 1000 }, observations: { tokens: 200, threshold: 2000 } },
+          buffered: {
+            observations: {
+              status: 'running',
+              chunks: 1,
+              messageTokens: 150,
+              projectedMessageRemoval: 120,
+              observationTokens: 30,
+            },
+            reflection: { status: 'running', inputObservationTokens: 100, observationTokens: 40 },
+          },
+        },
+      });
+
+      const response = await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
-        threadId: requestedThread.id,
-      } as any)) as { threadId?: string; tasks?: unknown };
+        threadId,
+      });
+      const parsed = GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.responseSchema!.parse(response);
 
-      expect(res).toMatchObject({ threadId: requestedThread.id, tasks });
+      expect(parsed).toMatchObject({
+        threadId,
+        tasks,
+        tokenUsage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+        queuedFollowUps: 2,
+        bufferingMessages: true,
+        bufferingObservations: true,
+        omProgress: {
+          pendingTokens: 300,
+          thresholdPercent: 30,
+          observationTokens: 200,
+          reflectionThresholdPercent: 10,
+          projectedMessageRemoval: 120,
+          projectedReflectionSavings: 60,
+        },
+      });
     });
 
     it('returns an empty task list when the requested thread has no durable task state', async () => {
@@ -1303,14 +1497,30 @@ describe('agent-controller routes', () => {
 
     it('SESSION STATE rejects a requested thread owned by another resource', async () => {
       const { victimThreadId } = await setupTwoSessions();
+      const controller = mastra.getAgentController('code')!;
+      const attackerSession = await controller.createSession({
+        resourceId: 'attacker',
+        id: 'attacker',
+        ownerId: controller.id,
+      });
+      attackerSession.setTokenUsage({ promptTokens: 100, completionTokens: 20, totalTokens: 120 });
+      attackerSession.emit({
+        type: 'usage_update',
+        usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+      });
+      const before = structuredClone(attackerSession.displayState.get());
+
       await expect(
         GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
           mastra,
           controllerId: 'code',
           resourceId: 'attacker',
           threadId: victimThreadId,
-        } as any),
-      ).rejects.toThrow(`thread "${victimThreadId}" not found`);
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect(attackerSession.thread.requireId()).toBe(before.threadId);
+      expect(attackerSession.displayState.get()).toEqual(before);
     });
 
     it('SESSION STATE rejects a requested thread that does not exist', async () => {

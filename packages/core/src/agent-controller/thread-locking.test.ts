@@ -158,11 +158,16 @@ describe('AgentController thread locking', () => {
       acquire.mockClear();
       release.mockClear();
 
-      let resolveRelease: (() => void) | undefined;
+      let resolveRelease!: () => void;
+      let markReleaseStarted!: () => void;
+      const releaseStarted = new Promise<void>(resolve => {
+        markReleaseStarted = resolve;
+      });
       release.mockImplementationOnce(
         () =>
           new Promise<void>(resolve => {
             resolveRelease = resolve;
+            markReleaseStarted();
           }),
       );
 
@@ -170,12 +175,12 @@ describe('AgentController thread locking', () => {
       const switchPromise = session.thread.switch({ threadId: first.id }).then(() => {
         settled = true;
       });
-      await Promise.resolve();
+      await releaseStarted;
 
       expect(settled).toBe(false);
       expect(acquire).toHaveBeenCalledWith(first.id);
 
-      resolveRelease?.();
+      resolveRelease();
       await switchPromise;
 
       expect(settled).toBe(true);

@@ -7,9 +7,13 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import {
+  type PendingThreadVerification,
+  isSessionThreadConflict,
+  useAgentControllerSessionSync,
+} from '../../../../hooks/useAgentControllerSessionSync';
 
-export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
+export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'conflict' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
 
 function nextSseConnectionState(previous: SseConnectionState, connected: boolean): SseConnectionState {
@@ -17,12 +21,27 @@ function nextSseConnectionState(previous: SseConnectionState, connected: boolean
   return previous === 'connected' ? 'dropped' : previous;
 }
 
+function eventThreadId(event: AgentControllerEvent): string | null | undefined {
+  if (!isKnownAgentControllerEvent(event)) return undefined;
+  switch (event.type) {
+    case 'display_state_changed':
+      return event.displayState.threadId ?? null;
+    case 'thread_changed':
+      return event.threadId;
+    case 'thread_created':
+      return event.thread.id;
+    default:
+      return undefined;
+  }
+}
+
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   scope?: string;
-  /** Exact thread id to bind on session creation (see ChatSessionContextApi). */
   sessionThreadId?: string;
+  initialThreadId?: string;
+  displayThreadId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
@@ -34,14 +53,25 @@ export function useAgentControllerConnection({
   resourceId,
   scope,
   sessionThreadId,
+  initialThreadId,
+  displayThreadId,
   factorySessionState,
   baseUrl = '',
   enabled = true,
   onEvent,
 }: UseAgentControllerConnectionArgs) {
   const queryClient = useQueryClient();
+  const requestedThreadId = initialThreadId ?? sessionThreadId;
+  const stateQueryKey = queryKeys.agentControllerConnectionState(
+    agentControllerId,
+    resourceId,
+    scope,
+    requestedThreadId,
+  );
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
+  // Stream callbacks can run before React commits the previous callback's updates.
   const sseStateRef = useRef<SseConnectionState>('never');
+  const pendingVerification = useRef<PendingThreadVerification>(undefined);
   const taskEventGeneration = useRef(0);
   const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
   const sseConnected = sseConnectionState === 'connected';
@@ -58,6 +88,7 @@ export function useAgentControllerConnection({
     resourceId,
     scope,
     sessionThreadId,
+    initialThreadId,
     factorySessionState,
     baseUrl,
     enabled,
@@ -66,65 +97,87 @@ export function useAgentControllerConnection({
     agentControllerId,
     resourceId,
     scope,
-    threadId: sessionThreadId,
+    threadId: requestedThreadId,
     baseUrl,
-    enabled: enabled && initQuery.isSuccess,
+    enabled: enabled && initQuery.isSuccess && !initQuery.isFetching,
     sseConnected,
+    pendingVerification,
     taskEventGeneration,
     liveTasks,
   });
+  const activeThreadId =
+    displayThreadId ?? requestedThreadId ?? syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined;
+  const sessionThreadConflict =
+    !initQuery.isFetching && isSessionThreadConflict(syncQuery.error) && activeThreadId === requestedThreadId;
+  const verifyingCurrentThread =
+    activeThreadId !== undefined && pendingVerification.current?.threadId === activeThreadId;
+  const hasCurrentState =
+    !initQuery.isFetching &&
+    !sessionThreadConflict &&
+    activeThreadId !== undefined &&
+    syncQuery.data?.threadId === activeThreadId;
+  const state = hasCurrentState ? syncQuery.data : undefined;
+
   const handleConnectedChange = (connected: boolean) => {
-    // Ref mirrors the state so back-to-back events see the true previous value
-    // even when React batches the renders in between.
     const previous = sseStateRef.current;
     const next = nextSseConnectionState(previous, connected);
     if (next === previous) return;
     sseStateRef.current = next;
     setSseConnectionState(next);
     if (next !== 'connected') return;
-    // Events sent while the stream was down are gone for good (the server does
-    // not replay them), so a reconnect refetches the mounted message windows —
-    // mergeWindow folds whatever the gap dropped back into the transcript. A
-    // first connect retries only failed windows: the stream opens after the
-    // session is bound to its thread, so a read that raced that binding works now.
+    // Streams don't replay missed transcript events.
     const reconnected = previous === 'dropped';
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
       predicate: query => reconnected || query.state.status === 'error',
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
     if (reconnected) {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
+        queryKey: stateQueryKey,
         exact: true,
       });
     }
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
-    const displayStateRunning =
-      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
-        ? event.displayState.isRunning
-        : undefined;
-    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
-    const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    if (sessionThreadConflict) return;
+    const verification = pendingVerification.current;
+    const verifyingThisThread = verification !== undefined && verification.threadId === activeThreadId;
+    const incomingThreadId = eventThreadId(event);
+    if (incomingThreadId !== undefined && incomingThreadId !== activeThreadId) {
+      const exactThreadBound = requestedThreadId !== undefined && activeThreadId === requestedThreadId;
+      const initializingBinding =
+        queryClient.isFetching({
+          queryKey: queryKeys.agentControllerConnectionInit(agentControllerId, resourceId, scope),
+        }) > 0;
+      const verifyingSameBinding = verifyingThisThread && verification.observedThreadId === incomingThreadId;
+      const shouldVerify = exactThreadBound && !initializingBinding && !verifyingSameBinding;
+      if (shouldVerify) {
+        pendingVerification.current = { threadId: activeThreadId, observedThreadId: incomingThreadId };
+        void queryClient.cancelQueries({ queryKey: stateQueryKey, exact: true }).then(() => syncQuery.refetch());
+      }
+      return;
+    }
+    if (verifyingThisThread) {
+      if (incomingThreadId !== undefined) verification.observedThreadId = incomingThreadId;
+      return;
+    }
+    const displayState =
+      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed' ? event.displayState : undefined;
+
+    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayState?.isRunning;
+    const tasks =
+      isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : displayState?.tasks;
     if (tasks) {
       taskEventGeneration.current += 1;
-      liveTasks.current = { threadId: sessionThreadId, tasks };
+      liveTasks.current = { threadId: activeThreadId, tasks };
     }
     if (typeof running === 'boolean' || tasks) {
-      const stateQueryKey = queryKeys.agentControllerConnectionState(
-        agentControllerId,
-        resourceId,
-        scope,
-        sessionThreadId,
-      );
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,
         current =>
-          current
+          current && current.threadId === activeThreadId
             ? {
                 ...current,
                 ...(typeof running === 'boolean' ? { running } : {}),
@@ -139,7 +192,7 @@ export function useAgentControllerConnection({
 
   useAgentControllerEvents({
     session,
-    enabled,
+    enabled: enabled && initQuery.isSuccess && !initQuery.isFetching && !sessionThreadConflict,
     epoch: syncQuery.dataUpdatedAt,
     onEvent: handleEvent,
     onConnectedChange: handleConnectedChange,
@@ -148,22 +201,24 @@ export function useAgentControllerConnection({
   const status = deriveConnectionStatus({
     initIsError: initQuery.isError,
     syncIsError: syncQuery.isError,
-    hasSyncData: Boolean(syncQuery.data),
-    sseConnected,
+    sessionThreadConflict,
+    hasSyncData: Boolean(state),
+    sseConnected: sseConnected && !verifyingCurrentThread,
     hasEverConnected,
     syncFailureCount: syncQuery.failureCount,
   });
 
   return {
     status,
-    state: syncQuery.data,
-    threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
+    state,
+    threadId: activeThreadId,
   };
 }
 
 export function deriveConnectionStatus({
   initIsError,
   syncIsError,
+  sessionThreadConflict = false,
   hasSyncData,
   sseConnected,
   hasEverConnected,
@@ -171,11 +226,13 @@ export function deriveConnectionStatus({
 }: {
   initIsError: boolean;
   syncIsError: boolean;
+  sessionThreadConflict?: boolean;
   hasSyncData: boolean;
   sseConnected: boolean;
   hasEverConnected: boolean;
   syncFailureCount: number;
 }): ConnectionStatus {
+  if (sessionThreadConflict) return 'conflict';
   if (initIsError || (syncIsError && !hasSyncData)) return 'error';
   if (!hasSyncData) return 'connecting';
   if (!sseConnected && syncFailureCount >= 10) return 'error';
