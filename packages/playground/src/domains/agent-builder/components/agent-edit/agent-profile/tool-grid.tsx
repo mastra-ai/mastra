@@ -41,7 +41,7 @@ export const ToolGrid = ({
     : undefined;
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
       <div className="flex shrink-0 items-center justify-between gap-4">
         <div data-testid="tools-card-picker-search" className="bg-surface3 max-w-[30ch] flex-1 rounded-full">
           <InputGroup variant="outline" size="default">
@@ -79,7 +79,7 @@ export const ToolGrid = ({
       {tools.length === 0 ? (
         <ToolListEmptyState details={emptyStateDetails} />
       ) : (
-        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto sm:grid-cols-2 lg:gap-6 2xl:grid-cols-3">
+        <div className="grid min-h-0 grid-cols-1 content-start gap-2 overflow-y-auto sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
           {tools.map(item => (
             <ToolCard key={`${item.type}__${item.id}`} item={item} editable={editable} onToggle={onToggle} />
           ))}
@@ -95,7 +95,7 @@ interface ToolListEmptyStateProps {
 
 export const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
   return (
-    <div className="flex min-h-0 items-center justify-center px-3 py-6">
+    <div className="flex min-h-0 items-center justify-center px-3 py-4">
       <Txt variant="ui-md" className="text-neutral3">
         {details}
       </Txt>

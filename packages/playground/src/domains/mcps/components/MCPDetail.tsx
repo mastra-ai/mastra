@@ -70,12 +70,12 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
   return (
     <MainContentContent isDivided={true}>
-      <div className="mx-auto w-full max-w-2xl px-8 py-12">
+      <div className="mx-auto w-full max-w-2xl px-5 py-8">
         <Txt as="h1" variant="header-md" className="text-neutral6 pb-4 font-medium">
           {server.name}
         </Txt>
 
-        <div className="flex items-center gap-1 pb-6">
+        <div className="flex items-center gap-1 pb-4">
           <Badge icon={<FolderIcon />} size="sm">
             Version
           </Badge>
@@ -162,7 +162,7 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
         </Txt>
       </div>
 
-      <div className="flex flex-col gap-2 pt-6">
+      <div className="flex flex-col gap-2 pt-4">
         {toolsKeyArray.map(toolId => {
           const tool = tools[toolId];
 

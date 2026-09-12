@@ -39,7 +39,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="text-neutral3 mb-8 content-center space-y-4">
+    <Container className="text-neutral3 mb-5 content-center space-y-4">
       {/* Main Error Display */}
       <div className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
         {icon}

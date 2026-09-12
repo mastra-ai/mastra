@@ -398,7 +398,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               </div>
             </div>
           </DialogBody>
-          <DialogFooter className="px-6">
+          <DialogFooter className="px-4">
             <Button variant="ghost" onClick={() => setShowAnalyzeDialog(false)} disabled={isAnalyzing}>
               Cancel
             </Button>
@@ -716,7 +716,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             </div>
           ) : displayItems.length === 0 ? (
             <div className="flex flex-1 items-center justify-center">
-              <div className="px-8 text-center">
+              <div className="px-5 text-center">
                 <Txt variant="ui-sm" className="text-neutral3 block">
                   {showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 </Txt>

@@ -145,7 +145,7 @@ export function MCPClientList() {
         </Section.Header>
 
         {mcpClients.length === 0 && (
-          <div className="border-border2 rounded-xl border border-dashed py-8 text-center">
+          <div className="border-border2 rounded-xl border border-dashed py-5 text-center">
             <EmptyState
               className="py-4!"
               iconSlot={

@@ -41,7 +41,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       }
     >
       <div
-        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center"
+        className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-4 py-4 text-center"
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-neutral4">

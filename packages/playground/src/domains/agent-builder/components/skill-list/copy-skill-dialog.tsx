@@ -53,7 +53,7 @@ export function CopySkillDialog({
             Creates a private copy in your skills that you can edit. The original stays untouched.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <div className="px-6 py-2">
+        <div className="px-4 py-2">
           <label className="text-ui-sm text-neutral4 mb-1.5 block" htmlFor="copy-skill-name">
             New skill name
           </label>

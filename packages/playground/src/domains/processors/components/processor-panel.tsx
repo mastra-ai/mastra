@@ -46,7 +46,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -57,7 +57,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (!processor)
     return (
-      <div className="px-6 py-12 text-center">
+      <div className="px-4 py-8 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Processor not found
         </Txt>

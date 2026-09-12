@@ -131,7 +131,7 @@ export function SkillChatComposer({
   }, [initialUserMessage, sendMessage, threadId, clientTools]);
 
   const emptyState = (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-8 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-5 text-center">
       <div className="bg-accent5/10 rounded-full p-3">
         <Sparkles className="text-accent5 h-6 w-6" />
       </div>

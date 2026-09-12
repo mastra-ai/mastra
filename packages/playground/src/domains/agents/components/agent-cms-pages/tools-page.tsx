@@ -194,7 +194,7 @@ export function ToolsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 pt-4">
+      <div className="flex flex-col gap-4 pt-4">
         {isToolsLocked && (
           <Notice variant="info" title="Tools are owned by code">
             <Notice.Message>

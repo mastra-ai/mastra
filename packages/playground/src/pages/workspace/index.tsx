@@ -377,7 +377,7 @@ export default function Workspace() {
         </PageLayout.TopArea>
       )}
 
-      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-6' : 'grid content-start gap-6'}>
+      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-4' : 'grid content-start gap-4'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <div className="relative">
@@ -570,7 +570,7 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
-          <div className="text-neutral4 py-12 text-center">
+          <div className="text-neutral4 py-8 text-center">
             <p>No workspace capabilities are configured.</p>
           </div>
         )}

@@ -81,7 +81,7 @@ export const MessageList = ({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto px-6 py-6"
+      className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       style={{ viewTransitionName: 'agent-builder-messages' }}
     >
       {showSkeleton ? (
@@ -89,7 +89,7 @@ export const MessageList = ({
       ) : showEmpty ? (
         emptyState
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           {messages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}

@@ -77,7 +77,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
             <TrashIcon className="h-4 w-4" />
           </Button>
 
-          <div className="space-y-2 pt-6">
+          <div className="space-y-2 pt-4">
             <Input
               placeholder="Key"
               value={pair.key}

@@ -55,7 +55,7 @@ export function BrowserViewPanel() {
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-8',
+        'fixed inset-0 z-50 flex items-center justify-center p-5',
         'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
         isModal ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}

@@ -90,12 +90,12 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
             </div>
 
             {isLoading ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
+              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-5">
                 <Spinner className="h-6 w-6" />
                 <Txt variant="ui-sm">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
+              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-5">
                 <FileText className="h-8 w-8" />
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>

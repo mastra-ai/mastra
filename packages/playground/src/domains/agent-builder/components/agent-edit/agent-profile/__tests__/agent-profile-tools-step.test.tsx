@@ -62,7 +62,7 @@ describe('AgentProfileToolsStep', () => {
     expect(selectedTools?.textContent).toContain('Selected tools: 2');
   });
 
-  it('renders the navigation footer with a top border and pt-6 spacing', () => {
+  it('renders the navigation footer with a top border and pt-4 spacing', () => {
     render(
       <Harness>
         <AgentProfileToolsStep />
@@ -71,6 +71,6 @@ describe('AgentProfileToolsStep', () => {
 
     const footer = screen.getByTestId('agent-step-footer');
     expect(footer.className).toContain('border-t');
-    expect(footer.className).toContain('pt-6');
+    expect(footer.className).toContain('pt-4');
   });
 });

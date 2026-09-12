@@ -124,7 +124,7 @@ function DatasetItemVersionsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 py-8 text-center">
+          <div className="text-neutral4 py-5 text-center">
             <p>Item not found.</p>
           </div>
         </MainContentContent>
@@ -158,7 +158,7 @@ function DatasetItemVersionsComparePage() {
       </RouteHeaderActions>
 
       <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
-        <div className="grid min-h-0 grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <CardHeader>
               <VersionSelect
@@ -168,7 +168,7 @@ function DatasetItemVersionsComparePage() {
                 onValueChange={val => setParam('version', Number(val))}
               />
             </CardHeader>
-            <CardContent className="grid content-start gap-8 overflow-y-auto">
+            <CardContent className="grid content-start gap-5 overflow-y-auto">
               {isLoading ? (
                 <div className="text-neutral4 text-ui-md">Loading...</div>
               ) : leftItem ? (
@@ -192,7 +192,7 @@ function DatasetItemVersionsComparePage() {
                 onValueChange={val => setParam('compare', Number(val))}
               />
             </CardHeader>
-            <CardContent className="grid content-start gap-8 overflow-y-auto">
+            <CardContent className="grid content-start gap-5 overflow-y-auto">
               {rightNumber == null ? (
                 <EmptyState
                   className="h-full"

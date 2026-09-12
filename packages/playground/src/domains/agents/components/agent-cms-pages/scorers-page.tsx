@@ -101,7 +101,7 @@ export function ScorersPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Scorers"

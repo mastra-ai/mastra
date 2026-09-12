@@ -47,7 +47,7 @@ export function ReferenceViewerDialog({
         }}
       >
         {/* Header */}
-        <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-6 py-4">
+        <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="bg-surface5 rounded p-1.5">
               <FileText className="text-neutral4 h-4 w-4" />
@@ -77,13 +77,13 @@ export function ReferenceViewerDialog({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-8">
               <div className="border-accent1 h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-red-400">Failed to load reference</p>
               <p className="text-neutral3 text-ui-md">{error}</p>
             </div>
@@ -92,7 +92,7 @@ export function ReferenceViewerDialog({
               {content}
             </pre>
           ) : (
-            <div className="text-neutral3 flex items-center justify-center py-12">No content available</div>
+            <div className="text-neutral3 flex items-center justify-center py-8">No content available</div>
           )}
         </div>
       </div>

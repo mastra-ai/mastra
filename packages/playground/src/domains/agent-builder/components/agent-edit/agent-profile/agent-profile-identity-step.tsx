@@ -33,7 +33,7 @@ export const AgentProfileIdentityStep = ({ avatar, details }: AgentProfileIdenti
         </Button>
       }
     >
-      <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-6 py-6 text-center">
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-4 px-4 py-4 text-center">
         {avatar}
         {details}
       </div>

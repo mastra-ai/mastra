@@ -40,7 +40,7 @@ export const SkillWorkspaceLayout = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-6 md:py-3">
+      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-4 md:py-2">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -126,7 +126,7 @@ export const SkillWorkspaceLayout = ({
             'md:transition-[grid-column] md:duration-300 md:ease-out',
           )}
         >
-          <div className="flex h-full min-h-0 flex-col px-4 pt-4 pb-6 md:px-10">
+          <div className="flex h-full min-h-0 flex-col px-4 pt-4 pb-4 md:px-10">
             <div className="flex min-h-0 w-full flex-1 flex-col md:mx-auto md:max-w-[80ch]">{chat}</div>
           </div>
         </div>
@@ -142,7 +142,7 @@ export const SkillWorkspaceLayout = ({
               // slides in from the right. The slide is driven by a CSS
               // keyframe animation triggered the first time this element
               // mounts (which matches the moment showForm flips to true).
-              'px-4 pb-6 md:p-4 md:bg-transparent',
+              'px-4 pb-4 md:p-4 md:bg-transparent',
             )}
             data-testid="skill-edit-configure-panel"
           >
@@ -154,7 +154,7 @@ export const SkillWorkspaceLayout = ({
             >
               <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
               {deleteAction && (
-                <div className="border-border1 border-t px-4 pt-4 pb-4 md:px-6" data-testid="skill-edit-delete-action">
+                <div className="border-border1 border-t px-4 pt-4 pb-4 md:px-4" data-testid="skill-edit-delete-action">
                   {deleteAction}
                 </div>
               )}

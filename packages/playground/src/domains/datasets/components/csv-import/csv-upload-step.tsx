@@ -91,7 +91,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-[160px] rounded-lg border-2 border-dashed p-4',
           'cursor-pointer transition-colors',
           // Default state
           'border-surface4 bg-surface2',

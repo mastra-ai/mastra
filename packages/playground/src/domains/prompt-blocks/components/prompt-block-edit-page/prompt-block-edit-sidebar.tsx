@@ -125,7 +125,7 @@ export function PromptBlockEditSidebar({
   return (
     <div className="flex h-full flex-col">
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
 
           {/* Name */}

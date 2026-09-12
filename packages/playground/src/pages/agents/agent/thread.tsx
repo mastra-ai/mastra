@@ -191,7 +191,7 @@ function AgentThread() {
 export default AgentThread;
 
 const AgentThreadLoadingSkeleton = () => (
-  <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-thread-skeleton" aria-busy="true">
+  <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-thread-skeleton" aria-busy="true">
     <AgentChatLoadingSkeleton />
   </div>
 );

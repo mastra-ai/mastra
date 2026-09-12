@@ -416,7 +416,7 @@ export function DatasetDetailView({
             </button>
             {!itemsCollapsed &&
               (items.length === 0 ? (
-                <div className="px-4 py-6 text-center">
+                <div className="px-4 py-4 text-center">
                   <Txt variant="ui-xs" className="text-neutral3">
                     No items yet. Use Generate to create test data.
                   </Txt>

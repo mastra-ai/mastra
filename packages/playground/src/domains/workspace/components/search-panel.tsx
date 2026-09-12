@@ -147,7 +147,7 @@ export function SearchWorkspacePanel({
           </div>
 
           {searchResults.results.length === 0 ? (
-            <div className="text-neutral4 text-ui-md px-4 py-8 text-center">
+            <div className="text-neutral4 text-ui-md px-4 py-5 text-center">
               No results found. Try a different query.
             </div>
           ) : (

@@ -71,7 +71,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                 </div>
               )}
               <div
-                className={cn('grid py-3 px-6 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3')}
+                className={cn('grid py-3 px-4 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3')}
               >
                 <h2 className="text-ui-md text-neutral5">{template.title}</h2>
                 <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
