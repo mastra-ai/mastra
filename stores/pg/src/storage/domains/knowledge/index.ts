@@ -865,29 +865,18 @@ export class KnowledgePG extends KnowledgeStorage {
           }
         }
 
-        const desiredGrantRefs = new Set<string>();
-        for (const grant of scope.grants ?? []) {
-          const scopeRefId = await resolveAddress(grant.scopeRefAddress);
-          if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
-            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
-          }
-          desiredGrantRefs.add(scopeRefId);
-          const changedGrant = await tx.execute({
-            sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?) ON CONFLICT ("scopeNodeId","scopeRefId") DO UPDATE SET role=excluded.role,"canSuggest"=excluded."canSuggest" WHERE "${TABLE_KNOWLEDGE_SCOPE_GRANTS}".role IS DISTINCT FROM excluded.role OR "${TABLE_KNOWLEDGE_SCOPE_GRANTS}"."canSuggest" IS DISTINCT FROM excluded."canSuggest"`,
-            args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
-          });
-          structureChanged ||= changedGrant.rowsAffected > 0;
-        }
-        const existingGrants = await tx.execute({
-          sql: `SELECT "scopeRefId" FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeNodeId"=?`,
-          args: [scopeNodeId],
-        });
-        for (const row of existingGrants.rows) {
-          const scopeRefId = String(row.scopeRefId);
-          if (!desiredGrantRefs.has(scopeRefId)) {
+        // Grants are seeded only when this reconcile creates the scope. Grant state on
+        // pre-existing scopes is governed runtime state: reconcile must neither resurrect
+        // removed grants nor wipe grants added through the governance APIs.
+        if (createdScopeIds.includes(scopeNodeId)) {
+          for (const grant of scope.grants ?? []) {
+            const scopeRefId = await resolveAddress(grant.scopeRefAddress);
+            if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
+              throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+            }
             await tx.execute({
-              sql: `DELETE FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeNodeId"=? AND "scopeRefId"=?`,
-              args: [scopeNodeId, scopeRefId],
+              sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?) ON CONFLICT ("scopeNodeId","scopeRefId") DO UPDATE SET role=excluded.role,"canSuggest"=excluded."canSuggest" WHERE "${TABLE_KNOWLEDGE_SCOPE_GRANTS}".role IS DISTINCT FROM excluded.role OR "${TABLE_KNOWLEDGE_SCOPE_GRANTS}"."canSuggest" IS DISTINCT FROM excluded."canSuggest"`,
+              args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
             });
             structureChanged = true;
           }

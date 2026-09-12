@@ -286,29 +286,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           }
         }
 
-        const desiredGrantKeys = new Set<string>();
-        for (const grant of scope.grants ?? []) {
-          const scopeRefId = this.#db.knowledgeScopeAddresses.get(grant.scopeRefAddress);
-          const scopeRef = scopeRefId ? this.#db.knowledgeNodes.get(scopeRefId) : undefined;
-          if (!scopeRef || scopeRef.deletedAt || !scopeRef.isScope) {
-            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
-          }
-          const grantKey = JSON.stringify([scopeNodeId, scopeRefId]);
-          desiredGrantKeys.add(grantKey);
-          const existing = this.#db.knowledgeScopeGrants.get(grantKey);
-          if (existing?.role !== grant.role || existing.canSuggest !== grant.canSuggest) {
-            this.#db.knowledgeScopeGrants.set(grantKey, {
+        // Grants are seeded only when this reconcile creates the scope. Grant state on
+        // pre-existing scopes is governed runtime state: reconcile must neither resurrect
+        // removed grants nor wipe grants added through the governance APIs.
+        if (createdScopeIds.includes(scopeNodeId)) {
+          for (const grant of scope.grants ?? []) {
+            const scopeRefId = this.#db.knowledgeScopeAddresses.get(grant.scopeRefAddress);
+            const scopeRef = scopeRefId ? this.#db.knowledgeNodes.get(scopeRefId) : undefined;
+            if (!scopeRef || scopeRef.deletedAt || !scopeRef.isScope) {
+              throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+            }
+            this.#db.knowledgeScopeGrants.set(JSON.stringify([scopeNodeId, scopeRefId]), {
               scopeNodeId,
               scopeRefId: scopeRef.id,
               role: grant.role,
               canSuggest: grant.canSuggest,
             });
-            changed = true;
-          }
-        }
-        for (const [grantKey, grant] of this.#db.knowledgeScopeGrants) {
-          if (grant.scopeNodeId === scopeNodeId && !desiredGrantKeys.has(grantKey)) {
-            this.#db.knowledgeScopeGrants.delete(grantKey);
             changed = true;
           }
         }

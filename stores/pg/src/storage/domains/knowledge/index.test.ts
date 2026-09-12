@@ -182,23 +182,33 @@ describe('KnowledgePG storage isolation', () => {
       },
     ]);
 
+    // Grant changes on an existing scope flow through the governed grant API; reconcile
+    // seeds grants only when it creates the scope. Concurrent governed grant writes
+    // serialize and advance one epoch each.
     const withRole = (role: 'append' | 'owner') => ({
-      scopes: [
-        { address: 'principal:shared', name: 'Shared principal' },
-        {
-          address: 'project:shared',
-          name: 'Shared project',
-          grants: [{ scopeRefAddress: 'principal:shared', role }],
-        },
-      ],
+      scopeNodeId: left.scopes['project:shared']!,
+      scopeRefId: left.scopes['principal:shared']!,
+      role,
     });
     const [appendResult, ownerResult] = await Promise.all([
-      first.reconcileStructure(withRole('append')),
-      second.reconcileStructure(withRole('owner')),
+      first.upsertScopeGrant(withRole('append')),
+      second.upsertScopeGrant(withRole('owner')),
     ]);
     const finalRole = appendResult.accessEpoch > ownerResult.accessEpoch ? 'append' : 'owner';
     expect([appendResult.accessEpoch, ownerResult.accessEpoch].sort()).toEqual([2, 3]);
     expect(await first.getAccessEpoch()).toBe(3);
+    expect(await first.listScopeGrants()).toEqual([
+      {
+        scopeNodeId: left.scopes['project:shared'],
+        scopeRefId: left.scopes['principal:shared'],
+        role: finalRole,
+        canSuggest: undefined,
+      },
+    ]);
+
+    // Re-materializing the seeded structure must not resurrect or re-impose the planned grant.
+    const rematerialized = await first.reconcileStructure(plan);
+    expect(rematerialized).toMatchObject({ changed: false, accessEpoch: 3 });
     expect(await first.listScopeGrants()).toEqual([
       {
         scopeNodeId: left.scopes['project:shared'],
