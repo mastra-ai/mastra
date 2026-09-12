@@ -267,8 +267,12 @@ export class MastraTUI {
       exit: exitCode => this.exit(exitCode),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
-      openBackgroundActivityCenter: () => this.showBackgroundActivityCenter(),
-      clearFinishedBackgroundActivities: () => this.clearFinishedBackgroundActivity(),
+      ...(this.state.options.backgroundToolsEnabled
+        ? {
+            openBackgroundActivityCenter: () => this.showBackgroundActivityCenter(),
+            clearFinishedBackgroundActivities: () => this.clearFinishedBackgroundActivity(),
+          }
+        : {}),
     });
   }
 
@@ -728,9 +732,11 @@ export class MastraTUI {
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
-    this.cleanupBackgroundCompletionListener = this.state.options.backgroundCompletionEvents?.subscribe(event =>
-      this.handleBackgroundCompletion(event),
-    );
+    if (this.state.options.backgroundToolsEnabled) {
+      this.cleanupBackgroundCompletionListener = this.state.options.backgroundCompletionEvents?.subscribe(event =>
+        this.handleBackgroundCompletion(event),
+      );
+    }
     // Restore escape-as-cancel setting from persisted state
     const escState = this.state.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {

@@ -146,7 +146,7 @@ export async function dispatchEvent(
 
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
-      {
+      if (state.options.backgroundToolsEnabled) {
         const threadId = state.session.thread.getId();
         if (threadId) {
           state.backgroundToolContexts.set(event.toolCallId, {

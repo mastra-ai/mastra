@@ -788,7 +788,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...(config?.inputProcessors ?? []),
     new PlanRejectionAbortProcessor(),
-    createBackgroundWorkSignalProcessor(),
+    ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
       // Untrusted checkouts (review sessions on PR branches) must not have
       // the working tree's instruction files injected as system reminders —
@@ -1181,17 +1181,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const backgroundCompletionEvents = createBackgroundCompletionEvents();
+  const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
-    backgroundTasks: {
-      enabled: backgroundToolsEnabled,
-      recoverStaleTasksOnStart: false,
-      ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
-    },
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     observability,
     memory,
     pubsub: signalsPubSub,
@@ -1619,11 +1623,15 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
-    backgroundTasks: {
-      enabled: backgroundToolsEnabled,
-      recoverStaleTasksOnStart: false,
-      ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
-    },
+    ...(backgroundToolsEnabled
+      ? {
+          backgroundTasks: {
+            enabled: true,
+            recoverStaleTasksOnStart: false,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+          },
+        }
+      : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay

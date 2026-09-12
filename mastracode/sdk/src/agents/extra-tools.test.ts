@@ -129,9 +129,9 @@ describe('createDynamicTools – extraTools', () => {
       mastra_expert: mastraExpert,
     })({ requestContext: makeRequestContext() });
 
-    expect(tools.mastra_expert).not.toBe(mastraExpert);
+    expect(tools.mastra_expert).toBe(mastraExpert);
     expect(tools.mastra_expert.background).toBeUndefined();
-    expect(tools.mastra_expert.execute).not.toBe(mastraExpert.execute);
+    expect(tools.mastra_expert.execute).toBe(mastraExpert.execute);
   });
 
   it('should enable explicit background requests only for the Alexandria expert plugin tool when enabled', async () => {
@@ -183,9 +183,14 @@ describe('createDynamicTools – extraTools', () => {
         return { answer: question };
       },
     });
-    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
-      mastra_expert: mastraExpert,
-    })({ requestContext: makeRequestContext() });
+    const tools = await createDynamicTools(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { mastra_expert: mastraExpert },
+      true,
+    )({ requestContext: makeRequestContext() });
 
     const first = tools.mastra_expert.execute!({ question: 'first' });
     const second = tools.mastra_expert.execute!({ question: 'second' });
@@ -216,9 +221,14 @@ describe('createDynamicTools – extraTools', () => {
         return { answer: question };
       },
     });
-    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
-      mastra_expert: mastraExpert,
-    })({ requestContext: makeRequestContext() });
+    const tools = await createDynamicTools(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { mastra_expert: mastraExpert },
+      true,
+    )({ requestContext: makeRequestContext() });
     const firstAbort = new AbortController();
 
     const first = tools.mastra_expert.execute!({ question: 'first' }, { abortSignal: firstAbort.signal } as any);
@@ -248,9 +258,14 @@ describe('createDynamicTools – extraTools', () => {
         return { answer: question };
       },
     });
-    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
-      mastra_expert: mastraExpert,
-    })({ requestContext: makeRequestContext() });
+    const tools = await createDynamicTools(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { mastra_expert: mastraExpert },
+      true,
+    )({ requestContext: makeRequestContext() });
     const queuedAbort = new AbortController();
 
     const first = tools.mastra_expert.execute!({ question: 'first' });

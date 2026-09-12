@@ -82,7 +82,7 @@ function createState(modeCount = 2) {
 
   return {
     state: {
-      options: { appName: 'Acme Code', version: '1.2.3' },
+      options: { appName: 'Acme Code', version: '1.2.3', backgroundToolsEnabled: true },
       projectInfo: {
         name: 'demo-project',
         resourceId: 'resource-123',
@@ -144,6 +144,16 @@ describe('buildLayout startup header', () => {
     expect(updateStatusLine).toHaveBeenCalledWith(state);
     expect(refreshModelAuthStatus).toHaveBeenCalledTimes(1);
     expect(state.ui.setFocus).toHaveBeenCalledWith(editor);
+  });
+
+  it('omits the background notice container when background tools are disabled', () => {
+    renderBannerMock.mockReturnValue('BANNER v1.2.3');
+    const { state, uiChildren } = createState();
+    state.options.backgroundToolsEnabled = false;
+
+    buildLayout(state, vi.fn());
+
+    expect(uiChildren).not.toContain(state.globalBackgroundNoticeContainer);
   });
 
   it('omits the mode-cycle startup hint when there is only one mode', () => {

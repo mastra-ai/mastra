@@ -150,6 +150,9 @@ export interface MastraTUIOptions {
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
 
+  /** Whether native background work and its TUI controls are enabled. */
+  backgroundToolsEnabled?: boolean;
+
   /** Process-local background completion events used for cross-thread discovery. */
   backgroundCompletionEvents?: BackgroundCompletionEvents;
 

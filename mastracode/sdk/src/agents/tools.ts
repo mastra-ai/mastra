@@ -56,16 +56,12 @@ async function executeAlexandriaSerially(tool: ToolLike, args: any[]): Promise<u
 }
 
 function configurePluginTool(name: string, tool: ToolLike, backgroundToolsEnabled: boolean): ToolLike {
-  if (!BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
+  if (!backgroundToolsEnabled || !BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
   return {
     ...tool,
-    ...(backgroundToolsEnabled
-      ? {
-          // Eligible for backgrounding, but the agent must opt in per call — a plain
-          // expert question should stay a normal awaited foreground call.
-          background: { enabled: true, defaultDisposition: 'foreground' as const },
-        }
-      : {}),
+    // Eligible for backgrounding, but the agent must opt in per call — a plain
+    // expert question should stay a normal awaited foreground call.
+    background: { enabled: true, defaultDisposition: 'foreground' as const },
     execute: (...args: any[]) => executeAlexandriaSerially(tool, args),
   };
 }

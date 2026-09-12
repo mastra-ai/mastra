@@ -489,11 +489,12 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
-  it('disables the background task manager unless background tools are enabled', async () => {
+  it('omits background task infrastructure unless background tools are enabled', async () => {
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
-    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(false);
+    const disabled = await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks).toBeUndefined();
+    expect(disabled.backgroundCompletionEvents).toBeUndefined();
 
     controllerConstructorMock.mockClear();
     loadSettingsMock.mockReturnValue({
@@ -501,23 +502,32 @@ describe('createMastraCode', () => {
       backgroundTools: { enabled: true },
     });
 
-    await createMastraCode();
+    const enabled = await createMastraCode();
     expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
+    expect(enabled.backgroundCompletionEvents).toBeDefined();
   });
 
-  it('configures server-owned background tasks with the resolved setting and completion callbacks', async () => {
+  it('registers background signal processing only when background tools are enabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ disablePlugins: true });
+    expect(resolveInputProcessors().map(processor => processor.id)).not.toContain('background-work-signals');
+
+    agentConstructorMock.mockClear();
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      backgroundTools: { enabled: true },
+    });
+
+    await createMastraCode({ disablePlugins: true });
+    expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
+  });
+
+  it('configures server-owned background tasks only when enabled', async () => {
     const { prepareAgentControllerMount } = await import('../index.js');
 
     const disabled = await prepareAgentControllerMount();
-    expect(disabled.mastraArgs.backgroundTasks).toEqual(
-      expect.objectContaining({
-        enabled: false,
-        recoverStaleTasksOnStart: false,
-        onTaskComplete: expect.any(Function),
-        onTaskFailed: expect.any(Function),
-        onTaskCancelled: expect.any(Function),
-      }),
-    );
+    expect(disabled.mastraArgs.backgroundTasks).toBeUndefined();
 
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
@@ -525,7 +535,15 @@ describe('createMastraCode', () => {
     });
 
     const enabled = await prepareAgentControllerMount();
-    expect(enabled.mastraArgs.backgroundTasks?.enabled).toBe(true);
+    expect(enabled.mastraArgs.backgroundTasks).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        recoverStaleTasksOnStart: false,
+        onTaskComplete: expect.any(Function),
+        onTaskFailed: expect.any(Function),
+        onTaskCancelled: expect.any(Function),
+      }),
+    );
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
@@ -1211,7 +1229,6 @@ describe('createMastraCode', () => {
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1238,7 +1255,6 @@ describe('createMastraCode', () => {
     expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
       'needs-mastra',
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1270,7 +1286,6 @@ describe('createMastraCode', () => {
     // scaffolding, so they run after it — last in each configured array.
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
       'acme-input',
@@ -1283,7 +1298,6 @@ describe('createMastraCode', () => {
 
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1327,7 +1341,6 @@ describe('createMastraCode', () => {
     expect(provider.isConnected).toBe(true);
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
       'acme-provider-input',
@@ -1393,7 +1406,6 @@ describe('createMastraCode', () => {
     expect(() => resolveInputProcessors()).not.toThrow();
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
-      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
