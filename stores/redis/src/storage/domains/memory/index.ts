@@ -710,10 +710,13 @@ export class StoreMemoryRedis extends MemoryStorage {
         };
       }
 
+      // Fetch per-thread message IDs concurrently; Promise.all preserves
+      // thread order so downstream results are identical to sequential fetch.
+      const idsPerThread = await Promise.all(
+        threadIds.map(async tid => ({ tid, msgIds: await this.client.zRange(getThreadMessagesKey(tid), 0, -1) })),
+      );
       const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
-      for (const tid of threadIds) {
-        const threadMessagesKey = getThreadMessagesKey(tid);
-        const msgIds = await this.client.zRange(threadMessagesKey, 0, -1);
+      for (const { tid, msgIds } of idsPerThread) {
         for (const mid of msgIds) {
           allMessageIdsWithThreads.push({ threadId: tid, messageId: mid });
         }

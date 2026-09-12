@@ -111,9 +111,9 @@ export class FilesystemDB {
       throw new Error(`Configured domain path "${directory}" is a file, expected a directory`);
     }
 
-    return readdirSync(baseDir)
-      .filter(file => extname(file) === extension && statSync(join(baseDir, file)).isFile())
-      .map(file => `${directory}/${file}`);
+    return readdirSync(baseDir, { withFileTypes: true })
+      .filter(entry => entry.isFile() && extname(entry.name) === extension)
+      .map(entry => `${directory}/${entry.name}`);
   }
 
   /**
@@ -267,8 +267,12 @@ export class FilesystemDB {
 /**
  * JSON reviver that converts ISO date strings back to Date objects.
  */
+const ISO_DATE_PREFIX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 function dateReviver(_key: string, value: unknown): unknown {
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+  // Fast path: shortest ISO datetime ('YYYY-MM-DDTHH:MM:SS') is 19 chars
+  // with '-' at index 4. Skips the regex for all other strings.
+  if (typeof value !== 'string' || value.length < 19 || value.charCodeAt(4) !== 45) return value;
+  if (ISO_DATE_PREFIX.test(value)) {
     const d = new Date(value);
     if (!isNaN(d.getTime())) return d;
   }
@@ -280,12 +284,11 @@ function dateReviver(_key: string, value: unknown): unknown {
  */
 function walkDir(dir: string): string[] {
   const results: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
       results.push(...walkDir(fullPath));
-    } else {
+    } else if (entry.isFile()) {
       results.push(fullPath);
     }
   }
