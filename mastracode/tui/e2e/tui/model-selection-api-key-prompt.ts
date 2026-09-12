@@ -56,6 +56,8 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/Custom pack: Missing Key Prompt E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
+    // Rows: [Activate, Set fallback…, Edit, Share, Delete].
+    terminal.write('\x1b[B');
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Missing Key Prompt E2E/i, terminal, 8_000);

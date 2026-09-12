@@ -13,28 +13,31 @@ function toManagedAccounts(accounts: OAuthAccountRecord[]) {
 }
 
 /**
- * After a successful login the active account was just registered — offer a
+ * After a successful login the account was just registered — offer a
  * one-shot rename before the dialog closes. Escape or empty submit keeps the
  * label the registry resolved (re-authenticated accounts keep their previous
  * label; new accounts fall back to the provider hook or the default).
  */
-async function promptForAccountName(ctx: SlashCommandContext, dialog: LoginDialogComponent, providerId: string) {
+async function promptForAccountName(
+  ctx: SlashCommandContext,
+  dialog: LoginDialogComponent,
+  providerId: string,
+  account: OAuthAccountRecord,
+) {
   const authStorage = ctx.authStorage;
   if (!authStorage) return;
-  const active = authStorage.getActiveAccount(providerId);
-  if (!active) return;
-  const input = await dialog.promptOptional(`Name this account (Enter to keep "${active.label}")`);
+  const input = await dialog.promptOptional(`Name this account (Enter to keep "${account.label}")`);
   if (input === null) return;
   const name = input.trim();
-  if (name && name !== active.label) {
-    authStorage.renameAccount(providerId, active.id, name);
+  if (name && name !== account.label) {
+    authStorage.renameAccount(providerId, account.id, name);
   }
 }
 
 async function performLogin(
   ctx: SlashCommandContext,
   providerId: string,
-  opts?: { replaceAccountId?: string },
+  opts?: { replaceAccountId?: string; activate?: boolean },
 ): Promise<void> {
   const provider = getOAuthProviders().find(p => p.id === providerId);
   const providerName = provider?.name || providerId;
@@ -82,22 +85,29 @@ async function performLogin(
         },
         opts,
       )
-      .then(async () => {
-        await promptForAccountName(ctx, dialog, providerId);
+      .then(async account => {
+        await promptForAccountName(ctx, dialog, providerId, account);
         ctx.state.ui.hideOverlay();
         ctx.state.controller.invalidateAvailableModelsCache();
 
         // The `/login` command must not change the user's active model or model
         // pack — that only belongs to the onboarding flow. Only auto-select the
         // provider default when no model is selected yet (e.g. onboarding was
-        // skipped), so the user isn't left without a usable model.
-        const hasSelectedModel = ctx.state.session.model.get() !== '';
-        const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
-        if (defaultModel && !hasSelectedModel) {
-          await ctx.state.session.model.switch({ modelId: defaultModel });
-          ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
+        // skipped), so the user isn't left without a usable model. An
+        // add-another login (activate:false) never touches the model: the
+        // account was registered but not activated.
+        const label = ctx.authStorage?.listAccounts(providerId).find(a => a.id === account.id)?.label ?? account.label;
+        if (opts?.activate === false) {
+          ctx.showInfo(`Added ${label} to ${providerName} (not active)`);
         } else {
-          ctx.showInfo(`Successfully logged in to ${providerName}`);
+          const hasSelectedModel = ctx.state.session.model.get() !== '';
+          const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
+          if (defaultModel && !hasSelectedModel) {
+            await ctx.state.session.model.switch({ modelId: defaultModel });
+            ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
+          } else {
+            ctx.showInfo(`Successfully logged in to ${providerName}`);
+          }
         }
         await seedOMDefaultAfterLogin(ctx.state, providerId, message => ctx.showInfo(message));
 
@@ -133,7 +143,15 @@ async function openAccountManager(
     const manager = new LoginAccountManagerComponent(providerName, toManagedAccounts(initialAccounts), {
       onAddAnother: () => {
         finish();
-        void performLogin(ctx, providerId);
+        // Add-another registers the account without activating it, then
+        // returns to the manager so the user can activate it (or Esc out).
+        // Cancelled/failed logins land back here too.
+        void performLogin(ctx, providerId, { activate: false }).then(() => {
+          const accounts = ctx.authStorage?.listAccounts(providerId) ?? [];
+          if (accounts.length > 0) {
+            return openAccountManager(ctx, providerId, providerName, accounts);
+          }
+        });
       },
       onReauthenticate: accountId => {
         finish();
