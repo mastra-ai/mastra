@@ -109,10 +109,19 @@ interface RenderThreadOptions {
   threadId?: string;
   suggestedPrompts?: string[];
   isHistoryLoading?: boolean;
+  isLoadingPrevious?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
 }
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
-  const { hasModelList = true, threadId = 'thread-1', suggestedPrompts, isHistoryLoading } = options;
+  const {
+    hasModelList = true,
+    threadId = 'thread-1',
+    suggestedPrompts,
+    isHistoryLoading,
+    isLoadingPrevious,
+    onLoadPrevious,
+  } = options;
 
   return (
     <Wrapper threadId={threadId}>
@@ -132,6 +141,8 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
             suggestedPrompts={suggestedPrompts}
             hasModelList={hasModelList}
             isHistoryLoading={isHistoryLoading}
+            isLoadingPrevious={isLoadingPrevious}
+            onLoadPrevious={onLoadPrevious}
           />
         </ChatProvider>
       </ThreadInputProvider>
@@ -269,6 +280,34 @@ describe('Thread', () => {
         expect(screen.getByText('How can I help you today?')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Check the weather' })).toBeTruthy();
       });
+    });
+  });
+
+  describe('Thread pagination (fetching older messages)', () => {
+    it('renders a loading skeleton at the top when fetching previous page', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('live question')], { isLoadingPrevious: true, onLoadPrevious: vi.fn() });
+      });
+
+      // The live messages should still be visible
+      expect(screen.getByText('live question', { selector: 'p' })).toBeTruthy();
+      
+      // The skeleton for fetching older messages should be rendered
+      const skeletonColumn = screen.getByLabelText('Loading older messages');
+      expect(skeletonColumn).toBeTruthy();
+      expect(skeletonColumn.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('does not render the skeleton when not fetching previous page', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([userMessage('live question')], { isLoadingPrevious: false });
+      });
+
+      expect(screen.queryByLabelText('Loading older messages')).toBeNull();
     });
   });
 

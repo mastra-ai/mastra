@@ -132,6 +132,7 @@ import type {
   SaveScoreResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  ListMemoryThreadMessagesParams,
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
@@ -414,18 +415,7 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: {
-      agentId?: string;
-      networkId?: string;
-      requestContext?: RequestContext | Record<string, any>;
-      includeSystemReminders?: boolean;
-      /** 0-based page index. Page 0 = most recent messages when orderBy is DESC. */
-      page?: number;
-      /** Number of messages per page. */
-      perPage?: number;
-      /** Sort order for messages. Defaults to server default (DESC = newest first). */
-      orderBy?: { field: string; direction: 'ASC' | 'DESC' };
-    } = {},
+    opts: ListMemoryThreadMessagesParams = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     const params = new URLSearchParams();
     if (opts.agentId) params.set('agentId', opts.agentId);

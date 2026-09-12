@@ -816,6 +816,11 @@ export interface UpdateMemoryThreadParams {
 
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
   includeSystemReminders?: boolean;
+  /** Optional agent ID. When provided, uses the agent's memory endpoint. */
+  agentId?: string;
+  /** Optional network ID. When provided, uses the network memory endpoint. */
+  networkId?: string;
+  requestContext?: RequestContext | Record<string, any>;
 };
 
 export type ListMemoryThreadMessagesResponse = {

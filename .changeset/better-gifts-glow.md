@@ -2,4 +2,13 @@
 '@mastra/client-js': patch
 ---
 
-Fixed an issue in Mastra Studio where chat history was capped at the last 10 messages. Users can now seamlessly scroll up to view their complete conversation history.
+# Add pagination support to listThreadMessages
+
+The `listThreadMessages` client API now accepts pagination parameters to allow fetching previous chunks of conversation history.
+
+```ts
+const messages = await client.listThreadMessages('thread-123', {
+  page: 1,
+  perPage: 40,
+});
+```
