@@ -53,6 +53,12 @@ describe(`Wave 3 adversarial noninterference proof (${adapter})`, () => {
       formerOwnerReplacementApprovalDenied: true,
       currentScopeAdminApprovedReplacement: true,
       replacementRejected: true,
+      sealedContextHiddenFromTargetReader: true,
+      sealedContextVisibleThroughApprovalAuthority: true,
+      sealedReReviewDeniedWithoutProposerContext: true,
+      sealedReReviewAllowedThroughApprovalAuthority: true,
+      hiddenProposalBacklogNoninterference: true,
+      hiddenProposalBacklogPagination: true,
       warmCacheVisibleBeforeRevocation: true,
       warmCacheVisibleAfterRevocation: false,
     });
