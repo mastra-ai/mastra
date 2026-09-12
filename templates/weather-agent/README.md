@@ -20,10 +20,12 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 1. **Clone the template**
    - Run `npx create-mastra@latest --template weather-agent` to scaffold the project locally.
-2. **Add your API keys**
+2. **Install dependencies**
+   - Run `npm install` (or `pnpm install`).
+3. **Add your API keys**
    - Copy `.env.example` to `.env` and fill in your key.
-3. **Start the dev server**
-   - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
+4. **Start the dev server**
+   - Run `npm run dev` (runs `mastra dev`) and open [localhost:4111](http://localhost:4111) to try it out.
 
 ## About Mastra templates
 

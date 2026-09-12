@@ -5,7 +5,7 @@ This guide provides instructions for developers who want to contribute to or wor
 ## Prerequisites
 
 - **Node.js** (v22.13.0 or later)
-- **pnpm** (v10.18.0 or later): Mastra uses pnpm for package management
+- **pnpm** (v11.x — repo pins `pnpm@11.21.0` in root `package.json:packageManager`, `engines` requires `>=11.0.0`; run `corepack enable && corepack prepare pnpm@11.21.0 --activate`): Mastra uses pnpm for package management
 - **Docker** (for local development services): Only needed for a subset of tests, not required for general development
 
 ## Getting started
@@ -148,7 +148,14 @@ Mastra uses Vitest for testing. You can run all tests or only specific packages.
   pnpm test:watch
   ```
 
-Some tests require environment variables to be set. If you're unsure about the required variables, ask for help in the pull request or wait for CI to run the tests.
+Some tests require environment variables to be set. Copy the block below to a `.env` file in the root directory; only fill what your test target needs. CI-only keys (Pinecone/Cloudflare) can stay empty for `test:core`.
+
+| Var | Needed for |
+| `OPENAI_API_KEY` | `pnpm test:core`, `test:memory`, agent evals |
+| `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Gateway/provider fallback tests |
+| `COHERE_API_KEY` / `PINECONE_API_KEY` | RAG/vector provider tests (CI-only, optional locally) |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Cloudflare store tests (CI-only, optional locally) |
+| `DB_URL=postgresql://postgres:postgres@localhost:5432/mastra` | pg store tests (after `pnpm run dev:services:up`) |
 
 Create a `.env` file in the root directory with the following content:
 
