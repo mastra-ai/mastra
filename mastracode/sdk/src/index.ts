@@ -31,7 +31,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { InMemoryDB, InMemoryHarness, MastraCompositeStore, ScoresInMemory } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -571,6 +571,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const harnessStorage = new InMemoryHarness();
+  // mastracode registers `outcome` and `efficiency` scorers that fire on every
+  // session, and the scorer hook persists each result through the legacy scores
+  // domain (`validateAndSaveScore` → `getStore('scores')`). Nothing in
+  // mastracode reads scores back — there is no UI, command, or API surface over
+  // them — so writing them to libsql only grew mastra.db without bound. Keep the
+  // domain in-memory (like harness above) so scorer runs stay error-free but
+  // leave nothing on disk.
+  const scoresStorage = new ScoresInMemory({ db: new InMemoryDB() });
 
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',
@@ -580,6 +588,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
       harness: harnessStorage,
+      scores: scoresStorage,
     },
   });
 

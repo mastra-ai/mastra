@@ -219,7 +219,7 @@ export async function reclaimLibSQLDisk(
     if (journalModeFromHeader(file) !== 'delete') {
       throw new Error(
         `${file} is in use by another process — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Native `libsql` driver, not `@libsql/client`: the wrapper's close() can
@@ -270,7 +270,7 @@ export async function reclaimLibSQLDisk(
       rmSync(tmp, { force: true });
       throw new Error(
         `${file} was opened by another process during compaction — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Swap the compacted copy into place. The old WAL/SHM sidecars belong to
@@ -442,7 +442,9 @@ export async function runStorageMaintenance(opts: {
 
   if (!vacuum) {
     if (maintenance.reclaimDisk) {
-      log('Deleted rows free pages inside the db file but not on disk. Run /prune vacuum to reclaim disk space.');
+      log(
+        'Deleted rows free pages inside the db file but not on disk. Run /prune vacuum (or mastracode prune --vacuum) to reclaim disk space.',
+      );
     }
     return;
   }
