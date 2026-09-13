@@ -2285,7 +2285,13 @@ export class KnowledgePG extends KnowledgeStorage {
       if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
       await this.#activity(
         tx,
-        input.status === 'rejected' ? 'reject' : 'conflict',
+        input.status === 'approved'
+          ? 'approve'
+          : input.status === 'rejected'
+            ? 'reject'
+            : input.status === 'escalated'
+              ? 'escalate'
+              : 'conflict',
         proposal.targetType,
         proposal.targetId,
         input.reviewerContextScopeId,

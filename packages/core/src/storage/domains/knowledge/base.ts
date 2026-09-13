@@ -75,7 +75,7 @@ export interface KnowledgeImportRun {
   completedAt?: Date;
 }
 
-export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted' | 'escalated';
 
 export type KnowledgeProposalApprovalCapability = 'append' | 'edit' | 'delete' | 'createChildren' | 'manageAccess';
 
@@ -155,7 +155,7 @@ export interface ListKnowledgeProposalsOutput {
 
 export interface ReviewKnowledgeProposalInput {
   id: string;
-  status: Exclude<KnowledgeProposalStatus, 'pending' | 'approved'>;
+  status: Exclude<KnowledgeProposalStatus, 'pending'>;
   reviewerContextScopeId: string;
   reviewReason?: string;
   expectedAccessEpoch: number;
@@ -254,7 +254,8 @@ export type KnowledgeActivityAction =
   | 'propose'
   | 'approve'
   | 'reject'
-  | 'conflict';
+  | 'conflict'
+  | 'escalate';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;

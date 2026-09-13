@@ -2113,7 +2113,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
       await this.#activity(
         tx,
-        status === 'rejected' ? 'reject' : 'conflict',
+        status === 'approved'
+          ? 'approve'
+          : status === 'rejected'
+            ? 'reject'
+            : status === 'escalated'
+              ? 'escalate'
+              : 'conflict',
         proposal.targetType,
         proposal.targetId,
         input.reviewerContextScopeId,

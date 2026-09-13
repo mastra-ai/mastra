@@ -11,4 +11,4 @@
 '@mastra/pg': patch
 ---
 
-Added scope-based Knowledge proposals for node creation, editing, movement, merging, deletion, restoration, scope lifecycle, promotion, and record-scope changes with per-target conflict re-review.
+Added scope-based Knowledge proposals for every governed mutation, plus gap flags and a scheduled verifier that rechecks claims against fresh evidence, applies authorized corrections, rejects contradictions, and escalates protected or ambiguous items.
