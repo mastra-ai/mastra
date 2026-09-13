@@ -3,6 +3,8 @@ import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
   TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
@@ -78,6 +80,91 @@ describe('MongoDB canonical Knowledge support', () => {
       ).resolves.toEqual([expect.objectContaining({ id: visibleId, claimedBy: 'scoped-worker' })]);
     } finally {
       await collection.deleteMany({ id: { $regex: `^${suffix}` } });
+    }
+  });
+
+  it('filters current owner visibility before limiting scoped semantic work', async () => {
+    const store = createStore();
+    await store.init();
+    const suffix = randomUUID();
+    const hiddenScopeId = randomUUID();
+    const visibleScopeId = randomUUID();
+    const hiddenNodeId = randomUUID();
+    const visibleNodeId = randomUUID();
+    const visibleRecordId = randomUUID();
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const records = await connector.getCollection(TABLE_KNOWLEDGE_RECORDS);
+    const recordScopes = await connector.getCollection(TABLE_KNOWLEDGE_RECORD_SCOPES);
+    const outbox = await connector.getCollection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
+    const nodes = await connector.getCollection('mastra_knowledge_nodes');
+    const nodeScopes = await connector.getCollection('mastra_knowledge_node_scopes');
+    const hiddenRecords = Array.from({ length: 1001 }, (_, index) => ({
+      id: randomUUID(),
+      nodeId: hiddenNodeId,
+      text: `hidden ${index}`,
+      metadata: {},
+      version: 1,
+      createdAt,
+      updatedAt: createdAt,
+    }));
+    const recordIds = [...hiddenRecords.map(record => record.id), visibleRecordId];
+    try {
+      await store.createNode({ id: hiddenScopeId, name: `${suffix} hidden scope`, isScope: true, scopeIds: [] });
+      await store.createNode({ id: visibleScopeId, name: `${suffix} visible scope`, isScope: true, scopeIds: [] });
+      await store.createNode({ id: hiddenNodeId, name: `${suffix} hidden owner`, scopeIds: [hiddenScopeId] });
+      await store.createNode({ id: visibleNodeId, name: `${suffix} visible owner`, scopeIds: [visibleScopeId] });
+      await outbox.deleteMany({
+        documentId: {
+          $in: [hiddenScopeId, visibleScopeId, hiddenNodeId, visibleNodeId].map(id => `knowledge:node:${id}`),
+        },
+      });
+      await records.insertMany([
+        ...hiddenRecords,
+        {
+          id: visibleRecordId,
+          nodeId: visibleNodeId,
+          text: 'visible',
+          metadata: {},
+          version: 1,
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ]);
+      await recordScopes.insertMany(recordIds.map(recordId => ({ recordId, scopeNodeId: visibleScopeId })));
+      await outbox.insertMany(
+        recordIds.map((recordId, index) => ({
+          id: `${suffix}-outbox-${String(index).padStart(4, '0')}`,
+          idempotencyKey: `${suffix}-outbox-${recordId}`,
+          documentId: `knowledge:record:${recordId}`,
+          documentType: 'record',
+          operation: 'upsert',
+          scopeIds: [visibleScopeId],
+          status: 'pending',
+          attempts: 0,
+          availableAt: createdAt,
+          createdAt: new Date(createdAt.getTime() + index),
+        })),
+      );
+
+      await expect(store.listSemanticOutbox({ scopeIds: [visibleScopeId], limit: 1 })).resolves.toEqual([
+        expect.objectContaining({ documentId: `knowledge:record:${visibleRecordId}` }),
+      ]);
+      await expect(
+        store.claimSemanticOutbox({
+          workerId: 'owner-aware-worker',
+          scopeIds: [visibleScopeId],
+          limit: 1,
+          now: new Date(createdAt.getTime() + 2000),
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({ documentId: `knowledge:record:${visibleRecordId}`, claimedBy: 'owner-aware-worker' }),
+      ]);
+    } finally {
+      await outbox.deleteMany({ id: { $regex: `^${suffix}` } });
+      await recordScopes.deleteMany({ recordId: { $in: recordIds } });
+      await records.deleteMany({ id: { $in: recordIds } });
+      await nodeScopes.deleteMany({ nodeId: { $in: [hiddenScopeId, visibleScopeId, hiddenNodeId, visibleNodeId] } });
+      await nodes.deleteMany({ id: { $in: [hiddenScopeId, visibleScopeId, hiddenNodeId, visibleNodeId] } });
     }
   });
 

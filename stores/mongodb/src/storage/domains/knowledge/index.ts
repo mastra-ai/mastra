@@ -4,6 +4,7 @@ import {
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
+  assertKnowledgeProposalMutationSemantics,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
@@ -2421,6 +2422,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
+      if (!input.verifiedMutation && proposal.operation !== mutation.kind)
+        throw new KnowledgeConflictError('Proposal operation does not match its payload');
+      assertKnowledgeProposalMutationSemantics(mutation, targets);
       try {
         await this.#applyProposalMutation(
           session,
@@ -3241,6 +3245,167 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return result;
   }
 
+  #semanticOutboxVisibilityPipeline(scopeIds: string[]): Document[] {
+    const visibleNode = (nodeId: unknown, operation: unknown): Document[] => [
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $eq: ['$id', nodeId] },
+              { $or: [{ $eq: [operation, 'delete'] }, { $eq: [{ $type: '$deletedAt' }, 'missing'] }] },
+            ],
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_NODE_SCOPES,
+          let: { nodeId: '$id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $and: [{ $eq: ['$nodeId', '$$nodeId'] }, { $in: ['$scopeNodeId', scopeIds] }] },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: '__memberships',
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $or: [
+              { $and: [{ $eq: ['$isScope', true] }, { $in: ['$id', scopeIds] }] },
+              { $gt: [{ $size: '$__memberships' }, 0] },
+            ],
+          },
+        },
+      },
+      { $limit: 1 },
+    ];
+    return [
+      { $set: { __targetId: { $arrayElemAt: [{ $split: ['$documentId', ':'] }, -1] } } },
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_NODES,
+          let: { nodeId: '$__targetId', operation: '$operation', documentType: '$documentType' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$$documentType', 'node'] } } },
+            ...visibleNode('$$nodeId', '$$operation'),
+          ],
+          as: '__visibleNode',
+        },
+      },
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_RECORDS,
+          localField: '__targetId',
+          foreignField: 'id',
+          as: '__recordExists',
+        },
+      },
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_RECORDS,
+          let: { recordId: '$__targetId', operation: '$operation', documentType: '$documentType' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$$documentType', 'record'] },
+                    { $eq: ['$id', '$$recordId'] },
+                    {
+                      $or: [{ $eq: ['$$operation', 'delete'] }, { $eq: [{ $type: '$deletedAt' }, 'missing'] }],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: TABLE_KNOWLEDGE_RECORD_SCOPES,
+                let: { recordId: '$id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [{ $eq: ['$recordId', '$$recordId'] }, { $in: ['$scopeNodeId', scopeIds] }],
+                      },
+                    },
+                  },
+                  { $limit: 1 },
+                ],
+                as: '__recordScopes',
+              },
+            },
+            {
+              $lookup: {
+                from: TABLE_KNOWLEDGE_NODES,
+                let: { nodeId: '$nodeId', operation: '$$operation' },
+                pipeline: visibleNode('$$nodeId', '$$operation'),
+                as: '__owner',
+              },
+            },
+            {
+              $lookup: {
+                from: TABLE_KNOWLEDGE_MENTIONS,
+                let: { recordId: '$id', operation: '$$operation' },
+                pipeline: [
+                  { $match: { $expr: { $eq: ['$recordId', '$$recordId'] } } },
+                  {
+                    $lookup: {
+                      from: TABLE_KNOWLEDGE_NODES,
+                      let: { nodeId: '$targetNodeId', operation: '$$operation' },
+                      pipeline: visibleNode('$$nodeId', '$$operation'),
+                      as: '__visibleTarget',
+                    },
+                  },
+                  { $match: { $expr: { $eq: [{ $size: '$__visibleTarget' }, 0] } } },
+                  { $limit: 1 },
+                ],
+                as: '__hiddenMentions',
+              },
+            },
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $gt: [{ $size: '$__recordScopes' }, 0] },
+                    { $gt: [{ $size: '$__owner' }, 0] },
+                    { $eq: [{ $size: '$__hiddenMentions' }, 0] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: '__visibleRecord',
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $or: [
+              { $and: [{ $eq: ['$documentType', 'node'] }, { $eq: ['$operation', 'delete'] }] },
+              { $gt: [{ $size: '$__visibleNode' }, 0] },
+              {
+                $and: [
+                  { $eq: ['$documentType', 'record'] },
+                  { $eq: ['$operation', 'delete'] },
+                  { $eq: [{ $size: '$__visibleRecord' }, 0] },
+                  { $eq: [{ $size: { $ifNull: ['$__recordExists', []] } }, 0] },
+                ],
+              },
+              { $gt: [{ $size: '$__visibleRecord' }, 0] },
+            ],
+          },
+        },
+      },
+    ];
+  }
+
   async listSemanticOutbox(
     input: {
       status?: KnowledgeSemanticOutboxEntry['status'];
@@ -3252,21 +3417,19 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const filter: Filter<Document> = {};
     if (input.status) filter.status = input.status;
     if (vouched) filter.scopeIds = { $in: vouched };
-    const rows = await (
-      await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)
-    )
-      .find(filter)
-      .sort({ createdAt: 1, id: 1 })
-      .limit(1000)
-      .toArray();
-    const result: KnowledgeSemanticOutboxEntry[] = [];
-    for (const row of rows) {
-      const entry = this.#semanticEntry(row);
-      if (vouched && !(await this.#isSemanticEntryVisible(entry, vouched))) continue;
-      result.push(entry);
-      if (result.length >= Math.min(Math.max(input.limit ?? 100, 1), 100)) break;
-    }
-    return result;
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const collection = await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
+    const rows = vouched
+      ? await collection
+          .aggregate([
+            { $match: filter },
+            ...this.#semanticOutboxVisibilityPipeline(vouched),
+            { $sort: { createdAt: 1, id: 1 } },
+            { $limit: limit },
+          ])
+          .toArray()
+      : await collection.find(filter).sort({ createdAt: 1, id: 1 }).limit(limit).toArray();
+    return rows.map(row => this.#semanticEntry(row));
   }
 
   async claimSemanticOutbox(input: {
@@ -3288,11 +3451,24 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       const vouched = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
       const pendingFilter: Filter<Document> = { status: 'pending', availableAt: { $lte: now } };
       if (vouched) pendingFilter.scopeIds = { $in: vouched };
-      const rows = await collection
-        .find(pendingFilter, sessionOptions(session))
-        .sort({ createdAt: 1, id: 1 })
-        .limit(1000)
-        .toArray();
+      const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+      const rows = vouched
+        ? await collection
+            .aggregate(
+              [
+                { $match: pendingFilter },
+                ...this.#semanticOutboxVisibilityPipeline(vouched),
+                { $sort: { createdAt: 1, id: 1 } },
+                { $limit: limit },
+              ],
+              sessionOptions(session),
+            )
+            .toArray()
+        : await collection
+            .find(pendingFilter, sessionOptions(session))
+            .sort({ createdAt: 1, id: 1 })
+            .limit(limit)
+            .toArray();
       if (vouched) {
         for (const row of rows) {
           const successor = this.#semanticEntry(row);
