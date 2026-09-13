@@ -44,6 +44,7 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
         _meta: {
           customField: 'custom-value',
           version: '1.0.0',
+          ui: { resourceUri: 'ui://calculator/main' },
         },
       },
       execute: async ({ query }) => {
@@ -128,5 +129,23 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
     expect((annotatedTool as any)._meta?.customField).toBe('custom-value');
     expect((annotatedTool as any)._meta?.version).toBe('1.0.0');
     expect((annotatedTool as any)._meta?.mastra?.strict).toBe(true);
+  });
+
+  it('should preserve tool _meta (incl. ui.resourceUri) on the tools/call result', async () => {
+    const result = await rawMcpClient.callTool({
+      name: 'annotatedTool',
+      arguments: { query: 'hello' },
+    });
+
+    expect(result.isError).toBe(false);
+
+    // The tool's _meta must be present on the call result so spec-compliant
+    // (non-Studio) MCP hosts can detect which MCP App to render.
+    const resultMeta = result._meta as Record<string, any> | undefined;
+    expect(resultMeta).toBeDefined();
+    expect(resultMeta!.ui?.resourceUri).toBe('ui://calculator/main');
+    // The legacy flat key must also be present, mirroring tools/list.
+    expect(resultMeta!['ui/resourceUri']).toBe('ui://calculator/main');
+    expect(resultMeta!.customField).toBe('custom-value');
   });
 });
