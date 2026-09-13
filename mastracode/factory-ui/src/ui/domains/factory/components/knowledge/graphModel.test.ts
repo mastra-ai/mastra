@@ -16,6 +16,7 @@ import {
   graphNodesWithBoundaries,
   graphRecordsWithBoundaries,
   graphTraversalEdges,
+  knowledgeEdgeHoverText,
   RECORD_DOT_SIZE,
   RECORD_JUNCTION_SIZE,
   RECORD_PIN_SIZE,
@@ -309,6 +310,17 @@ describe('structural lens edge composition', () => {
     const recordFlow = toFlowGraph([node('a'), node('b')], recordPairEdges(records));
     const rendered = renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true);
     expect(rendered.map(edge => edge.data?.linkType)).toEqual(['contains', 'wikilink']);
+  });
+
+  it('describes containment separately from knowledge-record mentions', () => {
+    const [contains, wikilink] = toFlowGraph(
+      [node('scope'), node('a'), node('b')],
+      [{ id: 'contains:scope:a', source: 'scope', target: 'a', type: 'contains' }, edge('a', 'b')],
+    ).edges;
+    if (!contains || !wikilink) throw new Error('Expected both graph edges');
+
+    expect(knowledgeEdgeHoverText(contains)).toBe('Direct member of this scope');
+    expect(knowledgeEdgeHoverText(wikilink)).toBe('Mentioned in a knowledge record');
   });
 });
 
