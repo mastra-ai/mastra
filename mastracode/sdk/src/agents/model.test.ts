@@ -9,10 +9,12 @@ const { appDataDir, previousEnv } = vi.hoisted(() => {
   return { appDataDir: dir, previousEnv: previous };
 });
 
-import { rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MastraGateway } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
 import { getDynamicModel, resolveModel } from './model.js';
 
@@ -21,6 +23,7 @@ afterEach(() => {
   else process.env.KIMI_API_KEY = previousEnv.kimiApiKey;
   if (previousEnv.mastraGatewayApiKey === undefined) delete process.env.MASTRA_GATEWAY_API_KEY;
   else process.env.MASTRA_GATEWAY_API_KEY = previousEnv.mastraGatewayApiKey;
+  setCredentialStoreProvider(undefined);
   vi.restoreAllMocks();
 });
 
@@ -44,6 +47,111 @@ describe('getDynamicModel error branches', () => {
     expect(() => getDynamicModel({ requestContext })).toThrow(
       'No model selected. Use /models to select a model first.',
     );
+  });
+});
+
+describe('getDynamicModel fallback chain', () => {
+  function seedSettings(packFallbacks: Record<string, string>) {
+    mkdirSync(appDataDir, { recursive: true });
+    writeFileSync(
+      join(appDataDir, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
+        models: { packFallbacks },
+      }),
+      'utf-8',
+    );
+  }
+
+  function requestWithSession(modelId: string, modeId = 'build') {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modelId, modeId } });
+    return { requestContext };
+  }
+
+  it('returns a bare model when no fallback is configured — identical to before', () => {
+    seedSettings({});
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
+  it('returns a bare model for a manual /model selection that matches no pack', () => {
+    seedSettings({ anthropic: 'openai' });
+
+    const model = getDynamicModel(requestWithSession('openai/gpt-5.4-mini'));
+
+    expect(Array.isArray(model)).toBe(false);
+  });
+
+  it('builds the fallback array from the active pack chain, resolving each pack for the same mode', () => {
+    seedSettings({ anthropic: 'openai', openai: 'github-copilot' });
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    expect(Array.isArray(model)).toBe(true);
+    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
+    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+  });
+
+  it('truncates the chain at a fallback pack that lacks the session mode model', () => {
+    seedSettings({ anthropic: 'custom:empty' });
+    const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));
+    raw.customModelPacks = [{ name: 'empty', models: {} }];
+    writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(raw), 'utf-8');
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+
+    // The fallback pack cannot serve mode 'build', so the chain collapses to
+    // the primary alone — a bare model, not a one-entry fallback array.
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
+  it('truncates the chain at a fallback entry whose model fails to resolve (deployed fail-closed)', async () => {
+    seedSettings({ anthropic: 'openai' });
+    // Deployed-style tenant store: anthropic connected, openai not, and no
+    // environment fallback — openai model resolution throws.
+    setCredentialStoreProvider(() => ({
+      allowEnvironmentFallback: false,
+      reload: () => {},
+      get: provider => (provider === 'anthropic' ? { type: 'api_key' as const, key: 'sk-ant-tenant' } : undefined),
+      getStoredApiKey: provider => (provider === 'anthropic' ? 'sk-ant-tenant' : undefined),
+      getApiKey: async provider => (provider === 'anthropic' ? 'sk-ant-tenant' : undefined),
+    }));
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user_1', id: 'prov_1', organizationId: 'org_1' });
+    requestContext.set('controller', { session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' } });
+
+    const model = getDynamicModel({ requestContext });
+
+    expect(Array.isArray(model)).toBe(false);
+    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+  });
+
+  it('gives a revisited pack a unique per-occurrence id (A→B→A chain)', () => {
+    seedSettings({ anthropic: 'openai', openai: 'anthropic' });
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
+    const entries = model as Array<{ id?: string }>;
+
+    // One revisit total per cascade (Q15: full circle, one revisit, surface).
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
+  });
+
+  it('identifies the pack through builtin overrides applied to the session model', () => {
+    seedSettings({ anthropic: 'openai' });
+    const raw = JSON.parse(readFileSync(join(appDataDir, 'settings.json'), 'utf-8'));
+    raw.models.modePackOverrides = { anthropic: { build: 'anthropic/claude-haiku-4-5' } };
+    writeFileSync(join(appDataDir, 'settings.json'), JSON.stringify(raw), 'utf-8');
+
+    const model = getDynamicModel(requestWithSession('anthropic/claude-haiku-4-5'));
+
+    expect(Array.isArray(model)).toBe(true);
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai']);
   });
 });
 

@@ -123,6 +123,56 @@ describe('AuthStorage multi-account registry', () => {
     expect(accounts[0]).toMatchObject({ access: 'a1', refresh: 'r1' });
   });
 
+  it('addAccount with activate:false appends without touching the active account or slot', async () => {
+    const { storage } = makeStorage();
+
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });
+    const added = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r2', access: 'a2', expires: FUTURE },
+      { activate: false },
+    );
+
+    expect(added).toMatchObject({ refresh: 'r2', active: false });
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts).toHaveLength(2);
+    expect(accounts[0]).toMatchObject({ refresh: 'r1', active: true });
+    expect(accounts[1]).toMatchObject({ refresh: 'r2', active: false });
+    // Slot still holds the first (active) account's tokens; the new account's
+    // tokens live only in its entry.
+    expect(storage.get(PROVIDER)).toMatchObject({ type: 'oauth', refresh: 'r1', access: 'a1' });
+  });
+
+  it("addAccount with activate:false still activates the provider's first account", async () => {
+    const { storage } = makeStorage();
+
+    const added = await storage.addAccount(
+      PROVIDER,
+      { refresh: 'r1', access: 'a1', expires: FUTURE },
+      { activate: false },
+    );
+
+    expect(added.active).toBe(true);
+    expect(storage.getActiveAccount(PROVIDER)?.refresh).toBe('r1');
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1', access: 'a1' });
+  });
+
+  it('addAccount with activate:false on the already-active entry still moves fresh tokens into the slot', async () => {
+    const { storage } = makeStorage();
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });
+    await storage.addAccount(PROVIDER, { refresh: 'r2', access: 'a2', expires: FUTURE }, { activate: false });
+
+    // Re-auth of the active account through the plain add path (same refresh
+    // token): entry updated in place, active kept, slot gets the new tokens.
+    await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1-new', expires: FUTURE }, { activate: false });
+
+    const accounts = storage.listAccounts(PROVIDER);
+    expect(accounts).toHaveLength(2);
+    expect(accounts[0]).toMatchObject({ refresh: 'r1', access: 'a1-new', active: true });
+    expect(accounts[1]).toMatchObject({ refresh: 'r2', active: false });
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r1', access: 'a1-new' });
+  });
+
   it('addAccount with a colliding id updates tokens in place (re-authentication path)', async () => {
     const { storage } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE }, { label: 'Work' });

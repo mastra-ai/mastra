@@ -15,6 +15,7 @@ import {
   handleGoalEvaluation,
   handleMessageStart,
   handleMessageUpdate,
+  handlePackFallbackState,
   handleMessageEnd,
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -494,6 +495,10 @@ export async function dispatchEvent(
       }
       break;
     }
+
+    case 'state_changed':
+      await handlePackFallbackState(ectx, event);
+      break;
 
     case 'display_state_changed':
       // The AgentController emits this after every event with the updated display state.

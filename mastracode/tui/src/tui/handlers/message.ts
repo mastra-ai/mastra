@@ -9,6 +9,16 @@
  * therefore delegated to `addUserMessage` / `renderSignalMessage`; this file
  * only drives the streaming assistant component and its tool boundaries.
  */
+import { listResolvableModePacks } from '@mastra/code-sdk/agents/model';
+import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { PendingPackFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
+import {
+  loadSettings,
+  resolveDefaultThinkingLevel,
+  resolveModePackModels,
+  saveSettings,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+} from '@mastra/code-sdk/onboarding/settings';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 
 import {
@@ -273,4 +283,93 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMess
     state.currentRunSystemReminderKeys.clear();
   }
   flushRender(state);
+}
+
+/**
+ * Thread stickiness for a pack hop (Q19): the rotation processor writes the
+ * landed pack into session state (PACK_FALLBACK_STATE_KEY) when a cascade
+ * advances; this handler consumes it on the typed `state_changed` event —
+ * data parts never ride controller message events, so this key is the live
+ * channel. Applies the landed pack exactly like the manual /models switch
+ * (applyPack in models-pack.ts): every mode's thread model, subagent models,
+ * thinking-level fixups, thread metadata, and settings, so the thread stays
+ * on the landed pack until the user switches manually.
+ */
+export async function handlePackFallbackState(
+  ectx: EventHandlerContext,
+  event: { state: Record<string, unknown>; changedKeys: string[] },
+): Promise<void> {
+  if (!event.changedKeys.includes(PACK_FALLBACK_STATE_KEY)) return;
+  const pending = event.state[PACK_FALLBACK_STATE_KEY] as PendingPackFallback | null | undefined;
+  // Already consumed (or never set): bail BEFORE clearing — clearing a null
+  // key re-emits state_changed with the same changedKey and would loop.
+  if (pending === null || pending === undefined) return;
+  // Consume first — a malformed or already-applied payload must never re-trigger.
+  await ectx.state.session.state.set({ [PACK_FALLBACK_STATE_KEY]: null });
+  if (typeof pending.toPackId !== 'string' || typeof pending.toModelId !== 'string') return;
+  if (pending.toModelId.length === 0 || pending.toPackId.length === 0) return;
+
+  const settings = loadSettings();
+  const pack = listResolvableModePacks(settings).find(candidate => candidate.id === pending.toPackId);
+  if (!pack) return; // Pack deleted since the hop — state is consumed, bail.
+  const packModels = resolveModePackModels(settings, pack) as Record<string, string>;
+
+  // Per-mode models — mirrors applyPack so switching modes after the hop
+  // stays on the landed pack instead of silently returning to the old one.
+  const modes = ectx.state.controller.listModes();
+  for (const mode of modes) {
+    const modelId = packModels[mode.id];
+    if (modelId) {
+      (mode as { defaultModelId?: string }).defaultModelId = modelId;
+      await ectx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
+    }
+  }
+
+  const currentModeId = ectx.state.session.mode.get();
+  const currentModeModel = packModels[currentModeId] ?? pending.toModelId;
+  await ectx.state.session.model.switch({ modelId: currentModeModel });
+
+  // Subagent models follow the landed pack too — after a persistent-outage
+  // hop they would otherwise keep calling the dead provider.
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
+    const saModelId = packModels[modeId];
+    if (saModelId) {
+      await ectx.state.session.subagents.model.set({ modelId: saModelId, agentType });
+    }
+  }
+
+  if (ectx.state.session.thread.getId()) {
+    await ectx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pending.toPackId });
+  }
+
+  if (pending.toPackId.startsWith('custom:')) {
+    settings.models.modeDefaults = { ...packModels };
+  } else {
+    settings.models.modeDefaults = {};
+  }
+  settings.models.activeModelPackId = pending.toPackId;
+  settings.models.subagentModels = {};
+
+  // OpenAI thinking fixups — same rules as applyPack.
+  const hasOpenAI = Object.values(packModels).some(modelId => modelId.startsWith('openai/'));
+  const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
+    | string
+    | undefined;
+  const defaultThinking = resolveDefaultThinkingLevel(settings, currentModeId);
+  const effectiveThinking = sessionOverride ?? defaultThinking.level;
+  if (
+    hasOpenAI &&
+    sessionOverride === undefined &&
+    defaultThinking.source === 'global' &&
+    defaultThinking.level === 'off'
+  ) {
+    settings.preferences.thinkingLevel = 'low';
+  } else if (currentModeModel.startsWith('openai/') && effectiveThinking === 'max') {
+    await ectx.state.session.state.set({ thinkingLevel: 'xhigh' });
+  }
+
+  saveSettings(settings);
+  ectx.updateStatusLine();
+  await ectx.refreshModelAuthStatus();
 }

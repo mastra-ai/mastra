@@ -175,6 +175,18 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Pending pack hop written by the account-rotation processor on a cascade
+  // hop; the TUI consumes it on `state_changed` to apply thread stickiness,
+  // then clears it back to null. Must be declared — Zod strips unknown keys.
+  mastracodePendingPackFallback: z
+    .object({
+      fromPackId: z.string(),
+      toPackId: z.string(),
+      toModelId: z.string(),
+      reason: z.enum(['pool-exhausted', 'persistent-outage']),
+      at: z.string(),
+    })
+    .nullish(),
   // Asset directories contributed by active plugins.
   pluginSkillPaths: z.array(z.string()).default([]),
   pluginCommandPaths: z.array(z.string()).default([]),

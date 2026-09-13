@@ -4,7 +4,11 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getAvailableModePacks, getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
+import {
+  getAvailableModePacks,
+  getBuiltinModePack,
+  resolveModePackFallbackChain,
+} from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveDefaultThinkingLevel,
@@ -140,14 +144,40 @@ async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string)
   });
 }
 
+/** Detail line fragment: dim lead-in with the chain itself highlighted. */
+function fallbackChainLine(leadIn: string, chain: string): string {
+  return `${theme.fg('dim', leadIn)}${theme.fg('textHighlight', chain)}`;
+}
+
+/** Detail line for the "Set fallback…" row of a pack's action menu. */
+function fallbackActionDetail(packs: ModePack[], packId: string): string {
+  const chain = formatPackFallbackChain(loadSettings(), packs, packId);
+  return chain
+    ? fallbackChainLine('  When every account is unavailable, hop to: ', chain)
+    : theme.fg('dim', '  No fallback — when this pack is unavailable the error surfaces.');
+}
+
+/** "Activate" detail: the pack's model lines plus its fallback chain when one is set. */
+export function activateActionDetail(
+  baseDetail: string,
+  settings: GlobalSettings,
+  packs: ModePack[],
+  packId: string,
+): string {
+  const chain = formatPackFallbackChain(settings, packs, packId);
+  return baseDetail + (chain ? `\n${fallbackChainLine('  fallback → ', chain)}` : '');
+}
+
 async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'activate' | 'edit' | 'share' | 'delete' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
 
@@ -164,7 +194,8 @@ async function askCustomPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: getPackDetail(pack),
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      fallback: fallbackActionDetail(packs, pack.id),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
@@ -182,7 +213,7 @@ async function askCustomPackAction(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'edit' | 'share' | 'delete');
+      resolve(item.value as 'activate' | 'fallback' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -203,14 +234,77 @@ async function askCustomPackAction(
   });
 }
 
+/**
+ * Action menu for an unmodified built-in pack — the "view" of the pack you
+ * land on when picking it from the /models list.
+ */
+async function askBuiltinPackAction(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<'activate' | 'fallback' | null> {
+  const actions = [
+    { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Pack: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(action => ({
+      value: action.id,
+      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+    }));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+    const detailById: Record<string, string> = {
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
+      fallback: fallbackActionDetail(packs, pack.id),
+    };
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(detailById[item.value] ?? '');
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'activate' | 'fallback');
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    detailText.setText(detailById.activate!);
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
 async function askModifiedBuiltinPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   builtinPack: ModePack,
-): Promise<'activate' | 'reset' | null> {
+  packs: ModePack[],
+): Promise<'activate' | 'reset' | 'fallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
+    { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
   ] as const;
 
   return new Promise(resolve => {
@@ -225,8 +319,14 @@ async function askModifiedBuiltinPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+      activate: activateActionDetail(
+        `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+        loadSettings(),
+        packs,
+        pack.id,
+      ),
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
+      fallback: fallbackActionDetail(packs, pack.id),
     };
 
     const closeOverlay = () => {
@@ -240,7 +340,7 @@ async function askModifiedBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'reset');
+      resolve(item.value as 'activate' | 'reset' | 'fallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -394,6 +494,27 @@ async function runCustomPackEditFlow(
       },
     };
   }
+}
+
+/**
+ * Set (or clear, with null) a pack's fallback pack. Values come from the
+ * /models picker, which only lists known packs — write-time validation is the
+ * picker itself. Load-time dangling tolerance lives in settings parsing.
+ */
+export function setPackFallback(settings: GlobalSettings, packId: string, fallbackId: string | null): void {
+  // `??=` tolerates hand-built settings fixtures and pre-feature in-memory
+  // objects; settings loaded from disk always carry the default {}.
+  const fallbacks = (settings.models.packFallbacks ??= {});
+  if (fallbackId === null) {
+    delete fallbacks[packId];
+  } else {
+    fallbacks[packId] = fallbackId;
+  }
+}
+
+/** Picker candidates for a pack's fallback: every pack except the pack itself (and the "New Custom" pseudo-row). */
+export function fallbackPackCandidates(packs: ModePack[], packId: string): ModePack[] {
+  return packs.filter(p => p.id !== packId && p.id !== 'custom');
 }
 
 export function resetBuiltinPackOverrides(settings: GlobalSettings, packId: string): void {
@@ -653,6 +774,140 @@ async function askImportCollision(
   });
 }
 
+/**
+ * Render the fallback chain a pack implies, e.g. "OpenAI → GitHub Copilot".
+ * Returns null when the pack has no fallback. The walk is the SDK's
+ * construction-capped one, so the display matches what a cascade would do.
+ */
+export function formatPackFallbackChain(settings: GlobalSettings, packs: ModePack[], packId: string): string | null {
+  const chain = resolveModePackFallbackChain(settings.models.packFallbacks ?? {}, packId, settings.customModelPacks);
+  if (chain.length < 2) return null;
+  const nameOf = (id: string) => packs.find(p => p.id === id)?.name ?? id;
+  return chain
+    .slice(1)
+    .map(id => nameOf(id))
+    .join(' → ');
+}
+
+/**
+ * Chain preview shown at the bottom of the fallback picker, recomputed for the
+ * currently highlighted candidate on every cursor move (null = "Clear fallback").
+ * Walks a preview copy of settings so hovering never mutates the real ones.
+ */
+function fallbackChainPreviewParts(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): { leadIn: string; chain: string | null } {
+  const preview: GlobalSettings = {
+    ...settings,
+    models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
+  };
+  setPackFallback(preview, pack.id, fallbackId);
+  const chain = formatPackFallbackChain(preview, packs, pack.id);
+  return {
+    leadIn: chain
+      ? `When ${pack.name} is unavailable: ${pack.name} → `
+      : `No fallback — when ${pack.name} is unavailable the error surfaces.`,
+    chain,
+  };
+}
+
+export function formatFallbackChainPreview(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return chain ? `${leadIn}${chain}` : leadIn;
+}
+
+/** Picker preview line: dim lead-in with the chain highlighted so it stands out. */
+export function formatFallbackChainPreviewStyled(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return `  ${theme.fg('dim', leadIn)}${chain ? theme.fg('textHighlight', chain) : ''}`;
+}
+
+async function askFallbackTarget(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<string | null | undefined> {
+  const settings = loadSettings();
+  const current = settings.models.packFallbacks[pack.id];
+  const candidates = fallbackPackCandidates(packs, pack.id);
+
+  const items: SelectItem[] = candidates.map(p => ({
+    value: p.id,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
+  }));
+  if (current) {
+    items.unshift({
+      value: '__clear__',
+      label: `  Clear fallback  ${theme.fg('dim', 'Stop hopping away from this pack')}`,
+    });
+  }
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Fallback for ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    const chainPreview = (fallbackId: string | null): string =>
+      formatFallbackChainPreviewStyled(settings, packs, pack, fallbackId);
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(chainPreview(item.value === '__clear__' ? null : item.value));
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value === '__clear__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(undefined);
+    };
+
+    detailText.setText(chainPreview(current ?? null));
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function runSetFallbackForPack(ctx: SlashCommandContext, pack: ModePack, packs: ModePack[]): Promise<void> {
+  const fallbackId = await askFallbackTarget(ctx, pack, packs);
+  if (fallbackId === undefined) return;
+
+  const next = loadSettings();
+  setPackFallback(next, pack.id, fallbackId);
+  saveSettings(next);
+  const fallbackName = fallbackId ? (packs.find(p => p.id === fallbackId)?.name ?? fallbackId) : null;
+  ctx.showInfo(fallbackName ? `Fallback for ${pack.name}: ${fallbackName}` : `Cleared the fallback for ${pack.name}`);
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   if (ctx.state.pendingNewThread) {
     await ctx.state.session.thread.create();
@@ -740,7 +995,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       }
       const pack = packs.find(p => p.id === packId);
       if (!pack) return;
-      detailText.setText(getPackDetail(pack));
+      const fallbackChain = formatPackFallbackChain(settings, packs, packId);
+      detailText.setText(
+        getPackDetail(pack) + (fallbackChain ? `\n${fallbackChainLine('  fallback → ', fallbackChain)}` : ''),
+      );
       ctx.state.ui.requestRender();
     };
 
@@ -813,32 +1071,18 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
       if (pack.id === 'custom') {
         pack = await runCustomFlow(ctx);
-      } else if (modifiedPackIds.has(pack.id)) {
-        const builtinPack = getBuiltinModePack(pack.id);
-        if (!builtinPack) {
-          resolve();
-          return;
-        }
-        const action = await askModifiedBuiltinPackAction(ctx, pack, builtinPack);
-        if (action === null) {
-          await handleModelsPackCommand(ctx);
-          resolve();
-          return;
-        }
-        if (action === 'reset') {
-          const nextSettings = loadSettings();
-          resetBuiltinPackOverrides(nextSettings, pack.id);
-          saveSettings(nextSettings);
-          pack = builtinPack;
-          resetBuiltinPack = true;
-        }
       } else if (pack.id.startsWith('custom:')) {
         while (true) {
-          const action = await askCustomPackAction(ctx, pack);
+          const action = await askCustomPackAction(ctx, pack, packs);
           if (action === null) {
             await handleModelsPackCommand(ctx);
             resolve();
             return;
+          }
+
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
           }
 
           if (action === 'delete') {
@@ -867,6 +1111,37 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           await saveCustomPackEdits(ctx, pack, previousPackId);
           previousPackId = undefined;
           ctx.showInfo(`Updated custom pack: ${pack.name}`);
+        }
+      } else {
+        // Built-in pack: land on the pack's action view. Modified built-ins
+        // also offer a reset; every pack offers fallback configuration.
+        while (true) {
+          const modified = modifiedPackIds.has(pack.id);
+          const builtinPack = modified ? getBuiltinModePack(pack.id) : undefined;
+          if (modified && !builtinPack) {
+            resolve();
+            return;
+          }
+          const action = modified
+            ? await askModifiedBuiltinPackAction(ctx, pack, builtinPack!, packs)
+            : await askBuiltinPackAction(ctx, pack, packs);
+          if (action === null) {
+            await handleModelsPackCommand(ctx);
+            resolve();
+            return;
+          }
+          if (action === 'fallback') {
+            await runSetFallbackForPack(ctx, pack, packs);
+            continue;
+          }
+          if (action === 'reset') {
+            const nextSettings = loadSettings();
+            resetBuiltinPackOverrides(nextSettings, pack.id);
+            saveSettings(nextSettings);
+            pack = builtinPack!;
+            resetBuiltinPack = true;
+          }
+          break;
         }
       }
 

@@ -36,6 +36,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     models: {
       activeModelPackId: 'anthropic',
       modePackOverrides: {},
+      packFallbacks: {},
       modeDefaults: {},
       modeThinkingDefaults: {},
       activeOmPackId: null,
@@ -210,6 +211,70 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('packFallbacks parsing', () => {
+  it('defaults to an empty map when unset', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({});
+    });
+  });
+
+  it('round-trips a configured chain through save and load', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.models.packFallbacks = { anthropic: 'openai', openai: 'github-copilot' };
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({
+        anthropic: 'openai',
+        openai: 'github-copilot',
+      });
+    });
+  });
+
+  it('drops malformed values with the usual parsing tolerance', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: { packFallbacks: { anthropic: 'openai', openai: 42, 'github-copilot': '' } },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({ anthropic: 'openai' });
+    });
+  });
+
+  it('drops entries whose source or target pack no longer exists', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          models: {
+            packFallbacks: {
+              anthropic: 'openai',
+              openai: 'no-such-pack',
+              'custom:deleted': 'anthropic',
+              'custom:kept': 'anthropic',
+            },
+          },
+          customModelPacks: [
+            { name: 'kept', models: { build: 'anthropic/claude-sonnet-4-5' }, createdAt: '2026-01-01T00:00:00.000Z' },
+          ],
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).models.packFallbacks).toEqual({
+        anthropic: 'openai',
+        'custom:kept': 'anthropic',
+      });
+    });
+  });
+});
 
 describe('MCP discovery settings parsing', () => {
   it('defaults external MCP discovery to disabled', () => {

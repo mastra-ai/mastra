@@ -20,6 +20,7 @@ export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
+import { pruneUnknownModePackFallbacks } from './packs.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
 export interface CustomPack {
@@ -233,6 +234,14 @@ export interface GlobalSettings {
     activeModelPackId: string | null;
     /** Per-mode overrides keyed by built-in pack ID. */
     modePackOverrides: Record<string, Record<string, string>>;
+    /**
+     * Fallback pack per pack ID (packId → packId; builtin ids and
+     * "custom:<name>" both allowed). When every account serving a pack's
+     * provider is exhausted — or the provider is persistently down — the turn
+     * hops to the fallback pack's model. Chains are allowed; a cycle is
+     * capped at one revisit per cascade, then the error surfaces.
+     */
+    packFallbacks: Record<string, string>;
     /** Explicit per-mode defaults — used when no activeModelPackId is set. */
     modeDefaults: Record<string, string>;
     /**
@@ -397,6 +406,7 @@ const DEFAULTS: GlobalSettings = {
   models: {
     activeModelPackId: null,
     modePackOverrides: {},
+    packFallbacks: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
     activeOmPackId: null,
@@ -500,6 +510,20 @@ function parseModePackOverrides(value: unknown): Record<string, Record<string, s
     if (Object.keys(parsedOverrides).length > 0) result[packId] = parsedOverrides;
   }
   return result;
+}
+
+function parsePackFallbacks(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  const result: Record<string, string> = {};
+  for (const [packId, fallbackId] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof fallbackId === 'string' && fallbackId.length > 0) result[packId] = fallbackId;
+  }
+  return result;
+}
+
+/** Shape-parse + drop entries whose source or target pack no longer exists. */
+function loadPackFallbacks(value: unknown, customModelPacks: Array<{ name: string }>): Record<string, string> {
+  return pruneUnknownModePackFallbacks(parsePackFallbacks(value), customModelPacks);
 }
 
 function parseQuietModeMaxToolPreviewLines(value: unknown): number {
@@ -851,6 +875,7 @@ function migrateFromAuth(settingsPath: string): boolean {
   if (existsSync(settingsPath)) {
     try {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      const rawCustomPacks: Array<{ name: string }> = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: {
@@ -858,6 +883,7 @@ function migrateFromAuth(settingsPath: string): boolean {
           ...raw.models,
           modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
           modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+          packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
         },
         preferences: parsePreferences(raw.preferences),
         storage: {
@@ -977,6 +1003,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const rawCustomPacks: Array<{ name: string }> = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -987,6 +1014,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         ...raw.models,
         modePackOverrides: parseModePackOverrides(raw.models?.modePackOverrides),
         modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
+        packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
       },
       preferences: parsePreferences(raw.preferences),
       storage: {
@@ -1123,6 +1151,21 @@ export function resolveModePackModels(
 ): Record<string, string> {
   if (pack.id.startsWith('custom:') || pack.id === 'custom') return pack.models;
   return { ...pack.models, ...settings.models.modePackOverrides?.[pack.id] };
+}
+
+/**
+ * The pack a session's current model came from: the pack whose model for the
+ * session's mode (builtin overrides applied) is exactly the session model id.
+ * Sessions on a manual /model override match no pack — callers treat that as
+ * "no fallback chain".
+ */
+export function findModePackForModel(
+  settings: GlobalSettings,
+  packs: Array<{ id: string; models: Record<string, string> }>,
+  modelId: string,
+  modeId: string,
+): { id: string; models: Record<string, string> } | undefined {
+  return packs.find(pack => resolveModePackModels(settings, pack)[modeId] === modelId);
 }
 
 export function resolveModelDefaults(

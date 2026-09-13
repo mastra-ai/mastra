@@ -1,9 +1,13 @@
+import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
+import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
 import {
+  findModePackForModel,
   loadSettings,
   resolveDefaultThinkingLevel,
+  resolveModePackModels,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
@@ -201,14 +205,42 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
+/** Structural pack shape for fallback resolution (custom pack models are partial by nature). */
+export interface ResolvableModePack {
+  id: string;
+  name: string;
+  models: Record<string, string>;
+}
+
+/** All packs a fallback chain may reference: every builtin plus saved customs. */
+export function listResolvableModePacks(settings: ReturnType<typeof loadSettings>): ResolvableModePack[] {
+  return [
+    ...listBuiltinModePacks(),
+    ...settings.customModelPacks.map(pack => ({
+      id: `custom:${pack.name}`,
+      name: pack.name,
+      models: { ...pack.models },
+    })),
+  ];
+}
+
 /**
  * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
+ *
+ * When the session's model came from a pack with a fallback chain configured
+ * (`settings.models.packFallbacks`), returns core's `ModelWithRetries[]`
+ * fallback array instead of a bare model: the active pack's model first, then
+ * each fallback pack's model for the same mode. Core advances the array when
+ * the error processors decline to retry (pool exhausted / persistent outage —
+ * see AccountRotationProcessor). Entry ids are unique per occurrence — the
+ * one allowed revisit of a pack gets `<packId>#2` — because core re-resolves
+ * the active fallback index by id across agentic steps.
  */
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel {
+): ResolvedModel | ModelWithRetries[] {
   const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
   const modelId = agentControllerContext?.session?.modelId;
@@ -226,8 +258,49 @@ export function getDynamicModel(
   }
 
   const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
+  const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
+  const primary = resolveModel(modelId, resolveOptions);
 
-  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
+  const settings = loadSettings(settingsPath);
+  // `models?` tolerates partial settings mocks; loaded settings always carry it.
+  const fallbacks = settings.models?.packFallbacks ?? {};
+  if (Object.keys(fallbacks).length === 0) return primary;
+
+  const modeId = agentControllerContext?.session?.modeId ?? 'build';
+  const packs = listResolvableModePacks(settings);
+  const activePack = findModePackForModel(settings, packs, modelId, modeId);
+  if (!activePack) return primary;
+
+  const chain = resolveModePackFallbackChain(fallbacks, activePack.id, settings.customModelPacks);
+  if (chain.length < 2) return primary;
+
+  const entries: ModelWithRetries[] = [{ id: activePack.id, model: primary }];
+  const appearances = new Map<string, number>([[activePack.id, 1]]);
+  for (const packId of chain.slice(1)) {
+    const pack = packs.find(candidate => candidate.id === packId);
+    if (!pack) break;
+    const entryModelId = resolveModePackModels(settings, pack)[modeId];
+    if (!entryModelId) break;
+    // Best-effort resolution: an unresolvable fallback (e.g. unconnected
+    // provider in deployed fail-closed mode) truncates the chain here rather
+    // than failing the request before the primary is ever tried.
+    let entryModel: ResolvedModel;
+    try {
+      entryModel = resolveModel(entryModelId, resolveOptions);
+    } catch {
+      break;
+    }
+    const occurrence = (appearances.get(packId) ?? 0) + 1;
+    appearances.set(packId, occurrence);
+    entries.push({
+      id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
+      model: entryModel,
+    });
+  }
+  // A chain that truncated to the primary alone is indistinguishable from no
+  // chain — return the bare model so core never sees a one-entry array.
+  if (entries.length < 2) return primary;
+  return entries;
 }
 
 /**
