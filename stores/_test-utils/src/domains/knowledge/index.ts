@@ -1606,6 +1606,51 @@ export function createKnowledgeStorageTests(
       });
     });
 
+    it('atomically applies verified gap mutations with their approval transition', async () => {
+      const node = await store.createNode({ name: 'Gap target', scopeIds: [PROJECT_SCOPE_ID] });
+      const accessEpoch = await store.getAccessEpoch();
+      const proposal = await store.createProposal({
+        id: 'verified-gap-apply',
+        targets: [
+          {
+            type: 'node',
+            id: node.id,
+            expectedVersion: node.version,
+            scopeIds: [PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+        operation: 'gap-flag',
+        payload: { kind: 'gap-flag', claim: 'The title is stale', evidence: [] },
+        proposerContextScopeId: PROJECT_SCOPE_ID,
+        expectedAccessEpoch: accessEpoch,
+      });
+
+      await expect(
+        store.applyProposal({
+          id: proposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          reviewReason: 'Verified from fresh sources',
+          verifiedMutation: {
+            kind: 'update-node',
+            mutation: { id: node.id, version: node.version, name: 'Verified gap repair' },
+          },
+          expectedAccessEpoch: accessEpoch,
+        }),
+      ).resolves.toMatchObject({
+        status: 'approved',
+        reviewReason: 'Verified from fresh sources',
+      });
+      await expect(store.getNode(node.id)).resolves.toMatchObject({
+        name: 'Verified gap repair',
+        version: node.version + 1,
+      });
+      await expect(store.getProposal(proposal.id)).resolves.toMatchObject({
+        status: 'approved',
+        reviewReason: 'Verified from fresh sources',
+      });
+    });
+
     it('applies complete proposal mutations atomically and preserves stale proposals for conflict review', async () => {
       const node = await store.createNode({ name: 'Proposal apply target', scopeIds: [PROJECT_SCOPE_ID] });
       const projectScope = await store.getNode(PROJECT_SCOPE_ID);
@@ -1900,7 +1945,12 @@ export function createKnowledgeStorageTests(
       await apply(
         {
           kind: 'merge-nodes',
-          mutation: { sourceId: created.id, targetId: target.id, sourceVersion: created.version },
+          mutation: {
+            sourceId: created.id,
+            targetId: target.id,
+            sourceVersion: created.version,
+            targetVersion: target.version,
+          },
         },
         [await nodeTarget(created.id, 'manageAccess'), await nodeTarget(target.id, 'edit')],
       );
@@ -2313,7 +2363,7 @@ export function createKnowledgeStorageTests(
         ],
         operation: 'promote-node',
         payload: {
-          kind: 'promote-node',
+          kind: 'curate-node',
           mutation: {
             id: node.id,
             version: node.version,
@@ -2378,7 +2428,7 @@ export function createKnowledgeStorageTests(
         ],
         operation: 'promote-node',
         payload: {
-          kind: 'promote-node',
+          kind: 'curate-node',
           mutation: {
             id: node.id,
             version: node.version,
