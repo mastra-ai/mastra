@@ -826,6 +826,7 @@ function filterAllToolCalls(
         if (part.type !== 'tool-invocation') {
           if (shouldFilterToolStatePart(part, toolStateFilter)) {
             changed = true;
+            if (part === sealedBoundaryPart) retainedBoundaryPart = nonToolParts.at(-1);
             continue;
           }
           nonToolParts.push(part);
@@ -918,6 +919,7 @@ function filterSpecificToolCalls(
         if (part.type !== 'tool-invocation') {
           if (shouldFilterToolStatePart(part, toolStateFilter)) {
             changed = true;
+            if (part === sealedBoundaryPart) retainedBoundaryPart = filteredParts.at(-1);
             continue;
           }
           filteredParts.push(part);
