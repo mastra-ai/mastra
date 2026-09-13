@@ -34,6 +34,7 @@ export interface StrategyDeps {
   storage: MemoryStorage;
   memory?: Memory;
   messageHistory: MessageHistory;
+  filterMessagesForHistory?: (messages: MastraDBMessage[]) => MastraDBMessage[];
   tokenCounter: TokenCounter;
   observationConfig: ResolvedObservationConfig;
   reflectionConfig: ResolvedReflectionConfig;
@@ -65,6 +66,7 @@ export interface StrategyDeps {
 export abstract class ObservationStrategy {
   protected readonly storage: MemoryStorage;
   protected readonly messageHistory: MessageHistory;
+  protected readonly filterMessagesForHistory: (messages: MastraDBMessage[]) => MastraDBMessage[];
   protected readonly tokenCounter: TokenCounter;
   protected readonly observationConfig: ResolvedObservationConfig;
   protected readonly reflectionConfig: ResolvedReflectionConfig;
@@ -80,6 +82,7 @@ export abstract class ObservationStrategy {
   ) {
     this.storage = deps.storage;
     this.messageHistory = deps.messageHistory;
+    this.filterMessagesForHistory = deps.filterMessagesForHistory ?? (messages => messages);
     this.tokenCounter = deps.tokenCounter;
     this.observationConfig = deps.observationConfig;
     this.reflectionConfig = deps.reflectionConfig;
@@ -369,23 +372,26 @@ export abstract class ObservationStrategy {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
-      }
+      const target = messages.find(msg => msg?.role === 'assistant' && Array.isArray(msg.content?.parts));
+      if (!target) return;
+
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        target.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      const message = {
+        ...target,
+        content: {
+          ...target.content,
+          parts: alreadyPresent ? [...target.content.parts] : [...target.content.parts, marker as any],
+        },
+      };
+
+      await this.messageHistory.persistMessages({
+        messages: [message],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }

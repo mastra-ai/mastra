@@ -9,6 +9,7 @@
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageHistory } from '@mastra/core/processors';
 import { describe, it, expect, vi } from 'vitest';
 
 import { ObservationStrategy } from '../observation-strategies/base';
@@ -138,6 +139,77 @@ describe('OM marker persistence plumbing', () => {
     expect(persisted.role).toBe('assistant');
     expect(persisted.id).toBe('stored-assistant-1');
     expect(persisted.content.parts).toContainEqual(marker);
+  });
+
+  it('selects a filtered tool-only assistant before applying the history filter', async () => {
+    const storedAssistant: MastraDBMessage = {
+      id: 'stored-tool-only-assistant',
+      role: 'assistant',
+      content: {
+        format: 2,
+        providerMetadata: { mastra: { rawProviderPayload: 'MARKER_PROVIDER_SECRET' } },
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'marker-tool-call',
+              toolName: 'secret_tool',
+              args: { secret: 'MARKER_ARGS_SECRET' },
+              result: { secret: 'MARKER_RESULT_SECRET' },
+            },
+            providerMetadata: { mastra: { rawToolPayload: 'MARKER_PART_SECRET' } },
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+    };
+    const sourceBefore = JSON.stringify(storedAssistant);
+    const listMessages = vi.fn().mockResolvedValue({
+      messages: [storedAssistant, makeUserMessage('stored-user-before-tool')],
+    });
+    const saveMessages = vi.fn().mockResolvedValue(undefined);
+    const storage = {
+      listMessages,
+      saveMessages,
+      getThreadById: vi.fn().mockResolvedValue({ id: threadId }),
+    };
+    const messageHistory = new MessageHistory({
+      storage: storage as any,
+      toolCallFilter: { exclude: ['secret_tool'] },
+      retainFilteredMessageAnchors: true,
+    });
+    const deps = {
+      storage,
+      messageHistory,
+      tokenCounter: {},
+      observationConfig: { messageTokens: 1000 },
+      reflectionConfig: { observationTokens: 1000 },
+      scope: 'thread',
+      retrieval: false,
+    } as unknown as StrategyDeps;
+    const strategy = new TestStrategy(deps, {
+      record: {} as ObservationRunOpts['record'],
+      threadId,
+      resourceId,
+      messages: [],
+    } as ObservationRunOpts);
+
+    await strategy.testStreamMarker(marker);
+
+    expect(saveMessages).toHaveBeenCalledTimes(1);
+    const persisted = saveMessages.mock.calls[0]![0].messages[0] as MastraDBMessage;
+    const serialized = JSON.stringify(persisted);
+    expect(persisted.id).toBe('stored-tool-only-assistant');
+    expect(persisted.content.parts).toContainEqual(marker);
+    expect(serialized).not.toContain('MARKER_PROVIDER_SECRET');
+    expect(serialized).not.toContain('MARKER_PART_SECRET');
+    expect(serialized).not.toContain('MARKER_ARGS_SECRET');
+    expect(serialized).not.toContain('MARKER_RESULT_SECRET');
+    expect(JSON.stringify(storedAssistant)).toBe(sourceBefore);
   });
 
   it('falls back to the storage scan when the MessageList has no assistant message, never marking a user message', async () => {

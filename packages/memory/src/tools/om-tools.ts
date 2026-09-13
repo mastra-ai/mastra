@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
+import { DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES, filterToolCallMessages } from '@mastra/core/processors';
+import type { MessageHistoryToolCallFilterOptions } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
@@ -20,12 +22,40 @@ function getMessageParts(msg: MastraDBMessage): any[] {
   return Array.isArray(parts) ? parts : [];
 }
 
-/** Returns true if a message has at least one non-data part with visible content. */
+function getTopLevelTextContent(msg: MastraDBMessage): string | undefined {
+  if (!msg.content || typeof msg.content !== 'object' || Array.isArray(msg.content)) return undefined;
+  const content = (msg.content as { content?: unknown }).content;
+  return typeof content === 'string' ? content : undefined;
+}
+
+/** Returns true if a message has visible content in a non-data part or its top-level content. */
 function hasVisibleParts(msg: MastraDBMessage): boolean {
   if (typeof msg.content === 'string') return (msg.content as string).length > 0;
   const parts = getMessageParts(msg);
-  if (parts.length === 0) return Boolean(msg.content?.content);
-  return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
+  const hasVisiblePart = parts.some((p: { type?: string; text?: unknown; metadata?: unknown }) => {
+    if (p.type?.startsWith('data-')) return false;
+    if (p.type === 'text' && p.text === '') {
+      const metadata = p.metadata;
+      const mastra =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+          ? (metadata as { mastra?: unknown }).mastra
+          : undefined;
+      const sealedAt =
+        mastra && typeof mastra === 'object' && !Array.isArray(mastra)
+          ? (mastra as { sealedAt?: unknown }).sealedAt
+          : undefined;
+      if (typeof sealedAt === 'number') return false;
+    }
+    return true;
+  });
+  return hasVisiblePart || Boolean(getTopLevelTextContent(msg));
+}
+
+function getConfiguredToolCallFilter(memory: RecallMemory): MessageHistoryToolCallFilterOptions | undefined {
+  const observationalMemory = memory.getConfig?.().observationalMemory;
+  return observationalMemory && typeof observationalMemory === 'object'
+    ? observationalMemory.toolCallFilter
+    : undefined;
 }
 
 type RecallThread = {
@@ -46,6 +76,9 @@ type RecallSearchResult = {
 };
 
 type RecallMemory = {
+  getConfig?: () => {
+    observationalMemory?: boolean | { toolCallFilter?: MessageHistoryToolCallFilterOptions };
+  };
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
   }>;
@@ -88,6 +121,35 @@ type RecallMemory = {
   }) => Promise<{ results: RecallSearchResult[] }>;
   getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
+
+function filterCursorMessages(memory: RecallMemory, messages: MastraDBMessage[]): MastraDBMessage[] {
+  const toolCallFilter = getConfiguredToolCallFilter(memory);
+  if (toolCallFilter === undefined) return messages;
+
+  const filteredMessages = filterToolCallMessages(
+    messages,
+    {
+      ...toolCallFilter,
+      maxModelOutputBytes: toolCallFilter.maxModelOutputBytes ?? DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES,
+    },
+    new Set(),
+    { stripMessageProviderMetadata: true },
+  );
+
+  const retainedIds = new Set(filteredMessages.map(message => message.id));
+  const filteredAnchors = messages
+    .filter(message => !retainedIds.has(message.id))
+    .map(message => ({
+      id: message.id,
+      role: message.role,
+      createdAt: message.createdAt,
+      ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
+      ...(message.resourceId === undefined ? {} : { resourceId: message.resourceId }),
+      content: { format: 2 as const, parts: [] },
+    })) as MastraDBMessage[];
+
+  return [...filteredMessages, ...filteredAnchors];
+}
 
 function parseRangeFormat(cursor: string): { startId: string; endId: string } | null {
   // Comma-separated merged ranges: "id1:id2,id3:id4"
@@ -138,7 +200,8 @@ async function resolveCursorMessage(
 
   const memoryStore = await memory.getMemoryStore();
   const result = await memoryStore.listMessagesById({ messageIds: [normalized] });
-  let message = result.messages.find(message => message.id === normalized) ?? null;
+  const messages = filterCursorMessages(memory, result.messages);
+  let message = messages.find(message => message.id === normalized) ?? null;
 
   if (!message) {
     message = await resolveCursorMessageByRecall(memory, normalized, access);
@@ -616,8 +679,13 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
         parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
       }
     }
-  } else if (msg.content?.content) {
-    parts.push(makePart(msg, 0, 'text', msg.content.content, detail));
+  }
+
+  if (parts.length === 0) {
+    const topLevelContent = getTopLevelTextContent(msg);
+    if (topLevelContent) {
+      parts.push(makePart(msg, 0, 'text', topLevelContent, detail));
+    }
   }
 
   return parts;
@@ -890,6 +958,10 @@ export interface RecallResult {
   tokenOffset: number;
 }
 
+// A configured filter can remove many consecutive storage rows. Keep cursor
+// reads bounded while allowing enough raw rows for a visible page to form.
+const MAX_FILTERED_RECALL_SCAN = 10_000;
+
 export async function recallMessages({
   memory,
   threadId,
@@ -984,12 +1056,11 @@ export async function recallMessages({
   // Fetch skip + limit + 1 to detect whether another page exists beyond this one
   const fetchCount = skip + normalizedLimit + 1;
 
-  const result = await memory.recall({
+  const recallArgs = {
     threadId: resolvedThreadId,
     resourceId,
     page: 0,
-    perPage: fetchCount,
-    orderBy: { field: 'createdAt', direction: isForward ? 'ASC' : 'DESC' },
+    orderBy: { field: 'createdAt' as const, direction: isForward ? ('ASC' as const) : ('DESC' as const) },
     filter: {
       dateRange: isForward
         ? {
@@ -1001,10 +1072,34 @@ export async function recallMessages({
             endExclusive: true,
           },
     },
-  });
+  };
+
+  let result = await memory.recall({ ...recallArgs, perPage: fetchCount });
 
   // Filter out messages with only internal data-* parts so they don't consume page slots.
-  const visibleMessages = result.messages.filter(hasVisibleParts);
+  let visibleMessages = result.messages.filter(hasVisibleParts);
+  const toolCallFilter = getConfiguredToolCallFilter(memory);
+  const visibleTarget = skip + normalizedLimit;
+
+  // Memory.recall reports continuation from the raw storage page. When the
+  // configured filter removes rows, refill the same ordered range so hidden
+  // rows do not make a visible page look complete. The default path remains a
+  // single recall with its existing read size and semantics.
+  if (toolCallFilter !== undefined) {
+    let scanCount = fetchCount;
+    while (result.hasMore && visibleMessages.length <= visibleTarget) {
+      const nextScanCount = Math.min(MAX_FILTERED_RECALL_SCAN, Math.max(scanCount + 1, scanCount * 2));
+      if (nextScanCount <= scanCount) {
+        throw new Error(
+          `Could not find enough visible messages within the configured cursor scan limit of ${MAX_FILTERED_RECALL_SCAN} rows`,
+        );
+      }
+
+      scanCount = nextScanCount;
+      result = await memory.recall({ ...recallArgs, perPage: scanCount });
+      visibleMessages = result.messages.filter(hasVisibleParts);
+    }
+  }
 
   // Memory.recall() always returns messages sorted chronologically (ASC) via MessageList.
   // For forward pagination: take from the start of the ASC array (oldest first after cursor).

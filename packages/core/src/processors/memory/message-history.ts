@@ -11,12 +11,14 @@ import type { MemoryStorage } from '../../storage';
 import type { TerminalToolResult } from '../../tools';
 import {
   filterToolCallMessages,
+  getSealedMessageBoundary,
   getPreservedModelOutputParts,
   normalizeToolCallFilterExclude,
+  preserveSealedMessageBoundary,
 } from '../tool-call-filter-utils';
 import type { ToolCallFilteringOptions } from '../tool-call-filter-utils';
 
-const DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES = 16 * 1024;
+export const DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES = 16 * 1024;
 const MAX_PERSISTED_TERMINAL_TOOL_RESULT_ID_BYTES = 1024;
 
 type PersistedTerminalToolResultPart = {
@@ -79,6 +81,11 @@ export interface MessageHistoryOptions {
    * Can't be combined with `toolCallFilter`.
    */
   persistence?: MessageHistoryFinalTurnPersistenceOptions;
+  /**
+   * @internal Native Observational Memory keeps payload-free rows for filtered
+   * messages so their IDs remain usable as history cursors.
+   */
+  retainFilteredMessageAnchors?: boolean;
 }
 
 /**
@@ -125,6 +132,7 @@ export class MessageHistory implements Processor {
   private lastMessages?: number;
   private toolCallFilter?: MessageHistoryToolCallFilterOptions;
   private persistence?: MessageHistoryFinalTurnPersistenceOptions;
+  private retainFilteredMessageAnchors: boolean;
 
   constructor(options: MessageHistoryOptions) {
     if (options.persistence !== undefined && options.toolCallFilter !== undefined) {
@@ -134,6 +142,41 @@ export class MessageHistory implements Processor {
     this.lastMessages = options.lastMessages;
     this.toolCallFilter = options.toolCallFilter;
     this.persistence = options.persistence;
+    this.retainFilteredMessageAnchors = options.retainFilteredMessageAnchors ?? false;
+  }
+
+  private createFilteredMessageAnchor(message: MastraDBMessage): MastraDBMessage | undefined {
+    if (typeof message.id !== 'string') return undefined;
+    const isSealed =
+      (message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+
+    return {
+      id: message.id,
+      role: message.role,
+      ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
+      ...(message.resourceId === undefined ? {} : { resourceId: message.resourceId }),
+      createdAt: message.createdAt,
+      content: {
+        format: 2,
+        ...(isSealed ? { metadata: { mastra: { sealed: true } } } : {}),
+        parts: [],
+      },
+    };
+  }
+
+  private addFilteredMessageAnchors(
+    sourceMessages: MastraDBMessage[],
+    persistedMessages: MastraDBMessage[],
+  ): MastraDBMessage[] {
+    const persistedIds = new Set(
+      persistedMessages.flatMap(message => (typeof message.id === 'string' ? [message.id] : [])),
+    );
+    const anchors = sourceMessages
+      .filter(message => typeof message.id === 'string' && !persistedIds.has(message.id))
+      .map(message => this.createFilteredMessageAnchor(message))
+      .filter((message): message is MastraDBMessage => message !== undefined);
+
+    return anchors.length === 0 ? persistedMessages : [...persistedMessages, ...anchors];
   }
 
   /**
@@ -271,8 +314,8 @@ export class MessageHistory implements Processor {
     const policyFiltersTool = (toolName: string): boolean =>
       normalizedToolCallFilterExclude === 'all' || normalizedToolCallFilterExclude?.includes(toolName) === true;
 
-    const filteredMessages = messages
-      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
+    const sourceMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
+    const filteredMessages = sourceMessages
       .map(m => {
         const newMessage = { ...m };
         let removedToolInvocationCoveredByPolicy = false;
@@ -289,28 +332,35 @@ export class MessageHistory implements Processor {
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
-            .map(p => {
-              if (p.type === `tool-invocation`) {
-                const shouldRemove =
-                  p.toolInvocation.state === `partial-call` || p.toolInvocation.toolName === `updateWorkingMemory`;
-                if (shouldRemove) {
-                  removedToolInvocationCoveredByPolicy ||= policyFiltersTool(p.toolInvocation.toolName);
-                  return null;
-                }
+          const sealedBoundaryPart = getSealedMessageBoundary(m)?.part;
+          let retainedBoundaryPart: typeof sealedBoundaryPart;
+          const persistedParts: typeof newMessage.content.parts = [];
+          for (const part of newMessage.content.parts) {
+            if (part.type === `tool-invocation`) {
+              const shouldRemove =
+                part.toolInvocation.state === `partial-call` || part.toolInvocation.toolName === `updateWorkingMemory`;
+              if (shouldRemove) {
+                removedToolInvocationCoveredByPolicy ||= policyFiltersTool(part.toolInvocation.toolName);
+                if (part === sealedBoundaryPart) retainedBoundaryPart = persistedParts.at(-1);
+                continue;
               }
-              // Strip working memory tags from text parts
-              if (p.type === `text`) {
-                const text = typeof p.text === 'string' ? p.text : '';
-                const cleaned = removeWorkingMemoryTags(text);
-                return {
-                  ...p,
-                  text: cleaned !== text ? cleaned.trim() : text,
-                };
-              }
-              return p;
-            })
-            .filter((p): p is NonNullable<typeof p> => Boolean(p));
+            }
+
+            // Strip working memory tags from text parts
+            let persistedPart = part;
+            if (part.type === `text`) {
+              const text = typeof part.text === 'string' ? part.text : '';
+              const cleaned = removeWorkingMemoryTags(text);
+              persistedPart = { ...part, text: cleaned !== text ? cleaned.trim() : text };
+            }
+            persistedParts.push(persistedPart);
+            if (part === sealedBoundaryPart) retainedBoundaryPart = persistedPart;
+          }
+          newMessage.content.parts = persistedParts;
+
+          if (this.toolCallFilter !== undefined) {
+            newMessage.content.parts = preserveSealedMessageBoundary(m, newMessage.content.parts, retainedBoundaryPart);
+          }
 
           if (removedToolInvocationCoveredByPolicy) {
             delete newMessage.content.providerMetadata;
@@ -341,7 +391,12 @@ export class MessageHistory implements Processor {
               { stripMessageProviderMetadata: true },
             );
 
-    return persistedMessages.map(MessageList.transformMessageForTranscript);
+    const transformedMessages = persistedMessages.map(MessageList.transformMessageForTranscript);
+    if (!this.retainFilteredMessageAnchors || this.toolCallFilter === undefined) {
+      return transformedMessages;
+    }
+
+    return this.addFilteredMessageAnchors(filteredMessages, transformedMessages);
   }
 
   private projectFinalTurnForPersistence(

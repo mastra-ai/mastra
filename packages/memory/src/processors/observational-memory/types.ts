@@ -2,7 +2,11 @@ import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
+import type {
+  MessageHistoryToolCallFilterOptions,
+  ProcessorContext,
+  ProcessorStreamWriter,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
@@ -968,6 +972,13 @@ export interface ObservationalMemoryConfig {
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+
+  /**
+   * Optional filtering for raw tool-call payloads in native OM history.
+   * The policy applies to native OM writes and history reads, including recall;
+   * omit it to preserve the existing native behavior.
+   */
+  toolCallFilter?: MessageHistoryToolCallFilterOptions;
 
   /**
    * Optional callback used to index emitted observation groups for semantic retrieval.

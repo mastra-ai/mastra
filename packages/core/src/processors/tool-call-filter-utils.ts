@@ -35,6 +35,8 @@ type ToolCallMessageFilterBehavior = {
   stripMessageProviderMetadata?: boolean;
 };
 
+type MessagePart = MastraDBMessage['content']['parts'][number];
+
 export function normalizeToolCallFilterExclude(exclude: unknown): string[] | 'all' {
   if (exclude == null) return 'all';
   if (!Array.isArray(exclude) || exclude.some(toolName => typeof toolName !== 'string')) {
@@ -98,6 +100,32 @@ function getMessageParts(message: MastraDBMessage): MastraMessagePart[] {
   return Array.isArray(parts) ? (parts as MastraMessagePart[]) : [];
 }
 
+export function getSealedMessageBoundary(
+  message: MastraDBMessage,
+): { index: number; part: MessagePart; sealedAt: number } | undefined {
+  const parts = getMessageParts(message);
+  const messageContent = message.content as unknown;
+  if (!messageContent || typeof messageContent !== 'object' || Array.isArray(messageContent)) return undefined;
+  const messageMetadata = (messageContent as { metadata?: unknown }).metadata;
+  if (!messageMetadata || typeof messageMetadata !== 'object' || Array.isArray(messageMetadata)) return undefined;
+  const mastraMetadata = (messageMetadata as { mastra?: unknown }).mastra;
+  if (!mastraMetadata || typeof mastraMetadata !== 'object' || Array.isArray(mastraMetadata)) return undefined;
+  if ((mastraMetadata as { sealed?: unknown }).sealed !== true) return undefined;
+
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const partMetadata = (parts[index] as { metadata?: unknown }).metadata;
+    if (!partMetadata || typeof partMetadata !== 'object' || Array.isArray(partMetadata)) continue;
+    const partMastraMetadata = (partMetadata as { mastra?: unknown }).mastra;
+    if (!partMastraMetadata || typeof partMastraMetadata !== 'object' || Array.isArray(partMastraMetadata)) continue;
+    const sealedAt = (partMastraMetadata as { sealedAt?: unknown }).sealedAt;
+    if (typeof sealedAt === 'number') {
+      return { index, part: parts[index]!, sealedAt };
+    }
+  }
+
+  return undefined;
+}
+
 function getTopLevelToolInvocations(
   message: MastraDBMessage,
 ): NonNullable<MastraDBMessage['content']['toolInvocations']> {
@@ -113,19 +141,64 @@ function getToolInvocations(message: MastraDBMessage): MastraToolInvocationPart[
   return getMessageParts(message).filter((part): part is MastraToolInvocationPart => part.type === 'tool-invocation');
 }
 
-function hasToolInvocations(message: MastraDBMessage): boolean {
-  return (
-    getMessageParts(message).some(part => part.type === 'tool-invocation') ||
-    getTopLevelToolInvocations(message).length > 0
-  );
-}
-
 function hasTopLevelTextContent(message: MastraDBMessage): boolean {
   const content = message.content as unknown;
   if (typeof content === 'string') return content.trim().length > 0;
   if (!content || typeof content !== 'object' || Array.isArray(content)) return false;
   const topLevelContent = (content as { content?: unknown }).content;
   return typeof topLevelContent === 'string' && topLevelContent.trim().length > 0;
+}
+
+type ToolStateFilter = {
+  excludedToolNames: string[] | 'all';
+  excludedToolCallIds: Set<string>;
+  preserveToolCallIds: Set<string>;
+};
+
+function shouldFilterToolState(data: unknown, filter: ToolStateFilter, fallbackToolName?: string): boolean {
+  const stateData = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  const toolCallId = typeof stateData.toolCallId === 'string' ? stateData.toolCallId : undefined;
+  if (toolCallId && filter.preserveToolCallIds.has(toolCallId)) return false;
+
+  if (filter.excludedToolNames === 'all') return true;
+
+  const toolName = typeof stateData.toolName === 'string' ? stateData.toolName : fallbackToolName;
+  return (
+    (toolName !== undefined && filter.excludedToolNames.includes(toolName)) ||
+    (toolCallId !== undefined && filter.excludedToolCallIds.has(toolCallId))
+  );
+}
+
+function filterToolStateMetadata(
+  metadata: MastraDBMessage['content']['metadata'],
+  filter: ToolStateFilter,
+): MastraDBMessage['content']['metadata'] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata;
+
+  let filteredMetadata = metadata;
+  for (const metadataKey of ['suspendedTools', 'pendingToolApprovals'] as const) {
+    const toolStates = metadata[metadataKey];
+    if (!toolStates || typeof toolStates !== 'object' || Array.isArray(toolStates)) continue;
+
+    const retainedEntries = Object.entries(toolStates).filter(
+      ([toolNameOrCallId, state]) => !shouldFilterToolState(state, filter, toolNameOrCallId),
+    );
+    if (retainedEntries.length === Object.keys(toolStates).length) continue;
+
+    if (filteredMetadata === metadata) filteredMetadata = { ...metadata };
+    if (retainedEntries.length === 0) {
+      delete filteredMetadata[metadataKey];
+    } else {
+      filteredMetadata[metadataKey] = Object.fromEntries(retainedEntries);
+    }
+  }
+
+  return filteredMetadata;
+}
+
+function shouldFilterToolStatePart(part: MastraMessagePart, filter: ToolStateFilter): boolean {
+  if (part.type !== 'data-tool-call-approval' && part.type !== 'data-tool-call-suspended') return false;
+  return shouldFilterToolState((part as { data?: unknown }).data, filter);
 }
 
 function getToolCallId(invocation: MastraToolInvocationPart['toolInvocation']): string | undefined {
@@ -593,6 +666,80 @@ function getPreservedModelOutputPart(
 }
 
 /**
+ * Keep the sealed boundary attached to the retained part at the original
+ * boundary when filtering removes the part that carried it. MessageList uses
+ * this marker to decide which parts may be appended when a sealed message is
+ * re-added.
+ */
+export function preserveSealedMessageBoundary(
+  message: MastraDBMessage,
+  parts: MastraDBMessage['content']['parts'],
+  retainedBoundaryPart?: MessagePart,
+): MastraDBMessage['content']['parts'] {
+  if (parts.length === 0) return parts;
+
+  const boundary = getSealedMessageBoundary(message);
+  if (!boundary) return parts;
+
+  let targetIndex =
+    retainedBoundaryPart === undefined ? parts.indexOf(boundary.part) : parts.indexOf(retainedBoundaryPart);
+  if (targetIndex === -1 && retainedBoundaryPart === undefined) {
+    for (let originalIndex = boundary.index - 1; originalIndex >= 0; originalIndex -= 1) {
+      const retainedIndex = parts.indexOf(getMessageParts(message)[originalIndex]!);
+      if (retainedIndex !== -1) {
+        targetIndex = retainedIndex;
+        break;
+      }
+    }
+  }
+
+  if (targetIndex === -1) {
+    return [
+      {
+        type: 'text',
+        text: '',
+        metadata: { mastra: { sealedAt: boundary.sealedAt } },
+      },
+      ...parts,
+    ] as MastraDBMessage['content']['parts'];
+  }
+
+  const targetPart = parts[targetIndex] as { metadata?: unknown };
+  const targetMetadata = targetPart.metadata;
+  const targetMastraMetadata =
+    targetMetadata && typeof targetMetadata === 'object' && !Array.isArray(targetMetadata)
+      ? (targetMetadata as { mastra?: unknown }).mastra
+      : undefined;
+  if (
+    targetMastraMetadata &&
+    typeof targetMastraMetadata === 'object' &&
+    !Array.isArray(targetMastraMetadata) &&
+    (targetMastraMetadata as { sealedAt?: unknown }).sealedAt === boundary.sealedAt
+  ) {
+    return parts;
+  }
+
+  const updatedPart = {
+    ...(parts[targetIndex] as object),
+    metadata: {
+      ...(targetMetadata && typeof targetMetadata === 'object' && !Array.isArray(targetMetadata) ? targetMetadata : {}),
+      mastra: {
+        ...(targetMastraMetadata && typeof targetMastraMetadata === 'object' && !Array.isArray(targetMastraMetadata)
+          ? targetMastraMetadata
+          : {}),
+        sealedAt: boundary.sealedAt,
+      },
+    },
+  };
+
+  return [
+    ...parts.slice(0, targetIndex),
+    updatedPart,
+    ...parts.slice(targetIndex + 1),
+  ] as MastraDBMessage['content']['parts'];
+}
+
+/**
  * Extract compact model-output text from completed tool results that the
  * configured raw-tool filter would remove. The returned parts are newly
  * allocated and never retain provider metadata or raw tool payloads.
@@ -630,12 +777,21 @@ function buildContent(
   parts: MastraDBMessage['content']['parts'],
   toolInvocations: MastraDBMessage['content']['toolInvocations'],
   behavior: ToolCallMessageFilterBehavior,
+  retainedBoundaryPart?: MessagePart,
+  toolStateFilter?: ToolStateFilter,
 ): MastraDBMessage['content'] {
   const { toolInvocations: _originalToolInvocations, ...contentWithoutToolInvocations } = message.content;
   const updatedContent: MastraDBMessage['content'] = {
     ...contentWithoutToolInvocations,
-    parts,
+    parts: preserveSealedMessageBoundary(message, parts, retainedBoundaryPart),
   };
+
+  if (toolStateFilter) {
+    const filteredMetadata = filterToolStateMetadata(contentWithoutToolInvocations.metadata, toolStateFilter);
+    if (filteredMetadata !== contentWithoutToolInvocations.metadata) {
+      updatedContent.metadata = filteredMetadata;
+    }
+  }
 
   if (behavior.stripMessageProviderMetadata) {
     delete updatedContent.providerMetadata;
@@ -654,27 +810,43 @@ function filterAllToolCalls(
   preserveToolCallIds: Set<string>,
   behavior: ToolCallMessageFilterBehavior,
 ): MastraDBMessage[] {
+  const toolStateFilter: ToolStateFilter = {
+    excludedToolNames: 'all',
+    excludedToolCallIds: new Set(),
+    preserveToolCallIds,
+  };
+
   return messages
     .map(message => {
-      if (!hasToolInvocations(message)) return message;
-
       let changed = false;
       const nonToolParts: MastraMessagePart[] = [];
+      let retainedBoundaryPart: MessagePart | undefined;
+      const sealedBoundaryPart = getSealedMessageBoundary(message)?.part;
       for (const part of getMessageParts(message)) {
         if (part.type !== 'tool-invocation') {
+          if (shouldFilterToolStatePart(part, toolStateFilter)) {
+            changed = true;
+            if (part === sealedBoundaryPart) retainedBoundaryPart = nonToolParts.at(-1);
+            continue;
+          }
           nonToolParts.push(part);
+          if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
         }
 
         const toolCallId = getToolCallId(part.toolInvocation);
         if (toolCallId && preserveToolCallIds.has(toolCallId)) {
           nonToolParts.push(part);
+          if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
         }
 
         changed = true;
         const modelOutputPart = getPreservedModelOutputPart(part, options);
         if (modelOutputPart) nonToolParts.push(modelOutputPart);
+        if (part === sealedBoundaryPart) {
+          retainedBoundaryPart = modelOutputPart ?? nonToolParts.at(-1);
+        }
       }
 
       const originalToolInvocations = getTopLevelToolInvocations(message);
@@ -683,6 +855,7 @@ function filterAllToolCalls(
         return toolCallId !== undefined && preserveToolCallIds.has(toolCallId);
       });
       changed ||= filteredToolInvocations.length !== originalToolInvocations.length;
+      changed ||= filterToolStateMetadata(message.content.metadata, toolStateFilter) !== message.content.metadata;
 
       if (!changed) return message;
 
@@ -696,7 +869,14 @@ function filterAllToolCalls(
 
       return {
         ...message,
-        content: buildContent(message, nonToolParts, filteredToolInvocations, behavior),
+        content: buildContent(
+          message,
+          nonToolParts,
+          filteredToolInvocations,
+          behavior,
+          retainedBoundaryPart,
+          toolStateFilter,
+        ),
       };
     })
     .filter((message): message is MastraDBMessage => message !== null);
@@ -723,15 +903,27 @@ function filterSpecificToolCalls(
     }
   }
 
+  const toolStateFilter: ToolStateFilter = {
+    excludedToolNames: options.exclude,
+    excludedToolCallIds,
+    preserveToolCallIds,
+  };
+
   return messages
     .map(message => {
-      if (!hasToolInvocations(message)) return message;
-
       let changed = false;
       const filteredParts: MastraMessagePart[] = [];
+      let retainedBoundaryPart: MessagePart | undefined;
+      const sealedBoundaryPart = getSealedMessageBoundary(message)?.part;
       for (const part of getMessageParts(message)) {
         if (part.type !== 'tool-invocation') {
+          if (shouldFilterToolStatePart(part, toolStateFilter)) {
+            changed = true;
+            if (part === sealedBoundaryPart) retainedBoundaryPart = filteredParts.at(-1);
+            continue;
+          }
           filteredParts.push(part);
+          if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
         }
 
@@ -739,6 +931,7 @@ function filterSpecificToolCalls(
         const toolCallId = getToolCallId(invocation);
         if (toolCallId && preserveToolCallIds.has(toolCallId)) {
           filteredParts.push(part);
+          if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
         }
 
@@ -753,6 +946,9 @@ function filterSpecificToolCalls(
         changed = true;
         const modelOutputPart = getPreservedModelOutputPart(part, options);
         if (modelOutputPart) filteredParts.push(modelOutputPart);
+        if (part === sealedBoundaryPart) {
+          retainedBoundaryPart = modelOutputPart ?? filteredParts.at(-1);
+        }
       }
 
       const originalToolInvocations = getTopLevelToolInvocations(message);
@@ -765,6 +961,7 @@ function filterSpecificToolCalls(
         );
       });
       changed ||= filteredToolInvocations.length !== originalToolInvocations.length;
+      changed ||= filterToolStateMetadata(message.content.metadata, toolStateFilter) !== message.content.metadata;
 
       if (!changed) return message;
 
@@ -778,7 +975,14 @@ function filterSpecificToolCalls(
 
       return {
         ...message,
-        content: buildContent(message, filteredParts, filteredToolInvocations, behavior),
+        content: buildContent(
+          message,
+          filteredParts,
+          filteredToolInvocations,
+          behavior,
+          retainedBoundaryPart,
+          toolStateFilter,
+        ),
       };
     })
     .filter((message): message is MastraDBMessage => message !== null);

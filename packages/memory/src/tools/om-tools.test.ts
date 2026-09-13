@@ -144,6 +144,196 @@ describe('om-tools', () => {
       expect(result.messages).toContain('Message 5');
     });
 
+    it('should keep a payload-free cursor anchor for tool-only messages', async () => {
+      const filteredMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            toolCallFilter: { exclude: ['secret_tool'], preserveModelOutputFor: [] },
+          },
+        },
+      });
+      await filteredMemory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'OM tool filter cursor test thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:02:00Z'),
+        },
+      });
+
+      const secretToolMessage = (id: string, minute: string): MastraDBMessage => ({
+        id,
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: `${id}-call`,
+                toolName: 'secret_tool',
+                args: { secret: `RAW_${id}_ARGS` },
+                result: { secret: `RAW_${id}_RESULT` },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(`2024-01-01T10:${minute}:00Z`),
+      });
+
+      await filteredMemory.persistMessages([
+        {
+          id: 'cursor-before',
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'top-level-visible',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Top-level visible answer',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'top-level-visible-call',
+                  toolName: 'secret_tool',
+                  args: { secret: 'RAW_TOP_LEVEL_ARGS' },
+                  result: { secret: 'RAW_TOP_LEVEL_RESULT' },
+                },
+              },
+              { type: 'data-om-observation-end', data: { cycleId: 'top-level-visible-cycle' } },
+            ],
+          },
+          createdAt: new Date('2024-01-01T09:59:00Z'),
+        },
+        {
+          id: 'allowed-legacy-tool',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolCallId: 'allowed-legacy-tool-call',
+                toolName: 'allowed_tool',
+                args: { value: 'allowed' },
+                result: { value: 'allowed' },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T09:58:00Z'),
+        },
+        secretToolMessage('hidden-before-1', '01'),
+        secretToolMessage('hidden-before-2', '02'),
+        secretToolMessage('tool-only-cursor', '03'),
+        {
+          id: 'sealed-marker-only',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mastra: { sealed: true } },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'sealed-marker-call',
+                  toolName: 'secret_tool',
+                  args: { secret: 'RAW_SEALED_ARGS' },
+                  result: { secret: 'RAW_SEALED_RESULT' },
+                },
+                metadata: { mastra: { sealedAt: 17_044 } },
+              },
+              { type: 'data-om-observation-end', data: { cycleId: 'sealed-marker-cycle' } },
+            ],
+          },
+          createdAt: new Date('2024-01-01T10:03:30Z'),
+        },
+        secretToolMessage('hidden-after-1', '04'),
+        secretToolMessage('hidden-after-2', '05'),
+        {
+          id: 'cursor-after',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'After cursor' }] },
+          createdAt: new Date('2024-01-01T10:06:00Z'),
+        },
+        {
+          id: 'payload-free-anchor',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: { format: 2, parts: [] },
+          createdAt: new Date('2024-01-01T10:07:00Z'),
+        },
+      ]);
+
+      const recalled = await filteredMemory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: false,
+      });
+      expect(recalled.messages.some(message => message.id === 'top-level-visible')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'allowed-legacy-tool')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'sealed-marker-only')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'payload-free-anchor')).toBe(false);
+
+      const topLevelVisibleRecall = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'cursor-before',
+        page: -1,
+        limit: 1,
+      });
+      expect(topLevelVisibleRecall.messages).toContain('Top-level visible answer');
+      expect(topLevelVisibleRecall.messages.match(/Top-level visible answer/g)).toHaveLength(1);
+
+      const forward = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'tool-only-cursor',
+        page: 1,
+        limit: 1,
+      });
+      const backward = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'tool-only-cursor',
+        page: -1,
+        limit: 1,
+      });
+
+      expect(forward.count).toBe(1);
+      expect(forward.messages).toContain('After cursor');
+      expect(backward.count).toBe(1);
+      expect(backward.messages).toContain('Before cursor');
+      expect(forward.messages).not.toContain('RAW_');
+      expect(backward.messages).not.toContain('RAW_');
+    });
+
     it('should browse the cursor thread in resource scope when the cursor belongs to another thread', async () => {
       await memory.saveThread({
         thread: {
