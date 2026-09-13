@@ -277,6 +277,19 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return scope && !scope.deletedAt && scope.isScope ? { address, scopeNodeId } : null;
   }
 
+  async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
+    return [...this.#db.knowledgeScopeAddresses]
+      .filter(([address, scopeNodeId]) => {
+        if (input.after && address <= input.after) return false;
+        const scope = this.#db.knowledgeNodes.get(scopeNodeId);
+        return scope?.isScope === true && !scope.deletedAt;
+      })
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(0, limit)
+      .map(([address, scopeNodeId]) => ({ address, scopeNodeId }));
+  }
+
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
     const entry = this.#db.knowledgeNodeAddresses.get(JSON.stringify([input.source, input.address]));
     return entry ? { ...entry } : null;

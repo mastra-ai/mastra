@@ -240,8 +240,8 @@ function stubKnowledgeRoute(
           {
             id: 'activity-1',
             action: 'create',
-            targetType: 'record',
-            scopeId: 'scope:payments',
+            recordType: 'record',
+            scope: ['org:org-1', `resource:${FACTORY_ID}`],
             sourceType: 'importer',
             sourceId: 'github',
             importRunId: 'run-1',
