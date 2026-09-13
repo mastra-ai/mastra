@@ -260,6 +260,73 @@ describe('Memory.summarizeThread()', () => {
     expect(result.summary).toContain('roof inspection');
   });
 
+  it('continues summarizing after a fully filtered storage page', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          toolCallFilter: { exclude: ['secret_tool'] },
+        },
+      },
+    });
+    const threadId = 'call-thread';
+    const resourceId = 'caller-42';
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Call',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const base = Date.now();
+    const hiddenMessages = Array.from(
+      { length: 100 },
+      (_, index): MastraDBMessage => ({
+        id: `hidden-${index}`,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: `hidden-call-${index}`,
+                toolName: 'secret_tool',
+                args: { index },
+                result: { index },
+              },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(base + (index + 1) * 1000),
+        threadId,
+        resourceId,
+      }),
+    );
+    await memory.saveMessages({
+      messages: [
+        createTestMessage('visible older message', 'user', {
+          id: 'visible-older',
+          threadId,
+          resourceId,
+          createdAt: new Date(base),
+        }),
+        ...hiddenMessages,
+      ],
+    });
+
+    const { model, promptText } = createPromptCapturingModel();
+    await memory.summarizeThread({ model: model as any, threadId, resourceId });
+
+    expect(promptText()).toContain('visible older message');
+  });
+
   it('only summarizes the last N messages when lastMessages is set', async () => {
     const { memory, threadId, resourceId } = await createThreadWithMessages([
       'marker-one',

@@ -3434,7 +3434,13 @@ Notes:
         page,
         includeTotal: false,
       });
-      if (batch.length === 0) break;
+      if (batch.length === 0) {
+        if (hasMore) {
+          page++;
+          continue;
+        }
+        break;
+      }
 
       let reachedLimit = false;
       const kept: MastraDBMessage[] = [];
