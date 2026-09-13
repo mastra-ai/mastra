@@ -244,6 +244,15 @@ export interface KnowledgeStructureGrant {
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeStructureScope {
+  /**
+   * Opaque scope address. Colon-separated segments do not create hierarchy;
+   * declare every relationship through `parentAddresses`.
+   *
+   * Avoid identity-style addresses such as `org:*`, `resource:*`, and
+   * `thread:*` for unrelated structural scopes. They remain distinct unless
+   * the full address matches, but clients may present them beside identity
+   * scopes with similar names.
+   */
   address: string;
   name: string;
   kind?: string;

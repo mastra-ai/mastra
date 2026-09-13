@@ -31,6 +31,8 @@ import {
   deriveRecordElements,
   egoGraph,
   filterGraph,
+  graphNodesWithBoundaries,
+  graphRecordsWithBoundaries,
   graphTraversalEdges,
   NO_FILTERS,
   renderedGraphEdges,
@@ -51,25 +53,46 @@ const RUNG_RING: Record<KnowledgeRung, string> = {
 
 function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
-  const labeled = focused || shouldShowLabel(degree);
+  const labeled = node.isBoundary || focused || shouldShowLabel(degree);
   const large = size >= 88;
   const nameSize = Math.max(10, Math.min(16, Math.round(size / 9)));
   const glow = Math.round(10 + size / 5);
+  const border = node.isBoundary
+    ? 'border-slate-400/70 border-dashed opacity-75'
+    : node.isScope
+      ? 'border-cyan-300/80'
+      : RUNG_RING[node.rung ?? 'org'];
+  const background = node.isBoundary
+    ? 'radial-gradient(circle at 50% 32%, rgba(148,163,184,0.16), rgba(20,24,31,0.96) 72%)'
+    : node.isScope
+      ? 'radial-gradient(circle at 50% 32%, rgba(34,211,238,0.28), rgba(8,24,31,0.98) 72%)'
+      : 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)';
+  const glowColor = node.isBoundary
+    ? 'rgba(148,163,184,0.15)'
+    : node.isScope
+      ? 'rgba(34,211,238,0.38)'
+      : 'rgba(139,92,246,0.35)';
   return (
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
-    <div data-testid="knowledge-node" data-node-id={node.id} className="relative" style={{ width: size, height: size }}>
+    <div
+      data-testid="knowledge-node"
+      data-node-id={node.id}
+      data-node-type={node.isBoundary ? 'boundary' : node.isScope ? 'scope' : 'content'}
+      className="relative"
+      style={{ width: size, height: size }}
+    >
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
         className={[
           'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
-          RUNG_RING[node.rung ?? 'org'],
+          border,
           selected ? 'ring-2 ring-purple-300' : '',
         ].join(' ')}
         style={{
-          background: 'radial-gradient(circle at 50% 32%, rgba(124,92,255,0.22), rgba(13,13,22,0.97) 72%)',
-          boxShadow: `0 0 ${glow}px rgba(139,92,246,0.35)`,
+          background,
+          boxShadow: `0 0 ${glow}px ${glowColor}`,
         }}
       >
         {labeled ? (
@@ -77,16 +100,18 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           // name must use a fixed light color — theme tokens like text-icon6
           // go dark-on-dark in light mode.
           <span
-            className="pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words text-purple-100"
+            className={`pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words ${node.isBoundary ? 'text-slate-200' : 'text-purple-100'}`}
             style={{ fontSize: nameSize }}
             title={node.name}
           >
             {node.name}
           </span>
         ) : null}
-        {labeled && large ? (
-          <span className="mt-0.5 text-[9px] font-medium tracking-widest text-purple-300/70 uppercase">
-            {node.kind.slice(0, 12)}
+        {labeled && (large || node.isBoundary) ? (
+          <span
+            className={`mt-0.5 text-[9px] font-medium tracking-widest uppercase ${node.isBoundary ? 'text-slate-400' : 'text-purple-300/70'}`}
+          >
+            {node.isBoundary && node.rung ? `↗ ${RUNG_LABELS[node.rung]}` : node.kind.slice(0, 12)}
           </span>
         ) : null}
       </div>
@@ -354,13 +379,16 @@ function KnowledgeGraphInner({
   const { nodes, edges } = useMemo(() => {
     // A11: records are the connection source of truth when the payload
     // carries them; logical owner→target pairs drive filters/ego/sizing.
-    const records = payload.records ?? [];
+    // Authorized boundary summaries become muted endpoints, and matching
+    // record wikilinks attach them to the same record element as their owner.
+    const records = graphRecordsWithBoundaries(payload.records ?? [], payload.outOfWindow);
+    const graphNodes = graphNodesWithBoundaries(payload.nodes, payload.outOfWindow, records);
     // Position capture policy: new data re-simulates WARM (nodes start
     // from their settled spots — new inbound edges change node sizes, so the
     // layout must re-settle); unchanged data freezes positions hard so
     // polls, filter toggles, and re-renders never rearrange the graph.
     const signature = [
-      payload.nodes
+      graphNodes
         .map(node => node.id)
         .sort()
         .join(','),
@@ -387,7 +415,7 @@ function KnowledgeGraphInner({
     // project view, so the cluster expands out of its current shape.
     const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
     const pairEdges = graphTraversalEdges(payload.edges, records);
-    let filtered = filterGraph(payload.nodes, pairEdges, filters);
+    let filtered = filterGraph(graphNodes, pairEdges, filters);
     if (focusedId) {
       const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, records);
       // A stale focus id (filtered away or gone from the payload) falls back
@@ -563,8 +591,10 @@ function KnowledgeGraphInner({
             onEdgeClick?.({ source: first, target: second ?? first, recordId: record.id });
             return;
           }
+          const knowledgeNode = (node as NodeFlowNode).data.node;
+          if (knowledgeNode.isBoundary) return;
           setFocusedId(node.id);
-          onNodeClick?.((node as NodeFlowNode).data.node);
+          onNodeClick?.(knowledgeNode);
         }}
         onPaneClick={() => setFocusedId(null)}
         onEdgeClick={(_, edge) => {

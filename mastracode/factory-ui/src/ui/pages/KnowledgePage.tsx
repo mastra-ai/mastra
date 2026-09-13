@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -115,6 +116,17 @@ function Breadcrumb({
   );
 }
 
+function ScopeLabel({ name, kind }: { name: string; kind: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{name}</span>
+      <Badge variant="neutral" emphasis="muted" size="xs">
+        {kind}
+      </Badge>
+    </span>
+  );
+}
+
 function ScopeTree({
   scopes,
   selection,
@@ -128,7 +140,7 @@ function ScopeTree({
   // structure plan or the host's rung config. The server materializes the
   // identity chain (org → project → session) as ordinary scope nodes linked
   // by membership edges, so nesting here is pure `parentIds`. A rung whose
-  // node exists renders merged (structural name + identity marker, structural
+  // node exists renders once (structural name + identity kind, structural
   // lens); a rung whose node does NOT exist (adapter without structural scope
   // nodes, or a failed vouch) falls back to a plain identity entry so the
   // rung stays reachable. The multi-parent case renders under every parent.
@@ -152,12 +164,11 @@ function ScopeTree({
       else byParent.set(parentId, [node]);
     }
   }
-  const rungLabel = (level: (typeof roots)[number]['level']) =>
-    level === 'resource' ? 'Project' : level === 'thread' ? 'Session' : 'Organization';
-  const markerLabel = (level: (typeof roots)[number]['level']) =>
-    level === 'resource' ? 'your project' : level === 'thread' ? 'your session' : 'your org';
+  const identityKind = (level: (typeof roots)[number]['level']) =>
+    level === 'resource' ? 'project' : level === 'thread' ? 'session' : 'org';
   const renderScopeNode = (node: KnowledgeScopeNode, depth: number) => {
     const marker = markerByNodeId.get(node.id);
+    const kind = marker ? identityKind(marker) : (node.kind ?? 'scope');
     const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
     return (
       <div key={node.id}>
@@ -165,15 +176,14 @@ function ScopeTree({
           type="button"
           aria-pressed={pressed}
           className={cn(
-            'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+            'hover:text-icon6 w-full rounded-md px-2 py-1 text-left',
             pressed && 'bg-surface4 text-icon6 font-medium',
           )}
           style={{ paddingLeft: `${8 + depth * 12}px` }}
           title={node.description ?? node.name}
           onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
         >
-          {node.name}
-          {marker ? <span className="text-icon3"> · {markerLabel(marker)}</span> : null}
+          <ScopeLabel name={node.name} kind={kind} />
         </button>
         {(byParent.get(node.id) ?? []).map(child => renderScopeNode(child, depth + 1))}
       </div>
@@ -193,12 +203,12 @@ function ScopeTree({
             type="button"
             aria-pressed={selection?.scopeLevel === root.level && !selection?.scopeNodeId}
             className={cn(
-              'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+              'hover:text-icon6 w-full rounded-md px-2 py-1 text-left',
               selection?.scopeLevel === root.level && !selection?.scopeNodeId && 'bg-surface4 text-icon6 font-medium',
             )}
             onClick={() => onSelect({ scopeLevel: root.level })}
           >
-            {rungLabel(root.level)} {root.id.slice(0, 8)}
+            <ScopeLabel name={root.id.slice(0, 8)} kind={identityKind(root.level)} />
           </button>
         ))}
       </div>
@@ -364,12 +374,18 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
   const selectScope = (next: KnowledgeSelection) => {
-    setTrail([]);
+    const nextScope = next.scopeNodeId
+      ? scopesQuery.data?.scopeNodes?.find(scopeNode => scopeNode.id === next.scopeNodeId)
+      : undefined;
+    const nextRung =
+      next.scopeLevel ?? scopesQuery.data?.roots.find(root => root.scopeNodeId === next.scopeNodeId)?.level;
+    const nextEntry = nextScope ? { nodeId: nextScope.id, name: nextScope.name, rung: nextRung } : null;
+    setTrail(nextEntry ? [nextEntry] : []);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
-      writeNodeSelection(copy, null);
-      // Merged entries (scope node owning a rung's address) deep-link to the
-      // structural lens — one entry, one lens.
+      writeNodeSelection(copy, nextEntry);
+      // A scope-node selection changes the lens and opens the same node's
+      // detail surface. The URL carries both states so the result is linkable.
       copy.set('scope', next.scopeNodeId ?? next.scopeLevel);
       return copy;
     });
@@ -466,9 +482,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             setSelected({ nodeId: id, name: node?.name ?? id, rung: node?.rung });
           }}
           onNodeClick={node => {
-            // A child scope drills into its lens. Clicking the active lens root
-            // opens scope detail instead of redundantly selecting the same lens.
-            if (selection.scopeNodeId && node.isScope && node.id !== selection.scopeNodeId) {
+            if (node.isScope) {
+              // Scope selection is identical in the tree and canvas: switch
+              // the lens and open that scope's detail surface in one action.
               selectScope({ scopeNodeId: node.id });
               return;
             }
