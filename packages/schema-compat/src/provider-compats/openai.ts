@@ -102,6 +102,23 @@ function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boo
   );
 }
 
+function scalarTypeForValue(value: unknown): JSONSchema7['type'] | undefined {
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'number') return 'number';
+  return undefined;
+}
+
+function inferScalarType(schema: JSONSchema7): JSONSchema7['type'] | undefined {
+  const values = 'const' in schema ? [schema.const] : Array.isArray(schema.enum) ? schema.enum : [];
+  const inferredTypes = values.map(scalarTypeForValue);
+  if (inferredTypes.some(type => type === undefined)) return undefined;
+
+  const types = [...new Set(inferredTypes)] as string[];
+  if (types.length === 0) return undefined;
+  return types.length === 1 ? (types[0] as JSONSchema7['type']) : (types as JSONSchema7['type']);
+}
+
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
@@ -293,7 +310,27 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       this.defaultUnionHandler(schema);
     }
 
+    if (Array.isArray(schema.anyOf)) {
+      for (const branch of schema.anyOf) {
+        if (typeof branch === 'object' && branch !== null && branch.type === undefined) {
+          const inferredType = inferScalarType(branch);
+          if (inferredType) {
+            branch.type = inferredType;
+          }
+        }
+      }
+    }
+
     if (schema.type === undefined && !schema.anyOf) {
+      const inferredType = inferScalarType(schema);
+      if (inferredType) {
+        schema.type = inferredType;
+      }
+
+      if (schema.type !== undefined) {
+        return;
+      }
+
       let subSchema: typeof schema = {};
       for (const key of Object.keys(schema)) {
         // @ts-expect-error - key is a valid property for JSON Schema
