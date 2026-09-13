@@ -36,6 +36,7 @@ import {
 } from './errors';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
+import type { QueueOptions } from './types';
 
 // ---------------------------------------------------------------------------
 // Admission
@@ -166,6 +167,52 @@ describe('Session.queue() — admission', () => {
         logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
       }),
     ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('freezes an omitted logical identity before attachment resolution and queue hashing', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+    const notBefore = Date.now() + 60_000;
+    const realResolveAttachmentRefs = (session as any)._resolveAttachmentRefs.bind(session);
+    let releaseAttachments!: () => void;
+    let attachmentsStarted!: () => void;
+    const attachmentsStartedPromise = new Promise<void>(resolve => {
+      attachmentsStarted = resolve;
+    });
+    const attachmentsGate = new Promise<void>(resolve => {
+      releaseAttachments = resolve;
+    });
+    let gated = false;
+    (session as any)._resolveAttachmentRefs = async (...args: any[]) => {
+      if (!gated) {
+        gated = true;
+        attachmentsStarted();
+        await attachmentsGate;
+      }
+      return realResolveAttachmentRefs(...args);
+    };
+
+    const options: QueueOptions = {
+      content: 'ordinary queued message',
+      admissionId: 'queue-omitted-identity',
+      notBefore,
+    };
+    const pending = session.admitQueue(options);
+    await attachmentsStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseAttachments();
+
+    const admitted = await pending;
+    const duplicate = await session.admitQueue({
+      content: 'ordinary queued message',
+      admissionId: 'queue-omitted-identity',
+      notBefore,
+    });
+    expect(duplicate).toEqual({ accepted: true, queuedItemId: admitted.queuedItemId, duplicate: true });
+    expect(session.getRecord().pendingQueue?.[0]).not.toHaveProperty('logicalMessageIdentity');
 
     await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
     await session.close();

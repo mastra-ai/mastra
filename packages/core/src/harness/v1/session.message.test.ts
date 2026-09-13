@@ -29,6 +29,7 @@ import {
   HarnessValidationError,
 } from './errors';
 import { Harness } from './harness';
+import type { MessageOptionsDefault } from './types';
 
 // ---------------------------------------------------------------------------
 // Fake agent: skips the model layer entirely. Records what message() passed
@@ -381,6 +382,39 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('keeps an omitted logical identity out of direct dispatch after caller mutation', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const realBuildRequestContext = (session as any)._buildRequestContext.bind(session);
+    let releaseContext!: () => void;
+    let contextStarted!: () => void;
+    const contextStartedPromise = new Promise<void>(resolve => {
+      contextStarted = resolve;
+    });
+    const contextGate = new Promise<void>(resolve => {
+      releaseContext = resolve;
+    });
+    (session as any)._buildRequestContext = async (...args: any[]) => {
+      contextStarted();
+      await contextGate;
+      return realBuildRequestContext(...args);
+    };
+
+    const options: MessageOptionsDefault = {
+      content: 'ordinary message',
+      admissionId: 'message-omitted-identity',
+    };
+    const pending = session.message(options);
+    await contextStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseContext();
+
+    await pending;
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toBeUndefined();
+    expect(sendSignal.mock.calls[0]?.[0]).not.toHaveProperty('metadata');
+  });
+
   it('rejects a full logical message when a run becomes active during reservation', async () => {
     const agent = new MockAgent({ id: 'default' });
     let releaseActive!: () => void;
@@ -575,6 +609,41 @@ describe('Session.message() — default path', () => {
       input: 'admit-input',
       response: 'admit-response',
     });
+  });
+
+  it('keeps an omitted logical identity out of admitMessage dispatch after caller mutation', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'admit-omitted-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const options: MessageOptionsDefault = {
+      content: 'ordinary admitted message',
+      admissionId: 'admit-omitted-identity',
+    };
+    const pending = session.admitMessage(options);
+    await lookupStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input', response: 'late-response' };
+    releaseLookup();
+
+    await expect(pending).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toBeUndefined();
   });
 
   it('returns message admission before a slow stream output is available', async () => {

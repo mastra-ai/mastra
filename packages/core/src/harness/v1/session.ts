@@ -7459,7 +7459,10 @@ export class Session {
     this._assertLive('message()');
     this._assertOpenForTurn('message()');
     const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, 'message()');
-    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
 
     if (opts.stream === true && opts.output !== undefined) {
       throw new HarnessConfigError('message()', '`stream: true` and `output` are mutually exclusive');
@@ -8318,7 +8321,10 @@ export class Session {
       opts.logicalMessageIdentity,
       'admitMessage()',
     );
-    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (opts.admissionId === undefined || opts.admissionId.length === 0) {
       throw new HarnessValidationError('admitMessage().admissionId', 'admissionId must be a non-empty string');
     }
@@ -9620,7 +9626,10 @@ export class Session {
     const logicalMessageIdentity = normalizeSessionLogicalMessageInputIdentity(opts.logicalMessageIdentity, 'signal()');
     const responseLogicalMessageIdentity =
       logicalMessageIdentity !== undefined && 'response' in logicalMessageIdentity ? logicalMessageIdentity : undefined;
-    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (typeof opts.content !== 'string') {
       throw new HarnessValidationError('signal()', '`content` must be a string');
     }
@@ -14625,7 +14634,10 @@ export class Session {
     this._assertLive(methodName);
     this._assertOpenForTurn(methodName);
     const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, methodName);
-    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
+    const admittedOpts = {
+      ...opts,
+      ...(logicalMessageIdentity === undefined ? {} : { logicalMessageIdentity }),
+    };
     if (typeof opts.content !== 'string' || opts.content.length === 0) {
       throw new HarnessValidationError(`${methodName}.content`, 'must be a non-empty string');
     }

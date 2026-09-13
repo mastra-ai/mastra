@@ -12,6 +12,7 @@ import {
 } from './errors';
 import type { HarnessEvent } from './events';
 import type { Session } from './session';
+import type { SessionSignalOptions } from './types';
 
 async function waitForStreamCalls(agent: MockAgent, expected: number): Promise<void> {
   for (let i = 0; i < 100 && agent.streamCalls.length < expected; i++) {
@@ -161,6 +162,54 @@ describe('Session.signal() admissionId', () => {
 
     const duplicate = await duplicatePromise;
     expect(duplicate.signal.metadata).toEqual({ logicalMessageId: 'signal-input' });
+    expect(duplicate.id).toBe(first.id);
+    release();
+    await Promise.all([first.result, duplicate.result]);
+  });
+
+  it('keeps an omitted logical identity out of duplicate signal reconstruction after caller mutation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'ordinary signal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const first = await session.signal({ content: 'ordinary signal', admissionId: 'signal-omitted-identity' });
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'signal-omitted-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const options: SessionSignalOptions = {
+      content: 'ordinary signal',
+      admissionId: 'signal-omitted-identity',
+    };
+    const duplicatePromise = session.signal(options);
+    await lookupStartedPromise;
+    options.logicalMessageIdentity = { input: 'late-input' };
+    releaseLookup();
+
+    const duplicate = await duplicatePromise;
+    expect(duplicate.signal.metadata).toBeUndefined();
     expect(duplicate.id).toBe(first.id);
     release();
     await Promise.all([first.result, duplicate.result]);
