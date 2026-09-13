@@ -1,0 +1,10 @@
+export { connect } from './connect.js';
+export type { ConnectOptions, ConnectIntegrationOptions, ConnectTools } from './connect.js';
+export { credential } from './credential.js';
+export { MastraConnectError } from './errors.js';
+export type { MastraConnectErrorCode } from './errors.js';
+export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
+export type { ProviderToolsOptions, ProxyToolConfig, ProxyToolContext } from './toolset.js';
+export { defineProxyTool, resolveConnectionId, applyAllowTools } from './toolset.js';
+export { PROVIDERS, findRegistration } from './registry.js';
+export type { ProviderRegistration } from './registry.js';
