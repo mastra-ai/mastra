@@ -276,6 +276,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(boundaryNode).toContainText('↗ Project');
   await expect(boundaryNode.locator(':scope > div').first()).toHaveCSS('border-style', 'dashed');
   await expect(page.locator('.react-flow__edge[data-id="record:record-3"]')).toBeVisible();
+  await expect(page.getByTestId('knowledge-truncation-banner')).toHaveCount(0);
   const lensUrl = page.url();
   await boundaryNode.dispatchEvent('click');
   await expect.poll(() => page.url()).toBe(lensUrl);

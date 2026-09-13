@@ -8,6 +8,7 @@ import type {
 } from '../../services/knowledge';
 import {
   BOUNDARY_NODE_SIZE,
+  countUnrenderedBoundaries,
   degreeMap,
   deriveRecordElements,
   egoGraph,
@@ -74,6 +75,7 @@ describe('bounded graph endpoints', () => {
         recordCount: 0,
       },
     ]);
+    expect(countUnrenderedBoundaries([boundary], graphNodes)).toBe(0);
     expect(connected[0]?.nodeIds).toEqual(['owner', 'outside']);
     const pairEdges = recordPairEdges(connected);
     expect(pairEdges).toEqual([expect.objectContaining({ source: 'owner', target: 'outside', recordId: 'record' })]);
@@ -87,6 +89,28 @@ describe('bounded graph endpoints', () => {
         focusable: false,
       }),
     );
+  });
+
+  it('counts only out-of-window targets that are not rendered', () => {
+    const rendered: KnowledgeBoundaryNode = {
+      id: 'rendered',
+      name: 'Rendered',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const missing: KnowledgeBoundaryNode = {
+      id: 'missing',
+      name: 'Missing',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const connected = graphRecordsWithBoundaries(
+      [{ id: 'record', nodeIds: ['owner'], pinned: false, text: 'See [[Rendered]].' }],
+      [rendered, missing],
+    );
+    const graphNodes = graphNodesWithBoundaries([node('owner')], [rendered, missing], connected);
+
+    expect(countUnrenderedBoundaries([rendered, missing], graphNodes)).toBe(1);
   });
 });
 
