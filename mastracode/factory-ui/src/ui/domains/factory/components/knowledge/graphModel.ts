@@ -36,15 +36,13 @@ export function graphNodesWithBoundaries(
     ...nodes,
     ...boundaries
       .filter(boundary => !known.has(boundary.id) && related.has(boundary.id))
-      .map(
-        (boundary): KnowledgeGraphNode => ({
-          ...boundary,
-          kind: 'outside view',
-          isBoundary: true,
-          pinned: false,
-          recordCount: 0,
-        }),
-      ),
+      .map((boundary): KnowledgeGraphNode => ({
+        ...boundary,
+        kind: 'outside view',
+        isBoundary: true,
+        pinned: false,
+        recordCount: 0,
+      })),
   ];
 }
 
@@ -311,6 +309,11 @@ export type KnowledgeFlowEdge = Edge<{
   /** The edge belongs to the record currently selected in the flyout. */
   focused?: boolean;
 }>;
+
+export function knowledgeEdgeHoverText(edge: KnowledgeFlowEdge): string {
+  if (edge.data?.linkType === 'contains') return 'Direct member of this scope';
+  return edge.data?.text ?? 'Mentioned in a knowledge record';
+}
 
 /** A11 record edges replace wikilinks only; containment remains visible. */
 export function renderedGraphEdges(
