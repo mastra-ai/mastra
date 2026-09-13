@@ -673,6 +673,12 @@ export function createKnowledgeStorageTests(
         scopeNodeId: first.scopes['repo:mastra'],
       });
       expect(await store.getScopeAddress('repo:missing')).toBeNull();
+      expect(await store.listScopeAddresses({ limit: 1 })).toEqual([
+        { address: 'org:shipyard', scopeNodeId: first.scopes['org:shipyard'] },
+      ]);
+      expect(await store.listScopeAddresses({ after: 'org:shipyard', limit: 1 })).toEqual([
+        { address: 'repo:mastra', scopeNodeId: first.scopes['repo:mastra'] },
+      ]);
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
     });
 

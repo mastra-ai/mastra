@@ -630,6 +630,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async getScopeAddress(_address: string): Promise<KnowledgeScopeAddress | null> {
     throw new KnowledgeUnsupportedError();
   }
+  async listScopeAddresses(_input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    throw new KnowledgeUnsupportedError();
+  }
   async getNodeAddress(_input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
     throw new KnowledgeUnsupportedError();
   }

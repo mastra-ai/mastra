@@ -310,11 +310,14 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'knowledge-appended',
+            action: 'create',
             recordType: 'record',
             recordId: 'record-1',
             scope: ['org:org-1', `resource:${FACTORY_ID}`],
             node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
