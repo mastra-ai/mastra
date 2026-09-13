@@ -300,12 +300,14 @@ export interface KnowledgeCore {
   KnowledgeSchemaError: new (message: string) => Error;
   KnowledgeUnsupportedError: new (adapter?: string) => Error;
   sanitizeKnowledgeImportError(error: unknown): string;
+  assertKnowledgeProposalMutationSemantics(mutation: unknown, targets: readonly unknown[]): void;
 }
 
 const KNOWLEDGE_CORE_EXPORTS = [
   'KnowledgeSchemaError',
   'KnowledgeUnsupportedError',
   'sanitizeKnowledgeImportError',
+  'assertKnowledgeProposalMutationSemantics',
 ] as const satisfies readonly (keyof KnowledgeCore)[];
 
 export function assertKnowledgeCoreSupport(features: ReadonlySet<string>): void {
