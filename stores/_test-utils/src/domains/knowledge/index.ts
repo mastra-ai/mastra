@@ -451,13 +451,28 @@ export function createKnowledgeStorageTests(
 
     it('continues bounded search pages until an authorized match is found', async () => {
       const target = await store.createNode({ name: 'Deep searchable needle', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-deep-search-match',
+        node: target,
+        text: 'Buried record needle',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
       for (let index = 0; index < 105; index++) {
-        await store.createNode({ name: `Newer unrelated node ${index}`, scopeIds: [PROJECT_SCOPE_ID] });
+        const filler = await store.createNode({ name: `Newer unrelated node ${index}`, scopeIds: [PROJECT_SCOPE_ID] });
+        await store.createRecord({
+          id: `record-newer-unrelated-${String(index).padStart(3, '0')}`,
+          node: filler,
+          text: `Newer unrelated record ${index}`,
+          scopeIds: [PROJECT_SCOPE_ID],
+        });
       }
 
       expect(await store.search({ query: 'searchable needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual([
         expect.objectContaining({ type: 'node', id: target.id }),
+      ]);
+      expect(await store.search({ query: 'buried record needle', scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).toEqual([
+        expect.objectContaining({ type: 'record', id: record.id }),
       ]);
     });
 
