@@ -137,7 +137,9 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async appendRecord(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
     const expectedAccessEpoch = await this.#assertMutationAllowed('append');
-    const record = await (await this.#knowledge.getStorageInternal()).createRecord({
+    const record = await (
+      await this.#knowledge.getStorageInternal()
+    ).createRecord({
       ...input,
       node: this.node.id,
       source: this.#importer.source,
@@ -210,7 +212,6 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     }
     const deleted = await storage.deleteRecordBySource({
       id,
-      version: record.version,
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,
@@ -221,7 +222,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 
   async #getTrackedRecord(id: string): Promise<{ recordId: string; version: number } | undefined> {
-    const state = await this.#knowledge.getImportState({
+    const state = await this.#knowledge.getImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),
@@ -239,7 +240,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async #setTrackedRecord(record: KnowledgeRecord | undefined, id = record?.id): Promise<void> {
     if (!id) return;
-    await this.#knowledge.setImportState({
+    await this.#knowledge.setImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),

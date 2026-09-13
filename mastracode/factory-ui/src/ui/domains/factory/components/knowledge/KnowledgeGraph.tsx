@@ -22,7 +22,7 @@ import {
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Boxes, Globe, Pin } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
@@ -558,15 +558,6 @@ function KnowledgeGraphInner({
       `}</style>
       <TruncationBanner payload={payload} outOfWindowCount={outOfWindowCount} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        {availableRungs.map(rung => (
-          <FilterChip
-            key={rung}
-            label={RUNG_LABELS[rung]}
-            icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
-            active={filters.rungs.size === 0 || filters.rungs.has(rung)}
-            onClick={() => toggleRung(rung)}
-          />
-        ))}
         <FilterChip
           label="Pinned"
           accent

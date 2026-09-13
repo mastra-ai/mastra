@@ -13,21 +13,17 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { KnowledgeApprovals } from '../domains/factory/components/knowledge/KnowledgeApprovals';
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import type { KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
+import type { KnowledgeRung, KnowledgeScopeTreePayload } from '../domains/factory/services/knowledge';
 import { RequestError } from '../domains/factory/services/request';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
 /**
- * The Knowledge page: a live force-directed graph of the project's knowledge —
- * nodes as nodes, wikilink relationships as edges. The default view is
- * project scope (org + project records, the knowledge records that carry across
- * sessions); thread-scoped knowledge is reached only by drilling into a
- * knowledge record's "captured in session" link, which switches to the thread view with
- * an org → project → thread breadcrumb (Amendment A2). Thread state lives in
- * the `?thread=` search param so the view is linkable and back-button safe.
+ * A live, access-filtered view of the project's knowledge. Selected scope and
+ * session state live in search params so views remain linkable and back-button safe.
  */
 export function KnowledgePage() {
   return (
@@ -182,17 +178,18 @@ function ActivityPanel({
   const [sourceType, setSourceType] = useState('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const activity = useKnowledgeActivity(factoryProjectId, scopeId, threadId);
+  const activity = useKnowledgeActivity(factoryProjectId, scopeId, threadId, {
+    action: action === 'all' ? undefined : action,
+    sourceType: sourceType === 'importer' || sourceType === 'system' ? sourceType : undefined,
+    from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+    to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+  });
   if (activity.isPending) return <SkeletonRows label="Loading knowledge activity" rows={6} />;
   if (activity.isError) {
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
     return <Notice variant="destructive">{message}</Notice>;
   }
-  const events = activity.data.events
-    .filter(event => action === 'all' || event.action === action)
-    .filter(event => sourceType === 'all' || event.sourceType === sourceType)
-    .filter(event => !from || event.createdAt >= new Date(`${from}T00:00:00`).toISOString())
-    .filter(event => !to || event.createdAt <= new Date(`${to}T23:59:59.999`).toISOString());
+  const events = activity.data.pages.flatMap(page => page.events);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2" aria-label="Knowledge activity filters">
@@ -256,6 +253,18 @@ function ActivityPanel({
               </time>
             </li>
           ))}
+          {activity.hasNextPage ? (
+            <li className="flex justify-center py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={activity.isFetchingNextPage}
+                onClick={() => void activity.fetchNextPage()}
+              >
+                {activity.isFetchingNextPage ? 'Loading activity…' : 'Load more activity'}
+              </Button>
+            </li>
+          ) : null}
         </ol>
       )}
     </div>
@@ -269,16 +278,22 @@ function ActiveKnowledgeView({
   threadId,
   importerId,
   runId,
+  proposalId,
+  onSelectProposal,
   onOpenRun,
+  onOpenNode,
   explore,
 }: {
-  view: 'explore' | 'activity' | 'imports';
+  view: 'explore' | 'activity' | 'approvals' | 'imports';
   factoryProjectId?: string;
   scopeId?: string;
   threadId?: string;
   importerId?: string;
   runId?: string;
+  proposalId?: string;
+  onSelectProposal: (proposalId: string | undefined) => void;
   onOpenRun: (importerId: string, runId: string) => void;
+  onOpenNode: (nodeId: string, name: string) => void;
   explore: React.ReactNode;
 }) {
   if (view === 'activity') {
@@ -286,8 +301,26 @@ function ActiveKnowledgeView({
       <ActivityPanel factoryProjectId={factoryProjectId} scopeId={scopeId} threadId={threadId} onOpenRun={onOpenRun} />
     );
   }
+  if (view === 'approvals') {
+    return factoryProjectId ? (
+      <KnowledgeApprovals
+        factoryProjectId={factoryProjectId}
+        threadId={threadId}
+        proposalId={proposalId}
+        onSelectProposal={onSelectProposal}
+        onOpenNode={onOpenNode}
+      />
+    ) : null;
+  }
   if (view === 'imports') {
-    return <KnowledgeImports factoryProjectId={factoryProjectId} initialImporterId={importerId} initialRunId={runId} />;
+    return (
+      <KnowledgeImports
+        factoryProjectId={factoryProjectId}
+        threadId={threadId}
+        initialImporterId={importerId}
+        initialRunId={runId}
+      />
+    );
   }
   return explore;
 }
@@ -310,9 +343,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const threadId = searchParams.get('thread') ?? undefined;
   const requestedScopeId = searchParams.get('scope') ?? undefined;
   const requestedView = searchParams.get('view');
-  const activeView = requestedView === 'activity' || requestedView === 'imports' ? requestedView : 'explore';
+  const activeView =
+    requestedView === 'activity' || requestedView === 'approvals' || requestedView === 'imports'
+      ? requestedView
+      : 'explore';
   const importerId = searchParams.get('importer') ?? undefined;
   const runId = searchParams.get('run') ?? undefined;
+  const proposalId = searchParams.get('proposal') ?? undefined;
+  // `?scope=` is an identity rung ('org', 'resource', or 'thread' alongside
+  // ?thread=) or a scope-tree node id; without it the view resolves the
+  // project scope (or the session scope inside a thread).
+  const selection: { scopeLevel: 'org' | 'resource' | 'thread'; scopeNodeId?: never } | { scopeNodeId: string; scopeLevel?: never } =
+    requestedScopeId === 'org' || requestedScopeId === 'resource' || (requestedScopeId === 'thread' && threadId)
+      ? { scopeLevel: requestedScopeId }
+      : requestedScopeId
+        ? { scopeNodeId: requestedScopeId }
+        : threadId
+          ? { scopeLevel: 'thread' }
+          : { scopeLevel: 'resource' };
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
@@ -349,15 +397,6 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     if (nextBaseline) baseline.current = nextBaseline;
   }, [nextBaseline]);
 
-  const openThread = (nextThreadId: string) => {
-    setSelected(null);
-    setSearchParams(params => {
-      const copy = new URLSearchParams(params);
-      copy.set('thread', nextThreadId);
-      copy.delete('scope');
-      return copy;
-    });
-  };
   const backToProject = () => {
     setSelected(null);
     setSearchParams(params => {
@@ -459,7 +498,6 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               )
             }
             onClose={() => setTrail([])}
-            onOpenThread={openThread}
             onNodeRef={name => {
               // A clicked [[wikilink]] gets the full node-click treatment (A7):
               // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
@@ -473,13 +511,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     );
   }
 
-  const setView = (view: 'explore' | 'activity' | 'imports') => {
+  const setView = (view: 'explore' | 'activity' | 'approvals' | 'imports') => {
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       if (view === 'explore') copy.delete('view');
       else copy.set('view', view);
       copy.delete('importer');
       copy.delete('run');
+      if (view !== 'approvals') copy.delete('proposal');
       return copy;
     });
   };
@@ -489,6 +528,15 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       copy.set('view', 'imports');
       copy.set('importer', selectedImporterId);
       copy.set('run', selectedRunId);
+      return copy;
+    });
+  };
+  const selectProposal = (selectedProposalId: string | undefined) => {
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('view', 'approvals');
+      if (selectedProposalId) copy.set('proposal', selectedProposalId);
+      else copy.delete('proposal');
       return copy;
     });
   };
@@ -503,7 +551,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           Explore captured knowledge and review how it changes over time.
         </Txt>
         <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
-          {(['explore', 'activity', 'imports'] as const).map(view => (
+          {(['explore', 'activity', 'approvals', 'imports'] as const).map(view => (
             <button
               key={view}
               type="button"
@@ -542,7 +590,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             threadId={threadId}
             importerId={importerId}
             runId={runId}
+            proposalId={proposalId}
+            onSelectProposal={selectProposal}
             onOpenRun={openImportRun}
+            onOpenNode={(nodeId, name) => {
+              setTrail([{ nodeId, name }]);
+              setView('explore');
+            }}
             explore={body}
           />
         </div>

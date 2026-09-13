@@ -201,7 +201,7 @@ describe('Knowledge mutation authorization', () => {
     expect(await storage.getRecordScopeIds(record.id)).toEqual([ids['scope:append']]);
   });
 
-  it('allows an editor to remove a stamp without granting append to a new destination', async () => {
+  it('requires edit authority on every removed stamp without requiring append for removal', async () => {
     const { knowledge, storage, ids } = await createFixture();
     const node = await storage.createNode({ name: 'Editor rescope', scopeIds: [ids['scope:edit']!] });
     const record = await storage.createRecord({
@@ -210,6 +210,19 @@ describe('Knowledge mutation authorization', () => {
       scopeIds: [ids['scope:edit']!, ids['scope:append']!],
     });
 
+    await expect(
+      knowledge.setRecordScopes({
+        id: record.id,
+        version: record.version,
+        scopeIds: [ids['scope:edit']!],
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).rejects.toThrow(`Knowledge scope not found: ${ids['scope:append']}`);
+    await storage.upsertScopeGrant({
+      scopeNodeId: ids['scope:append']!,
+      scopeRefId: ids['principal:edit']!,
+      role: 'edit',
+    });
     const removed = await knowledge.setRecordScopes({
       id: record.id,
       version: record.version,

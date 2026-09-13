@@ -34,9 +34,9 @@ import { runLayout } from './layout';
 function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): KnowledgeGraphNode {
   return {
     id,
+    reference: `reference-${id}`,
     name: `Knowledge node ${id}`,
     kind: 'concept',
-    scopeIds: ['org:o', 'resource:r'],
     rung: 'resource',
     pinned: false,
     recordCount: 1,
@@ -157,11 +157,7 @@ describe('degreeMap', () => {
 });
 
 describe('filterGraph', () => {
-  const nodes = [
-    node('org-1', { rung: 'org', scopeIds: ['org:o'] }),
-    node('res-1'),
-    node('res-pinned', { pinned: true }),
-  ];
+  const nodes = [node('org-1', { rung: 'org' }), node('res-1'), node('res-pinned', { pinned: true })];
   const edges = [edge('org-1', 'res-1'), edge('res-1', 'res-pinned')];
 
   it('shows everything with no filters', () => {

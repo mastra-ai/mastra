@@ -6,15 +6,14 @@ export type KnowledgeImportStatus = 'queued' | 'running' | 'succeeded' | 'failed
 
 export interface KnowledgeImportRun {
   id: string;
+  reference: string;
   importerId: string;
   binding: string;
   source?: string;
-  scope?: string;
   importKind: KnowledgeImportKind;
   triggerKind: KnowledgeImportTrigger;
   status: KnowledgeImportStatus;
   error?: string;
-  transcriptThreadId?: string;
   queuedAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -24,7 +23,7 @@ export interface KnowledgeImporterSummary {
   id: string;
   importKind: KnowledgeImportKind;
   triggers: KnowledgeImportTrigger[];
-  bindings: Array<{ source: string; scope: string }>;
+  bindings: Array<{ source: string; binding: string }>;
   lastRun?: KnowledgeImportRun;
 }
 
@@ -40,6 +39,7 @@ export interface KnowledgeImportRunsPayload {
 export interface KnowledgeImportRunDetailPayload {
   run: KnowledgeImportRun;
   activity: Array<{ id: string; action: string; targetType: string; createdAt: string }>;
+  nextCursor?: string;
   transcript?: {
     threadId: string;
     available: boolean;
@@ -69,9 +69,11 @@ function importsBase(baseUrl: string, factoryProjectId: string): string {
 export function fetchKnowledgeImporters(
   baseUrl: string,
   factoryProjectId: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeImportersPayload> {
-  return requestJson<KnowledgeImportersPayload>(importsBase(baseUrl, factoryProjectId), { signal });
+  const suffix = threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
+  return requestJson<KnowledgeImportersPayload>(`${importsBase(baseUrl, factoryProjectId)}${suffix}`, { signal });
 }
 
 export function fetchKnowledgeImportRuns(
@@ -80,9 +82,11 @@ export function fetchKnowledgeImportRuns(
   importerId: string,
   filters: KnowledgeImportFilters,
   cursor?: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeImportRunsPayload> {
   const query = new URLSearchParams();
+  if (threadId) query.set('threadId', threadId);
   if (filters.binding) query.set('binding', filters.binding);
   if (filters.status) query.set('status', filters.status);
   if (filters.trigger) query.set('trigger', filters.trigger);
@@ -101,10 +105,16 @@ export function fetchKnowledgeImportRun(
   factoryProjectId: string,
   importerId: string,
   runId: string,
+  cursor?: string,
+  threadId?: string,
   signal?: AbortSignal,
 ): Promise<KnowledgeImportRunDetailPayload> {
+  const query = new URLSearchParams();
+  if (cursor) query.set('cursor', cursor);
+  if (threadId) query.set('threadId', threadId);
+  const suffix = query.size > 0 ? `?${query}` : '';
   return requestJson<KnowledgeImportRunDetailPayload>(
-    `${importsBase(baseUrl, factoryProjectId)}/${encodeURIComponent(importerId)}/runs/${encodeURIComponent(runId)}`,
+    `${importsBase(baseUrl, factoryProjectId)}/${encodeURIComponent(importerId)}/runs/${encodeURIComponent(runId)}${suffix}`,
     { signal },
   );
 }
