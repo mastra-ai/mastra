@@ -93,6 +93,13 @@
       "dependencyDashboardApproval": false
     },
     {
+      "description": "MongoDB 8.x fatally refuses to start on the CI runners' Linux kernel 6.19+ (TCMalloc rseq incompatibility, SERVER-121912). Keep mongo pinned to 7.x until MongoDB ships a patched TCMalloc.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mongo"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "groupName": "AI provider SDKs",
       "commitMessageTopic": "AI provider SDKs",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
