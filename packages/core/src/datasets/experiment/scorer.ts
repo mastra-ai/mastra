@@ -14,7 +14,54 @@ import type { CorrelationContext } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { TargetType } from '../../storage/types';
 import type { StepResult } from '../../workflows';
-import type { ScorerResult } from './types';
+import type { ExperimentConfig, ScorerResult } from './types';
+
+export interface NormalizedExperimentScorers {
+  hasRunLevelScorers: boolean;
+  flatScorers?: (MastraScorer<any, any, any, any> | string)[];
+  stepScorers?: Record<string, (MastraScorer<any, any, any, any> | string)[]>;
+  persistedScorerIds: string[] | null;
+}
+
+/** Normalize flat and categorized scorer configuration for execution and persistence. */
+export function normalizeExperimentScorers(scorers: ExperimentConfig['scorers']): NormalizedExperimentScorers {
+  if (scorers === undefined) {
+    return {
+      hasRunLevelScorers: false,
+      persistedScorerIds: null,
+    };
+  }
+
+  let flatScorers: (MastraScorer<any, any, any, any> | string)[];
+  let stepScorers: Record<string, (MastraScorer<any, any, any, any> | string)[]> | undefined;
+
+  if (Array.isArray(scorers)) {
+    flatScorers = scorers;
+  } else {
+    flatScorers = [];
+    if ('agent' in scorers && scorers.agent) flatScorers.push(...scorers.agent);
+    if ('workflow' in scorers && scorers.workflow) flatScorers.push(...scorers.workflow);
+    if ('trajectory' in scorers && scorers.trajectory) flatScorers.push(...scorers.trajectory);
+    if ('steps' in scorers && scorers.steps) stepScorers = scorers.steps;
+  }
+
+  const seenStringIds = new Set<string>();
+  const normalizedFlatScorers = flatScorers.filter(entry => {
+    if (typeof entry !== 'string') return true;
+    if (seenStringIds.has(entry)) return false;
+    seenStringIds.add(entry);
+    return true;
+  });
+
+  return {
+    hasRunLevelScorers: true,
+    flatScorers: normalizedFlatScorers,
+    stepScorers,
+    persistedScorerIds: [
+      ...new Set(normalizedFlatScorers.map(entry => (typeof entry === 'string' ? entry : entry.id))),
+    ],
+  };
+}
 
 function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefined {
   switch (targetType) {
@@ -146,6 +193,55 @@ export interface WorkflowScorerData {
 }
 
 /**
+ * Deterministic score id for experiment score rows. Retried executions of the
+ * same (experiment, item, attempt, scorer) produce the same id, so the scores
+ * store upserts (latest wins) instead of accumulating duplicate rows.
+ */
+function scoreIdFromKey(scoreKey: string, scorerId: string): string {
+  return `${scoreKey}:${scorerId}`;
+}
+
+function stepScoreIdFromKey(scoreKey: string, stepId: string, scorerId: string): string {
+  return `${scoreKey}:step:${stepId}:${scorerId}`;
+}
+
+export function experimentScoreId(experimentId: string, itemId: string, attempt: number, scorerId: string): string {
+  return scoreIdFromKey(experimentScoreKey(experimentId, itemId, attempt), scorerId);
+}
+
+/** Prefix shared by all scores of one (experiment, item, attempt) execution. */
+export function experimentScoreKey(experimentId: string, itemId: string, attempt: number): string {
+  return `expscore:${experimentId}:${itemId}:${attempt}`;
+}
+
+/** Deterministic score id for a scorer applied to one workflow step. */
+export function experimentStepScoreId(
+  experimentId: string,
+  itemId: string,
+  attempt: number,
+  stepId: string,
+  scorerId: string,
+): string {
+  return stepScoreIdFromKey(experimentScoreKey(experimentId, itemId, attempt), stepId, scorerId);
+}
+
+function stableScoreIdsForScorers(
+  scorers: MastraScorer<any, any, any, any>[],
+  getBaseId: (scorerId: string) => string,
+): string[] {
+  const totals = new Map<string, number>();
+  for (const scorer of scorers) totals.set(scorer.id, (totals.get(scorer.id) ?? 0) + 1);
+
+  const occurrences = new Map<string, number>();
+  return scorers.map(scorer => {
+    const occurrence = occurrences.get(scorer.id) ?? 0;
+    occurrences.set(scorer.id, occurrence + 1);
+    const baseId = getBaseId(scorer.id);
+    return totals.get(scorer.id) === 1 ? baseId : `${baseId}:occurrence:${occurrence}`;
+  });
+}
+
+/**
  * Run all scorers for a single item result.
  * Errors are isolated per scorer - one failing scorer doesn't affect others.
  * Trajectory scorers (scorer.type === 'trajectory') receive a pre-extracted
@@ -156,20 +252,6 @@ export interface WorkflowScorerData {
  * source for trajectory extraction, so nulling it to stop writes would silently
  * downgrade trajectory scorers to the raw-message fallback.
  */
-/**
- * Deterministic score id for experiment score rows. Retried executions of the
- * same (experiment, item, attempt, scorer) produce the same id, so the scores
- * store upserts (latest wins) instead of accumulating duplicate rows.
- */
-export function experimentScoreId(experimentId: string, itemId: string, attempt: number, scorerId: string): string {
-  return `${experimentScoreKey(experimentId, itemId, attempt)}:${scorerId}`;
-}
-
-/** Prefix shared by all scores of one (experiment, item, attempt) execution. */
-export function experimentScoreKey(experimentId: string, itemId: string, attempt: number): string {
-  return `expscore:${experimentId}:${itemId}:${attempt}`;
-}
-
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
   item: {
@@ -212,8 +294,11 @@ export async function runScorersForItem(
     experimentId: runId,
   };
 
+  const stableScoreIds = stableScoreKey
+    ? stableScoreIdsForScorers(scorers, scorerId => scoreIdFromKey(stableScoreKey, scorerId))
+    : undefined;
   const settled = await Promise.allSettled(
-    scorers.map(async scorer => {
+    scorers.map(async (scorer, scorerIndex) => {
       const { result, promptMetadata } = await runScorerSafe(
         scorer,
         item,
@@ -233,7 +318,7 @@ export async function runScorersForItem(
         try {
           // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
-            ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
+            ...(stableScoreIds ? { id: stableScoreIds[scorerIndex] } : {}),
             scorerId: scorer.id,
             score: result.score,
             reason: result.reason ?? undefined,
@@ -484,6 +569,7 @@ export async function runStepScorersForItem(
   itemId: string,
   traceId?: string,
   persistScores: boolean = true,
+  stableScoreKey?: string,
 ): Promise<ScorerResult[]> {
   const stepIds = Object.keys(stepScorers);
   if (stepIds.length === 0) return [];
@@ -524,8 +610,11 @@ export async function runStepScorersForItem(
       experimentId: runId,
     };
 
+    const stableScoreIds = stableScoreKey
+      ? stableScoreIdsForScorers(scorers, scorerId => stepScoreIdFromKey(stableScoreKey, stepId, scorerId))
+      : undefined;
     const settled = await Promise.allSettled(
-      scorers.map(async scorer => {
+      scorers.map(async (scorer, scorerIndex) => {
         try {
           const scoreResult: unknown = await scorer.run({
             input: stepInput,
@@ -559,13 +648,14 @@ export async function runStepScorersForItem(
           if (persistScores && storage && score !== null) {
             try {
               await validateAndSaveScore(storage, {
+                ...(stableScoreIds ? { id: stableScoreIds[scorerIndex] } : {}),
                 scorerId: scorer.id,
                 score,
                 reason: reason ?? undefined,
                 input: stepInput,
                 output: stepOutput,
                 additionalContext: { ...item.metadata, stepId },
-                entityType: 'WORKFLOW_STEP',
+                entityType: 'STEP',
                 entityId: itemId,
                 source: 'TEST',
                 runId,
