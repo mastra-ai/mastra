@@ -327,6 +327,49 @@ describe('Memory.summarizeThread()', () => {
     expect(promptText()).toContain('visible older message');
   });
 
+  it('does not count a payload-free history anchor toward the summary limit', async () => {
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          toolCallFilter: { exclude: ['secret_tool'] },
+        },
+      },
+    });
+    const threadId = 'call-thread';
+    const resourceId = 'caller-42';
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Call',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    await memory.saveMessages({
+      messages: [
+        createTestMessage('visible older message', 'user', { id: 'visible-older', threadId, resourceId }),
+        {
+          id: 'payload-free-anchor',
+          role: 'assistant',
+          content: { format: 2, parts: [] },
+          type: 'text',
+          createdAt: new Date(Date.now() + 1000),
+          threadId,
+          resourceId,
+        },
+      ],
+    });
+
+    const { model, promptText } = createPromptCapturingModel();
+    await memory.summarizeThread({ model: model as any, threadId, resourceId, lastMessages: 1 });
+
+    expect(promptText()).toContain('visible older message');
+  });
+
   it('only summarizes the last N messages when lastMessages is set', async () => {
     const { memory, threadId, resourceId } = await createThreadWithMessages([
       'marker-one',

@@ -166,6 +166,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isPayloadFreeHistoryAnchor(message: MastraDBMessage): boolean {
+  const content = message.content;
+  return isRecord(content) && !Array.isArray(content) && Array.isArray(content.parts) && content.parts.length === 0;
+}
+
 export function extractWorkingMemoryTags(text: string): string[] | null {
   const results: string[] = [];
   let pos = 0;
@@ -946,7 +951,11 @@ export class Memory extends MastraMemory {
               { stripMessageProviderMetadata: true },
             );
 
-      const list = new MessageList({ threadId, resourceId }).add(filteredMessages, 'memory');
+      const recalledMessages =
+        toolCallFilter === undefined
+          ? filteredMessages
+          : filteredMessages.filter(message => !isPayloadFreeHistoryAnchor(message));
+      const list = new MessageList({ threadId, resourceId }).add(recalledMessages, 'memory');
 
       // Always return mastra-db format (V2)
       const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
