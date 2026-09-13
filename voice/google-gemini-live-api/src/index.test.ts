@@ -1489,6 +1489,149 @@ describe('GeminiLiveVoice', () => {
       expect(usage.totalTokens).toBe(3);
       expect(['audio', 'text', 'video']).toContain(usage.modality);
     });
+
+    // #23719: usageMetadata is outside the server message's `messageType` oneof, so the
+    // server may attach it to any frame. An else-if chain placed it behind serverContent
+    // and the other content branches, which swallowed usage for every frame that carried
+    // turn content.
+    describe('usage events for combined frames (#23719)', () => {
+      const collectUsage = () => {
+        const events: Array<Record<string, unknown>> = [];
+        voice.on('usage', event => events.push(event));
+        return events;
+      };
+
+      it('emits usage when the frame also carries server content', async () => {
+        const usages = collectUsage();
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: {
+              parts: [
+                {
+                  inlineData: { mimeType: 'audio/pcm', data: Buffer.from(new Int16Array([1, -2])).toString('base64') },
+                },
+              ],
+            },
+          },
+          usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+        });
+
+        expect(usages).toHaveLength(1);
+        expect(usages[0]).toMatchObject({ inputTokens: 1, outputTokens: 2, totalTokens: 3, modality: 'audio' });
+
+        await (voice as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+      });
+
+      it('emits usage for the reported turn-complete shape', async () => {
+        const usages = collectUsage();
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [] }, turnComplete: true },
+          usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+        });
+
+        expect(usages).toHaveLength(1);
+        expect(usages[0]).toMatchObject({ inputTokens: 1, outputTokens: 2, totalTokens: 3, modality: 'text' });
+      });
+
+      it('passes through prompt, response and total tokens without mapping cached or reasoning counts', async () => {
+        const usages = collectUsage();
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [] }, turnComplete: true },
+          usageMetadata: {
+            promptTokenCount: 10,
+            responseTokenCount: 20,
+            cachedContentTokenCount: 5,
+            thoughtsTokenCount: 2,
+            totalTokenCount: 35,
+          },
+        });
+
+        expect(usages).toHaveLength(1);
+        expect(usages[0]).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 35, modality: 'text' });
+      });
+
+      it('emits usage for a tool call frame and still routes to the tool call handler', async () => {
+        const usages = collectUsage();
+        const original = (voice as any).handleToolCall;
+        (voice as any).handleToolCall = vi.fn().mockResolvedValue(undefined);
+
+        try {
+          await (voice as any).handleGeminiMessage({
+            toolCall: { functionCalls: [{ name: 'lookup', args: { id: '1' } }] },
+            usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+          });
+
+          expect(usages).toHaveLength(1);
+          expect((voice as any).handleToolCall).toHaveBeenCalledTimes(1);
+        } finally {
+          (voice as any).handleToolCall = original;
+        }
+      });
+
+      it('emits usage for a setupComplete frame and still routes to setup handling', async () => {
+        const usages = collectUsage();
+        const original = (voice as any).handleSetupComplete;
+        (voice as any).handleSetupComplete = vi.fn();
+
+        try {
+          await (voice as any).handleGeminiMessage({
+            setupComplete: {},
+            usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+          });
+
+          expect(usages).toHaveLength(1);
+          expect((voice as any).handleSetupComplete).toHaveBeenCalledTimes(1);
+        } finally {
+          (voice as any).handleSetupComplete = original;
+        }
+      });
+
+      it('emits usage for a setup frame and still routes to setup handling', async () => {
+        const usages = collectUsage();
+        const original = (voice as any).handleSetupComplete;
+        (voice as any).handleSetupComplete = vi.fn();
+
+        try {
+          await (voice as any).handleGeminiMessage({
+            setup: {},
+            usageMetadata: { promptTokenCount: 1, responseTokenCount: 2, totalTokenCount: 3 },
+          });
+
+          expect(usages).toHaveLength(1);
+          expect((voice as any).handleSetupComplete).toHaveBeenCalledTimes(1);
+        } finally {
+          (voice as any).handleSetupComplete = original;
+        }
+      });
+
+      it('does not emit usage for a tool call frame without usage metadata', async () => {
+        const usages = collectUsage();
+        const original = (voice as any).handleToolCall;
+        (voice as any).handleToolCall = vi.fn().mockResolvedValue(undefined);
+
+        try {
+          await (voice as any).handleGeminiMessage({
+            toolCall: { functionCalls: [{ name: 'lookup', args: { id: '1' } }] },
+          });
+
+          expect(usages).toHaveLength(0);
+          expect((voice as any).handleToolCall).toHaveBeenCalledTimes(1);
+        } finally {
+          (voice as any).handleToolCall = original;
+        }
+      });
+
+      it('does not emit usage for a server content frame without usage metadata', async () => {
+        const usages = collectUsage();
+
+        await (voice as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+
+        expect(usages).toHaveLength(0);
+      });
+    });
   });
 
   describe('Native-audio behavioral signals (#17021)', () => {
