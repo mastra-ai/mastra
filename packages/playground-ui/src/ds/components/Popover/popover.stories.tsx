@@ -19,14 +19,12 @@ type Story = StoryObj<typeof Popover>;
 export const Default: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline">Open Popover</Button>
-      </PopoverTrigger>
+      <PopoverTrigger variant="outline">Open Popover</PopoverTrigger>
       <PopoverContent>
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Dimensions</h4>
-            <p className="text-neutral3 text-ui-md">Set the dimensions for the layer.</p>
+            <p className="text-ui-md text-neutral3">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
             <div className="grid grid-cols-3 items-center gap-4">
@@ -44,6 +42,54 @@ export const Default: Story = {
   ),
 };
 
+/** The trigger is a design-system Button: `variant`, `size` and `tooltip` apply directly. */
+export const Variants: Story = {
+  render: () => (
+    <div className="grid gap-4">
+      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+        <div key={variant} className="flex items-center gap-2">
+          {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+            <Popover key={size}>
+              <PopoverTrigger variant={variant} size={size}>
+                {variant} / {size}
+              </PopoverTrigger>
+              <PopoverContent>
+                <p className="text-ui-md">Popover content.</p>
+              </PopoverContent>
+            </Popover>
+          ))}
+          <Popover>
+            <PopoverTrigger variant={variant} size="icon-md" tooltip="Settings">
+              <Settings />
+            </PopoverTrigger>
+            <PopoverContent>
+              <p className="text-ui-md">Popover content.</p>
+            </PopoverContent>
+          </Popover>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+/** Pass `render` to project the popover behavior onto your own element; `variant`/`size` are then ignored. */
+export const CustomRender: Story = {
+  render: () => (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button variant="outline" size="md">
+            Open Popover
+          </Button>
+        }
+      />
+      <PopoverContent>
+        <p className="text-ui-md">Popover content.</p>
+      </PopoverContent>
+    </Popover>
+  ),
+};
+
 export const WithIconTrigger: Story = {
   render: () => (
     <Popover>
@@ -56,7 +102,7 @@ export const WithIconTrigger: Story = {
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="leading-none font-medium">Settings</h4>
-            <p className="text-neutral3 text-ui-md">Manage your preferences.</p>
+            <p className="text-ui-md text-neutral3">Manage your preferences.</p>
           </div>
         </div>
       </PopoverContent>
@@ -123,7 +169,7 @@ export const SimpleText: Story = {
         <Button variant="ghost">?</Button>
       </PopoverTrigger>
       <PopoverContent className="w-60">
-        <p className="text-neutral5 text-ui-md">This is helpful information about the feature.</p>
+        <p className="text-ui-md text-neutral5">This is helpful information about the feature.</p>
       </PopoverContent>
     </Popover>
   ),

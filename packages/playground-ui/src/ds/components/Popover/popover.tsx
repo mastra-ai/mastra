@@ -4,21 +4,26 @@ import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { asChildRenderProps } from '@/lib/as-child';
+import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
+import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
-type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
-  asChild?: boolean;
-};
+export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
 
+/**
+ * The button that opens the popover. Renders a design-system `<Button>` by
+ * default, so it takes Button's `variant` / `size` / `tooltip`. Pass `render`
+ * to project the behavior onto your own element (then the look is yours).
+ */
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
-  ({ asChild, children, ...props }, ref) => {
+  ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
+    const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
+
     return (
-      <PopoverPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
-        {asChild ? undefined : children}
+      <PopoverPrimitive.Trigger ref={ref} className={resolved.className} render={resolved.render} {...props}>
+        {resolved.children}
       </PopoverPrimitive.Trigger>
     );
   },

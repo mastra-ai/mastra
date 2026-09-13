@@ -8,7 +8,9 @@ import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 import { DatePicker } from './date-picker';
 import { TimePicker } from './time-picker';
 import { Button } from '@/ds/components/Button';
+import type { ButtonProps } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
@@ -19,9 +21,17 @@ type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> 
   onValueChange: (date: Date | undefined) => void;
 };
 
+type DefaultTriggerLook = Pick<ButtonProps, 'variant' | 'size'>;
+
 export type DateTimePickerProps =
-  | (CommonProps & { children?: never; className?: string; placeholder?: string })
-  | (CommonProps & { children: React.ReactNode; className?: never; placeholder?: string });
+  | (CommonProps & DefaultTriggerLook & { children?: never; className?: string; placeholder?: string })
+  | (CommonProps & {
+      children: React.ReactNode;
+      className?: never;
+      placeholder?: string;
+      variant?: never;
+      size?: never;
+    });
 
 export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   value,
@@ -32,6 +42,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   children,
   className,
   placeholder,
+  variant,
+  size,
   ...props
 }) => {
   const [openPopover, setOpenPopover] = React.useState(false);
@@ -45,6 +57,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
           <DefaultTrigger
             value={value}
             placeholder={placeholder}
+            variant={variant}
+            size={size}
             className={className}
             data-testid="datepicker-button"
           />
@@ -260,20 +274,27 @@ export const DateTimePickerContent = ({
   );
 };
 
-type DefaultButtonProps = {
+type DefaultButtonProps = Pick<ButtonProps, 'variant' | 'size' | 'tooltip' | 'disabled'> & {
   className?: string;
   placeholder?: string;
   value: Date | undefined | null;
 };
 
 export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
-  ({ value, placeholder, className, ...props }, ref) => {
+  ({ value, placeholder, variant = 'default', size, className, ...props }, ref) => {
     return (
-      <Button ref={ref} className={cn('justify-start', className)} icon={<CalendarIcon />} {...props}>
+      <Button
+        ref={ref}
+        variant={variant}
+        size={size}
+        className={cn('justify-start', controlTriggerOpenStateFor(variant), className)}
+        icon={<CalendarIcon />}
+        {...props}
+      >
         {value ? (
-          <span className="text-white">{format(value, 'PP p')}</span>
+          <span className="text-neutral6">{format(value, 'PP p')}</span>
         ) : (
-          <span className="text-gray">{placeholder ?? 'Pick a date'}</span>
+          <span className="text-neutral3">{placeholder ?? 'Pick a date'}</span>
         )}
       </Button>
     );

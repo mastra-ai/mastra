@@ -34,3 +34,11 @@ export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string
   outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
   ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
 };
+
+// Open-state classes for a trigger rendered with any Button variant; only the
+// form-style variants have one (a `primary`/`destructive` trigger keeps its look).
+export function controlTriggerOpenStateFor(variant: string | null | undefined): string | undefined {
+  return variant === 'default' || variant === 'outline' || variant === 'ghost'
+    ? controlTriggerOpenState[variant]
+    : undefined;
+}
