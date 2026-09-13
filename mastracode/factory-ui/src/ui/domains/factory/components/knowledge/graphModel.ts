@@ -48,6 +48,15 @@ export function graphNodesWithBoundaries(
   ];
 }
 
+/** Count payload boundaries that the graph model could not render. */
+export function countUnrenderedBoundaries(
+  boundaries: KnowledgeBoundaryNode[],
+  graphNodes: KnowledgeGraphNode[],
+): number {
+  const rendered = new Set(graphNodes.map(node => node.id));
+  return boundaries.filter(boundary => !rendered.has(boundary.id)).length;
+}
+
 /** Attach boundary endpoints to the same record elements as their in-window owners. */
 export function graphRecordsWithBoundaries(
   records: KnowledgeGraphRecord[],

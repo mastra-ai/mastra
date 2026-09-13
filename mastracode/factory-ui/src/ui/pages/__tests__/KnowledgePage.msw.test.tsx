@@ -842,6 +842,35 @@ describe('KnowledgePage', () => {
     });
   });
 
+  it('keeps the out-of-window count for boundary nodes that cannot be rendered', async () => {
+    stubKnowledgeRoute({
+      ...graphFixture,
+      outOfWindow: [
+        {
+          id: 'ent-x',
+          name: 'Elsewhere',
+          scope: ['org:org-1', `resource:${FACTORY_ID}`],
+          rung: 'resource',
+        },
+        {
+          id: 'ent-y',
+          name: 'Unlinked',
+          scope: ['org:org-1', `resource:${FACTORY_ID}`],
+          rung: 'resource',
+        },
+      ],
+      records: [
+        ...graphFixture.records,
+        { id: 'record-boundary', nodeIds: ['ent-1'], pinned: false, text: 'See [[Elsewhere]].' },
+      ],
+    });
+    renderRoute();
+
+    const banner = await screen.findByTestId('knowledge-truncation-banner');
+    expect(banner).toHaveTextContent(/1 linked nodes outside the window/);
+    expect(banner).not.toHaveTextContent(/2 linked nodes outside the window/);
+  });
+
   it('restores a node flyout from its deep link', async () => {
     stubKnowledgeRoute();
     renderRoute(
