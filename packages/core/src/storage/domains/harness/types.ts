@@ -9,6 +9,8 @@
  * (see HARNESS_V1_SPEC.md §5.2). The harness layer composes the two.
  */
 
+import type { LogicalMessageIdentity } from '../../../agent/message-list';
+
 // ---------------------------------------------------------------------------
 // SessionRecord
 // ---------------------------------------------------------------------------
@@ -106,6 +108,8 @@ export interface QueuedItem {
   content: string;
   attachments: PersistedAttachment[];
   requestContext?: PersistedRequestContextInput;
+  /** Validated native input/response identity captured at queue admission. */
+  logicalMessageIdentity?: LogicalMessageIdentity;
   model?: string;
   mode?: string;
   yolo?: boolean;

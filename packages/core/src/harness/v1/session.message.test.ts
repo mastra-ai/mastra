@@ -359,6 +359,26 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('binds logical identity to the admitted message hash', async () => {
+    const { harness, agent } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    await session.message({
+      content: 'hi',
+      admissionId: 'lineage-admission',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+    });
+
+    await expect(
+      session.message({
+        content: 'hi',
+        admissionId: 'lineage-admission',
+        logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+    expect(agent.calls).toHaveLength(1);
+  });
+
   it('replays a completed admitted message after a cold Harness and storage restart', async () => {
     const db = new InMemoryDB();
     const storage1 = new InMemoryHarness({ db });

@@ -39,6 +39,8 @@ import {
   AGENT_RESPONSE_RECOVERY_STEP,
   type AgentExecutionOptionComposers,
 } from '../../agent/merge-execution-options';
+import { normalizeLogicalMessageInputIdentity, normalizeLogicalMessageIdentity } from '../../agent/message-list';
+import type { LogicalMessageIdentity, LogicalMessageSignalIdentity } from '../../agent/message-list';
 import { createSignal } from '../../agent/signals';
 import type { AgentSignalContents, CreatedAgentSignal } from '../../agent/signals';
 import {
@@ -1454,6 +1456,34 @@ export interface SessionInternals {
    * (live subscribers still receive them). Defaults to true.
    */
   persistTransientStreamingEvents?: boolean;
+}
+
+function normalizeSessionLogicalMessageIdentity(
+  value: LogicalMessageIdentity | undefined,
+  methodName: string,
+): LogicalMessageIdentity | undefined {
+  try {
+    return normalizeLogicalMessageIdentity(value);
+  } catch (error) {
+    throw new HarnessValidationError(
+      `${methodName}.logicalMessageIdentity`,
+      error instanceof Error ? error.message : 'must contain valid input and response ids',
+    );
+  }
+}
+
+function normalizeSessionLogicalMessageInputIdentity(
+  value: LogicalMessageSignalIdentity | undefined,
+  methodName: string,
+): LogicalMessageSignalIdentity | undefined {
+  try {
+    return normalizeLogicalMessageInputIdentity(value);
+  } catch (error) {
+    throw new HarnessValidationError(
+      `${methodName}.logicalMessageIdentity`,
+      error instanceof Error ? error.message : 'must contain a valid input id',
+    );
+  }
 }
 
 export class Session {
@@ -7428,6 +7458,8 @@ export class Session {
   async message(opts: MessageOptions): Promise<AgentResult | AgentStream | unknown> {
     this._assertLive('message()');
     this._assertOpenForTurn('message()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, 'message()');
+    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
 
     if (opts.stream === true && opts.output !== undefined) {
       throw new HarnessConfigError('message()', '`stream: true` and `output` are mutually exclusive');
@@ -7497,7 +7529,7 @@ export class Session {
     const admissionHashes =
       opts.admissionId !== undefined
         ? this._computeMessageAdmissionHashes(
-            opts,
+            admittedOpts,
             {
               modeId: effectiveModeId,
               modelId: effectiveModelId,
@@ -7628,6 +7660,7 @@ export class Session {
       // (temperature, maxOutputTokens, …) layered onto the structured generate
       // turn. Omitted → model/provider defaults, so existing turns are unchanged.
       ...(opts.modelSettings ? { modelSettings: opts.modelSettings } : {}),
+      ...(logicalMessageIdentity ? { logicalMessageIdentity } : {}),
     };
 
     // Structured + sync path: agent.generate with structuredOutput.
@@ -7811,6 +7844,7 @@ export class Session {
           ...(admissionIdentity ? { id: admissionIdentity.signalId } : {}),
           type: 'user-message',
           contents: opts.content as never,
+          ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
         },
         {
           ...(admissionIdentity ? { runId: admissionIdentity.runId } : {}),
@@ -8927,6 +8961,9 @@ export class Session {
             ...(opts.model !== undefined ? { model: opts.model } : {}),
           }),
       ...(opts.modelSettings !== undefined ? { modelSettings: opts.modelSettings } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       attachments: (opts.attachments ?? []).map(attachment => ({
         attachmentId: attachment.attachmentId,
         resourceId: attachment.resourceId,
@@ -8956,7 +8993,7 @@ export class Session {
   }
 
   private _computeSignalAdmissionHash(
-    opts: Pick<SessionSignalOptions, 'content' | 'mode'>,
+    opts: Pick<SessionSignalOptions, 'content' | 'mode' | 'logicalMessageIdentity'>,
     attachments: PersistedAttachment[],
     requestContext?: PersistedRequestContextInput,
   ): string {
@@ -8964,6 +9001,9 @@ export class Session {
       kind: 'signal',
       content: opts.content,
       ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       attachments: attachments.map(attachment => ({
         kind: attachment.kind,
         name: attachment.name,
@@ -9233,6 +9273,7 @@ export class Session {
       id: evidence.signalId,
       type: 'user-message',
       contents: opts.content,
+      ...(opts.logicalMessageIdentity ? { metadata: { logicalMessageId: opts.logicalMessageIdentity.input } } : {}),
       createdAt,
       acceptedAt: createdAt,
     });
@@ -9523,6 +9564,10 @@ export class Session {
   ): Promise<SessionSignalResult> {
     this._assertLive('signal()');
     this._assertOpenForTurn('signal()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageInputIdentity(opts.logicalMessageIdentity, 'signal()');
+    const responseLogicalMessageIdentity =
+      logicalMessageIdentity !== undefined && 'response' in logicalMessageIdentity ? logicalMessageIdentity : undefined;
+    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
     if (typeof opts.content !== 'string') {
       throw new HarnessValidationError('signal()', '`content` must be a string');
     }
@@ -9550,7 +9595,7 @@ export class Session {
     // active when the caller retries it.
     const signalAdmissionHash =
       opts.admissionId !== undefined
-        ? this._computeSignalAdmissionHash(opts, internal?.attachments ?? [], persistedRequestContext)
+        ? this._computeSignalAdmissionHash(admittedOpts, internal?.attachments ?? [], persistedRequestContext)
         : undefined;
     const signalAdmissionIdentity =
       opts.admissionId !== undefined ? this._signalAdmissionIdentity(opts.admissionId) : undefined;
@@ -9967,6 +10012,7 @@ export class Session {
             acceptedAt: new Date(admission.createdAt),
             type: 'user-message',
             contents: contents as never,
+            ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
           },
           {
             runId: dispatching.runId,
@@ -10076,6 +10122,7 @@ export class Session {
           ...this._createEmptySynthesisOptions(),
           ...toolSurface,
           ...(turnInstructions ? { instructions: turnInstructions } : {}),
+          ...(responseLogicalMessageIdentity ? { logicalMessageIdentity: responseLogicalMessageIdentity } : {}),
         };
         assertOwnedSignalTurnNotDeleted();
         this._assertOpenForTurn('signal()');
@@ -10094,6 +10141,7 @@ export class Session {
               ...(internal?.signalId !== undefined ? { id: internal.signalId } : {}),
               type: 'user-message',
               contents: signalContents as never,
+              ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
             },
             {
               resourceId: this.resourceId,
@@ -10163,6 +10211,7 @@ export class Session {
                   acceptedAt: new Date(signalAdmission.createdAt),
                   type: 'user-message',
                   contents: signalContents as never,
+                  ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
                 },
                 {
                   runId: dispatching.runId,
@@ -10451,6 +10500,7 @@ export class Session {
             ...(internal?.signalId !== undefined ? { id: internal.signalId } : {}),
             type: 'user-message',
             contents: interleavedContents as never,
+            ...(logicalMessageIdentity ? { metadata: { logicalMessageId: logicalMessageIdentity.input } } : {}),
           },
           {
             resourceId: this.resourceId,
@@ -14459,6 +14509,8 @@ export class Session {
   }> {
     this._assertLive(methodName);
     this._assertOpenForTurn(methodName);
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(opts.logicalMessageIdentity, methodName);
+    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
     if (typeof opts.content !== 'string' || opts.content.length === 0) {
       throw new HarnessValidationError(`${methodName}.content`, 'must be a non-empty string');
     }
@@ -14491,7 +14543,7 @@ export class Session {
     }
     const effectiveModeId = opts.mode ?? this._record.modeId;
     const admissionId = opts.admissionId ?? `queue-${randomUUID()}`;
-    const admissionHash = this._computeQueueAdmissionHash(opts, attachments, effectivePersistedRequestContext);
+    const admissionHash = this._computeQueueAdmissionHash(admittedOpts, attachments, effectivePersistedRequestContext);
     if (internal?.expectedAdmissionHash !== undefined && internal.expectedAdmissionHash !== admissionHash) {
       throw new HarnessAdmissionConflictError(this.id, admissionId, internal.expectedAdmissionHash, admissionHash);
     }
@@ -14523,6 +14575,7 @@ export class Session {
       ...(effectivePersistedRequestContext
         ? { requestContext: clonePersistedRequestContext(effectivePersistedRequestContext) }
         : {}),
+      ...(logicalMessageIdentity ? { logicalMessageIdentity } : {}),
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       mode: effectiveModeId,
       ...(opts.yolo !== undefined ? { yolo: opts.yolo } : {}),
@@ -14620,6 +14673,7 @@ export class Session {
     mode?: string;
     model?: string;
     yolo?: boolean;
+    logicalMessageIdentity?: LogicalMessageIdentity;
     attachments: PersistedAttachment[];
     requestContext?: PersistedRequestContextInput;
   }): Promise<QueueAdmissionResult> {
@@ -14630,6 +14684,7 @@ export class Session {
         ...(item.mode !== undefined ? { mode: item.mode } : {}),
         ...(item.model !== undefined ? { model: item.model } : {}),
         ...(item.yolo === true ? { yolo: true } : {}),
+        ...(item.logicalMessageIdentity !== undefined ? { logicalMessageIdentity: item.logicalMessageIdentity } : {}),
       },
       'admitQueue()',
       {
@@ -14775,6 +14830,9 @@ export class Session {
       ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
       ...(opts.model !== undefined ? { model: opts.model } : {}),
       ...(opts.yolo === true ? { yolo: true } : {}),
+      ...(opts.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...opts.logicalMessageIdentity } }
+        : {}),
       ...(opts.priority !== undefined && opts.priority !== 0 ? { priority: opts.priority } : {}),
       ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
       ...(opts.notBefore !== undefined ? { notBefore: opts.notBefore } : {}),
@@ -15309,6 +15367,7 @@ export class Session {
         maxSteps: HARNESS_SESSION_MAX_STEPS,
         ...toolSurface,
         ...(turnInstructions ? { instructions: turnInstructions } : {}),
+        ...(item.logicalMessageIdentity ? { logicalMessageIdentity: item.logicalMessageIdentity } : {}),
       };
 
       await Promise.race([this._ensureThreadSubscription(agent), activeTurnWaiter.promise]);
@@ -15331,7 +15390,12 @@ export class Session {
       ]);
       assertQueuedTurnNotDeleted();
       const signal = agent.sendSignal(
-        { id: identity.signalId, type: 'user-message', contents: queuedContents as never },
+        {
+          id: identity.signalId,
+          type: 'user-message',
+          contents: queuedContents as never,
+          ...(item.logicalMessageIdentity ? { metadata: { logicalMessageId: item.logicalMessageIdentity.input } } : {}),
+        },
         {
           runId: identity.runId,
           resourceId: this.resourceId,

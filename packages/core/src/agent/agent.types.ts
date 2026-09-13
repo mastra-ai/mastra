@@ -17,7 +17,7 @@ import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPaylo
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { AGENT_RESPONSE_RECOVERY_CONTINUATION } from './merge-execution-options';
-import type { MessageListInput } from './message-list';
+import type { LogicalMessageIdentity, MessageListInput } from './message-list';
 import type { AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgentGenerateResult } from './subagent';
 import type {
@@ -556,6 +556,13 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
+  /**
+   * Native identity for the admitted user input and the response segments it
+   * owns. The preparation layer seeds this before the first MessageList write;
+   * durable recovery restores it from the serialized MessageList state.
+   */
+  logicalMessageIdentity?: LogicalMessageIdentity;
+
   /**
    * Signal chunks to hide from this caller's stream: true hides all recognized signals,
    * false hides none, and an array hides selected types. Defaults to none.

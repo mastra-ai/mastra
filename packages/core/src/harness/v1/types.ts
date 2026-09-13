@@ -11,6 +11,7 @@ import type { z } from 'zod';
 
 import type { Agent } from '../../agent';
 import type { AgentExecutionOptionsBase } from '../../agent/agent.types';
+import type { LogicalMessageIdentity, LogicalMessageSignalIdentity } from '../../agent/message-list';
 import type { CreatedAgentSignal } from '../../agent/signals';
 import type { ToolsInput } from '../../agent/types';
 import type { ChannelProvider } from '../../channels';
@@ -1857,6 +1858,9 @@ export interface ShutdownOptions {
 
 /** Per-turn overrides allowed on `message()`. Spec §4.2 / §9 (HarnessOverrides). */
 export interface MessageOverrides {
+  /** Native identity shared by this input and all response segments it owns. */
+  logicalMessageIdentity?: LogicalMessageIdentity;
+
   /** Override the model id for just this turn. Falls back to session model. */
   model?: string;
   /** Override the active mode for this turn. Must reference a known mode id. */
@@ -2053,6 +2057,9 @@ export interface InboxResponseResult {
  * `MessageOverrides`).
  */
 export interface QueueOverrides {
+  /** Native identity shared by this queued input and all response segments it owns. */
+  logicalMessageIdentity?: LogicalMessageIdentity;
+
   /** Override the model id for this queued turn. Falls back to session model. */
   model?: string;
   /** Override the active mode for this queued turn. Must be a known mode id. */
@@ -2139,6 +2146,9 @@ export interface ListMessagesOptions {
 
 /** Options accepted by `Session.signal(...)`. */
 export interface SessionSignalOptions {
+  /** Native identity for this admitted input; active responses keep their owner. */
+  logicalMessageIdentity?: LogicalMessageSignalIdentity;
+
   /** Free-form user content. Matches `message().content`. */
   content: string;
 

@@ -141,6 +141,56 @@ describe('Session.queue() — admission', () => {
     await session.close();
   });
 
+  it('persists logical identity with the queued admission and includes it in duplicate hashing', async () => {
+    const { harness } = setupHarness();
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    const admitted = await session.admitQueue({
+      content: 'lineaged work',
+      admissionId: 'queue-lineage',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+      notBefore: Date.now() + 60_000,
+    });
+    expect(session.getRecord().pendingQueue).toEqual([
+      expect.objectContaining({
+        id: admitted.queuedItemId,
+        logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+      }),
+    ]);
+
+    await expect(
+      session.admitQueue({
+        content: 'lineaged work',
+        admissionId: 'queue-lineage',
+        logicalMessageIdentity: { input: 'input-2', response: 'response-2' },
+      }),
+    ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
+
+    await session.cancelQueuedItem({ queuedItemId: admitted.queuedItemId, reason: 'test cleanup' });
+    await session.close();
+  });
+
+  it('restores queued logical identity into the native turn options and signal', async () => {
+    const { harness, agent } = setupHarness();
+    agent.enqueueRun({ finishReason: 'stop', text: 'lineaged reply' });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    await session.queue({
+      content: 'lineaged queued work',
+      logicalMessageIdentity: { input: 'input-queued', response: 'response-queued' },
+    });
+
+    expect(agent.streamCalls[0]?.options.logicalMessageIdentity).toEqual({
+      input: 'input-queued',
+      response: 'response-queued',
+    });
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      metadata: { logicalMessageId: 'input-queued' },
+    });
+    await session.close();
+  });
+
   it('wakes a delayed notBefore item without another queue admission', async () => {
     const { harness, agent } = setupHarness();
     agent.enqueueRun({ finishReason: 'stop', text: 'delayed reply' });

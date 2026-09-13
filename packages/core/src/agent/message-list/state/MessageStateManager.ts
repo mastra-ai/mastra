@@ -1,5 +1,6 @@
 import type { CoreSystemMessage } from '@internal/ai-sdk-v4';
 
+import type { LogicalMessageIdentity } from '../logical-message-identity';
 import { serializeMessages, deserializeMessages } from './serialization';
 import type { SerializedMessage } from './serialization';
 import type { MastraDBMessage, MessageSource, MemoryInfo } from './types';
@@ -360,4 +361,5 @@ export interface SerializedMessageListState {
   newUserMessagesPersisted: string[];
   newResponseMessagesPersisted: string[];
   userContextMessagesPersisted: string[];
+  logicalMessageIdentity?: LogicalMessageIdentity;
 }

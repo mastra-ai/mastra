@@ -1905,6 +1905,83 @@ describe('MessageHistory', () => {
         updateThread: vi.fn().mockResolvedValue(undefined),
       }) as unknown as MemoryStorage;
 
+    it('preserves the reserved logical id in filtered anchors', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({
+        storage,
+        toolCallFilter: { exclude: ['private_tool'] },
+        retainFilteredMessageAnchors: true,
+      });
+      const message: MastraDBMessage = {
+        id: 'logical-anchor',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          metadata: { logicalMessageId: 'response-1' },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'private-call',
+                toolName: 'private_tool',
+                args: {},
+                result: {},
+              },
+            },
+          ],
+        },
+      };
+
+      await processor.persistMessages({ messages: [message], threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const saved = (storage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved[0]?.content.metadata).toEqual({ logicalMessageId: 'response-1' });
+    });
+
+    it('preserves logical ids for a signal input and final assistant projection', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({ storage, persistence: { mode: 'final-turn' } });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'logical-input',
+          role: 'signal',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: {
+            format: 2,
+            metadata: { logicalMessageId: 'input-1', signal: { type: 'user-message' } },
+            parts: [{ type: 'text', text: 'hello' }],
+          },
+        },
+        {
+          id: 'logical-response',
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: {
+            format: 2,
+            metadata: { logicalMessageId: 'response-1' },
+            parts: [{ type: 'text', text: 'answer' }],
+          },
+        },
+      ];
+
+      await processor.persistMessages({ messages, threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const saved = (storage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved.map(message => message.id)).toEqual(['logical-input', 'logical-response']);
+      expect(saved.map(message => message.content.metadata)).toEqual([
+        { logicalMessageId: 'input-1' },
+        { logicalMessageId: 'response-1' },
+      ]);
+    });
+
     const createFinalTurnMessages = (): MastraDBMessage[] => [
       {
         id: 'user-stable',

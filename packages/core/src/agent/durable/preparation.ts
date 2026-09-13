@@ -582,6 +582,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const messageList = new MessageList({
     threadId,
     resourceId,
+    logicalMessageIdentity: execOptions?.logicalMessageIdentity,
   });
 
   // Add agent instructions. Per-call `options.instructions` overrides the

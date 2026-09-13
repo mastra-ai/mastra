@@ -46,6 +46,9 @@ type ConsumedDuringPreparation =
   | 'instructions'
   | 'system'
   | 'context'
+  // Logical input/response identity is seeded into MessageList before its
+  // first write and then carried by the serialized MessageList state.
+  | 'logicalMessageIdentity'
   // Memory is resolved during preparation; thread/resource/memoryConfig are
   // extracted and stored in workflow state + registry
   | 'memory'

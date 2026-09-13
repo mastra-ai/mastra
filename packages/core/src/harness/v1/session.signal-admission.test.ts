@@ -155,6 +155,43 @@ describe('Session.signal() admissionId', () => {
     expect(events.filter(event => event.type === 'signal_completed' && event.signalId === first.id)).toHaveLength(1);
   });
 
+  it('keeps steer input identity separate from the active response owner', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'shared terminal',
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const sendSignal = vi.spyOn(agent, 'sendSignal');
+
+    const firstTurn = session.message({
+      content: 'first',
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+    });
+    await waitForStreamCalls(agent, 1);
+
+    const steer = await session.signal({
+      content: 'steer once',
+      logicalMessageIdentity: { input: 'input-2' },
+    });
+
+    const firstCall = sendSignal.mock.calls[0]?.[0] as { metadata?: unknown } | undefined;
+    const steerCall = sendSignal.mock.calls[1]?.[0] as { metadata?: unknown } | undefined;
+    expect(firstCall?.metadata).toEqual({ logicalMessageId: 'input-1' });
+    expect(steerCall?.metadata).toEqual({ logicalMessageId: 'input-2' });
+    expect((agent.streamCalls[0]!.options as { logicalMessageIdentity?: unknown }).logicalMessageIdentity).toEqual({
+      input: 'input-1',
+      response: 'response-1',
+    });
+
+    release();
+    await Promise.all([firstTurn, steer.result]);
+  });
+
   it('rechecks routing after durable admission when the previously active run finishes', async () => {
     const agent = new MockAgent({ id: 'default' });
     let releaseActive!: () => void;

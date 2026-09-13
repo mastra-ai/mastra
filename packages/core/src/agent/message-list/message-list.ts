@@ -8,7 +8,13 @@ import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { deepEqual } from '../../utils';
-import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
+import {
+  createSignal,
+  isCreatedAgentSignal,
+  isTransientSignalMessage,
+  isUserAuthoredMessage,
+  mastraDBMessageToSignal,
+} from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -28,6 +34,8 @@ import {
 } from './conversion';
 import type { ToolCallConversionMode } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
+import { getLogicalMessageId, normalizeLogicalMessageIdentity, withLogicalMessageId } from './logical-message-identity';
+import type { LogicalMessageIdentity } from './logical-message-identity';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -155,6 +163,7 @@ export class MessageList {
   private _agentNetworkAppend = false;
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
+  private logicalMessageIdentity?: LogicalMessageIdentity;
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
@@ -186,6 +195,7 @@ export class MessageList {
     generateMessageId,
     logger,
     filterIncompleteToolCalls,
+    logicalMessageIdentity,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: {
@@ -194,6 +204,7 @@ export class MessageList {
     generateMessageId?: (context?: IdGeneratorContext) => string;
     logger?: IMastraLogger;
     filterIncompleteToolCalls?: boolean;
+    logicalMessageIdentity?: LogicalMessageIdentity;
   } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
@@ -202,6 +213,7 @@ export class MessageList {
     this.logger = logger;
     this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
     this._agentNetworkAppend = _agentNetworkAppend || false;
+    this.logicalMessageIdentity = normalizeLogicalMessageIdentity(logicalMessageIdentity);
   }
 
   /**
@@ -427,13 +439,18 @@ export class MessageList {
   }
 
   public serialize(): SerializedMessageListState {
-    return this.stateManager.serializeAll({
-      messages: this.messages,
-      systemMessages: this.systemMessages,
-      taggedSystemMessages: this.taggedSystemMessages,
-      memoryInfo: this.memoryInfo,
-      agentNetworkAppend: this._agentNetworkAppend,
-    });
+    return {
+      ...this.stateManager.serializeAll({
+        messages: this.messages,
+        systemMessages: this.systemMessages,
+        taggedSystemMessages: this.taggedSystemMessages,
+        memoryInfo: this.memoryInfo,
+        agentNetworkAppend: this._agentNetworkAppend,
+      }),
+      ...(this.logicalMessageIdentity !== undefined
+        ? { logicalMessageIdentity: { ...this.logicalMessageIdentity } }
+        : {}),
+    };
   }
 
   /**
@@ -473,6 +490,9 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    if (state.logicalMessageIdentity !== undefined) {
+      this.logicalMessageIdentity = normalizeLogicalMessageIdentity(state.logicalMessageIdentity);
+    }
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
@@ -2006,7 +2026,27 @@ export class MessageList {
       });
     }
 
-    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    let messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    const signalInputLogicalMessageId =
+      getLogicalMessageId(messageV2.content.metadata) ??
+      (messageV2.role === 'signal'
+        ? getLogicalMessageId(
+            (messageV2.content.metadata?.signal as { metadata?: Record<string, unknown> } | undefined)?.metadata,
+          )
+        : undefined);
+    const logicalMessageId =
+      messageSource === 'response' && messageV2.role === 'assistant'
+        ? this.logicalMessageIdentity?.response
+        : messageSource === 'input' && isUserAuthoredMessage(messageV2)
+          ? (signalInputLogicalMessageId ??
+            (this.logicalMessageIdentity !== undefined &&
+            (messageV2.role !== 'signal' || this.newUserMessages.size === 0)
+              ? this.logicalMessageIdentity.input
+              : undefined))
+          : undefined;
+    if (logicalMessageId !== undefined) {
+      messageV2 = withLogicalMessageId(messageV2, logicalMessageId);
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
