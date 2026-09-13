@@ -1113,7 +1113,10 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
-  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   * Grouped results remain supported but are deprecated. Use `queryThreads()` to retrieve thread identities.
+   */
   queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }

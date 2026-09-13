@@ -237,6 +237,8 @@ export class Observability extends BaseResource {
   /**
    * Queries completed logical traces using recursive trace and related-record predicates.
    *
+   * Grouped results remain supported but are deprecated. Use `queryThreads()` to retrieve thread identities.
+   *
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces or distinct thread groups
    */
