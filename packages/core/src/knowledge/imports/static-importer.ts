@@ -120,7 +120,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async appendKnowledge(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
     await this.#assertMutationAllowed();
-    return this.#knowledge.createRecord({
+    const record = await this.#knowledge.createRecord({
       ...input,
       node: this.node.id,
       source: this.#importer.source,
@@ -129,6 +129,8 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
     });
+    await this.#setTrackedRecord(record);
+    return record;
   }
 
   async listKnowledge(): Promise<KnowledgeRecord[]> {
@@ -176,7 +178,52 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
         `Knowledge importer ${this.#importer.importerId} cannot remove knowledge owned by another binding`,
       );
     }
-    return storage.deleteRecordBySource({ id, source: this.#importer.source, importRunId: this.#importRunId });
+    const tracked = await this.#getTrackedRecord(id);
+    if (tracked?.recordId !== record.id || tracked.version !== record.version) {
+      await storage.recordImportSkip({
+        targetType: 'record',
+        targetId: record.id,
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+        details: { reason: 'ownership-changed', source: this.#importer.source },
+      });
+      return null;
+    }
+    const deleted = await storage.deleteRecordBySource({
+      id,
+      source: this.#importer.source,
+      version: tracked.version,
+      importRunId: this.#importRunId,
+    });
+    await this.#setTrackedRecord(undefined, id);
+    return deleted;
+  }
+
+  async #getTrackedRecord(id: string): Promise<{ recordId: string; version: number } | undefined> {
+    const state = await this.#knowledge.getImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: trackedRecordVersionKey(id),
+    });
+    if (!state?.value) return undefined;
+    try {
+      const tracked = JSON.parse(state.value) as { recordId?: unknown; version?: unknown };
+      return typeof tracked.recordId === 'string' && typeof tracked.version === 'number'
+        ? { recordId: tracked.recordId, version: tracked.version }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #setTrackedRecord(record: KnowledgeRecord | undefined, id = record?.id): Promise<void> {
+    if (!id) return;
+    await this.#knowledge.setImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: trackedRecordVersionKey(id),
+      value: record ? JSON.stringify({ recordId: record.id, version: record.version }) : '',
+    });
   }
 
   async #assertMutationAllowed(): Promise<void> {
@@ -300,6 +347,13 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       nodeScopeIds.length !== 1 ||
       nodeScopeIds[0] !== this.#importer.scopeId
     ) {
+      await storage.recordImportSkip({
+        targetType: 'node',
+        targetId: node.id,
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+        details: { reason: 'ownership-changed', source: this.#importer.source, address: normalized },
+      });
       return { node, deleted: false };
     }
     const result = await storage.deleteNodeByAddress({
@@ -365,6 +419,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 
 function trackedVersionKey(address: string): string {
   return `mastra:static-importer:node-version:${address}`;
+}
+
+function trackedRecordVersionKey(id: string): string {
+  return `mastra:static-importer:record-version:${id}`;
 }
 
 function normalizeAddress(address: string): string {
