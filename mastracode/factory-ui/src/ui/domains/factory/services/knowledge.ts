@@ -76,7 +76,8 @@ export interface KnowledgeScopeTreePayload {
  * for activity/flyout context).
  */
 export type KnowledgeSelection =
-  { scopeLevel: KnowledgeRung; scopeNodeId?: never } | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
+  | { scopeLevel: KnowledgeRung; scopeNodeId?: never }
+  | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
 
 export interface KnowledgeGraphNode {
   id: string;
