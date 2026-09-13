@@ -281,6 +281,8 @@ export interface DurableAgenticWorkflowInput {
   modelSpanData?: unknown;
   /** Starting step index for continuation across iterations */
   stepIndex?: number;
+  /** Output-processor retries already spent on this run, carried across iterations */
+  processorRetryCount?: number;
   /**
    * JSON-safe snapshot of `requestContext.entries()` from the call site.
    * Threaded through workflow input so durable steps (e.g. `is-task-complete`
@@ -596,6 +598,13 @@ export interface RunRegistryEntry {
    * durable `llm-execution` step falls back to `inputProcessors`.
    */
   llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Tool call ids whose tool-result chunk was already processed and emitted for
+   * this run. The workflow engine can re-execute the tool call step across
+   * suspend and resume cycles for one tool call, so this guards the dedicated
+   * processToolResult pass and the tool-result chunk emission to run once.
+   */
+  processedToolResults?: Set<string>;
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */

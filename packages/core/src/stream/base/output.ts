@@ -912,6 +912,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
+
+              // Durable agents emit their final finish chunk (with the tripwire
+              // recorded on the stepResult) after this chunk, so keep the stream
+              // open and let the finish chunk do the normal closing. Terminating
+              // here would kill the public stream before finish ever arrives.
+              if (self.#options?.isDurableStream) {
+                // Emit the tripwire chunk for listeners and pass it through
+                self.#emitChunk(chunk);
+                controller.enqueue(chunk);
+                return;
+              }
+
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 
@@ -981,12 +993,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
                 const stepTripwire = lastStep?.tripwire;
-                self.#tripwire = {
-                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
-                  retry: stepTripwire?.retry,
-                  metadata: stepTripwire?.metadata,
-                  processorId: stepTripwire?.processorId,
-                };
+                if (stepTripwire) {
+                  self.#tripwire = {
+                    reason: stepTripwire.reason || 'Processor tripwire triggered',
+                    retry: stepTripwire.retry,
+                    metadata: stepTripwire.metadata,
+                    processorId: stepTripwire.processorId,
+                  };
+                } else if (!self.#tripwire) {
+                  // Durable finish chunks carry accumulated step records without
+                  // tripwire data; the tripwire chunk that preceded them already
+                  // set #tripwire, so only fall back when nothing recorded it.
+                  self.#tripwire = { reason: 'Processor tripwire triggered' };
+                }
               }
 
               // Add structured output to the latest assistant message metadata
@@ -1133,7 +1152,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     step => step.toolCalls.length > 0 || step.toolResults.length > 0,
                   );
                   this.resolvePromises({
-                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
+                    text:
+                      hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#getFilteredBufferedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -1203,7 +1223,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
-                  text: self.#bufferedText.join(''),
+                  // Same filtered text the output.text promise resolves with, so
+                  // onFinish never receives a rejected retry attempt's content.
+                  text: self.#getFilteredBufferedText(),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
@@ -1915,6 +1937,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       this.#emitter.once('finish', done);
       this.#emitter.once('settled', done);
     });
+  }
+
+  /**
+   * Aggregate stream text, minus any tripwired step (a processor-retry
+   * boundary in the durable agent, where one MastraModelOutput spans every
+   * attempt). Tripped steps carry '' as their text, so joining step texts
+   * drops the rejected attempt; without a tripped step the raw buffer is used.
+   */
+  #getFilteredBufferedText(): string {
+    return this.#bufferedSteps.some(step => step.tripwire)
+      ? this.#bufferedSteps.map(step => step.text || '').join('')
+      : this.#bufferedText.join('');
   }
 
   #getTotalUsage(): LanguageModelUsage {
