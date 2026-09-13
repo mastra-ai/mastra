@@ -309,13 +309,19 @@ export class Knowledge extends MastraBase {
 
   async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
     const storage = await this.#getStorage();
-    const liveScopeIds: string[] = [];
-    for (const scopeId of vouchedScopeIds) {
-      const scope = await storage.getNode(scopeId);
-      if (scope?.isScope) liveScopeIds.push(scopeId);
-    }
-    this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
-    return this.#accessEvaluator.evaluate(liveScopeIds);
+    this.#accessEvaluator ??= new KnowledgeAccessEvaluator({
+      instance: this,
+      storage,
+      resolveLiveVouchedScopeIds: async scopeIds => {
+        const liveScopeIds: string[] = [];
+        for (const scopeId of scopeIds) {
+          const scope = await storage.getNode(scopeId);
+          if (scope?.isScope) liveScopeIds.push(scopeId);
+        }
+        return liveScopeIds;
+      },
+    });
+    return this.#accessEvaluator.evaluate(vouchedScopeIds);
   }
 
   async fileGapFlag(input: FileKnowledgeGapFlagInput) {

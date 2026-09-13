@@ -3,6 +3,7 @@ import {
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
+  createKnowledgeNodeCursor,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
@@ -923,6 +924,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           this.#recordScopeIds(record.id),
         );
       }
+      for (const mentions of this.#db.knowledgeMentions.values()) {
+        if (!mentions.delete(source.id)) continue;
+        mentions.add(target.id);
+      }
       for (const address of this.#db.knowledgeNodeAddresses.values()) {
         if (address.nodeId === source.id) address.nodeId = target.id;
       }
@@ -1193,22 +1198,29 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const queryScope = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const results: SearchKnowledgeResult[] = [];
-    for (const node of await this.listNodes({ scopeIds: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
-      const searchable = [node.name, node.kind, node.metadata ? JSON.stringify(node.metadata) : undefined]
-        .filter(Boolean)
-        .join('\n');
-      if (searchable.toLocaleLowerCase().includes(query)) {
-        results.push({
-          type: 'node',
-          id: node.id,
-          recordId: node.id,
-          name: node.name,
-          text: searchable,
-          scopeIds: [...this.#nodeScopeIds(node.id)],
-        });
+    let cursor: string | undefined;
+    do {
+      const nodes = await this.listNodes({ scopeIds: queryScope, cursor, limit: 100 });
+      for (const node of nodes) {
+        const searchable = [node.name, node.kind, node.metadata ? JSON.stringify(node.metadata) : undefined]
+          .filter(Boolean)
+          .join('\n');
+        if (searchable.toLocaleLowerCase().includes(query)) {
+          results.push({
+            type: 'node',
+            id: node.id,
+            recordId: node.id,
+            name: node.name,
+            text: searchable,
+            scopeIds: [...this.#nodeScopeIds(node.id)],
+          });
+          if (results.length >= limit) return results;
+        }
       }
-    }
+      cursor = nodes.length === 100 ? createKnowledgeNodeCursor(nodes.at(-1)!) : undefined;
+    } while (cursor);
     for (const record of this.#db.knowledgeRecords.values()) {
       if (
         record.deletedAt ||
@@ -1228,7 +1240,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         scopeIds: [...this.#recordScopeIds(record.id)],
       });
     }
-    return results.slice(0, input.limit ?? 20);
+    return results.slice(0, limit);
   }
 
   async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {

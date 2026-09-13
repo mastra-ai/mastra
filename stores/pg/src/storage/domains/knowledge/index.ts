@@ -1217,6 +1217,7 @@ export class KnowledgePG extends KnowledgeStorage {
       sourceId: string;
       targetId: string;
       sourceVersion: number;
+      targetVersion: number;
       importRunId?: string;
       contextScopeId?: string;
       expectedAccessEpoch?: number;
@@ -1228,6 +1229,7 @@ export class KnowledgePG extends KnowledgeStorage {
     if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
     const target = await this.#getNode(tx, input.targetId);
     if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
+    if (target.version !== input.targetVersion) throw new KnowledgeConflictError(input.targetId);
     const sourceScopeIds = await this.#getNodeScopeIds(tx, source.id);
     const now = new Date();
     const updated = await tx.execute({
@@ -1261,6 +1263,10 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [target.id, source.id],
     });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" SET nodeId=? WHERE nodeId=?`,
+      args: [target.id, source.id],
+    });
     await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
       targetId: target.id,
     });
@@ -1523,43 +1529,57 @@ export class KnowledgePG extends KnowledgeStorage {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
+    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const results: SearchKnowledgeResult[] = [];
-    const nodes = await this.#readExecutor.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL ORDER BY updatedAt DESC`,
-    );
-    for (const row of nodes.rows) {
-      const node = parseNode(row);
-      const nodeScopeIds = await this.#getNodeScopeIds(this.#readExecutor, node.id);
-      const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLocaleLowerCase();
-      if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query))
-        results.push({
-          type: 'node',
-          id: node.id,
-          recordId: node.id,
-          name: node.name,
-          text: node.name,
-          scopeIds: nodeScopeIds,
-        });
-      if (results.length >= (input.limit ?? 20)) return results;
-    }
-    const records = await this.#readExecutor.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL ORDER BY id DESC`,
-    );
-    for (const row of records.rows) {
-      const record = parseKnowledge(row);
-      if (!record.text.toLocaleLowerCase().includes(query)) continue;
-      const recordScopeIds = await this.#getRecordScopeIds(this.#readExecutor, record.id);
-      if (!(await this.#isRecordVisible(this.#readExecutor, record, scopeIds))) continue;
-      const parent = await this.#getNode(this.#readExecutor, record.nodeId);
-      results.push({
-        type: 'record',
-        id: record.id,
-        recordId: record.nodeId,
-        name: parent!.name,
-        text: record.text,
-        scopeIds: recordScopeIds,
+    let nodeCursor: { updatedAt: string; id: string } | undefined;
+    while (results.length < limit) {
+      const nodes = await this.#readExecutor.execute({
+        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL${nodeCursor ? ' AND (updatedAt < ? OR (updatedAt = ? AND id < ?))' : ''} ORDER BY updatedAt DESC,id DESC LIMIT 100`,
+        args: nodeCursor ? [nodeCursor.updatedAt, nodeCursor.updatedAt, nodeCursor.id] : [],
       });
-      if (results.length >= (input.limit ?? 20)) break;
+      for (const row of nodes.rows) {
+        const node = parseNode(row);
+        const nodeScopeIds = await this.#getNodeScopeIds(this.#readExecutor, node.id);
+        const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLocaleLowerCase();
+        if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query)) {
+          results.push({
+            type: 'node',
+            id: node.id,
+            recordId: node.id,
+            name: node.name,
+            text: node.name,
+            scopeIds: nodeScopeIds,
+          });
+          if (results.length >= limit) return results;
+        }
+      }
+      if (nodes.rows.length < 100) break;
+      const last = parseNode(nodes.rows.at(-1)!);
+      nodeCursor = { updatedAt: last.updatedAt.toISOString(), id: last.id };
+    }
+    let recordCursor: string | undefined;
+    while (results.length < limit) {
+      const records = await this.#readExecutor.execute({
+        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL${recordCursor ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT 100`,
+        args: recordCursor ? [recordCursor] : [],
+      });
+      for (const row of records.rows) {
+        const record = parseKnowledge(row);
+        if (!record.text.toLocaleLowerCase().includes(query)) continue;
+        if (!(await this.#isRecordVisible(this.#readExecutor, record, scopeIds))) continue;
+        const parent = await this.#getNode(this.#readExecutor, record.nodeId);
+        results.push({
+          type: 'record',
+          id: record.id,
+          recordId: record.nodeId,
+          name: parent!.name,
+          text: record.text,
+          scopeIds: await this.#getRecordScopeIds(this.#readExecutor, record.id),
+        });
+        if (results.length >= limit) return results;
+      }
+      if (records.rows.length < 100) break;
+      recordCursor = String(records.rows.at(-1)!.id);
     }
     return results;
   }
@@ -2761,7 +2781,16 @@ export class KnowledgePG extends KnowledgeStorage {
         });
         for (const row of successors.rows) {
           const successor = parseOutbox(row);
-          if (!(await this.#isSemanticOutboxEntryVisible(tx, successor, scopeIds))) continue;
+          if (successor.operation === 'delete') {
+            const id = successor.documentId.slice(`knowledge:${successor.documentType}:`.length);
+            const current =
+              successor.documentType === 'node'
+                ? await this.#getNodeIncludingDeleted(tx, id)
+                : await this.#getRecord(tx, id, true);
+            if (current && !current.deletedAt) continue;
+          } else if (!(await this.#isSemanticOutboxEntryVisible(tx, successor, scopeIds))) {
+            continue;
+          }
           const invisiblePredecessorClause =
             successor.operation === 'delete'
               ? ''

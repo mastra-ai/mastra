@@ -318,9 +318,15 @@ export class StoreOperationsMySQL extends StoreOperations {
     }
   }
 
-  async withTransaction<T>(fn: (connection: PoolConnection) => Promise<T>): Promise<T> {
+  async withTransaction<T>(fn: (connection: PoolConnection) => Promise<T>, lockName?: string): Promise<T> {
     const connection = await this.pool.getConnection();
+    let acquiredLockName: string | undefined;
     try {
+      if (lockName) {
+        const [rows] = await connection.execute<RowDataPacket[]>('SELECT GET_LOCK(?, 10) AS acquired', [lockName]);
+        if (Number(rows[0]?.acquired) !== 1) throw new Error(`MySQL transaction lock timed out: ${lockName}`);
+        acquiredLockName = lockName;
+      }
       await connection.beginTransaction();
       const result = await fn(connection);
       await connection.commit();
@@ -329,6 +335,7 @@ export class StoreOperationsMySQL extends StoreOperations {
       await connection.rollback();
       throw error;
     } finally {
+      if (acquiredLockName) await connection.execute('SELECT RELEASE_LOCK(?)', [acquiredLockName]);
       connection.release();
     }
   }
