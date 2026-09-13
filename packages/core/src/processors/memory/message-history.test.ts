@@ -1383,6 +1383,43 @@ describe('MessageHistory', () => {
           content: { format: 2, parts: [] },
         },
       ]);
+
+      const sealedMessage = {
+        ...message,
+        id: 'msg-sealed-tool-only-anchor',
+        content: {
+          ...message.content,
+          metadata: { mastra: { sealed: true } },
+        },
+      };
+      const sealedStorage = createPersistenceStorage();
+      await new MessageHistory({
+        storage: sealedStorage,
+        toolCallFilter: { exclude: ['secret_tool'] },
+        retainFilteredMessageAnchors: true,
+      }).persistMessages({ messages: [sealedMessage], threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const sealedAnchor = (sealedStorage.saveMessages as any).mock.calls[0][0].messages[0] as MastraDBMessage;
+      expect(sealedAnchor.content).toEqual({
+        format: 2,
+        metadata: { mastra: { sealed: true } },
+        parts: [],
+      });
+
+      const readdedSealedAnchor = new MessageList({ threadId: 'thread-1' });
+      readdedSealedAnchor.add(sealedAnchor, 'memory');
+      readdedSealedAnchor.add(
+        {
+          ...sealedAnchor,
+          content: {
+            ...sealedAnchor.content,
+            parts: [{ type: 'text', text: 'new content after sealed anchor' }],
+          },
+        },
+        'response',
+      );
+      expect(readdedSealedAnchor.get.all.db()).toHaveLength(2);
+      expect(readdedSealedAnchor.get.all.db()[1]?.id).not.toBe(sealedAnchor.id);
     });
 
     it('keeps a sealed re-add boundary when the filtered tool part was last', async () => {

@@ -147,6 +147,8 @@ export class MessageHistory implements Processor {
 
   private createFilteredMessageAnchor(message: MastraDBMessage): MastraDBMessage | undefined {
     if (typeof message.id !== 'string') return undefined;
+    const isSealed =
+      (message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
 
     return {
       id: message.id,
@@ -154,7 +156,11 @@ export class MessageHistory implements Processor {
       ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
       ...(message.resourceId === undefined ? {} : { resourceId: message.resourceId }),
       createdAt: message.createdAt,
-      content: { format: 2, parts: [] },
+      content: {
+        format: 2,
+        ...(isSealed ? { metadata: { mastra: { sealed: true } } } : {}),
+        parts: [],
+      },
     };
   }
 
