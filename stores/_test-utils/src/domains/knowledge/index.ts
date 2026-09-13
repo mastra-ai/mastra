@@ -606,6 +606,12 @@ export function createKnowledgeStorageTests(
           knowledgeSemanticIdempotencyKey(knowledgeSemanticDocumentId('node', node.id), 'delete', 2),
         ]),
       );
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ action: 'delete', targetType: 'record', targetId: record.id }),
+          expect.objectContaining({ action: 'delete', targetType: 'node', targetId: node.id }),
+        ]),
+      );
     });
 
     it('preserves source-owned records that were broadened outside the importer binding', async () => {

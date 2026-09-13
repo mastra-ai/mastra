@@ -19,6 +19,7 @@ import type {
   ListKnowledgeNodesInput,
   QueryKnowledgeRecordsBySourceInput,
   QueryKnowledgeRecordsInput,
+  QueryKnowledgeRecordsOutput,
   SearchKnowledgeInput,
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
@@ -384,7 +385,7 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).listRelatedRecords(input);
   }
 
-  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput) {
+  async listRecordsBySource(input: QueryKnowledgeRecordsBySourceInput): Promise<QueryKnowledgeRecordsOutput> {
     return (await this.getStorage()).listRecordsBySource(input);
   }
 
