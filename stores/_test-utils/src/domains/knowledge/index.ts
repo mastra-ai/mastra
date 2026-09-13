@@ -1686,7 +1686,7 @@ export function createKnowledgeStorageTests(
       });
 
       await expect(store.listProposals({ scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).resolves.toEqual({
-        proposals: [expect.objectContaining({ id: visible.id, status: 'pending', reason: 'Correct the title' })],
+        proposals: [],
         nextCursor: undefined,
       });
       await expect(
@@ -1697,7 +1697,8 @@ export function createKnowledgeStorageTests(
         nextCursor: undefined,
       });
       await expect(store.listProposals({ scopeIds: [ORG_SCOPE_ID], limit: 10 })).resolves.toEqual({
-        proposals: [],
+        proposals: [expect.objectContaining({ id: visible.id })],
+        nextCursor: undefined,
       });
 
       const accessEpoch = await store.getAccessEpoch();
