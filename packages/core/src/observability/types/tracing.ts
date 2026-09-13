@@ -1865,7 +1865,13 @@ export type TracingEvent =
 export interface SpanOutputProcessor {
   /** Processor name */
   name: string;
-  /** Process span before export */
+  /**
+   * Process span before export.
+   *
+   * Mutate the span in place and return the same instance, or return `undefined` to
+   * drop it. Do not return a copy such as `{ ...span, input: redacted }`: only the
+   * live span can be exported, so a copy is dropped and logged as a processor error.
+   */
   process(span?: AnySpan): AnySpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;

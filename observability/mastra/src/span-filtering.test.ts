@@ -914,5 +914,42 @@ describe('Span Filtering', () => {
 
       await tracing.shutdown();
     });
+
+    it('should drop and log spans when a processor returns a copy instead of the live span', async () => {
+      const exporter = new TestExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanOutputProcessors: [
+          {
+            name: 'copying-processor',
+            // A spread copy loses the span prototype, so it can neither be validated nor exported.
+            process: (span?: any) => ({ ...span, input: 'redacted' }),
+            shutdown: async () => {},
+          },
+        ],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        input: 'secret prompt',
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      const exportedInputs = exporter.events.map(
+        e => (e as { exportedSpan?: { input?: unknown } }).exportedSpan?.input,
+      );
+      expect(exportedInputs).not.toContain('secret prompt');
+      expect(exporter.events).toHaveLength(0);
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        expect.stringContaining('Processor must return the span it received'),
+      );
+
+      await tracing.shutdown();
+    });
   });
 });

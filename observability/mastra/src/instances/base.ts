@@ -718,7 +718,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Process a span through all output processors
+   * Process a span through all output processors.
+   *
+   * Processors must return the span they received (mutated in place) or `undefined`
+   * to drop it. A plain copy such as `{ ...span, input }` loses the span's prototype,
+   * so it cannot be exported; exporting the original instead would leak whatever the
+   * processor meant to remove, so the span is dropped and the mistake is logged.
    */
   private processSpan(span?: AnySpan): AnySpan | undefined {
     for (const processor of this.spanOutputProcessors) {
@@ -727,7 +732,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
 
       try {
-        span = processor.process(span);
+        const processed = processor.process(span);
+        if (processed !== undefined && typeof processed.exportSpan !== 'function') {
+          this.logger.error(
+            `[Observability] Processor must return the span it received (or undefined to drop it), not a copy. Span dropped [name=${processor.name}]`,
+          );
+          return undefined;
+        }
+        span = processed;
       } catch (error) {
         this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
         // Continue with other processors

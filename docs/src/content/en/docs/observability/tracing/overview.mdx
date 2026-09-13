@@ -461,6 +461,8 @@ export const mastra = new Mastra({
 })
 ```
 
+Processors mutate the span they receive and return the same instance, or return `undefined` to drop the span. Returning a copy such as `{ ...span, input: redacted }` does not work: only the live span can be exported, so the copy is dropped and a processor error is logged.
+
 Processors are executed in the order they're defined, allowing you to chain multiple transformations. Common use cases include:
 
 - Redacting sensitive data (passwords, tokens, API keys)

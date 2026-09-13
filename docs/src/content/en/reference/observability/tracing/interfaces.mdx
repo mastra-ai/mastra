@@ -486,7 +486,11 @@ interface SpanOutputProcessor {
   /** Processor name */
   name: string
 
-  /** Process span before export */
+  /**
+   * Process span before export.
+   * Mutate the span in place and return the same instance, or return
+   * undefined to drop it. A copy of the span cannot be exported.
+   */
   process(span?: AnySpan): AnySpan | undefined
 
   /** Shutdown processor */
