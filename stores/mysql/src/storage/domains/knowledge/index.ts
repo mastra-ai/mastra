@@ -74,6 +74,7 @@ import type {
   KnowledgeNode,
   KnowledgeNodeAddress,
   KnowledgeProposal,
+  KnowledgeProposalApprovalCapability,
   KnowledgeProposalApprovalScopeIds,
   KnowledgeRecord,
   KnowledgeScopeAddress,
@@ -2094,6 +2095,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const hasApprovalScopeIds = Object.values(input.approvalScopeIds ?? {}).some(
+      authorizedScopeIds => authorizedScopeIds && authorizedScopeIds.length > 0,
+    );
+    if (scopeIds.length === 0 && !hasApprovalScopeIds) return { proposals: [] };
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     if (input.cursor) {
       const cursor = await this.getVisibleProposal({
@@ -2115,24 +2120,121 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       );
       args.push(input.cursor, input.cursor, input.cursor);
     }
+    clauses.push(this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args));
+    args.push(limit + 1);
     const result = await this.#executor.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt DESC,id DESC`,
+      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt DESC,id DESC LIMIT ?`,
       args,
     });
-    const proposals: KnowledgeProposal[] = [];
-    for (const row of result.rows) {
-      const proposal = parseProposal(row);
-      if (
-        await this.#isProposalVisible(this.#executor, proposal, { scopeIds, approvalScopeIds: input.approvalScopeIds })
-      ) {
-        proposals.push(proposal);
-      }
-      if (proposals.length > limit) break;
-    }
+    const proposals = result.rows.map(parseProposal);
     return {
       proposals: proposals.slice(0, limit),
       nextCursor: proposals.length > limit ? proposals[limit - 1]?.id : undefined,
     };
+  }
+
+  #proposalVisibilityPredicate(
+    scopeIds: string[],
+    approvalScopeIds: KnowledgeProposalApprovalScopeIds | undefined,
+    args: unknown[],
+  ): string {
+    const inScope = (expression: string, ids: string[]) => {
+      args.push(...ids);
+      return `${expression} IN (${ids.map(() => '?').join(',')})`;
+    };
+    const nodeVisible = (nodeAlias: string, ids: string[]) =>
+      `((${nodeAlias}.isScope=1 AND ${inScope(`${nodeAlias}.id`, ids)}) OR (${nodeAlias}.isScope=0 AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visibleNodeScope
+        WHERE visibleNodeScope.nodeId=${nodeAlias}.id AND ${inScope('visibleNodeScope.scopeNodeId', ids)}
+      )))`;
+    const currentTargetScopesVisible = (ids: string[]) => `(
+      (target.type='node' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" targetNode
+        WHERE targetNode.id=target.id
+          AND ((COALESCE(target.expectedDeleted,0)=1 AND targetNode.deletedAt IS NOT NULL)
+            OR (COALESCE(target.expectedDeleted,0)=0 AND targetNode.deletedAt IS NULL))
+          AND ${nodeVisible('targetNode', ids)}
+      )) OR
+      (target.type='record' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord
+        JOIN "${TABLE_KNOWLEDGE_NODES}" ownerNode ON ownerNode.id=targetRecord.nodeId AND ownerNode.deletedAt IS NULL
+        WHERE targetRecord.id=target.id
+          AND ((COALESCE(target.expectedDeleted,0)=1 AND targetRecord.deletedAt IS NOT NULL)
+            OR (COALESCE(target.expectedDeleted,0)=0 AND targetRecord.deletedAt IS NULL))
+          AND ${nodeVisible('ownerNode', ids)}
+          AND EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" visibleRecordScope
+            WHERE visibleRecordScope.recordId=targetRecord.id AND ${inScope('visibleRecordScope.scopeNodeId', ids)}
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" mention
+            JOIN "${TABLE_KNOWLEDGE_NODES}" mentionNode ON mentionNode.id=mention.targetNodeId
+            WHERE mention.recordId=targetRecord.id
+              AND (mentionNode.deletedAt IS NOT NULL OR NOT ${nodeVisible('mentionNode', ids)})
+          )
+      ))
+    )`;
+
+    const currentTargetScopeIntersects = (ids: string[]) => `(
+      (target.type='node' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" targetNode
+        WHERE targetNode.id=target.id
+          AND ((COALESCE(target.expectedDeleted,0)=1 AND targetNode.deletedAt IS NOT NULL)
+            OR (COALESCE(target.expectedDeleted,0)=0 AND targetNode.deletedAt IS NULL))
+          AND ((targetNode.isScope=1 AND COALESCE(target.expectedDeleted,0)=0 AND ${inScope('targetNode.id', ids)})
+            OR ((targetNode.isScope=0 OR COALESCE(target.expectedDeleted,0)=1) AND EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" writableNodeScope
+              WHERE writableNodeScope.nodeId=targetNode.id AND ${inScope('writableNodeScope.scopeNodeId', ids)}
+            )))
+      )) OR
+      (target.type='record' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord
+        WHERE targetRecord.id=target.id
+          AND ((COALESCE(target.expectedDeleted,0)=1 AND targetRecord.deletedAt IS NOT NULL)
+            OR (COALESCE(target.expectedDeleted,0)=0 AND targetRecord.deletedAt IS NULL))
+          AND EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" writableRecordScope
+            WHERE writableRecordScope.recordId=targetRecord.id AND ${inScope('writableRecordScope.scopeNodeId', ids)}
+          )
+      ))
+    )`;
+
+    let readBranch = 'FALSE';
+    if (scopeIds.length > 0) {
+      const contextVisible = `(${inScope('proposerContextScopeId', scopeIds)} OR EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" contextScope
+        WHERE contextScope.nodeId=proposerContextScopeId AND ${inScope('contextScope.scopeNodeId', scopeIds)}
+      ))`;
+      readBranch = `(${contextVisible} AND NOT EXISTS (
+        SELECT 1 FROM JSON_TABLE(changes, '$.targets[*]' COLUMNS (
+          type VARCHAR(16) PATH '$.type', id VARCHAR(255) PATH '$.id',
+          expectedDeleted INTEGER PATH '$.expectedDeleted'
+        )) AS target
+        WHERE NOT ${currentTargetScopesVisible(scopeIds)}
+      ))`;
+    }
+
+    const capabilityBranches: string[] = [];
+    for (const [capability, authorizedScopeIds] of Object.entries(approvalScopeIds ?? {}) as [
+      KnowledgeProposalApprovalCapability,
+      string[],
+    ][]) {
+      if (!authorizedScopeIds || authorizedScopeIds.length === 0) continue;
+      args.push(capability);
+      capabilityBranches.push(`(target.approvalCapability=? AND ${currentTargetScopeIntersects(authorizedScopeIds)})`);
+    }
+    const writeBranch =
+      capabilityBranches.length === 0
+        ? 'FALSE'
+        : `NOT EXISTS (
+        SELECT 1 FROM JSON_TABLE(changes, '$.targets[*]' COLUMNS (
+          type VARCHAR(16) PATH '$.type', id VARCHAR(255) PATH '$.id',
+          expectedDeleted INTEGER PATH '$.expectedDeleted',
+          approvalCapability VARCHAR(32) PATH '$.approvalCapability'
+        )) AS target
+        WHERE NOT (${capabilityBranches.join(' OR ')})
+      )`;
+    return `(${readBranch} OR ${writeBranch})`;
   }
 
   async reviewProposal(input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
