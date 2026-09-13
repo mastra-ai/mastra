@@ -66,6 +66,37 @@ describe('Knowledge gap flags', () => {
     });
   });
 
+  it('rejects a verified mutation whose target was not bound to the gap flag', async () => {
+    const { knowledge, storage, ids, node } = await createFixture();
+    const unrelated = await storage.createNode({ name: 'Unrelated claim', scopeIds: [ids['scope:feature']!] });
+    const flag = await knowledge.fileGapFlag({
+      claim: 'The title is stale',
+      evidence: [],
+      targets: [{ type: 'node', id: node.id }],
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    const worker = await knowledge.createGapQueueWorker({
+      vouchedScopeIds: [ids['principal:owner']!],
+      reviewerContextScopeId: ids['principal:owner']!,
+      verify: async () => ({
+        outcome: 'verified',
+        evidence: ['fresh-source:revision-2'],
+        mutation: {
+          kind: 'update-node',
+          mutation: { id: unrelated.id, version: unrelated.version, name: 'Injected title' },
+        },
+      }),
+    });
+
+    await expect(worker.runOnce()).rejects.toThrow('was not bound to the gap flag');
+    await expect(storage.getNode(unrelated.id)).resolves.toMatchObject({
+      name: 'Unrelated claim',
+      version: unrelated.version,
+    });
+    await expect(storage.getProposal(flag.id)).resolves.toMatchObject({ status: 'pending' });
+  });
+
   it('always escalates protected scopes and notifies without invoking the verifier', async () => {
     const { knowledge, ids, node } = await createFixture();
     await knowledge.fileGapFlag({

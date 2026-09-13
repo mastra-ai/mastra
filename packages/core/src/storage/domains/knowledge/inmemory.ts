@@ -63,6 +63,7 @@ import type {
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   ReviewKnowledgeProposalInput,
+  ResolveKnowledgeGapProposalInput,
   RestoreKnowledgeNodeInput,
   UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
@@ -1626,12 +1627,34 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal(input);
+  }
+
+  async resolveGapProposal(input: ResolveKnowledgeGapProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal({
+      id: input.id,
+      reviewerContextScopeId: input.reviewerContextScopeId,
+      expectedAccessEpoch: input.expectedAccessEpoch,
+      verifiedMutation: input.mutation,
+      verifiedTargets: input.targets,
+      reviewReason: input.reviewReason,
+    });
+  }
+
+  async #applyProposal(
+    input: ApplyKnowledgeProposalInput & {
+      verifiedMutation?: KnowledgeProposalMutation;
+      verifiedTargets?: KnowledgeProposalTarget[];
+      reviewReason?: string;
+    },
+  ): Promise<KnowledgeProposal> {
     return this.#runAtomicMutation(() => {
       this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       const proposal = this.#db.knowledgeProposals.get(input.id);
       if (!proposal) throw new KnowledgeNotFoundError('proposal', input.id);
       if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
-      for (const target of proposal.targets) {
+      const targets = input.verifiedTargets ?? proposal.targets;
+      for (const target of targets) {
         const entity =
           target.type === 'node' ? this.#db.knowledgeNodes.get(target.id) : this.#db.knowledgeRecords.get(target.id);
         if (

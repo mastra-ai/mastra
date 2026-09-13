@@ -168,8 +168,15 @@ export interface ApplyKnowledgeProposalInput {
   id: string;
   reviewerContextScopeId: string;
   expectedAccessEpoch: number;
-  verifiedMutation?: KnowledgeProposalMutation;
-  reviewReason?: string;
+}
+
+export interface ResolveKnowledgeGapProposalInput {
+  id: string;
+  reviewerContextScopeId: string;
+  expectedAccessEpoch: number;
+  mutation: KnowledgeProposalMutation;
+  targets: KnowledgeProposalTarget[];
+  reviewReason: string;
 }
 
 export interface KnowledgeNode {
@@ -779,6 +786,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async applyProposal(_input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async resolveGapProposal(_input: ResolveKnowledgeGapProposalInput): Promise<KnowledgeProposal> {
     throw new KnowledgeUnsupportedError();
   }
   async getScopeAddress(_address: string): Promise<KnowledgeScopeAddress | null> {
