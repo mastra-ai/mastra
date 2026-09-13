@@ -572,7 +572,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     id: string;
     version: number;
     source: string;
-    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
@@ -1399,6 +1398,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       input.importRunId,
       input.details,
     );
+  }
+
   async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
     this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
     const [primaryTarget] = input.targets;
@@ -1658,7 +1659,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           );
         }
       }
-      const mutation = proposal.payload as KnowledgeProposalMutation;
+      if (input.verifiedMutation && proposal.operation !== 'gap-flag') {
+        throw new Error(`Verified mutations are only supported for Knowledge gap flags`);
+      }
+      const mutation = input.verifiedMutation ?? (proposal.payload as KnowledgeProposalMutation);
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
@@ -1676,9 +1680,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
       proposal.status = 'approved';
       proposal.reviewerContextScopeId = input.reviewerContextScopeId;
+      proposal.reviewReason = input.reviewReason;
       proposal.reviewedAt = new Date();
       this.#recordActivity('approve', proposal.targetType, proposal.targetId, input.reviewerContextScopeId, undefined, {
         proposalId: proposal.id,
+        reason: input.reviewReason,
       });
       return cloneProposal(proposal);
     });
@@ -1977,7 +1983,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return Boolean(
       node &&
       (target.expectedDeleted ? node.deletedAt : !node.deletedAt) &&
-      isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), visibleScopeIds),
+      isKnowledgeScopeVisible(
+        node.isScope && !target.expectedDeleted ? [node.id] : this.#nodeScopeIds(node.id),
+        visibleScopeIds,
+      ),
     );
   }
 
@@ -1989,7 +1998,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
     const node = this.#db.knowledgeNodes.get(target.id);
     if (!node || (target.expectedDeleted ? !node.deletedAt : Boolean(node.deletedAt))) return undefined;
-    return node.isScope && !target.expectedDeleted ? [node.id] : this.#nodeScopeIds(node.id);
+    if (target.expectedDeleted) return canonicalizeKnowledgeScopeIds(target.scopeIds);
+    return node.isScope ? [node.id] : this.#nodeScopeIds(node.id);
   }
 
   /**
