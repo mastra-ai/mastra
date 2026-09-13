@@ -1242,6 +1242,7 @@ export class KnowledgePG extends KnowledgeStorage {
     sourceId: string;
     targetId: string;
     sourceVersion: number;
+    targetVersion: number;
     importRunId?: string;
     contextScopeId?: string;
     expectedAccessEpoch?: number;
@@ -1813,7 +1814,6 @@ export class KnowledgePG extends KnowledgeStorage {
   async deleteRecordBySource(input: {
     id: string;
     source: string;
-    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
@@ -2459,8 +2459,12 @@ export class KnowledgePG extends KnowledgeStorage {
         WHERE target_node.id=${targetValue('id')}
           AND (((target->>'expectedDeleted')::boolean IS TRUE AND target_node."deletedAt" IS NOT NULL)
             OR (COALESCE((target->>'expectedDeleted')::boolean,FALSE) IS FALSE AND target_node."deletedAt" IS NULL))
-          AND ((target_node."isScope"=TRUE AND COALESCE((target->>'expectedDeleted')::boolean,FALSE) IS FALSE AND ${inScope('target_node.id', ids)})
-            OR ((target_node."isScope"=FALSE OR (target->>'expectedDeleted')::boolean IS TRUE) AND EXISTS (
+          AND (((target->>'expectedDeleted')::boolean IS TRUE AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(target->'scopeIds') retained_target_scope
+              WHERE ${inScope('retained_target_scope', ids)}
+            ))
+            OR (COALESCE((target->>'expectedDeleted')::boolean,FALSE) IS FALSE AND target_node."isScope"=TRUE AND ${inScope('target_node.id', ids)})
+            OR (COALESCE((target->>'expectedDeleted')::boolean,FALSE) IS FALSE AND target_node."isScope"=FALSE AND EXISTS (
               SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" writable_node_scope
               WHERE writable_node_scope."nodeId"=target_node.id AND ${inScope('writable_node_scope."scopeNodeId"', ids)}
             )))
@@ -2627,7 +2631,10 @@ export class KnowledgePG extends KnowledgeStorage {
           );
         }
       }
-      const mutation = proposal.payload as KnowledgeProposalMutation;
+      if (input.verifiedMutation && proposal.operation !== 'gap-flag') {
+        throw new Error(`Verified mutations are only supported for Knowledge gap flags`);
+      }
+      const mutation = input.verifiedMutation ?? (proposal.payload as KnowledgeProposalMutation);
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
@@ -2650,8 +2657,8 @@ export class KnowledgePG extends KnowledgeStorage {
       }
       const reviewedAt = new Date();
       const updated = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_PROPOSALS}" SET status='approved',"reviewerContextScopeId"=?,"reviewedAt"=? WHERE id=? AND status='pending'`,
-        args: [input.reviewerContextScopeId, reviewedAt, input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_PROPOSALS}" SET status='approved',"reviewerContextScopeId"=?,"reviewReason"=?,"reviewedAt"=? WHERE id=? AND status='pending'`,
+        args: [input.reviewerContextScopeId, input.reviewReason ?? null, reviewedAt, input.id],
       });
       if (updated.rowsAffected !== 1) throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
       await this.#activity(
@@ -2665,7 +2672,13 @@ export class KnowledgePG extends KnowledgeStorage {
           proposalId: proposal.id,
         },
       );
-      return { ...proposal, status: 'approved', reviewerContextScopeId: input.reviewerContextScopeId, reviewedAt };
+      return {
+        ...proposal,
+        status: 'approved',
+        reviewerContextScopeId: input.reviewerContextScopeId,
+        reviewReason: input.reviewReason,
+        reviewedAt,
+      };
     });
   }
 
@@ -2683,57 +2696,105 @@ export class KnowledgePG extends KnowledgeStorage {
   }): Promise<KnowledgeActivityEvent[]> {
     const clauses: string[] = [];
     const args: QueryValues = [];
-    if (input.importRunId) {
-      clauses.push('importRunId=?');
-      args.push(input.importRunId);
-    }
-    if (input.action) {
-      clauses.push('action=?');
-      args.push(input.action);
-    }
-    if (input.sourceType)
-      clauses.push(input.sourceType === 'importer' ? 'importRunId IS NOT NULL' : 'importRunId IS NULL');
-    if (input.from) {
-      clauses.push('createdAt>=?');
-      args.push(input.from.toISOString());
-    }
-    if (input.to) {
-      clauses.push('createdAt<=?');
-      args.push(input.to.toISOString());
-    }
-    if (input.after) {
-      clauses.push('id < ?');
-      args.push(input.after);
-    }
-    const result = await this.#readExecutor.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_ACTIVITY}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY id DESC`,
-      args,
-    });
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const membershipScopeIds = input.membershipScopeIds
       ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
       : undefined;
+    const inScope = (expression: string, ids: string[]) => {
+      if (ids.length === 0) return 'FALSE';
+      args.push(...ids);
+      return `${expression} IN (${ids.map(() => '?').join(',')})`;
+    };
+    const nodeVisible = (alias: string, ids: string[]) => `EXISTS (
+      SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visible_node_scope
+      WHERE visible_node_scope."nodeId"=${alias}.id AND ${inScope('visible_node_scope."scopeNodeId"', ids)}
+    )`;
+    const retainedVisible = (ids: string[]) => `EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(activity.details->'${ACTIVITY_VISIBILITY_SCOPE_IDS}') retained_scope(value)
+      WHERE ${inScope('retained_scope.value', ids)}
+    )`;
+    const targetVisible = `(
+      (activity."targetType"='node' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" target_node
+        WHERE target_node.id=activity."targetId" AND ${nodeVisible('target_node', scopeIds)}
+      )) OR
+      (activity."targetType"='record' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" target_record
+        JOIN "${TABLE_KNOWLEDGE_NODES}" owner_node ON owner_node.id=target_record."nodeId" AND owner_node."deletedAt" IS NULL
+        WHERE target_record.id=activity."targetId"
+          AND ${nodeVisible('owner_node', scopeIds)}
+          AND EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" visible_record_scope
+            WHERE visible_record_scope."recordId"=target_record.id AND ${inScope('visible_record_scope."scopeNodeId"', scopeIds)}
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" mention
+            JOIN "${TABLE_KNOWLEDGE_NODES}" mention_node ON mention_node.id=mention."targetNodeId"
+            WHERE mention."recordId"=target_record.id
+              AND (mention_node."deletedAt" IS NOT NULL OR NOT ${nodeVisible('mention_node', scopeIds)})
+          )
+      )) OR (activity.action='delete' AND ${retainedVisible(scopeIds)})
+    )`;
+    const proposalVisibility = this.#proposalVisibilityPredicate(scopeIds, undefined, args);
+    clauses.push(`(
+      activity.details->>'proposalId' IS NULL OR EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_PROPOSALS}" proposal
+        WHERE proposal.id=activity.details->>'proposalId' AND ${proposalVisibility}
+      )
+    )`);
+    clauses.push(targetVisible);
+    if (membershipScopeIds) {
+      clauses.push(`(
+        (activity."targetType"='node' AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" membership_node_scope
+          WHERE membership_node_scope."nodeId"=activity."targetId" AND ${inScope('membership_node_scope."scopeNodeId"', membershipScopeIds)}
+        )) OR
+        (activity."targetType"='record' AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" membership_record_scope
+          WHERE membership_record_scope."recordId"=activity."targetId" AND ${inScope('membership_record_scope."scopeNodeId"', membershipScopeIds)}
+        )) OR (activity.action='delete' AND ${retainedVisible(membershipScopeIds)})
+      )`);
+    }
+    if (input.contextScopeId) {
+      clauses.push('activity."contextScopeId"=?');
+      args.push(input.contextScopeId);
+    }
+    if (input.importRunId) {
+      clauses.push('activity."importRunId"=?');
+      args.push(input.importRunId);
+    }
+    if (input.action) {
+      clauses.push('activity.action=?');
+      args.push(input.action);
+    }
+    if (input.sourceType)
+      clauses.push(
+        input.sourceType === 'importer' ? 'activity."importRunId" IS NOT NULL' : 'activity."importRunId" IS NULL',
+      );
+    if (input.from) {
+      clauses.push('activity."createdAt">=?');
+      args.push(input.from.toISOString());
+    }
+    if (input.to) {
+      clauses.push('activity."createdAt"<=?');
+      args.push(input.to.toISOString());
+    }
+    if (input.after) {
+      clauses.push('activity.id < ?');
+      args.push(input.after);
+    }
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    args.push(limit);
+    const result = await this.#readExecutor.execute({
+      sql: `SELECT activity.* FROM "${TABLE_KNOWLEDGE_ACTIVITY}" activity WHERE ${clauses.join(' AND ')} ORDER BY activity.id DESC LIMIT ?`,
+      args,
+    });
     const events: KnowledgeActivityEvent[] = [];
     for (const row of result.rows) {
       const action = String(row.action) as KnowledgeActivityAction;
       const details = row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details);
-      const proposalId = typeof details?.proposalId === 'string' ? details.proposalId : undefined;
-      if (proposalId && !(await this.getVisibleProposal({ id: proposalId, scopeIds }))) continue;
-      const retainedScopeIds = activityVisibilityScopeIds(details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
-      const visibleDeletion = action === 'delete' && isKnowledgeScopeVisible(retainedScopeIds, scopeIds);
       const targetId = String(row.targetId);
-      if (targetType === 'node') {
-        const node = await this.#getNodeIncludingDeleted(this.#readExecutor, targetId);
-        const targetScopeIds = node ? await this.#getNodeScopeIds(this.#readExecutor, targetId) : retainedScopeIds;
-        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
-        if (!visibleDeletion && (!node || !isKnowledgeScopeVisible(targetScopeIds, scopeIds))) continue;
-      } else {
-        const record = await this.#getRecord(this.#readExecutor, targetId, true);
-        const targetScopeIds = record ? await this.getRecordScopeIds(targetId) : retainedScopeIds;
-        if (membershipScopeIds && !isKnowledgeScopeVisible(targetScopeIds, membershipScopeIds)) continue;
-        if (record ? !(await this.#isRecordVisible(this.#readExecutor, record, scopeIds)) : !visibleDeletion) continue;
-      }
       events.push({
         id: String(row.id),
         action,
