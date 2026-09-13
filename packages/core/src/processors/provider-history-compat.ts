@@ -287,6 +287,16 @@ export const stripForeignProviderExecutedTools: CompatRule = {
 };
 
 const CLAUDE_VERSION_PATTERN = /claude-(?:(?:opus|sonnet|haiku)-)?(\d+)(?:[.-](\d+))?/i;
+const GEMINI_MODEL_PATTERN = /(?:^|[/:])gemini-/i;
+const GEMINI_VERSION_PATTERN = /gemini-(\d+)/i;
+
+function getModelId(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string') {
+    return (model as { modelId: string }).modelId;
+  }
+  return undefined;
+}
 
 function supportsAssistantPrefill(modelId: string): boolean | undefined {
   const match = CLAUDE_VERSION_PATTERN.exec(modelId);
@@ -312,15 +322,43 @@ export function isMaybeAnthropicWithoutAssistantPrefill(model: unknown): boolean
 
   if (!isMaybeAnthropic(model)) return false;
 
-  const modelId =
-    typeof model === 'string'
-      ? model
-      : model && typeof model === 'object' && typeof (model as { modelId?: unknown }).modelId === 'string'
-        ? (model as { modelId: string }).modelId
-        : undefined;
-
+  const modelId = getModelId(model);
   if (!modelId) return true;
   return supportsAssistantPrefill(modelId) !== true;
+}
+
+function supportsTrailingModelTurn(modelId: string): boolean | undefined {
+  const match = GEMINI_VERSION_PATTERN.exec(modelId);
+  if (!match) return undefined;
+  return Number(match[1]) < 3;
+}
+
+/**
+ * Detects Gemini models that reject requests ending on a model turn.
+ * Gemini 3 and later reject this shape, while Gemini 2.x accepts it.
+ * Unversioned Gemini aliases are matched conservatively.
+ */
+export function isMaybeGeminiWithoutTrailingModelTurn(model: unknown): boolean {
+  if (typeof model === 'function') return true;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeGeminiWithoutTrailingModelTurn((entry as { model?: unknown }).model ?? entry));
+  }
+
+  const isGoogleFamily =
+    getModelProviderFamily(model) === 'google' ||
+    matchesProviderPrefix(model, 'google-ai-studio') ||
+    matchesProviderPrefix(model, 'google-vertex');
+  if (!isGoogleFamily) return false;
+
+  const modelId = getModelId(model);
+  if (!modelId) return true;
+  if (!GEMINI_MODEL_PATTERN.test(modelId)) return false;
+  return supportsTrailingModelTurn(modelId) !== true;
+}
+
+export function requiresTrailingAssistantGuard(model: unknown): boolean {
+  return isMaybeAnthropicWithoutAssistantPrefill(model) || isMaybeGeminiWithoutTrailingModelTurn(model);
 }
 
 export function isMaybeAzure(

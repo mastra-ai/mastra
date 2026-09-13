@@ -29,7 +29,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { isMaybeAnthropicWithoutAssistantPrefill } from './provider-history-compat';
+import { requiresTrailingAssistantGuard } from './provider-history-compat';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
@@ -1485,14 +1485,15 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
-    // Append the trailing assistant guard when the resolved model does not support assistant prefill
-    const processors =
-      stepInput.model && isMaybeAnthropicWithoutAssistantPrefill(stepInput.model)
-        ? [...this.inputProcessors, new TrailingAssistantGuard()]
-        : this.inputProcessors;
-
-    // Run through all input processors that have processInputStep
-    for (const [index, processorOrWorkflow] of processors.entries()) {
+    // Run through configured processors, then conditionally run the compatibility guard against their final output.
+    for (let index = 0; index <= this.inputProcessors.length; index++) {
+      const processorOrWorkflow =
+        index < this.inputProcessors.length
+          ? this.inputProcessors[index]!
+          : requiresTrailingAssistantGuard(stepInput.model)
+            ? new TrailingAssistantGuard()
+            : undefined;
+      if (!processorOrWorkflow) continue;
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();

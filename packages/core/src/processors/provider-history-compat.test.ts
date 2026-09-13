@@ -11,6 +11,7 @@ import {
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
+  isMaybeGeminiWithoutTrailingModelTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
@@ -358,6 +359,57 @@ describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
       isMaybeAnthropicWithoutAssistantPrefill([
         { model: 'anthropic/claude-haiku-4-5-20251001' },
         { model: 'anthropic/claude-opus-5' },
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe('isMaybeGeminiWithoutTrailingModelTurn', () => {
+  it('matches Gemini 3 and later across direct, Vertex, and routed models', () => {
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' }),
+    ).toBe(true);
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({ provider: 'vertex-ai.google-ai', modelId: 'gemini-3.1-pro-preview' }),
+    ).toBe(true);
+    expect(isMaybeGeminiWithoutTrailingModelTurn('google/gemini-3-pro-preview')).toBe(true);
+    expect(isMaybeGeminiWithoutTrailingModelTurn('google:gemini-3-pro-preview')).toBe(true);
+    expect(isMaybeGeminiWithoutTrailingModelTurn('google-ai-studio/gemini-3.5-flash-lite')).toBe(true);
+    expect(isMaybeGeminiWithoutTrailingModelTurn('google-vertex/gemini-3.5-flash-lite')).toBe(true);
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({
+        provider: 'openrouter.chat',
+        modelId: 'google/gemini-3.5-flash-lite',
+      }),
+    ).toBe(true);
+  });
+
+  it('preserves trailing model turns for Gemini 2', () => {
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' }),
+    ).toBe(false);
+    expect(isMaybeGeminiWithoutTrailingModelTurn('google/gemini-2.0-flash')).toBe(false);
+  });
+
+  it('does not match unrelated models hosted by Google or other providers', () => {
+    expect(isMaybeGeminiWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemma-4-26b' })).toBe(
+      false,
+    );
+    expect(isMaybeGeminiWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'gpt-5' })).toBe(false);
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'google/gemini-3.5-flash-lite' }),
+    ).toBe(false);
+  });
+
+  it('matches unknown Gemini versions and fallback arrays conservatively', () => {
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-flash-latest' }),
+    ).toBe(true);
+    expect(isMaybeGeminiWithoutTrailingModelTurn(() => 'google/gemini-3.5-flash-lite')).toBe(true);
+    expect(
+      isMaybeGeminiWithoutTrailingModelTurn([
+        { model: 'google/gemini-2.5-flash' },
+        { model: 'google/gemini-3.5-flash-lite' },
       ]),
     ).toBe(true);
   });

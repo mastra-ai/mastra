@@ -17,10 +17,11 @@ const createMessage = (role: 'user' | 'assistant', text: string): MastraDBMessag
 });
 
 const makeArgs = (
-  overrides: Pick<Partial<ProcessInputStepArgs>, 'messages' | 'structuredOutput'> = {},
+  overrides: Pick<Partial<ProcessInputStepArgs>, 'messages' | 'model' | 'structuredOutput'> = {},
 ): ProcessInputStepArgs =>
   ({
     messages: overrides.messages ?? [createMessage('assistant', 'draft response')],
+    model: overrides.model ?? { provider: 'anthropic.messages', modelId: 'claude-opus-5' },
     structuredOutput:
       'structuredOutput' in overrides ? overrides.structuredOutput : { schema: z.object({ answer: z.string() }) },
   }) as ProcessInputStepArgs;
@@ -50,6 +51,17 @@ describe('TrailingAssistantGuard', () => {
     });
     expect(result?.messages?.[2]?.id).toEqual(expect.any(String));
     expect(result?.messages?.[2]?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it.each([
+    { provider: 'openai.chat', modelId: 'gpt-5' },
+    { provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' },
+  ])('does not append a message for $provider/$modelId', model => {
+    const guard = new TrailingAssistantGuard();
+
+    const result = guard.processInputStep(makeArgs({ model: model as any }));
+
+    expect(result).toBeUndefined();
   });
 
   it('does not append a message when structured output has no schema', () => {

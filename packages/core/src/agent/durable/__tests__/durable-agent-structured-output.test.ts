@@ -13,6 +13,19 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
+const TRAILING_ASSISTANT_GUARD_TEXT = 'Generate the structured response.';
+
+function expectTrailingAssistantGuard(prompt: any[]) {
+  const nonSystemMessages = prompt.filter(message => message.role !== 'system');
+  expect(nonSystemMessages.slice(-2)).toMatchObject([
+    { role: 'assistant' },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: TRAILING_ASSISTANT_GUARD_TEXT }],
+    },
+  ]);
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -84,6 +97,40 @@ function createChunkedStructuredOutputModel(jsonOutput: object) {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
+  });
+}
+
+function createCapturingStructuredOutputModel({
+  provider,
+  modelId,
+  capturedCalls,
+}: {
+  provider: string;
+  modelId: string;
+  capturedCalls: any[];
+}) {
+  return new MockLanguageModelV2({
+    provider,
+    modelId,
+    doStream: async options => {
+      capturedCalls.push(options);
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId, timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: JSON.stringify({ answer: 'done' }) },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
   });
 }
 
@@ -265,6 +312,112 @@ describe('DurableAgent structured output', () => {
   });
 
   describe('streaming structured output', () => {
+    it('guards a trailing assistant turn for Gemini 3 without configured input processors', async () => {
+      const capturedCalls: any[] = [];
+      const mockModel = createCapturingStructuredOutputModel({
+        provider: 'google.generative-ai',
+        modelId: 'gemini-3.5-flash-lite',
+        capturedCalls,
+      });
+      const baseAgent = new Agent({
+        id: 'durable-gemini-3-trailing-assistant-test',
+        name: 'Durable Gemini 3 Trailing Assistant Test',
+        instructions: 'Return a structured response.',
+        model: mockModel as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream(
+        [
+          { role: 'user', content: 'Give me a verdict.' },
+          { role: 'assistant', content: 'Draft response' },
+        ],
+        { structuredOutput: { schema: z.object({ answer: z.string() }) } },
+      );
+
+      try {
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+      } finally {
+        result.cleanup();
+      }
+
+      expectTrailingAssistantGuard(capturedCalls[0].prompt);
+    });
+
+    it('uses the final processor-selected model when deciding whether to guard', async () => {
+      const geminiCalls: any[] = [];
+      const selectedGemini = createCapturingStructuredOutputModel({
+        provider: 'openrouter.chat',
+        modelId: 'google/gemini-3.5-flash-lite',
+        capturedCalls: geminiCalls,
+      });
+      const routeToGemini = createDurableAgent({
+        agent: new Agent({
+          id: 'durable-route-to-gemini-test',
+          name: 'Durable Route to Gemini Test',
+          instructions: 'Return a structured response.',
+          model: new MockLanguageModelV2({ provider: 'openai', modelId: 'gpt-5' }),
+          inputProcessors: [{ id: 'route-to-gemini', processInputStep: () => ({ model: selectedGemini }) }],
+        }),
+        pubsub,
+      });
+
+      const geminiResult = await routeToGemini.stream([{ role: 'assistant', content: 'Draft response' }], {
+        structuredOutput: {
+          schema: z.object({ answer: z.string() }),
+          jsonPromptInjection: 'auto',
+        },
+      });
+      try {
+        for await (const _chunk of geminiResult.fullStream as AsyncIterable<any>) {
+        }
+      } finally {
+        geminiResult.cleanup();
+      }
+
+      expect(geminiCalls[0].responseFormat?.type).toBe('json');
+      expectTrailingAssistantGuard(geminiCalls[0].prompt);
+
+      const openAICalls: any[] = [];
+      const selectedOpenAI = createCapturingStructuredOutputModel({
+        provider: 'openai',
+        modelId: 'gpt-5',
+        capturedCalls: openAICalls,
+      });
+      const routeToOpenAI = createDurableAgent({
+        agent: new Agent({
+          id: 'durable-route-to-openai-test',
+          name: 'Durable Route to OpenAI Test',
+          instructions: 'Return a structured response.',
+          model: new MockLanguageModelV2({
+            provider: 'google.generative-ai',
+            modelId: 'gemini-3.5-flash-lite',
+          }),
+          inputProcessors: [{ id: 'route-to-openai', processInputStep: () => ({ model: selectedOpenAI }) }],
+        }),
+        pubsub,
+      });
+
+      const openAIResult = await routeToOpenAI.stream([{ role: 'assistant', content: 'Draft response' }], {
+        structuredOutput: {
+          schema: z.object({ answer: z.string() }),
+          jsonPromptInjection: 'auto',
+        },
+      });
+      try {
+        for await (const _chunk of openAIResult.fullStream as AsyncIterable<any>) {
+        }
+      } finally {
+        openAIResult.cleanup();
+      }
+
+      expect(openAICalls[0].responseFormat?.type).toBe('json');
+      expect(openAICalls[0].prompt.filter((message: any) => message.role !== 'system').at(-1)).toMatchObject({
+        role: 'assistant',
+      });
+    });
+
     it('should stream structured output correctly in chunks', async () => {
       const expectedOutput = {
         name: 'Alice',
