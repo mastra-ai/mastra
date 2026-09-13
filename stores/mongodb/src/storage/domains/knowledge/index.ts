@@ -43,6 +43,8 @@ import type {
   KnowledgeProposal,
   KnowledgeProposalApprovalScopeIds,
   KnowledgeProposalMutation,
+  KnowledgeProposalTarget,
+  ResolveKnowledgeGapProposalInput,
   ListKnowledgeProposalsInput,
   ListKnowledgeProposalsOutput,
   ReviewKnowledgeProposalInput,
@@ -2361,6 +2363,27 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal(input);
+  }
+
+  async resolveGapProposal(input: ResolveKnowledgeGapProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal({
+      id: input.id,
+      reviewerContextScopeId: input.reviewerContextScopeId,
+      expectedAccessEpoch: input.expectedAccessEpoch,
+      verifiedMutation: input.mutation,
+      verifiedTargets: input.targets,
+      reviewReason: input.reviewReason,
+    });
+  }
+
+  async #applyProposal(
+    input: ApplyKnowledgeProposalInput & {
+      verifiedMutation?: KnowledgeProposalMutation;
+      verifiedTargets?: KnowledgeProposalTarget[];
+      reviewReason?: string;
+    },
+  ): Promise<KnowledgeProposal> {
     return this.#transaction(async session => {
       await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
       const proposals = await this.#collection(TABLE_KNOWLEDGE_PROPOSALS);
@@ -2368,7 +2391,8 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       if (!row) throw new KnowledgeNotFoundError('proposal', input.id);
       const proposal = proposalFromDocument(row);
       if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
-      for (const target of proposal.targets) {
+      const targets = input.verifiedTargets ?? proposal.targets;
+      for (const target of targets) {
         const collection = await this.#collection(
           target.type === 'node' ? TABLE_KNOWLEDGE_NODES : TABLE_KNOWLEDGE_RECORDS,
         );
@@ -2403,7 +2427,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           mutation,
           input.reviewerContextScopeId,
           input.expectedAccessEpoch,
-          proposal.targets,
+          targets,
         );
       } catch (error) {
         if (error instanceof KnowledgeConflictError) {
@@ -2875,6 +2899,289 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return (await this.getCurationCursor(input))!;
   }
 
+  #activityVisibilityPipeline(scopeIds: string[], membershipScopeIds?: string[]): Document[] {
+    const visibleNodeLookup = (scopeFilter: string[], as: string): Document => ({
+      $lookup: {
+        from: TABLE_KNOWLEDGE_NODES,
+        let: { targetId: '$targetId', targetType: '$targetType' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$$targetType', 'node'] },
+                  { $eq: ['$id', '$$targetId'] },
+                  { $eq: [{ $type: '$deletedAt' }, 'missing'] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: TABLE_KNOWLEDGE_NODE_SCOPES,
+              let: { nodeId: '$id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $and: [{ $eq: ['$nodeId', '$$nodeId'] }, { $in: ['$scopeNodeId', scopeFilter] }] },
+                  },
+                },
+                { $limit: 1 },
+              ],
+              as: '__memberships',
+            },
+          },
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $and: [{ $eq: ['$isScope', true] }, { $in: ['$id', scopeFilter] }] },
+                  { $gt: [{ $size: '$__memberships' }, 0] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as,
+      },
+    });
+    const visibleRecordLookup = (scopeFilter: string[], as: string): Document => ({
+      $lookup: {
+        from: TABLE_KNOWLEDGE_RECORDS,
+        let: { targetId: '$targetId', targetType: '$targetType' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$$targetType', 'record'] },
+                  { $eq: ['$id', '$$targetId'] },
+                  { $eq: [{ $type: '$deletedAt' }, 'missing'] },
+                ],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: TABLE_KNOWLEDGE_RECORD_SCOPES,
+              let: { recordId: '$id' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $and: [{ $eq: ['$recordId', '$$recordId'] }, { $in: ['$scopeNodeId', scopeFilter] }] },
+                  },
+                },
+                { $limit: 1 },
+              ],
+              as: '__recordScopes',
+            },
+          },
+          {
+            $lookup: {
+              from: TABLE_KNOWLEDGE_NODES,
+              let: { nodeId: '$nodeId' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [{ $eq: ['$id', '$$nodeId'] }, { $eq: [{ $type: '$deletedAt' }, 'missing'] }],
+                    },
+                  },
+                },
+                {
+                  $lookup: {
+                    from: TABLE_KNOWLEDGE_NODE_SCOPES,
+                    let: { nodeId: '$id' },
+                    pipeline: [
+                      {
+                        $match: {
+                          $expr: {
+                            $and: [{ $eq: ['$nodeId', '$$nodeId'] }, { $in: ['$scopeNodeId', scopeFilter] }],
+                          },
+                        },
+                      },
+                      { $limit: 1 },
+                    ],
+                    as: '__memberships',
+                  },
+                },
+                {
+                  $match: {
+                    $expr: {
+                      $or: [
+                        { $and: [{ $eq: ['$isScope', true] }, { $in: ['$id', scopeFilter] }] },
+                        { $gt: [{ $size: '$__memberships' }, 0] },
+                      ],
+                    },
+                  },
+                },
+              ],
+              as: '__owner',
+            },
+          },
+          {
+            $lookup: {
+              from: TABLE_KNOWLEDGE_MENTIONS,
+              let: { recordId: '$id' },
+              pipeline: [
+                { $match: { $expr: { $eq: ['$recordId', '$$recordId'] } } },
+                {
+                  $lookup: {
+                    from: TABLE_KNOWLEDGE_NODES,
+                    let: { nodeId: '$targetNodeId' },
+                    pipeline: [
+                      {
+                        $match: {
+                          $expr: {
+                            $and: [{ $eq: ['$id', '$$nodeId'] }, { $eq: [{ $type: '$deletedAt' }, 'missing'] }],
+                          },
+                        },
+                      },
+                      {
+                        $lookup: {
+                          from: TABLE_KNOWLEDGE_NODE_SCOPES,
+                          let: { nodeId: '$id' },
+                          pipeline: [
+                            {
+                              $match: {
+                                $expr: {
+                                  $and: [{ $eq: ['$nodeId', '$$nodeId'] }, { $in: ['$scopeNodeId', scopeFilter] }],
+                                },
+                              },
+                            },
+                            { $limit: 1 },
+                          ],
+                          as: '__memberships',
+                        },
+                      },
+                      {
+                        $match: {
+                          $expr: {
+                            $or: [
+                              { $and: [{ $eq: ['$isScope', true] }, { $in: ['$id', scopeFilter] }] },
+                              { $gt: [{ $size: '$__memberships' }, 0] },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                    as: '__visibleTarget',
+                  },
+                },
+                { $match: { $expr: { $eq: [{ $size: '$__visibleTarget' }, 0] } } },
+                { $limit: 1 },
+              ],
+              as: '__hiddenMentions',
+            },
+          },
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $gt: [{ $size: '$__recordScopes' }, 0] },
+                  { $gt: [{ $size: '$__owner' }, 0] },
+                  { $eq: [{ $size: '$__hiddenMentions' }, 0] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as,
+      },
+    });
+    const pipeline: Document[] = [
+      visibleNodeLookup(scopeIds, '__visibleNode'),
+      visibleRecordLookup(scopeIds, '__visibleRecord'),
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_PROPOSALS,
+          let: { proposalId: '$details.proposalId' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$id', '$$proposalId'] } } },
+            ...this.#proposalVisibilityPipeline(scopeIds, undefined),
+            { $limit: 1 },
+          ],
+          as: '__visibleProposal',
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              {
+                $or: [
+                  { $gt: [{ $size: '$__visibleNode' }, 0] },
+                  { $gt: [{ $size: '$__visibleRecord' }, 0] },
+                  {
+                    $and: [
+                      { $eq: ['$action', 'delete'] },
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $setIntersection: [
+                                { $ifNull: [`$details.${ACTIVITY_VISIBILITY_SCOPE_IDS}`, []] },
+                                scopeIds,
+                              ],
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                $or: [
+                  { $eq: [{ $type: '$details.proposalId' }, 'missing'] },
+                  { $gt: [{ $size: '$__visibleProposal' }, 0] },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ];
+    if (membershipScopeIds) {
+      pipeline.push(
+        visibleNodeLookup(membershipScopeIds, '__membershipNode'),
+        visibleRecordLookup(membershipScopeIds, '__membershipRecord'),
+        {
+          $match: {
+            $expr: {
+              $or: [
+                { $gt: [{ $size: '$__membershipNode' }, 0] },
+                { $gt: [{ $size: '$__membershipRecord' }, 0] },
+                {
+                  $and: [
+                    { $eq: ['$action', 'delete'] },
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $setIntersection: [
+                              { $ifNull: [`$details.${ACTIVITY_VISIBILITY_SCOPE_IDS}`, []] },
+                              membershipScopeIds,
+                            ],
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      );
+    }
+    return pipeline;
+  }
+
   async listActivity(input: {
     scopeIds: KnowledgeScopeIds;
     membershipScopeIds?: KnowledgeScopeIds;
@@ -2888,69 +3195,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const vouched = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const nodeMemberships = await (
-      await this.#collection(TABLE_KNOWLEDGE_NODE_SCOPES)
-    )
-      .find({ scopeNodeId: { $in: vouched } })
-      .project({ nodeId: 1 })
-      .toArray();
-    const visibleNodeIds = [...new Set([...vouched, ...nodeMemberships.map(row => String(row.nodeId))])];
-    const recordMemberships = await (
-      await this.#collection(TABLE_KNOWLEDGE_RECORD_SCOPES)
-    )
-      .find({ scopeNodeId: { $in: vouched } })
-      .project({ recordId: 1 })
-      .toArray();
-    const visibleRecordIds: string[] = [];
-    for (const recordId of new Set(recordMemberships.map(row => String(row.recordId)))) {
-      const recordDocument = await (await this.#collection(TABLE_KNOWLEDGE_RECORDS)).findOne({ id: recordId });
-      if (recordDocument && (await this.#isRecordVisible(recordFromDocument(recordDocument), vouched))) {
-        visibleRecordIds.push(recordId);
-      }
-    }
-    const visibleProposalIds: string[] = [];
-    let proposalCursor: string | undefined;
-    do {
-      const page = await this.listProposals({ scopeIds: vouched, cursor: proposalCursor, limit: 100 });
-      visibleProposalIds.push(...page.proposals.map(proposal => proposal.id));
-      proposalCursor = page.nextCursor;
-    } while (proposalCursor);
-    const filter: Filter<Document> = {
-      $and: [
-        {
-          $or: [
-            { targetType: 'node', targetId: { $in: visibleNodeIds } },
-            { targetType: 'record', targetId: { $in: visibleRecordIds } },
-            { action: 'delete', [`details.${ACTIVITY_VISIBILITY_SCOPE_IDS}`]: { $in: vouched } },
-          ],
-        },
-        {
-          $or: [{ 'details.proposalId': { $exists: false } }, { 'details.proposalId': { $in: visibleProposalIds } }],
-        },
-      ],
-    };
     const membershipScopeIds = input.membershipScopeIds
       ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
       : undefined;
-    if (membershipScopeIds) {
-      const [membershipNodes, membershipRecords] = await Promise.all([
-        (await this.#collection(TABLE_KNOWLEDGE_NODE_SCOPES))
-          .find({ scopeNodeId: { $in: membershipScopeIds } })
-          .project({ nodeId: 1 })
-          .toArray(),
-        (await this.#collection(TABLE_KNOWLEDGE_RECORD_SCOPES))
-          .find({ scopeNodeId: { $in: membershipScopeIds } })
-          .project({ recordId: 1 })
-          .toArray(),
-      ]);
-      (filter.$and as Filter<Document>[]).push({
-        $or: [
-          { targetType: 'node', targetId: { $in: membershipNodes.map(row => String(row.nodeId)) } },
-          { targetType: 'record', targetId: { $in: membershipRecords.map(row => String(row.recordId)) } },
-          { action: 'delete', [`details.${ACTIVITY_VISIBILITY_SCOPE_IDS}`]: { $in: membershipScopeIds } },
-        ],
-      });
-    }
+    const filter: Filter<Document> = {};
     if (input.contextScopeId) filter.contextScopeId = input.contextScopeId;
     if (input.importRunId) filter.importRunId = input.importRunId;
     if (input.action) filter.action = input.action;
@@ -2965,9 +3213,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_ACTIVITY)
     )
-      .find(filter)
-      .sort({ id: -1 })
-      .limit(limit)
+      .aggregate([
+        { $match: filter },
+        ...this.#activityVisibilityPipeline(vouched, membershipScopeIds),
+        { $sort: { id: -1 } },
+        { $limit: limit },
+      ])
       .toArray();
     const result: KnowledgeActivityEvent[] = [];
     for (const row of rows) {
@@ -2997,14 +3248,17 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       limit?: number;
     } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
+    const vouched = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
+    const filter: Filter<Document> = {};
+    if (input.status) filter.status = input.status;
+    if (vouched) filter.scopeIds = { $in: vouched };
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)
     )
-      .find(input.status ? { status: input.status } : {})
+      .find(filter)
       .sort({ createdAt: 1, id: 1 })
       .limit(1000)
       .toArray();
-    const vouched = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
     const result: KnowledgeSemanticOutboxEntry[] = [];
     for (const row of rows) {
       const entry = this.#semanticEntry(row);
@@ -3031,12 +3285,14 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         { $set: { status: 'pending', availableAt: now }, $unset: { claimedAt: '', claimedBy: '' } },
         sessionOptions(session),
       );
+      const vouched = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
+      const pendingFilter: Filter<Document> = { status: 'pending', availableAt: { $lte: now } };
+      if (vouched) pendingFilter.scopeIds = { $in: vouched };
       const rows = await collection
-        .find({ status: 'pending', availableAt: { $lte: now } }, sessionOptions(session))
+        .find(pendingFilter, sessionOptions(session))
         .sort({ createdAt: 1, id: 1 })
         .limit(1000)
         .toArray();
-      const vouched = input.scopeIds ? canonicalizeKnowledgeScopeIds(input.scopeIds) : undefined;
       if (vouched) {
         for (const row of rows) {
           const successor = this.#semanticEntry(row);
