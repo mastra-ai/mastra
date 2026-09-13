@@ -1461,7 +1461,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     proposal.reviewReason = input.reviewReason;
     proposal.reviewedAt = new Date();
     this.#recordActivity(
-      input.status === 'rejected' ? 'reject' : 'conflict',
+      input.status === 'approved'
+        ? 'approve'
+        : input.status === 'rejected'
+          ? 'reject'
+          : input.status === 'escalated'
+            ? 'escalate'
+            : 'conflict',
       proposal.targetType,
       proposal.targetId,
       input.reviewerContextScopeId,
