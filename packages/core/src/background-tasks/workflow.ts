@@ -166,12 +166,13 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // "null", which is truthy and would suppress the framework's suspended run id below
         // (see #23739). Resolve the args-side value so a malformed one counts as absent.
         const argsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
-        if (!argsSuspendedToolRunId) {
-          if (resumeData !== undefined && suspendedToolRunId) {
-            args.suspendedToolRunId = suspendedToolRunId;
-          } else {
-            delete args.suspendedToolRunId;
-          }
+        if (resumeData !== undefined && suspendedToolRunId) {
+          // The framework-resolved id is authoritative on a resume leg, matching the durable
+          // and non-durable tool-call steps; a model-authored value never wins over it.
+          args.suspendedToolRunId = suspendedToolRunId;
+        } else if (!argsSuspendedToolRunId) {
+          // Neither side resolved to a usable id: drop a sentinel so it is not passed through.
+          delete args.suspendedToolRunId;
         }
 
         const result = await executor.execute(args, {

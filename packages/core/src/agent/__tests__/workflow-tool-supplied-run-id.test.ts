@@ -90,7 +90,7 @@ function createCompletingWorkflow() {
     .commit();
 }
 
-type RunIdProbe = { runIds: string[]; distinct: number };
+type RunIdProbe = { runIds: string[]; distinct: number; completedTickets: string[] };
 
 async function runTwoCallsToSameWorkflow(suspendedToolRunId: unknown): Promise<RunIdProbe> {
   const sharedWorkflow = createCompletingWorkflow();
@@ -112,9 +112,17 @@ async function runTwoCallsToSameWorkflow(suspendedToolRunId: unknown): Promise<R
 
   const stream = await mastra.getAgent('agent').stream('Run the shared workflow twice.', { maxSteps: 6 });
   // Drain the stream so both tool calls execute before the probe is read.
-  for await (const _chunk of stream.fullStream) {
-    // no-op
+  const completedTickets: string[] = [];
+  const textParts: string[] = [];
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tool-result') {
+      const result = (chunk.payload as { result?: { result?: { ticket?: string } } }).result;
+      if (result?.result?.ticket) completedTickets.push(result.result.ticket);
+    } else if (chunk.type === 'text-delta') {
+      textParts.push((chunk.payload as { text?: string }).text ?? '');
+    }
   }
+  const finalText = textParts.join('');
 
   const runIds = createRun.mock.calls
     .map(call => call[0]?.runId)
@@ -123,16 +131,22 @@ async function runTwoCallsToSameWorkflow(suspendedToolRunId: unknown): Promise<R
   // Both independent calls must have reached createRun.
   expect(createRun).toHaveBeenCalledTimes(2);
 
-  return { runIds, distinct: new Set(runIds).size };
+  // The reported symptom is a silently lost result: both calls must complete with their own
+  // result, and the turn must still finish normally.
+  expect(completedTickets.sort()).toEqual(['A', 'B']);
+  expect(finalText).toContain('Both workflows completed.');
+
+  return { runIds, distinct: new Set(runIds).size, completedTickets };
 }
 
 describe('workflow tool model-supplied suspendedToolRunId', () => {
   it('does not adopt the literal string "null" as a run id', async () => {
-    const { runIds, distinct } = await runTwoCallsToSameWorkflow('null');
+    const { runIds, distinct, completedTickets } = await runTwoCallsToSameWorkflow('null');
 
     expect(runIds).toHaveLength(2);
     expect(runIds).not.toContain('null');
     expect(distinct).toBe(2);
+    expect(completedTickets.sort()).toEqual(['A', 'B']);
   });
 
   it('keeps independent calls independent when the field is omitted', async () => {

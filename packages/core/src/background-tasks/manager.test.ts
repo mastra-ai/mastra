@@ -1117,6 +1117,56 @@ describe('BackgroundTaskManager', () => {
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 
+    it('does not adopt a model-supplied sentinel run id on the initial run', async () => {
+      const executeFn = vi.fn(async () => ({ ok: true }));
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'c-sentinel', args: { suspendedToolRunId: 'null' }, agentId: 'a1', runId: 'r5' },
+        ctx(executeFn),
+      );
+      await tick(200);
+
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(executeFn).toHaveBeenCalledTimes(1);
+      expect(executeFn.mock.calls[0]?.[0]).not.toHaveProperty('suspendedToolRunId');
+    });
+
+    it('resumes with the framework run id when the model supplied a different one', async () => {
+      // The framework-resolved suspended run id must win over a model-authored value, matching
+      // the durable and non-durable tool-call steps. See #23739.
+      const executeFn = vi.fn(async (args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend(
+            { awaiting: 'approval', suspendedToolRunId: 'delegated-run-id' },
+            { runId: 'delegated-run-id' },
+          );
+          return undefined;
+        }
+        return { suspendedToolRunId: args.suspendedToolRunId };
+      });
+
+      const { task } = await manager.enqueue(
+        {
+          toolName: 't',
+          toolCallId: 'c-precedence',
+          args: { suspendedToolRunId: 'model-authored-run-id' },
+          agentId: 'a1',
+          runId: 'r6',
+        },
+        ctx(executeFn),
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+
+      await manager.resume(task.id, { user: 'alice' });
+      await tick(200);
+
+      const completed = await manager.getTask(task.id);
+      expect(completed?.status).toBe('completed');
+      expect(completed?.result).toEqual({ suspendedToolRunId: 'delegated-run-id' });
+      expect(executeFn.mock.calls[1]?.[0]).toMatchObject({ suspendedToolRunId: 'delegated-run-id' });
+    });
+
     it('resumes an agent-as-tool delegation whose runId is only in suspendOptions', async () => {
       // Mirrors the real agent-as-tool suspend: the nested sub-agent runId is
       // passed via `suspendOptions.runId` (with `isAgentSuspend: true`) and is

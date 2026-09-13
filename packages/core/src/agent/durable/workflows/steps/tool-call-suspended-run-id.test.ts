@@ -61,6 +61,18 @@ describe('durable workflow-tool suspendedToolRunId', () => {
     expect(execute.mock.calls[0]![0]).toMatchObject({ suspendedToolRunId: INNER_RUN_ID });
   });
 
+  it('lets the framework-resolved run id win over a usable model-supplied id', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    await runDurableToolCall({ prompt: 'charge', suspendedToolRunId: 'model-authored-run-id' }, execute, {
+      resumeData: { approved: true },
+      suspendData: { suspendedToolRunId: INNER_RUN_ID },
+    });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![0]).toMatchObject({ suspendedToolRunId: INNER_RUN_ID });
+  });
+
   it('drops a sentinel when no framework run id resolves', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
 
