@@ -7,6 +7,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
+import { downgradeImageUrlPartsForV2 } from '../durable/workflows/steps/normalize-model-output';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
@@ -618,6 +619,12 @@ export class MessageList {
            * @see https://github.com/mastra-ai/mastra/issues/23082
            */
           targetProvider?: string;
+          /**
+           * Downgrade stored `image-url` tool-result parts to the V2 `media`
+           * shape. Defaults to true (spec-v2 consumers); the aiV6/aiV7 prompt
+           * builders pass false and map the parts to their target spec instead.
+           */
+          downgradeImageUrlParts?: boolean;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
@@ -654,15 +661,20 @@ export class MessageList {
         }
 
         if (storedModelOutputs.size > 0) {
+          const downgrade = options.downgradeImageUrlParts !== false;
           for (const modelMsg of modelMessages) {
             if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
 
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                const storedOutput = storedModelOutputs.get(part.toolCallId);
                 modelMsg.content[i] = {
                   ...part,
-                  output: storedModelOutputs.get(part.toolCallId) as any,
+                  // V2 prompts have no URL image form, so spec-v2 consumers get the
+                  // legacy best-effort `media` downgrade; spec-v3+ consumers receive
+                  // `image-url` parts unchanged and map them to their target spec.
+                  output: (downgrade ? downgradeImageUrlPartsForV2(storedOutput) : storedOutput) as any,
                 };
               }
             }
@@ -759,7 +771,8 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+      }): Promise<LanguageModelV2Prompt> =>
+        aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt({ ...options, downgradeImageUrlParts: false })),
     },
     aiV7: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
@@ -771,7 +784,8 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
-      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
+      }): Promise<LanguageModelV2Prompt> =>
+        aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt({ ...options, downgradeImageUrlParts: false })),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
