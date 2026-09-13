@@ -358,6 +358,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async deleteNodeByAddress(input: {
     source: string;
     address: string;
+    scopeId: string;
     importRunId?: string;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     this.#assertImportRunExists(input.importRunId);
@@ -372,6 +373,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       for (const record of [...this.#db.knowledgeRecords.values()]) {
         if (record.nodeId !== node.id || record.source !== input.source) continue;
         const recordScopeIds = this.#recordScopeIds(record.id);
+        if (recordScopeIds.length !== 1 || recordScopeIds[0] !== input.scopeId) continue;
         this.#recordActivity('delete', 'record', record.id, recordScopeIds[0], input.importRunId);
         this.#enqueue('record', record.id, 'delete', record.version + 1, recordScopeIds);
         this.#db.knowledgeMentions.delete(`record:${record.id}`);
@@ -396,11 +398,17 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  async deleteRecordBySource(input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(input: {
+    id: string;
+    source: string;
+    version: number;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => {
       const record = this.#db.knowledgeRecords.get(input.id);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       const scopeIds = this.#recordScopeIds(record.id);
       this.#recordActivity('delete', 'record', record.id, scopeIds[0], input.importRunId);
       this.#enqueue('record', record.id, 'delete', record.version + 1, scopeIds);
@@ -922,6 +930,24 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (input.status === 'running') run.startedAt = timestamp;
     else run.completedAt = timestamp;
     return this.#cloneImportRun(run);
+  }
+
+  async recordImportSkip(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+    contextScopeId: string;
+    importRunId: string;
+    details: Record<string, unknown>;
+  }): Promise<void> {
+    this.#assertImportRunExists(input.importRunId);
+    this.#recordActivity(
+      'skip',
+      input.targetType,
+      input.targetId,
+      input.contextScopeId,
+      input.importRunId,
+      input.details,
+    );
   }
 
   async listActivity(input: {

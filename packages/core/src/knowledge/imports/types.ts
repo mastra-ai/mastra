@@ -2,11 +2,6 @@ import type { KnowledgeConcreteRole, KnowledgeScopeIds } from '../../storage/dom
 import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
 
-export interface KnowledgeImporterSourceIdentity {
-  readonly type: string;
-  readonly id: string;
-}
-
 export interface KnowledgeImporterTriggers {
   readonly cron?: string | readonly string[];
   readonly webhook?: true;
@@ -61,8 +56,10 @@ export interface KnowledgeImporterHandle<TPayload = unknown> extends KnowledgeIm
 /** Runtime-only authority bound by a registered handler invocation. */
 export interface KnowledgeImporterBindingHandle {
   readonly importerId: string;
-  readonly source: KnowledgeImporterSourceIdentity;
-  readonly sourceKey: string;
-  readonly scopeIds: Readonly<KnowledgeScopeIds>;
+  readonly binding: string;
+  readonly source: string;
+  readonly scopeAddress: string;
+  readonly scopeId: string;
+  readonly resolutionScopeIds: Readonly<KnowledgeScopeIds>;
   readonly role: Extract<KnowledgeImporterRole, 'append' | 'edit' | 'owner'>;
 }
