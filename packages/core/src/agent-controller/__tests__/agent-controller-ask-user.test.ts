@@ -417,3 +417,78 @@ describe('AgentController: ask_user native suspension', () => {
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 });
+
+describe('AgentController: Stop on a parked question frees the thread', () => {
+  async function buildRecording(id: string) {
+    const prompts: unknown[] = [];
+    const agent = new Agent({
+      id: `agent-${id}`,
+      name: `Agent ${id}`,
+      instructions: 'You ask the user questions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async (options: any) => {
+          prompts.push(options?.prompt);
+          return {
+            stream:
+              prompts.length === 1
+                ? createAskUserToolCallStream(JSON.stringify({ question: 'Red or blue?' }))
+                : createTextStream(),
+          };
+        },
+      }),
+      tools: { ask_user: askUserTool },
+    });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { [`agent-${id}`]: agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent(`agent-${id}`);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: `controller-${id}`,
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: `session-${id}`, ownerId: 'test-owner' });
+    await session.thread.create();
+    const ends: Array<string | undefined> = [];
+    session.subscribe(event => {
+      if (event.type === 'agent_end') ends.push(event.reason);
+    });
+    return { controller, session, prompts, ends };
+  }
+
+  it('answers a message sent after Stop on a parked question', async () => {
+    const { controller, session, prompts, ends } = await buildRecording('stop-then-send');
+    await session.sendMessage({ content: 'Ask me a color.' });
+    expect(ends).toEqual(['suspended']);
+
+    session.abort();
+    const next = session.sendMessage({ content: 'Forget the color and say hello.' });
+    void next.catch(() => {});
+
+    // The parked run no longer holds the thread: the new message starts its own run.
+    await vi.waitFor(() => expect(ends.at(-1)).toBe('complete'), { timeout: 10_000 });
+    await next;
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('Forget the color and say hello.');
+    expect(session.displayState.get().isRunning).toBe(false);
+    expect(controller.listActiveThreadRuns()).toHaveLength(0);
+  }, 20_000);
+
+  it('runs the follow-up that waited behind a parked question once Stop abandons it', async () => {
+    const { controller, session, prompts, ends } = await buildRecording('stop-drains-queue');
+    await session.sendMessage({ content: 'Ask me a color.' });
+    expect(ends).toEqual(['suspended']);
+    await session.followUp({ content: 'Queued behind the question.' });
+    expect(session.followUps.count()).toBe(1);
+
+    session.abort();
+
+    await vi.waitFor(() => expect(ends.at(-1)).toBe('complete'), { timeout: 10_000 });
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('Queued behind the question.');
+    expect(session.followUps.count()).toBe(0);
+    await vi.waitFor(() => expect(controller.listActiveThreadRuns()).toHaveLength(0));
+  }, 20_000);
+});

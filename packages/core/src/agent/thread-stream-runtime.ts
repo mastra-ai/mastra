@@ -1377,7 +1377,10 @@ export class AgentThreadStreamRuntime {
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
-      return false;
+      // A run parked on a tool suspension (a question to the user, a pending
+      // generation) has no prepared run left to abort, and its completion
+      // watcher returned when it suspended, so nothing else frees its thread.
+      return this.#releaseParkedRun(state, pubsub, runId);
     }
 
     preparedRun.abortController.abort();
@@ -1390,6 +1393,39 @@ export class AgentThreadStreamRuntime {
       this.#publish(pubsub, key, { type: 'run-aborted', runId, streamId });
     }
 
+    return true;
+  }
+
+  /**
+   * Release an aborted run that is parked on a tool suspension. Its completion
+   * watcher returned when it suspended, so without this the thread keeps it as
+   * its blocking run: every later message is queued onto a run that will never
+   * resume, and nothing sent after Stop is answered. The run is released the
+   * way a finished run is: its records and thread reservation are dropped, then
+   * the thread's pending work starts or its lease is given up. A run parked on
+   * a tool approval is left alone; its decline path releases it.
+   */
+  #releaseParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, runId: string): boolean {
+    if (state.approvalSuspendedRunIds.has(runId)) return false;
+    const record = state.threadRunsById.get(runId);
+    const parked =
+      state.suspendedRunIds.has(runId) || record?.lifecycle === 'suspended' || record?.lifecycle === 'suspending';
+    if (!parked || !record) return false;
+    const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
+    this.#clearSuspendedRun(state, runId);
+    record.lifecycle = 'completed';
+    state.threadRunsByStreamId.delete(record.streamId);
+    if (state.threadRunsById.get(runId) === record) state.threadRunsById.delete(runId);
+    state.threadKeysByRunId.delete(runId);
+    if (state.activeThreadRunIds.get(key) !== runId) return true;
+    state.activeThreadRunIds.delete(key);
+    if (state.activeThreadStreamIds.get(key) === record.streamId) state.activeThreadStreamIds.delete(key);
+    this.#publish(pubsub, key, { type: 'run-aborted', runId, streamId: record.streamId });
+    if (this.#hasPendingThreadWork(state, key)) {
+      void this.#drainPendingSignals(state, pubsub, key, record);
+    } else {
+      this.#releaseThreadLease(pubsub, key, runId);
+    }
     return true;
   }
 

@@ -648,6 +648,11 @@ export interface AgentControllerDisplayState {
   // ── Follow-up queue ──────────────────────────────────────────────────
   /** Number of follow-up messages queued locally by the AgentController */
   queuedFollowUps: number;
+  /**
+   * The queued follow-ups themselves, in send order: id and text. A UI can
+   * list them, and remove one with `session.removeFollowUp({ id })`.
+   */
+  queuedFollowUpItems: readonly QueuedFollowUpItem[];
 
   // ── Token usage ──────────────────────────────────────────────────────
   /** Cumulative token usage for the current thread */
@@ -715,11 +720,18 @@ export interface AgentControllerDisplayState {
 /**
  * Creates the default/initial `AgentControllerDisplayState`.
  */
+/** One queued follow-up as a UI sees it: a stable id and the message text. */
+export interface QueuedFollowUpItem {
+  id: string;
+  content: string;
+}
+
 export function defaultDisplayState(): AgentControllerDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
     queuedFollowUps: 0,
+    queuedFollowUpItems: [],
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
@@ -835,7 +847,7 @@ export type AgentControllerEvent =
       retryAttempt?: number;
       maxRetries?: number;
     }
-  | { type: 'follow_up_queued'; count: number; runId?: string }
+  | { type: 'follow_up_queued'; count: number; items?: readonly QueuedFollowUpItem[]; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
   | { type: 'workspace_error'; error: Error }
