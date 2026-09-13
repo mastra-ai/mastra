@@ -176,6 +176,7 @@ export class KnowledgeImporterRunner {
           binding: run.binding,
           workerId: this.#workerId,
           leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
+          transcriptThreadId,
         })
         .then(owned => {
           if (!owned) controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));
@@ -214,6 +215,7 @@ export class KnowledgeImporterRunner {
           binding: run.binding,
           workerId: this.#workerId,
           leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
+          transcriptThreadId,
         });
         if (!owned) {
           controller.abort(new Error(`Knowledge import run ${run.id} lost its execution lease`));

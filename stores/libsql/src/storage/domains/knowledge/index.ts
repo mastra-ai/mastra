@@ -1516,6 +1516,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           input.leaseKey,
         ],
       });
+      if (input.transcriptThreadId) {
+        await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET transcriptThreadId=COALESCE(transcriptThreadId,?) WHERE id=?`,
+          args: [input.transcriptThreadId, input.id],
+        });
+      }
       return true;
     });
   }

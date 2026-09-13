@@ -217,6 +217,7 @@ export interface HeartbeatKnowledgeImportRunInput {
   binding: string;
   workerId: string;
   leaseKey: string;
+  transcriptThreadId?: string;
   timestamp?: Date;
 }
 
