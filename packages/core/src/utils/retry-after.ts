@@ -59,6 +59,14 @@ function parseRetryAfterHeader(value: string, now: number): number | undefined {
     return Number.isFinite(seconds) ? seconds * 1_000 : undefined;
   }
 
+  // A numeric value that is not the delay-seconds form (`-3`, `+3`, `1.5`) is
+  // malformed, not an HTTP-date. `Date.parse` would read a bare number as a
+  // year and yield a delay decades wide, so reject it before the date fallback
+  // and let the caller keep walking the cause chain.
+  if (/^[+-]?\d*\.?\d+(?:e[+-]?\d+)?$/i.test(normalizedValue)) {
+    return undefined;
+  }
+
   const retryAt = Date.parse(normalizedValue);
   return Number.isFinite(retryAt) && retryAt > now ? retryAt - now : undefined;
 }
