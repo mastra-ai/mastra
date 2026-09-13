@@ -30,6 +30,7 @@ import type {
   QueryKnowledgeRecordsInput,
   QueryKnowledgeRecordsOutput,
   SearchKnowledgeInput,
+  PromoteKnowledgeNodeInput,
   UpdateKnowledgeNodeInput,
 } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
@@ -38,6 +39,10 @@ import { assertKnowledgeScopeCapabilities, assertKnowledgeTargetCapability } fro
 import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/read-filter';
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
+import { KnowledgeCurator } from './curation/curator';
+import type { CreateKnowledgeCuratorInput, RegisterKnowledgeCuratorProfileInput } from './curation/types';
+export * from './curation/curator';
+export * from './curation/types';
 import {
   KnowledgeGapFlags,
   type FileKnowledgeGapFlagInput,
@@ -46,6 +51,7 @@ import {
 import {
   KnowledgeProposalLifecycle,
   type ProposeKnowledgeMutationInput,
+  type ProposeKnowledgeNodePromotionInput,
   type ProposeKnowledgeNodeUpdateInput,
   type ReviewKnowledgeProposalDecisionInput,
 } from './governance/proposals';
@@ -88,6 +94,8 @@ export class Knowledge extends MastraBase {
   #storagePromise?: Promise<KnowledgeStorage>;
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
+  #curatorInstructions?: string;
+  #curatorProfiles = new Map<string, { registration: RegisterKnowledgeCuratorProfileInput; identityScopeId: string }>();
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
   #accessEvaluator?: KnowledgeAccessEvaluator;
@@ -106,6 +114,7 @@ export class Knowledge extends MastraBase {
     this.description = config.description;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    this.#curatorInstructions = config.curation?.instructions?.trim() || undefined;
     for (const importer of config.importers ?? []) {
       this.registerImporter(importer);
     }
@@ -226,6 +235,55 @@ export class Knowledge extends MastraBase {
     return storage;
   }
 
+  async registerCuratorProfile(input: RegisterKnowledgeCuratorProfileInput): Promise<void> {
+    const registration = structuredClone(input);
+    if (!registration.id.trim()) throw new Error('Knowledge curator profile id must not be empty.');
+    const existing = this.#curatorProfiles.get(registration.id);
+    if (existing && isDeepStrictEqual(existing.registration, registration)) return;
+    if (existing) {
+      throw new Error(`Knowledge curator profile ${registration.id} is already registered with different authority`);
+    }
+
+    const storage = await this.#getStorage();
+    const grants = await Promise.all(
+      registration.grants.map(async grant => {
+        const target = await storage.getScopeAddress(grant.scopeAddress);
+        if (!target) throw new KnowledgeNotFoundError('scope', grant.scopeAddress);
+        return { grant, target };
+      }),
+    );
+    let identityScope = await storage.getScopeAddress(registration.identityScope.address);
+    if (!identityScope) {
+      await this.materializeScope(registration.identityScope);
+      identityScope = await storage.getScopeAddress(registration.identityScope.address);
+    }
+    if (!identityScope) throw new KnowledgeNotFoundError('scope', registration.identityScope.address);
+    await storage.reconcileScopeReferenceGrants({
+      scopeRefId: identityScope.scopeNodeId,
+      grants: grants.map(({ grant, target }) => ({
+        scopeNodeId: target.scopeNodeId,
+        scopeRefId: identityScope.scopeNodeId,
+        role: grant.role,
+        canSuggest: grant.canSuggest,
+      })),
+    });
+    this.#curatorProfiles.set(registration.id, { registration, identityScopeId: identityScope.scopeNodeId });
+  }
+
+  createCurator(input: CreateKnowledgeCuratorInput): KnowledgeCurator {
+    const profile = this.#curatorProfiles.get(input.profileId);
+    if (!profile) throw new Error(`Knowledge curator profile is not registered: ${input.profileId}`);
+    return new KnowledgeCurator(
+      this,
+      {
+        vouchedScopeIds: [profile.identityScopeId],
+        companionScopeId: input.companionScopeId,
+        contextScopeId: input.contextScopeId,
+      },
+      this.#curatorInstructions,
+    );
+  }
+
   async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
     const storage = await this.#getStorage();
     const liveScopeIds: string[] = [];
@@ -257,6 +315,10 @@ export class Knowledge extends MastraBase {
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput) {
     return (await this.#getProposalLifecycle()).proposeNodeUpdate(input);
+  }
+
+  async proposeNodePromotion(input: ProposeKnowledgeNodePromotionInput) {
+    return (await this.#getProposalLifecycle()).proposeNodePromotion(input);
   }
 
   async listProposals(input: {
@@ -291,8 +353,16 @@ export class Knowledge extends MastraBase {
       scopeIds => this.evaluateAccess(scopeIds),
       input => this.getNode(input),
       input => this.getRecord(input),
+      input => this.#resolveVisibleScopeNode(input),
     );
     return this.#proposalLifecycle;
+  }
+
+  async #resolveVisibleScopeNode(input: { id: string; scopeIds: KnowledgeScopeIds }) {
+    const frontier = await this.evaluateAccess(input.scopeIds);
+    if (!frontier.scopes[input.id]?.read) return null;
+    const node = await (await this.#getStorage()).getNode(input.id);
+    return node?.isScope && !node.deletedAt ? node : null;
   }
 
   async createScope(input: CreateKnowledgeScopeInput) {
@@ -663,6 +733,28 @@ export class Knowledge extends MastraBase {
       });
     }
     return storage.updateNode({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
+  }
+
+  async promoteNode(
+    input: Omit<PromoteKnowledgeNodeInput, 'expectedAccessEpoch'> & { vouchedScopeIds: KnowledgeScopeIds },
+  ) {
+    const storage = await this.#getStorage();
+    const { vouchedScopeIds, ...mutation } = input;
+    const frontier = await this.evaluateAccess(vouchedScopeIds);
+    const { scopeIds } = await this.#authorizeNodeMutation({
+      storage,
+      frontier,
+      nodeId: mutation.id,
+      capability: 'manageAccess',
+    });
+    if (!scopeIds.includes(mutation.sourceScopeId)) throw new KnowledgeNotFoundError('node', mutation.id);
+    assertKnowledgeScopeCapabilities({
+      frontier,
+      scopeIds: [mutation.sourceScopeId, mutation.destinationScopeId],
+      capability: 'manageAccess',
+      targetType: 'scope',
+    });
+    return storage.promoteNode({ ...mutation, expectedAccessEpoch: frontier.accessEpoch });
   }
 
   async mergeNodes(input: {

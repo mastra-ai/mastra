@@ -64,7 +64,29 @@ async function createScopeIds(memory: Memory, store: any, resourceId: string, th
       contextualScopeAddress: threadAddress,
       parameters: { orgId: 'acme', resourceId, threadId },
     });
-    return [organization.scopes['org:acme']!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
+    const resourceUncuratedAddress = `${resourceAddress}:uncurated`;
+    const resourceUncurated = await knowledge.materializeScope({
+      address: resourceUncuratedAddress,
+      name: 'uncurated',
+      parentAddresses: [resourceAddress],
+      contextualScopeAddress: resourceAddress,
+      parameters: { orgId: 'acme', resourceId, threadId },
+    });
+    const threadUncuratedAddress = `${threadAddress}:uncurated`;
+    const threadUncurated = await knowledge.materializeScope({
+      address: threadUncuratedAddress,
+      name: 'uncurated',
+      parentAddresses: [threadAddress],
+      contextualScopeAddress: threadAddress,
+      parameters: { orgId: 'acme', resourceId, threadId },
+    });
+    return [
+      organization.scopes['org:acme']!,
+      resource.scopes[resourceAddress]!,
+      thread.scopes[threadAddress]!,
+      resourceUncurated.scopes[resourceUncuratedAddress]!,
+      threadUncurated.scopes[threadUncuratedAddress]!,
+    ];
   }
   const organization = await store.createNode({ name: 'Acme', isScope: true, scopeIds: [] });
   const resource = await store.createNode({
@@ -81,179 +103,6 @@ describe('Subconscious LibSQL integration', () => {
 
   afterEach(async () => {
     await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
-  });
-
-  it('curates durable scoped knowledge after observation and reconciles semantic vectors', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'subconscious-libsql-'));
-    directories.push(directory);
-    const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
-    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
-    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
-    await storage.init();
-    const observerModel = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'observe', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start', id: 'observe-text' },
-          {
-            type: 'text-delta',
-            id: 'observe-text',
-            delta: '<observations>\nMaya Chen owns Project Atlas. The staging region is cobalt.\n</observations>',
-          },
-          { type: 'text-end', id: 'observe-text' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 10, totalTokens: 60 } },
-        ]),
-      }),
-    });
-    let curatorCall = 0;
-    let resolveCuratorContinuation!: () => void;
-    const curatorContinuation = new Promise<void>(resolve => {
-      resolveCuratorContinuation = resolve;
-    });
-    const curatorStream = vi.fn(async () => {
-      curatorCall += 1;
-      if (curatorCall === 1) {
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start' as const, warnings: [] },
-            { type: 'response-metadata' as const, id: 'curate-tools', modelId: 'aimock', timestamp: new Date() },
-            {
-              type: 'tool-call' as const,
-              toolCallId: 'create-atlas',
-              toolName: 'knowledge_create',
-              input: JSON.stringify({
-                name: 'Project Atlas',
-                kind: 'project',
-                text: '[[Maya Chen]] owns [[Project Atlas]]. The staging region is cobalt.',
-                nodeScope: 'resource',
-                scope: 'resource',
-              }),
-            },
-            {
-              type: 'tool-call' as const,
-              toolCallId: 'create-alpha-secret',
-              toolName: 'knowledge_create',
-              input: JSON.stringify({
-                name: 'Alpha Secret',
-                kind: 'note',
-                text: 'Only the alpha thread may see this.',
-                nodeScope: 'thread',
-                scope: 'thread',
-              }),
-            },
-            {
-              type: 'finish' as const,
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-            },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      }
-      resolveCuratorContinuation();
-      return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start' as const, warnings: [] },
-          { type: 'response-metadata' as const, id: 'curate-done', modelId: 'aimock', timestamp: new Date() },
-          { type: 'text-start' as const, id: 'curate-text' },
-          { type: 'text-delta' as const, id: 'curate-text', delta: 'Curated.' },
-          { type: 'text-end' as const, id: 'curate-text' },
-          {
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
-    });
-    const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
-    const memory = new Memory({
-      storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
-      vector,
-      embedder,
-      options: {
-        observationalMemory: {
-          enabled: true,
-          scope: 'thread',
-          model: observerModel,
-          experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curatorModel }] }),
-          observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
-        },
-      },
-    });
-    const threadId = randomUUID();
-    const resourceId = randomUUID();
-    await memory.createThread({ threadId, resourceId, title: 'Subconscious curation' });
-    await memory.saveMessages({ messages: [message(threadId, resourceId)] });
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-
-    const result = await (await memory.omEngine)!.observe({
-      threadId,
-      resourceId,
-      requestContext,
-      sendStateSignal: vi.fn(async () => ({ skipped: false }) as any),
-    });
-    expect(result.observed).toBe(true);
-    await curatorContinuation;
-    expect(curatorStream).toHaveBeenCalledTimes(2);
-
-    const knowledge = (await storage.getStore('knowledge'))!;
-    const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
-    const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scopeIds });
-    expect(atlas).toMatchObject({ kind: 'project' });
-    expect((await knowledge.listRecords({ node: atlas!.id, scopeIds })).records).toHaveLength(1);
-    expect(await knowledge.listActivity({ scopeIds, limit: 20 })).not.toEqual([]);
-
-    expect(await memory.drainKnowledgeSemanticIndex(scopeIds)).toBeGreaterThan(0);
-    expect(await knowledge.listSemanticOutbox({ status: 'pending', scopeIds })).toEqual([]);
-    const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
-    const matches = await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20 });
-    expect(matches.map(match => match.id)).toContain(`knowledge:node:${atlas!.id}`);
-    expect(await knowledge.getNodeScopeIds(atlas!.id)).toEqual([scopeIds[1]]);
-    const record = (await knowledge.listRecords({ node: atlas!.id, scopeIds })).records[0]!;
-    await expect(
-      knowledge.updateNode({ id: atlas!.id, version: atlas!.version + 1, name: 'Stale Atlas' }),
-    ).rejects.toThrow('version');
-    const deleted = await knowledge.deleteRecord({
-      id: record.id,
-      version: record.version,
-      deletedBy: 'subconscious:curate',
-    });
-    await memory.drainKnowledgeSemanticIndex(scopeIds);
-    expect(await knowledge.getRecord({ id: record.id })).toBeNull();
-    expect(
-      (
-        await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20, filter: { record_id: record.id } })
-      ).some(match => match.id.endsWith(record.id)),
-    ).toBe(false);
-    await knowledge.restoreRecord({ id: record.id, version: deleted.version });
-    await memory.drainKnowledgeSemanticIndex(scopeIds);
-    expect(await knowledge.getRecord({ id: record.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
-    expect(
-      (
-        await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20, filter: { record_id: record.id } })
-      ).some(match => match.id.endsWith(record.id)),
-    ).toBe(true);
-
-    const betaThreadId = randomUUID();
-    await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
-    const tools = memory.listTools();
-    const toolContext = { agent: { threadId: betaThreadId, resourceId }, requestContext } as any;
-    const search = await tools.knowledge_search!.execute?.({ query: 'cobalt staging' }, toolContext);
-    expect(search).toMatchObject({
-      results: expect.arrayContaining([expect.objectContaining({ name: 'Project Atlas' })]),
-    });
-    expect((search as any).results.map((item: any) => item.name)).not.toContain('Alpha Secret');
-    const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext);
-    expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
-    const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
-    expect(hidden).toEqual({ found: false });
   });
 
   it('persists passive reminder continuity and suppresses a duplicate across Memory reconstruction', async () => {
@@ -827,4 +676,97 @@ describe('Subconscious LibSQL integration', () => {
       ensureOwnedRemindThread({ memory, parentThreadId: foreignParentId, resourceId: ownedResourceId }),
     ).rejects.toThrow('ownership metadata does not match');
   });
+
+  it('runs governed curation with cursor recovery, CAS, and application restore', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-curate-libsql-'));
+    directories.push(directory);
+    const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
+    const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
+    const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
+    await storage.init();
+    const threadId = randomUUID();
+    const resourceId = randomUUID();
+    let completionItemId = '';
+    const curatorModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        content: [{ type: 'text' as const, text: `<curation-complete through="${completionItemId}" />` }],
+      }),
+    });
+    const knowledgeInstance = new Knowledge({ id: 'default', storage });
+    const memory = new Memory({
+      storage,
+      knowledge: knowledgeInstance,
+      vector,
+      embedder,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          experimental_subconscious: new Subconscious({
+            observation: [{ name: 'curate', model: curatorModel, curatorProfile: 'subconscious' }],
+          }),
+        },
+      },
+    });
+    await memory.createThread({ threadId, resourceId, title: 'Curator lifecycle' });
+    const knowledge = (await storage.getStore('knowledge'))!;
+    const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
+    await knowledgeInstance.registerCuratorProfile({
+      id: 'subconscious',
+      identityScope: {
+        address: 'curator:subconscious',
+        name: 'Subconscious curator',
+        contextualScopeAddress: 'curator:subconscious',
+      },
+      grants: [
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}:uncurated`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}`, role: 'owner' },
+        { scopeAddress: `resource:${resourceId}:thread:${threadId}`, role: 'owner' },
+      ],
+    });
+    const node = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[4]!] });
+    const record = await knowledge.createRecord({
+      node,
+      text: '[[Project Atlas]] launches soon.',
+      scopeIds: [scopeIds[4]!],
+      source: threadId,
+      resolutionScopeIds: scopeIds,
+      metadata: { sourceThreadId: threadId },
+    });
+    completionItemId = record.id;
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+
+    await expect(memory.runCuration({ threadId, resourceId, requestContext })).resolves.toEqual({ outcome: 'ran' });
+    expect(await knowledge.getCurationCursor({ sourceThreadId: threadId, agent: 'curate' })).toMatchObject({
+      lastKnowledgeId: record.id,
+    });
+    await expect(knowledge.updateNode({ id: node.id, version: node.version + 1, name: 'Stale Atlas' })).rejects.toThrow(
+      'version',
+    );
+
+    const deleted = await knowledge.deleteRecord({
+      id: record.id,
+      version: record.version,
+      deletedBy: 'subconscious:curate',
+    });
+    expect(await knowledge.getRecord({ id: record.id })).toBeNull();
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
+    const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
+    const queryVector = (await embedder.doEmbed({ values: ['Project Atlas launch'] })).embeddings[0]!;
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      false,
+    );
+
+    await knowledge.restoreRecord({ id: record.id, version: deleted.version });
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
+    expect(await knowledge.getRecord({ id: record.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
+    expect((await vector.query({ indexName, queryVector, topK: 20 })).some(match => match.id.endsWith(record.id))).toBe(
+      true,
+    );
+  });
+
 });

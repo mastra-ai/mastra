@@ -22,6 +22,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeGrantRole;
   canSuggest?: boolean;
 }
+export interface ReconcileKnowledgeScopeReferenceGrantsInput extends KnowledgeMutationFence {
+  scopeRefId: string;
+  grants: KnowledgeScopeGrant[];
+}
 export interface KnowledgeNodeScope {
   nodeId: string;
   scopeNodeId: string;
@@ -107,6 +111,10 @@ export type KnowledgeProposalMutation =
   | { kind: 'restore-node'; mutation: RestoreKnowledgeNodeInput }
   | { kind: 'restore-scope'; mutation: RestoreKnowledgeNodeInput }
   | { kind: 'promote-node'; mutation: UpdateKnowledgeNodeInput & { isScope: true } }
+  | {
+      kind: 'curate-node';
+      mutation: Omit<PromoteKnowledgeNodeInput, 'contextScopeId' | 'expectedAccessEpoch'>;
+    }
   | { kind: 'restore-record'; mutation: { id: string; version: number } }
   | {
       kind: 'add-record-scope' | 'remove-record-scope';
@@ -429,6 +437,14 @@ export interface CreateKnowledgeRecordInput extends KnowledgeMutationFence {
   resolutionScopeIds?: KnowledgeScopeIds;
   contextScopeId?: string;
 }
+export interface PromoteKnowledgeNodeInput extends KnowledgeMutationFence {
+  id: string;
+  version: number;
+  sourceScopeId: string;
+  destinationScopeId: string;
+  contextScopeId: string;
+}
+
 export interface ListKnowledgeNodesInput {
   scopeIds: KnowledgeScopeIds;
   membershipScopeIds?: KnowledgeScopeIds;
@@ -697,6 +713,11 @@ export abstract class KnowledgeStorage extends StorageDomain {
   ): Promise<KnowledgeScopeGrant[]> {
     throw new KnowledgeUnsupportedError();
   }
+  async reconcileScopeReferenceGrants(
+    _input: ReconcileKnowledgeScopeReferenceGrantsInput,
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
+    throw new KnowledgeUnsupportedError();
+  }
   async upsertScopeGrant(
     _grant: KnowledgeScopeGrant,
     _fence: KnowledgeMutationFence = {},
@@ -857,6 +878,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async updateNode(_input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async promoteNode(_input: PromoteKnowledgeNodeInput): Promise<KnowledgeNode> {
     throw new KnowledgeUnsupportedError();
   }
   async deleteNode(_input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {

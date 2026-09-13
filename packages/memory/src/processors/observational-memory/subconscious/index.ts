@@ -52,7 +52,16 @@ function resolveExtractor(entry: SubconsciousObservationEntry): ResolvedSubconsc
 }
 
 function resolveAgent(
-  entry: string | { name: string; instructions?: string; model?: any; agent?: any; maxSteps?: number },
+  entry:
+    | string
+    | {
+        name: string;
+        instructions?: string;
+        model?: any;
+        agent?: any;
+        maxSteps?: number;
+        curatorProfile?: string;
+      },
   builtIns: Set<string>,
   globalModel: SubconsciousConfig['model'],
   globalMaxSteps: number | undefined,
@@ -65,6 +74,7 @@ function resolveAgent(
     instructions: config?.instructions,
     model: config?.model ?? globalModel,
     maxSteps: boundedSteps(config, fallbackMaxSteps),
+    ...(config?.curatorProfile ? { curatorProfile: config.curatorProfile } : {}),
     builtIn: builtIns.has(name),
   };
 }
@@ -170,6 +180,12 @@ export class Subconscious {
         );
       }
       return;
+    }
+    if ('curatorProfile' in entry) {
+      if (name !== 'curate') {
+        throw new Error('Subconscious curatorProfile is only valid for the built-in curate agent.');
+      }
+      if (!entry.curatorProfile?.trim()) throw new Error('Subconscious curatorProfile must not be empty.');
     }
     if (BUILT_IN_OBSERVATION.has(name)) return;
     if ('model' in entry || 'maxSteps' in entry) {

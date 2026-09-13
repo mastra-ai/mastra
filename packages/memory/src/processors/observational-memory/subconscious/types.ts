@@ -18,6 +18,8 @@ export interface SubconsciousCurateConfig {
   instructions?: string;
   model?: SubconsciousModel;
   maxSteps?: number;
+  /** Host-registered Knowledge curator profile. Required before the built-in curate agent can mutate. */
+  curatorProfile?: string;
 }
 
 export type SubconsciousBuiltInObservationConfig = SubconsciousRemindConfig | SubconsciousCurateConfig;
@@ -53,6 +55,7 @@ export interface ResolvedSubconsciousAgent {
   instructions?: string;
   model?: SubconsciousModel;
   maxSteps?: number;
+  curatorProfile?: string;
   builtIn: boolean;
 }
 

@@ -39,24 +39,54 @@ describe('direct replay isolation', () => {
       knowledge: new Knowledge({ id: 'default', storage: storageB }),
       ...semanticInfrastructure,
     });
-    const subconscious = new Subconscious();
+    const subconscious = new Subconscious({
+      observation: [{ name: 'curate', curatorProfile: 'subconscious' }],
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    const workByNode = new Map<string, { recordId: string; destinationScopeId: string }>();
+    for (const [memory, project] of [
+      [memoryA, 'Atlas'],
+      [memoryB, 'Beacon'],
+    ] as const) {
+      const scopeIds = await resolveKnowledgeScopeIds(memory, {
+        agent: { threadId: 'thread-a', resourceId: 'projects' },
+        requestContext,
+      });
+      await memory.getKnowledgeInstance()!.registerCuratorProfile({
+        id: 'subconscious',
+        identityScope: {
+          address: 'curator:subconscious',
+          name: 'Subconscious curator',
+          contextualScopeAddress: 'curator:subconscious',
+        },
+        grants: [
+          { scopeAddress: 'resource:projects:thread:thread-a:uncurated', role: 'owner' },
+          { scopeAddress: 'resource:projects', role: 'owner' },
+          { scopeAddress: 'resource:projects:thread:thread-a', role: 'owner' },
+        ],
+      });
+      const store = await memory.getKnowledgeStore();
+      const node = await store.createNode({ name: `Project ${project}`, kind: 'project', scopeIds: [scopeIds[4]!] });
+      const record = await store.createRecord({
+        node: node.id,
+        text: `Project ${project} is active.`,
+        scopeIds: [scopeIds[4]!],
+        source: 'thread-a',
+      });
+      workByNode.set(node.id, { recordId: record.id, destinationScopeId: scopeIds[1]! });
+    }
 
-    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
-      const consumeStream = async () => {
-        const tools = (await this.listTools({ requestContext: options?.ifIdle?.streamOptions?.requestContext })) as any;
-        const project = String(message.contents).includes('Atlas') ? 'Atlas' : 'Beacon';
-        await tools.knowledge_create.execute(
-          {
-            name: `Project ${project}`,
-            kind: 'project',
-            text: `Project ${project} is active.`,
-            nodeScope: 'resource',
-            scope: 'resource',
-          },
-          {},
-        );
-      };
-      return { accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }), signal: {} } as any;
+    vi.spyOn(Agent.prototype, 'generate').mockImplementation(async function (this: Agent) {
+      const tools = (await this.listTools({ requestContext })) as any;
+      const worklist = await tools.knowledge_curation_list.execute({}, {});
+      const node = worklist.nodes[0];
+      const work = workByNode.get(node.id)!;
+      await tools.knowledge_curation_promote.execute(
+        { nodeId: node.id, version: node.version, destinationScopeId: work.destinationScopeId },
+        {},
+      );
+      return { text: `<curation-complete through="${work.recordId}" />` } as any;
     });
 
     const common = {
@@ -81,8 +111,6 @@ describe('direct replay isolation', () => {
       ],
     });
 
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
     for (const [memory, expected] of [
       [memoryA, 'Project Atlas'],
       [memoryB, 'Project Beacon'],
