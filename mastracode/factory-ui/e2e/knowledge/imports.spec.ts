@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const projectId = '00000000-0000-4000-8000-000000000501';
-const scopeId = '00000000-0000-4000-8000-000000000502';
+const scopeId = 'kh_scope_project';
 const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNOWLEDGE_PROOF_OUTPUT) : undefined;
 
 const queuedRun = {
-  id: 'run-proof',
-  reference: 'run-proof-reference',
+  id: 'kh_run_proof',
+  reference: 'kr_run_proof',
   importerId: 'github',
   binding: 'kh_binding',
   source: 'repo:mastra',
@@ -25,7 +25,7 @@ const completedRun = {
   completedAt: '2026-08-30T09:00:02.000Z',
 };
 
-test('observes an agentic import from queue through filtered activity', async ({ context, page }) => {
+test('renders an agentic import journey from sanitized network fixtures', async ({ context, page }) => {
   let completed = false;
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
@@ -42,13 +42,26 @@ test('observes an agentic import from queue through filtered activity', async ({
     if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
-    if (url.pathname.endsWith('/attention')) return route.fulfill({ json: { items: [] } });
+    if (url.pathname.endsWith('/attention')) return route.fulfill({
+      json: {
+        items: [],
+        kinds: {
+          'automation-failed': { open: 0, unread: 0, latest: null },
+          'supervisor-finding': { open: 0, unread: 0, latest: null },
+          'agent-waiting': { open: 0, unread: 0, latest: null },
+          mention: { open: 0, unread: 0, latest: null },
+          'automation-proposed': { open: 0, unread: 0, latest: null },
+          activity: { open: 0, unread: 0, latest: null },
+        },
+        hasMore: false,
+      },
+    });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
     if (url.pathname.endsWith('/knowledge/scopes')) {
       return route.fulfill({
         json: {
-          scope: { id: scopeId, name: 'Proof Factory', kind: 'scope', parentScopeIds: [] },
+          scope: { id: scopeId, reference: 'kr_scope_project', name: 'Proof Factory', kind: 'scope' },
           children: [],
         },
       });
@@ -127,7 +140,8 @@ test('observes an agentic import from queue through filtered activity', async ({
 
   await page.getByText('repo:mastra').click();
   await expect(page.getByRole('heading', { name: 'Knowledge activity' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Agent transcript' })).toBeVisible();
+  await expect(page.getByText('Integrated the merged pull request into feature history.')).toBeVisible();
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });
@@ -135,7 +149,7 @@ test('observes an agentic import from queue through filtered activity', async ({
     fs.writeFileSync(
       path.join(output, 'results.json'),
       JSON.stringify(
-        { tests: [{ title: 'observes an agentic import from queue through filtered activity', status: 'passed' }] },
+        { tests: [{ title: 'renders an agentic import journey from sanitized network fixtures', status: 'passed' }] },
         null,
         2,
       ),
