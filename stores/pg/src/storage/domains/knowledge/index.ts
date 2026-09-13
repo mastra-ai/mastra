@@ -366,90 +366,6 @@ function knowledgeIndexDDL(schemaName?: string): string[] {
   return knowledgeIndexes(schemaName).map(index => index.sql);
 }
 
-const KNOWLEDGE_V1_TABLE_COLUMNS = new Map([
-  [
-    TABLE_KNOWLEDGE_NODES,
-    [
-      'id',
-      'type',
-      'name',
-      'canonicalName',
-      'kind',
-      'content',
-      'description',
-      'scope',
-      'scopeKey',
-      'version',
-      'mergedInto',
-      'createdAt',
-      'updatedAt',
-      'createdAtZ',
-      'updatedAtZ',
-    ],
-  ],
-  [
-    TABLE_KNOWLEDGE_RECORDS,
-    [
-      'id',
-      'node',
-      'text',
-      'scope',
-      'scopeKey',
-      'sourceThreadId',
-      'capturedAt',
-      'when',
-      'maxScope',
-      'metadata',
-      'deletedAt',
-      'deletedBy',
-      'capturedAtZ',
-      'whenZ',
-      'deletedAtZ',
-    ],
-  ],
-  [TABLE_KNOWLEDGE_MENTIONS, ['sourceType', 'sourceId', 'recordId']],
-  [TABLE_KNOWLEDGE_CURSORS, ['sourceThreadId', 'agent', 'lastKnowledgeId', 'updatedAt', 'updatedAtZ']],
-  [
-    TABLE_KNOWLEDGE_ACTIVITY,
-    ['id', 'action', 'recordType', 'recordId', 'scope', 'scopeKey', 'sourceThreadId', 'createdAt', 'createdAtZ'],
-  ],
-  [
-    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-    [
-      'id',
-      'idempotencyKey',
-      'documentId',
-      'documentType',
-      'operation',
-      'scope',
-      'scopeKey',
-      'status',
-      'attempts',
-      'availableAt',
-      'claimedAt',
-      'claimedBy',
-      'createdAt',
-      'completedAt',
-      'availableAtZ',
-      'claimedAtZ',
-      'createdAtZ',
-      'completedAtZ',
-    ],
-  ],
-] as const);
-
-const KNOWLEDGE_V1_INDEXES = new Set([
-  ...[...KNOWLEDGE_V1_TABLE_COLUMNS.keys()].map(table => `${table}_pkey`),
-  'idx_knowledge_nodes_identity',
-  'idx_knowledge_nodes_scope',
-  'idx_knowledge_records_node_latest',
-  'idx_knowledge_records_thread_latest',
-  'idx_knowledge_mentions_record',
-  'idx_knowledge_activity_latest',
-  'idx_knowledge_outbox_idempotency',
-  'idx_knowledge_outbox_claim',
-]);
-
 const knowledgeTableDefinitions: Array<{
   tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
   schema: Record<string, StorageColumn>;
@@ -629,11 +545,7 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
       const inspection = await this.#inspectSchemaWithExecutor(tx);
-      if (inspection.status === 'incompatible-reset-required') {
-        if (!(await this.#replaceRecognizedLegacySchema(tx))) assertKnowledgeSchemaCompatible(inspection);
-      } else {
-        assertKnowledgeSchemaCompatible(inspection);
-      }
+      assertKnowledgeSchemaCompatible(inspection);
 
       for (const definition of knowledgeTableDefinitions) {
         await tx.executeRaw(
@@ -646,44 +558,6 @@ export class KnowledgePG extends KnowledgeStorage {
         args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
       });
     });
-  }
-
-  async #replaceRecognizedLegacySchema(tx: Executor): Promise<boolean> {
-    const columnResult = await tx.execute({
-      sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra_knowledge_%' ORDER BY table_name, ordinal_position`,
-      args: [this.#schemaName ?? null],
-    });
-    const columns = new Map<string, string[]>();
-    for (const row of columnResult.rows) {
-      const table = String(row.table_name);
-      const names = columns.get(table) ?? [];
-      names.push(String(row.column_name));
-      columns.set(table, names);
-    }
-    if (columns.size !== KNOWLEDGE_V1_TABLE_COLUMNS.size) return false;
-    for (const [table, expected] of KNOWLEDGE_V1_TABLE_COLUMNS) {
-      if (JSON.stringify(columns.get(table)) !== JSON.stringify(expected)) return false;
-    }
-
-    const indexResult = await tx.execute({
-      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[]) ORDER BY indexname`,
-      args: [this.#schemaName ?? null, [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()]],
-    });
-    const indexes = new Set(indexResult.rows.map(row => String(row.indexname)));
-    if (indexes.size !== KNOWLEDGE_V1_INDEXES.size || [...KNOWLEDGE_V1_INDEXES].some(index => !indexes.has(index))) {
-      return false;
-    }
-
-    const triggerResult = await tx.execute({
-      sql: `SELECT trigger_name FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[])`,
-      args: [this.#schemaName ?? null, [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()]],
-    });
-    if (triggerResult.rows.length > 0) return false;
-
-    for (const table of [...KNOWLEDGE_V1_TABLE_COLUMNS.keys()].reverse()) {
-      await tx.execute(`DROP TABLE "${table}"`);
-    }
-    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
