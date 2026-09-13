@@ -14,6 +14,7 @@ import type {
   KnowledgeNodePayload,
   KnowledgeGraphPayload,
   KnowledgeRouteLimits,
+  KnowledgeSearchPayload,
   KnowledgeScopeTreePayload,
 } from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
@@ -211,8 +212,19 @@ describe('KnowledgeRoutes', () => {
     const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
     const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
     expect(body.scopeNodes).toHaveLength(2);
-    expect(orgNode).toMatchObject({ name: ORG, parentIds: [] });
-    expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
+    expect(orgNode).toMatchObject({
+      name: ORG,
+      parentIds: [],
+      memberCount: 1,
+      memberCountTruncated: false,
+      childScopeCount: 1,
+    });
+    expect(resourceNode).toMatchObject({
+      name: 'Graph project',
+      parentIds: [orgNode!.id],
+      memberCount: 0,
+      childScopeCount: 0,
+    });
     expect(body.roots).toEqual([
       { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
       { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
@@ -225,6 +237,91 @@ describe('KnowledgeRoutes', () => {
     expect(again.scopeNodes).toEqual(body.scopeNodes);
     expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`)).status).toBe(404);
     expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph`)).status).toBe(404);
+  });
+
+  it('paginates scope children per parent with stable cursors', async () => {
+    const h = await createHarness();
+    const childScopes = Array.from({ length: 30 }, (_, index) => ({
+      address: `scope:${String(index).padStart(2, '0')}`,
+      name: `scope-${String(index).padStart(2, '0')}`,
+      parentAddresses: [`org:${ORG}`],
+    }));
+    await h.knowledge.reconcileStructure({
+      scopes: [{ address: `org:${ORG}`, name: ORG }, ...childScopes],
+    });
+
+    const firstResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const first = (await firstResponse.json()) as KnowledgeScopeTreePayload;
+    const orgNode = first.scopeNodes?.find(node => node.address === `org:${ORG}`);
+    const firstChildren = (first.scopeNodes ?? []).filter(node => node.parentIds.includes(orgNode!.id));
+    expect(firstChildren).toHaveLength(25);
+    expect(orgNode).toMatchObject({ memberCount: 31, childScopeCount: 31 });
+    expect(first.childCursors?.[orgNode!.id]).toBe(firstChildren.at(-1)?.id);
+
+    const secondResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${orgNode!.id}&cursor=${first.childCursors?.[orgNode!.id]}`,
+    );
+    const second = (await secondResponse.json()) as KnowledgeScopeTreePayload;
+    expect(second.scopeNodes).toHaveLength(6);
+    expect(second.nextCursor).toBeUndefined();
+    expect(new Set([...firstChildren, ...(second.scopeNodes ?? [])].map(node => node.id)).size).toBe(31);
+  });
+
+  it('searches authorized nodes and structural scopes beyond the active graph window', async () => {
+    const h = await createHarness();
+    const atlas = await node(h.knowledge, 'Project Atlas', h.projectScope, 'service');
+    await node(h.knowledge, 'Other Atlas', [`org:${OTHER_ORG}`, 'resource:elsewhere'], 'service');
+    const { scopes } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        {
+          address: 'features:memory',
+          name: 'Memory Systems',
+          description: 'Captured memory features',
+          parentAddresses: [`org:${ORG}`],
+        },
+        { address: `org:${OTHER_ORG}`, name: OTHER_ORG },
+        { address: 'other:memory', name: 'Other Memory', parentAddresses: [`org:${OTHER_ORG}`] },
+      ],
+    });
+
+    const nodeResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/search?q=${encodeURIComponent('atlas')}`,
+    );
+    expect(nodeResponse.status).toBe(200);
+    const nodeBody = (await nodeResponse.json()) as KnowledgeSearchPayload;
+    expect(nodeBody.results).toEqual([
+      { id: atlas.id, name: 'Project Atlas', kind: 'service', type: 'node', rung: 'resource' },
+    ]);
+
+    const scopeResponse = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/search?q=${encodeURIComponent('memory')}`,
+    );
+    const scopeBody = (await scopeResponse.json()) as KnowledgeSearchPayload;
+    expect(scopeBody.results).toEqual([
+      {
+        id: scopes['features:memory'],
+        name: 'Memory Systems',
+        kind: 'scope',
+        type: 'scope',
+        rung: null,
+        address: 'features:memory',
+        description: 'Captured memory features',
+      },
+    ]);
+
+    const treeResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const tree = (await treeResponse.json()) as KnowledgeScopeTreePayload;
+    expect(tree.scopeNodes).not.toContainEqual(expect.objectContaining({ id: scopes['other:memory'] }));
+
+    const foreignLens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${scopes['other:memory']}`,
+    );
+    expect(foreignLens.status).toBe(404);
+    const foreignActivity = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${scopes['other:memory']}`,
+    );
+    expect(foreignActivity.status).toBe(404);
   });
 
   it('materializes the session rung as a scope node under the project when a thread is selected', async () => {
@@ -268,13 +365,33 @@ describe('KnowledgeRoutes', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as KnowledgeScopeTreePayload;
     const byName = new Map((body.scopeNodes ?? []).map(scopeNode => [scopeNode.name, scopeNode]));
+    // The initial page contains roots + immediate children only. Deeper scope
+    // levels are fetched one parent at a time when the user expands them.
+    expect([...byName.keys()].sort()).toEqual(['features', 'Graph project', 'mastra', 'repo:mastra'].sort());
+    expect(byName.get('mastra')).toMatchObject({ memberCount: 3, memberCountTruncated: false, childScopeCount: 3 });
+    expect(byName.get('features')).toMatchObject({ memberCount: 1, childScopeCount: 1 });
+    expect(byName.get('repo:mastra')).toMatchObject({ memberCount: 1, childScopeCount: 1 });
+
+    const memoryPage = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${ids['features']}`)
+    ).json()) as KnowledgeScopeTreePayload;
+    const issuesPage = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${ids['repo:mastra']}`)
+    ).json()) as KnowledgeScopeTreePayload;
+    for (const scopeNode of [...(memoryPage.scopeNodes ?? []), ...(issuesPage.scopeNodes ?? [])]) {
+      byName.set(scopeNode.name, scopeNode);
+    }
+    expect(memoryPage.scopeNodes?.map(node => node.name)).toEqual(['memory']);
+    expect(issuesPage.scopeNodes?.map(node => node.name)).toEqual(['issues']);
+
     // The host-vouched project rung materialized as a scope node under the
     // declared org node, keeping the declared name ('mastra') untouched.
     const resourceNode = byName.get('Graph project');
-    expect(resourceNode).toMatchObject({ address: `resource:${h.projectId}`, parentIds: [ids[`org:${ORG}`]] });
-    expect([...byName.keys()].sort()).toEqual(
-      ['features', 'Graph project', 'issues', 'mastra', 'memory', 'repo:mastra'].sort(),
-    );
+    expect(resourceNode).toMatchObject({
+      address: `resource:${h.projectId}`,
+      parentIds: [ids[`org:${ORG}`]],
+      memberCount: 0,
+    });
     // Identity rungs whose addresses are owned by scope nodes carry the
     // structural match, so the client renders one merged entry per rung.
     expect(body.roots).toEqual([
@@ -328,8 +445,8 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const { scopes: ids } = await h.knowledge.reconcileStructure({
       scopes: [
-        { address: 'org:acme', name: 'mastra' },
-        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: `org:${ORG}`, name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
         { address: 'features:child', name: 'child', kind: 'domain', parentAddresses: ['features'] },
       ],
     });
@@ -373,6 +490,14 @@ describe('KnowledgeRoutes', () => {
       kind: 'concept',
       scope: [...h.orgScope, 'resource:someone-else'],
       scopeAddresses: ['features'],
+    });
+
+    const scopesResponse = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    const scopesBody = (await scopesResponse.json()) as KnowledgeScopeTreePayload;
+    expect(scopesBody.scopeNodes?.find(item => item.id === ids['features'])).toMatchObject({
+      memberCount: 3,
+      memberCountTruncated: false,
+      childScopeCount: 1,
     });
 
     const response = await h.app.request(
@@ -489,7 +614,7 @@ describe('KnowledgeRoutes', () => {
     expect(body.truncated).toBe(false);
   });
 
-  it('projects the bounded description into graph snapshots and never leaks content', async () => {
+  it('projects descriptions into graph and detail reads without leaking long-form content into snapshots', async () => {
     const h = await createHarness();
     const synopsis =
       'Payments coordinates settlement and reconciliation. Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
@@ -517,6 +642,11 @@ describe('KnowledgeRoutes', () => {
     expect(body.nodes).toHaveLength(4);
     expect(body.records).toHaveLength(0);
     expect(body.truncated).toBe(false);
+
+    const detail = await nodeDetail(h, described.id);
+    expect(detail.status).toBe(200);
+    expect(detail.body.node.description).toBe(synopsis);
+    expect((await nodeDetail(h, absent.id)).body.node).not.toHaveProperty('description');
   });
 
   // 2
@@ -881,7 +1011,22 @@ describe('KnowledgeRoutes', () => {
     expect((await nodeDetail(h, threadEntity.id, '?threadId=t-x19')).status).toBe(404);
   });
 
-  it('does not expose storage record or source-thread identifiers in activity projections', async () => {
+  it('enriches activity records with their owning node and deep-link context', async () => {
+    const h = await createHarness();
+    const entity = await node(h.knowledge, 'Activity Entity', h.projectScope);
+    const created = await record(h.knowledge, entity, 'Activity fact.', h.projectScope);
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    expect(response.body.events).toContainEqual(
+      expect.objectContaining({
+        recordId: created.id,
+        node: { id: entity.id, name: 'Activity Entity', rung: 'resource' },
+      }),
+    );
+  });
+
+  it('does not expose deleted activity targets or their source-thread identifiers', async () => {
     const h = await createHarness();
     const entity = await node(h.knowledge, 'Activity Entity', h.projectScope);
     const created = await record(h.knowledge, entity, 'Activity fact.', h.projectScope, 'private-thread-id');
