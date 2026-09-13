@@ -1,1 +1,1 @@
-../../.mastracode/commands/pr.md
+/Users/damienschneider/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/pr.md

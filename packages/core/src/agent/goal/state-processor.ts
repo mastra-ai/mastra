@@ -77,8 +77,10 @@ export class GoalStateProcessor {
     const carried = getObjectiveFromRequestContext(args.requestContext);
     const cached = takeCachedGoalObjective(args.requestContext, args.threadId);
     let current: GoalObjectiveRecord | undefined;
+    let reason: 'cleared' | 'absent' | GoalObjectiveRecord['status'] = 'absent';
     if (carried === null) {
       current = undefined; // explicitly cleared this step
+      reason = 'cleared';
     } else if (carried !== undefined) {
       current = carried;
     } else if (cached?.objective) {
@@ -88,10 +90,14 @@ export class GoalStateProcessor {
       // without an objective carries no information — treating it as "no goal"
       // would retract an objective the store reports as active.
       const store = await this.resolveStore();
-      current = store
-        ? await store.getState<GoalObjectiveRecord>({ threadId: args.threadId, type: GOAL_STATE_TYPE })
-        : undefined;
+      // Same reasoning one step further out: an unresolvable store is missing
+      // information, not evidence of "no goal". Emitting nothing leaves whatever
+      // the model already sees untouched rather than retracting an objective the
+      // store may well report as active.
+      if (!store) return;
+      current = await store.getState<GoalObjectiveRecord>({ threadId: args.threadId, type: GOAL_STATE_TYPE });
     }
+    if (current) reason = current.status;
 
     const prior = this.getPriorObjective(args);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
@@ -112,7 +118,10 @@ export class GoalStateProcessor {
         tagName: 'current-objective',
         contents: '\n',
         value: { objective: undefined },
-        attributes: { status: 'none' },
+        // `reason` is diagnostic only — it deliberately stays out of `cacheKey`
+        // so the cached prefix does not churn. Without it every retraction looks
+        // identical and a past `goal:none` cannot be explained after the fact.
+        attributes: { status: 'none', reason },
         metadata: { value: { objective: undefined } },
       };
     }
