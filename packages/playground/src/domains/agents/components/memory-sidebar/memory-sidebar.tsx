@@ -116,7 +116,7 @@ export function MemorySidebarBody({
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
   const { isPanelOpen } = useMemoryTimeline();
   const { streamProgress } = useObservationalMemoryContext();
-  const { lastMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
+  const { recentMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
 
   const showMemory = selectedTab === 'memory';
   const memoryCardShellRef = useRef<HTMLDivElement>(null);
@@ -182,7 +182,7 @@ export function MemorySidebarBody({
     return () => observer.disconnect();
   }, [
     hasMemory,
-    lastMessages,
+    recentMessages.description,
     observationPercent,
     observationalOn,
     semanticRecallOn,
@@ -294,13 +294,9 @@ export function MemorySidebarBody({
                   <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <ConfigBadge
                       icon={MessageSquare}
-                      tooltip={
-                        lastMessages !== undefined
-                          ? `Keeps the last ${lastMessages} messages in context`
-                          : 'Recent message history is off'
-                      }
-                      enabled={lastMessages !== undefined}
-                      value={lastMessages}
+                      tooltip={recentMessages.description}
+                      enabled={recentMessages.enabled}
+                      value={recentMessages.maxMessages}
                     />
                     <ConfigBadge
                       icon={Search}

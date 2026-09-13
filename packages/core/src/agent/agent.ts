@@ -4609,7 +4609,9 @@ export class Agent<
     }
 
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
-    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+    const historyEnabled =
+      threadConfig.lastMessages !== false && (threadConfig.lastMessages || threadConfig.messageHistory);
+    if (!historyEnabled && !threadConfig.semanticRecall) {
       return { messages: [] };
     }
 

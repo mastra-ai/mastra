@@ -1,11 +1,11 @@
 ---
-title: "Message history | Memory"
-description: "Store and retrieve recent Mastra conversation messages, configure history limits and thread titles, and query threads for chat interfaces."
+title: 'Message history | Memory'
+description: 'Store and retrieve recent Mastra conversation messages, configure history limits and thread titles, and query threads for chat interfaces.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
-  - "@mastra/libsql"
-  - "@mastra/ai-sdk"
+  - '@mastra/core'
+  - '@mastra/memory'
+  - '@mastra/libsql'
+  - '@mastra/ai-sdk'
 ---
 
 # Message history
@@ -123,6 +123,25 @@ You can use this history in two ways:
 `lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/harness/signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
 
 :::
+
+### Limit history by tokens
+
+Message count is a poor proxy for context size: a tool result can be a few tokens or thousands. Use `messageHistory` to keep recent history within a token budget instead:
+
+```typescript title="src/mastra/agents/test-agent.ts"
+export const agent = new Agent({
+  id: 'test-agent',
+  memory: new Memory({
+    options: {
+      messageHistory: { maxTokens: 8_000, atMaxRemoveTokens: 2_000 },
+    },
+  }),
+})
+```
+
+When remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (default: 25% of `maxTokens`). Removing history in chunks rather than one message at a time keeps the prompt prefix stable across several turns, so provider prompt caches stay warm. The current turn's input, the agent's responses, and system messages are never trimmed.
+
+Trimmed messages stay in storage, but a per-thread boundary is persisted so they are excluded from later turns. Setting `messageHistory` without `lastMessages` disables the default 10-message cap; set both to combine a count cap with a token budget.
 
 :::tip
 

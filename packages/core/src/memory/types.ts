@@ -951,8 +951,24 @@ type BaseMemoryConfig = {
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
    * ```
+   * @deprecated Counting messages is a poor proxy for context size. Prefer `messageHistory`
+   * to bound history by a token budget. `lastMessages: false` still disables history.
    */
   lastMessages?: number | false;
+
+  /**
+   * Token budget for conversation history. When set, remembered messages are trimmed
+   * oldest-first until the context fits; system instructions and the current turn are never removed.
+   * Trimmed history stays in storage but is excluded from context on later turns.
+   * When set without a numeric `lastMessages`, history is limited by tokens only.
+   *
+   * @example
+   * ```typescript
+   * messageHistory: { maxTokens: 8000 } // frees 25% of the budget when exceeded
+   * messageTokens: { maxTokens: 8000, atMaxRemoveTokens: 1000 }
+   * ```
+   */
+  messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1276,6 +1292,9 @@ export type SerializedMemoryConfig = {
 
     /** Number of recent messages to include, or false to disable */
     lastMessages?: number | false;
+
+    /** Token budget for conversation history */
+    messageHistory?: import('./message-history-config').MessageHistoryConfig;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

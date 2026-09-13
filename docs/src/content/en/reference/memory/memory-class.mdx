@@ -1,11 +1,11 @@
 ---
-title: "Reference: Memory class | Memory"
-description: "The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra."
+title: 'Reference: Memory class | Memory'
+description: 'The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/memory"
-  - "@mastra/pg"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
+  - '@mastra/pg'
 ---
 
 # Memory class
@@ -77,6 +77,13 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
               'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option. The window slides forward on every request, so once a thread exceeds the limit, each turn invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory) instead.',
             isOptional: true,
             defaultValue: '10',
+          },
+          {
+            name: 'messageHistory',
+            type: '{ maxTokens: number; atMaxRemoveTokens?: number }',
+            description:
+              "Token budget for recent message history. When the remembered history exceeds `maxTokens`, the oldest messages are dropped until at least `atMaxRemoveTokens` tokens are freed (defaults to 25% of `maxTokens`). The current turn's input, responses, context, and system messages are never removed. Trimmed history is excluded from later turns via a persisted per-thread boundary, but the messages themselves stay in storage. When set without an explicit `lastMessages`, the default 10-message cap is not applied. Prefer this over `lastMessages`, since message count is a poor proxy for context size.",
+            isOptional: true,
           },
           {
             name: 'readOnly',
