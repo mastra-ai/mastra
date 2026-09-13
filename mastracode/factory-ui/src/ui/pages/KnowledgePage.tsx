@@ -194,7 +194,7 @@ function ScopeTree({
   scopes: KnowledgeScopeTreePayload | undefined;
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
-  /** A listed session (`thread:<id>` scope) opens the thread view rather than a lens. */
+  /** A listed session (`resource:<project>:thread:<id>` scope) opens the thread view rather than a lens. */
   onOpenSession: (threadId: string) => void;
   onNodesLoaded: (nodes: KnowledgeScopeNode[]) => void;
 }) {
@@ -259,7 +259,11 @@ function ScopeTree({
     if (path.has(node.id)) return null;
     const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
-    const sessionId = !marker && node.address.startsWith('thread:') ? node.address.slice('thread:'.length) : undefined;
+    const sessionPrefix = `resource:${factoryProjectId}:thread:`;
+    const sessionId =
+      !marker && factoryProjectId && node.address.startsWith(sessionPrefix)
+        ? node.address.slice(sessionPrefix.length)
+        : undefined;
     const kind = marker ? identityKind(marker) : sessionId ? 'session' : (node.kind ?? 'scope');
     const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
     const children = byParent.get(node.id) ?? [];
