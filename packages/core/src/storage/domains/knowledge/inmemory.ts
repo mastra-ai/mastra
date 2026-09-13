@@ -1045,6 +1045,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       key: input.leaseKey,
       value: JSON.stringify({ workerId: input.workerId, heartbeatAt: timestamp.toISOString() }),
     });
+    run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
     return true;
   }
 
