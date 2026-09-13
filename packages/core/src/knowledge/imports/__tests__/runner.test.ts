@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Agent } from '../../../agent';
 import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
 import { Knowledge } from '../../index';
 
@@ -258,6 +259,63 @@ describe('Knowledge importer runner', () => {
     ]);
   });
 
+  it('durably links interrupted agent transcripts before Agent execution', async () => {
+    const started = deferred();
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: async (_prompt: string, options: { abortSignal: AbortSignal }) => {
+        started.resolve();
+        await new Promise<void>((_resolve, reject) => {
+          options.abortSignal.addEventListener('abort', () => reject(options.abortSignal.reason), { once: true });
+        });
+        return { text: 'unreachable' };
+      },
+    } as unknown as Agent;
+    const storage = new InMemoryStore({ id: 'import-runner-agentic-interruption' });
+    const knowledge = new Knowledge({
+      storage,
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async ctx => {
+            await ctx.agentImport!({ instructions: 'Integrate evidence.', data: {}, checkpoint: 'message-44' });
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const pending = knowledge.getImporter('slack-distiller')!.run(one);
+    const pendingAssertion = expect(pending).rejects.toThrow('shut down before the run completed');
+    await started.promise;
+    const [running] = (await knowledge.listImportRuns({ importerId: 'slack-distiller' })).runs;
+    expect(running).toMatchObject({
+      status: 'running',
+      transcriptThreadId: `knowledge-import-run:${running!.id}`,
+    });
+
+    await knowledge.shutdownImporters();
+    await pendingAssertion;
+    const domain = await knowledge.getStorage();
+    await domain.recoverImportRun({
+      id: running!.id,
+      replacementId: 'replacement-run',
+      payloadKey: `__mastra_internal/import-payload/${running!.id}`,
+      replacementPayloadKey: '__mastra_internal/import-payload/replacement-run',
+      leaseKey: `__mastra_internal/import-lease/${running!.id}`,
+      staleBefore: new Date(Date.now() + 1_000),
+    });
+    expect(await knowledge.getImportRun(running!.id)).toMatchObject({
+      status: 'interrupted',
+      transcriptThreadId: `knowledge-import-run:${running!.id}`,
+    });
+  });
+
   it('replays a failed window after graph writes without duplicates and commits its cursor last', async () => {
     let attempt = 0;
     const knowledge = new Knowledge({
@@ -325,5 +383,188 @@ describe('Knowledge importer runner', () => {
     ).toBeNull();
     await knowledge.shutdownImporters();
     await expect(knowledge.getImporter('calendar')!.run(one)).rejects.toThrow('shutting down');
+  });
+
+  it('runs registered agents with stable observational identity, bound tools, and checkpoint evidence', async () => {
+    const executions: Array<{ prompt: string; options: Record<string, any> }> = [];
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: vi.fn(async (prompt: string, options: Record<string, any>) => {
+        executions.push({ prompt, options });
+        const tools = options.toolsets.knowledgeImport as Record<string, { execute: (input: any) => Promise<any> }>;
+        const tool = (name: string) => Object.entries(tools).find(([key]) => key.endsWith(`_${name}`))![1];
+        const node = await tool('upsertNode').execute({
+          address: 'thread:architecture',
+          name: 'Architecture decision',
+        });
+        const existing = await tool('listKnowledge').execute({
+          address: 'thread:architecture',
+        });
+        if (!existing.some((record: { text: string }) => record.text === 'Use the canonical scope-node model.')) {
+          await tool('appendKnowledge').execute({
+            address: 'thread:architecture',
+            text: 'Use the canonical scope-node model.',
+            metadata: { checkpoint: 'message-42' },
+          });
+        }
+        expect(node.name).toBe('Architecture decision');
+        return { text: 'Done. <import-complete checkpoint="message-42" />' };
+      }),
+    } as unknown as Agent;
+    const knowledge = new Knowledge({
+      id: 'shipyard',
+      description: 'Curated Shipyard feature knowledge',
+      storage: new InMemoryStore({ id: 'import-runner-agentic' }),
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent, maxSteps: 8 },
+          handler: async ctx => {
+            const payload = ctx.payload as { checkpoint: string };
+            await ctx.agentImport!({
+              instructions: 'Integrate architecture decisions.',
+              data: { messages: ['canonical scope-node model'] },
+              checkpoint: payload.checkpoint,
+            });
+            await ctx.state.set('checkpoint', payload.checkpoint);
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+    const importer = knowledge.getImporter('slack-distiller')!;
+
+    const first = await importer.run(one, { checkpoint: 'message-42' });
+    const second = await importer.run(one, { checkpoint: 'message-42' });
+
+    expect(first.error).toBeUndefined();
+    expect(first).toMatchObject({ status: 'succeeded', importKind: 'agentic' });
+    expect(first.transcriptThreadId).toBe(`knowledge-import-run:${first.id}`);
+    expect(second.transcriptThreadId).toBe(`knowledge-import-run:${second.id}`);
+    expect(executions[0]!.options.memory.resource).toBe(executions[1]!.options.memory.resource);
+    expect(executions[0]!.options.memory.thread).not.toBe(executions[1]!.options.memory.thread);
+    expect(executions[0]!.options.maxSteps).toBe(8);
+    expect(
+      executions[0]!.options.prepareStep().activeTools.map((name: string) => name.slice(name.lastIndexOf('_') + 1)),
+    ).toEqual([
+      'getNode',
+      'listNodes',
+      'upsertNode',
+      'removeNode',
+      'appendKnowledge',
+      'listKnowledge',
+      'removeKnowledge',
+    ]);
+    expect(executions[0]!.options.prepareStep().activeTools).not.toEqual(
+      executions[1]!.options.prepareStep().activeTools,
+    );
+    expect(executions[0]!.prompt).toContain('Curated Shipyard feature knowledge');
+    expect(
+      await knowledge.getImportState({
+        importerId: 'slack-distiller',
+        binding: knowledgeImporterBindingKey(one),
+        key: 'checkpoint',
+      }),
+    ).toMatchObject({ value: 'message-42' });
+    const scope = await (await knowledge.getStorage()).getScopeAddress(one.scope);
+    const nodes = await knowledge.listNodes({ scopeIds: [scope!.scopeNodeId] });
+    const imported = nodes.filter(node => node.name === 'Architecture decision');
+    expect(imported).toHaveLength(1);
+    await expect(
+      knowledge.listRecords({ node: imported[0]!.id, scopeIds: [scope!.scopeNodeId] }),
+    ).resolves.toMatchObject({
+      records: [expect.objectContaining({ text: 'Use the canonical scope-node model.' })],
+    });
+  });
+
+  it('bounds agentic import payloads in the prompt and discloses omissions', async () => {
+    const executions: string[] = [];
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: async (prompt: string) => {
+        executions.push(prompt);
+        return { text: 'Done. <import-complete checkpoint="message-99" />' };
+      },
+    } as unknown as Agent;
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'import-runner-agentic-budget' }),
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async ctx => {
+            await ctx.agentImport!({
+              instructions: 'Integrate evidence.',
+              data: { blob: 'x'.repeat(200_000) },
+              checkpoint: 'message-99',
+            });
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const run = await knowledge.getImporter('slack-distiller')!.run(one);
+
+    expect(run.status).toBe('succeeded');
+    const prompt = executions[0]!;
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(80_000);
+    expect(prompt).toContain('[Truncated:');
+    expect(prompt).toContain('do not invent omitted evidence');
+    expect(prompt).not.toContain('x'.repeat(200_000));
+  });
+
+  it('fails agentic runs without checkpoint evidence and keeps staged state uncommitted', async () => {
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: async (_prompt: string, options: Record<string, any>) => {
+        const tools = options.toolsets.knowledgeImport as Record<string, { execute: (input: any) => Promise<any> }>;
+        const upsert = Object.entries(tools).find(([key]) => key.endsWith('_upsertNode'))![1];
+        await upsert.execute({ address: 'message:43', name: 'Failed import evidence' });
+        return { text: 'I stopped before acknowledging the checkpoint.' };
+      },
+    } as unknown as Agent;
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'import-runner-agentic-failure' }),
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async ctx => {
+            await ctx.agentImport!({ instructions: 'Integrate evidence.', data: {}, checkpoint: 'message-43' });
+            await ctx.state.set('checkpoint', 'message-43');
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const run = await knowledge.getImporter('slack-distiller')!.run(one);
+
+    expect(run).toMatchObject({
+      status: 'failed',
+      importKind: 'agentic',
+      transcriptThreadId: `knowledge-import-run:${run.id}`,
+    });
+    expect(run.error).toContain('did not acknowledge checkpoint message-43');
+    expect(
+      await knowledge.getImportState({
+        importerId: 'slack-distiller',
+        binding: knowledgeImporterBindingKey(one),
+        key: 'checkpoint',
+      }),
+    ).toBeNull();
   });
 });
