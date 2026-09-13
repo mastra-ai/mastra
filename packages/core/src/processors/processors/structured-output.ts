@@ -14,7 +14,7 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
-import type { ProcessOutputStreamArgs, Processor } from '../index';
+import type { ProcessOutputStepArgs, ProcessOutputStreamArgs, Processor, ProcessorMessageResult } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
@@ -45,6 +45,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
+  /**
+   * Strict-mode failure recorded while the step stream was still open. A tripwire
+   * raised from `processOutputStream` ends the run immediately, so it is raised
+   * from `processOutputStep` instead, where the loop can honour `maxProcessorRetries`.
+   */
+  private pendingFailure?: string;
   private jsonPromptInjection?: boolean | 'system' | 'inline' | 'auto';
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
@@ -97,7 +103,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   }
 
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, requestContext, messageList, ...rest } = args;
+    const { part, state, streamParts, requestContext, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
@@ -110,7 +116,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         await this.processAndEmitStructuredOutput(
           streamParts,
           controller,
-          abort,
           observabilityContext,
           requestContext,
           messageList,
@@ -122,10 +127,25 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
   }
 
+  /**
+   * Raise the tripwire for a strict-mode failure once the step has finished, asking the
+   * loop to retry the step. The loop retries while `maxProcessorRetries` allows it and
+   * otherwise ends the run with the tripwire, as it does for any other output processor.
+   */
+  processOutputStep({ abort, messageList }: ProcessOutputStepArgs): ProcessorMessageResult {
+    const failure = this.pendingFailure;
+    if (failure === undefined) {
+      return messageList;
+    }
+    this.pendingFailure = undefined;
+    // Let the retried step run the structuring pass again.
+    this.isStructuringAgentStreamStarted = false;
+    return abort(failure, { retry: true });
+  }
+
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
-    abort: ProcessOutputStreamArgs['abort'],
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
@@ -156,12 +176,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', chunk.payload.error, abort);
+          this.handleError('Structuring failed', chunk.payload.error);
 
-          if (this.errorStrategy === 'warn') {
-            // avoid enqueuing the error chunk to the main agent stream
-            break;
-          }
           if (this.errorStrategy === 'fallback' && this.fallbackValue !== undefined) {
             const fallbackChunk: ChunkType<OUTPUT> = {
               runId: chunk.runId,
@@ -174,8 +190,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
               },
             };
             controller?.enqueue(fallbackChunk);
-            break;
           }
+          // The structuring error never reaches the main agent stream: warn only logs,
+          // fallback substitutes, strict raises its tripwire from processOutputStep.
+          break;
         }
 
         const newChunk = {
@@ -187,7 +205,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         controller?.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError('Structured output processing failed', error, abort);
+      this.handleError('Structured output processing failed', error);
     }
   }
 
@@ -357,14 +375,14 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+  private handleError(context: string, error: unknown): void {
     const errorMessage = this.getErrorMessage(error);
     const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
         this.logger?.error(message, error);
-        abort(message);
+        this.pendingFailure = message;
         break;
       case 'warn':
         this.logger?.warn(message, error);

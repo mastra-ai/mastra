@@ -352,3 +352,20 @@ const response = await testAgent.generate('Tell me about TypeScript.', {
 
 console.log(response.object)
 ```
+
+### Retry the structuring step
+
+When a separate structuring `model` is configured and its output fails validation under the `strict` strategy, the structuring processor asks the agent loop to retry the step. Set `maxProcessorRetries` on the agent or the call to allow the retry; the model is told why the previous response was not accepted, and the structuring pass runs again on the new response. When the budget is exhausted, or when `maxProcessorRetries` is not set, the run ends with a tripwire as before.
+
+```typescript
+const response = await testAgent.generate('Tell me about TypeScript.', {
+  maxProcessorRetries: 2,
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      keyFeatures: z.array(z.string()),
+    }),
+    model: '__GATEWAY_OPENAI_MODEL__',
+  },
+})
+```

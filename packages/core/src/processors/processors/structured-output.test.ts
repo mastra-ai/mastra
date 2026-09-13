@@ -125,17 +125,46 @@ describe('StructuredOutputProcessor', () => {
         ]),
       };
 
-      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+      const streamSpy = vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      await expect(
-        processor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Structuring failed');
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+        retryCount: 0,
+      });
+
+      // The tripwire is raised from processOutputStep so the loop can retry the step.
+      expect(abort).not.toHaveBeenCalled();
+      expect(() => processor.processOutputStep({ abort, messageList: {} } as any)).toThrow(
+        '[StructuredOutputProcessor] Structuring failed: Structuring failed',
+      );
+      expect(abort).toHaveBeenCalledWith('[StructuredOutputProcessor] Structuring failed: Structuring failed', {
+        retry: true,
+      });
+
+      // The retried step runs the structuring pass again.
+      streamSpy.mockResolvedValue({ fullStream: convertArrayToReadableStream([]) } as any);
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+        retryCount: 1,
+      });
+      expect(streamSpy).toHaveBeenCalledTimes(2);
+      expect(processor.processOutputStep({ abort, messageList: {} } as any)).toEqual({});
+    });
+
+    it('should not raise a tripwire from processOutputStep when structuring succeeded', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const messageList = {};
+
+      expect(processor.processOutputStep({ abort, messageList } as any)).toBe(messageList);
+      expect(abort).not.toHaveBeenCalled();
+      expect(controller.enqueue).not.toHaveBeenCalled();
     });
 
     it('should preserve upstream error details in strict logs', async () => {
@@ -183,15 +212,16 @@ describe('StructuredOutputProcessor', () => {
 
       vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      await expect(
-        loggingProcessor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4');
+      await loggingProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+        retryCount: 0,
+      });
+      expect(() => loggingProcessor.processOutputStep({ abort, messageList: {} } as any)).toThrow(
+        '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
@@ -635,15 +665,16 @@ describe('StructuredOutputProcessor', () => {
 
       vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
 
-      await expect(
-        loggingProcessor.processOutputStream({
-          part: finishChunk,
-          streamParts: [],
-          state: { controller },
-          abort,
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Schema failed');
+      await loggingProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort,
+        retryCount: 0,
+      });
+      expect(() => loggingProcessor.processOutputStep({ abort, messageList: {} } as any)).toThrow(
+        '[StructuredOutputProcessor] Structuring failed: Schema failed',
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         '[StructuredOutputProcessor] Structuring failed: Schema failed',
