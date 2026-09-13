@@ -38,6 +38,11 @@ import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/r
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
+  KnowledgeGapFlags,
+  type FileKnowledgeGapFlagInput,
+  type KnowledgeGapQueueWorkerConfig,
+} from './governance/gaps';
+import {
   KnowledgeProposalLifecycle,
   type ProposeKnowledgeMutationInput,
   type ProposeKnowledgeNodeUpdateInput,
@@ -59,6 +64,7 @@ import {
   type KnowledgeImporterDefinition,
 } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
+export * from './governance/gaps';
 export * from './governance/proposals';
 export * from './governance/scopes';
 
@@ -84,6 +90,7 @@ export class Knowledge extends MastraBase {
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
   #accessEvaluator?: KnowledgeAccessEvaluator;
+  #gapFlags?: KnowledgeGapFlags;
   #proposalLifecycle?: KnowledgeProposalLifecycle;
   #scopeGovernance?: KnowledgeScopeGovernance;
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
@@ -227,6 +234,20 @@ export class Knowledge extends MastraBase {
     }
     this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
     return this.#accessEvaluator.evaluate(liveScopeIds);
+  }
+
+  async fileGapFlag(input: FileKnowledgeGapFlagInput) {
+    return (await this.#getGapFlags()).file(input);
+  }
+
+  async createGapQueueWorker(config: KnowledgeGapQueueWorkerConfig) {
+    return (await this.#getGapFlags()).createWorker(config);
+  }
+
+  async #getGapFlags(): Promise<KnowledgeGapFlags> {
+    const storage = await this.#getStorage();
+    this.#gapFlags ??= new KnowledgeGapFlags(storage, scopeIds => this.evaluateAccess(scopeIds));
+    return this.#gapFlags;
   }
 
   async propose(input: ProposeKnowledgeMutationInput) {
