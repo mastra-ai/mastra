@@ -1,4 +1,5 @@
 import {
+  knowledgeImporterBindingKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -11,7 +12,9 @@ const PROJECT_SCOPE_ID = '10000000-0000-4000-8000-000000000002';
 const OTHER_SCOPE_ID = '10000000-0000-4000-8000-000000000003';
 const MISSING_SCOPE_ID = '10000000-0000-4000-8000-000000000099';
 
-export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
+export function createKnowledgeStorageTests(
+  createStore: (reopen?: boolean) => Promise<KnowledgeStorage> | KnowledgeStorage,
+): void {
   describe('knowledge storage canonical contract', () => {
     let store: KnowledgeStorage;
 
@@ -46,6 +49,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         activity: await store.listActivity({ scopeIds }),
         outbox: await store.listSemanticOutbox({ scopeIds }),
       }).toEqual(before);
+    });
+
+    it('rolls back mutations linked to a missing import run', async () => {
+      const scopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID];
+      const node = await store.createNode({ name: 'Run-linked subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Original', scopeIds: [PROJECT_SCOPE_ID] });
+      const snapshot = async () => ({
+        nodes: await store.listNodes({ scopeIds }),
+        records: await store.listRecords({ node, scopeIds }),
+        recordScopes: await store.getRecordScopeIds(record.id),
+        activity: await store.listActivity({ scopeIds }),
+        outbox: await store.listSemanticOutbox({ scopeIds }),
+      });
+      const before = await snapshot();
+      const importRunId = 'missing-import-run';
+      const mutations = [
+        () => store.createNode({ name: 'Invalid run node', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () => store.updateNode({ id: node.id, version: node.version, name: 'Invalid run edit', importRunId }),
+        () => store.createRecord({ node, text: 'Invalid [[Run mention]]', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
+        () =>
+          store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID], importRunId }),
+      ];
+      for (const mutate of mutations) {
+        await expect(mutate()).rejects.toThrow('import run');
+        expect(await snapshot()).toEqual(before);
+      }
     });
 
     it('commits node, record, scoped mentions and provenance together', async () => {
@@ -617,10 +646,126 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(retry.createdScopeIds).toHaveLength(1);
     });
 
+    it('persists tuple-scoped importer state, run lifecycle, and activity linkage', async () => {
+      const firstBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:one' });
+      const secondBinding = knowledgeImporterBindingKey({ source: 'google-calendar:primary', scope: 'resource:two' });
+      await store.setImportState({ importerId: 'calendar', binding: firstBinding, key: 'cursor', value: 'cursor-1' });
+      await store.setImportState({ importerId: 'calendar', binding: secondBinding, key: 'cursor', value: 'cursor-2' });
+
+      const queuedAt = new Date('2026-08-28T12:00:00.000Z');
+      const run = await store.createImportRun({
+        id: '01K00000000000000000000001',
+        importerId: 'calendar',
+        binding: firstBinding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt,
+      });
+      await expect(
+        store.createImportRun({
+          id: run.id,
+          importerId: 'calendar',
+          binding: firstBinding,
+          importKind: 'static',
+          triggerKind: 'programmatic',
+        }),
+      ).rejects.toBeInstanceOf(KnowledgeConflictError);
+      await store.updateImportRun({ id: run.id, status: 'running', timestamp: new Date(queuedAt.getTime() + 1_000) });
+      const failed = await store.updateImportRun({
+        id: run.id,
+        status: 'failed',
+        error: `Error: calendar unavailable\n${'x'.repeat(2_000)}`,
+        traceId: 'trace-1',
+        timestamp: new Date(queuedAt.getTime() + 2_000),
+      });
+      expect(failed).toMatchObject({ status: 'failed', traceId: 'trace-1' });
+      expect(failed.error).toHaveLength(1_000);
+      expect(failed.error).not.toContain('\n');
+      await expect(store.updateImportRun({ id: run.id, status: 'running' })).rejects.toBeInstanceOf(
+        KnowledgeConflictError,
+      );
+
+      const skipped = await store.createImportRun({
+        id: '01K00000000000000000000002',
+        importerId: 'calendar',
+        binding: firstBinding,
+        importKind: 'static',
+        triggerKind: 'cron',
+        status: 'skipped',
+        queuedAt: new Date(queuedAt.getTime() + 3_000),
+      });
+      expect(skipped.completedAt).toEqual(skipped.queuedAt);
+      await expect(
+        store.createImportRun({
+          importerId: 'calendar',
+          binding: firstBinding,
+          importKind: 'static',
+          triggerKind: 'webhook',
+          status: 'skipped',
+        }),
+      ).rejects.toThrow('Only cron-triggered Knowledge import runs can be created as skipped');
+
+      const interruptedRun = await store.createImportRun({
+        id: '01K00000000000000000000003',
+        importerId: 'calendar',
+        binding: firstBinding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(queuedAt.getTime() + 4_000),
+      });
+      await store.updateImportRun({ id: interruptedRun.id, status: 'running' });
+      const interrupted = await store.updateImportRun({ id: interruptedRun.id, status: 'interrupted' });
+      expect(interrupted).toMatchObject({ status: 'interrupted' });
+
+      const node = await store.createNode({
+        name: 'Imported calendar event',
+        scopeIds: [PROJECT_SCOPE_ID],
+        importRunId: run.id,
+      });
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: run.id })).toEqual([
+        expect.objectContaining({ targetId: node.id, importRunId: run.id }),
+      ]);
+
+      const reopened = await createStore(true);
+      await reopened.init();
+      await expect(
+        reopened.getImportState({ importerId: 'calendar', binding: firstBinding, key: 'cursor' }),
+      ).resolves.toEqual(expect.objectContaining({ value: 'cursor-1' }));
+      await expect(
+        reopened.getImportState({ importerId: 'calendar', binding: secondBinding, key: 'cursor' }),
+      ).resolves.toEqual(expect.objectContaining({ value: 'cursor-2' }));
+      await expect(reopened.getImportRun(run.id)).resolves.toEqual(expect.objectContaining({ status: 'failed' }));
+      const firstPage = await reopened.listImportRuns({ importerId: 'calendar', binding: firstBinding, limit: 1 });
+      expect(firstPage).toEqual({
+        runs: [expect.objectContaining({ id: interrupted.id })],
+        nextCursor: interrupted.id,
+      });
+      expect(
+        await reopened.listImportRuns({
+          importerId: 'calendar',
+          binding: firstBinding,
+          after: firstPage.nextCursor,
+        }),
+      ).toEqual({
+        runs: [expect.objectContaining({ id: skipped.id }), expect.objectContaining({ id: run.id })],
+        nextCursor: undefined,
+      });
+      await expect(reopened.listImportRuns({ after: 'missing-run-cursor' })).resolves.toEqual({
+        runs: [],
+        nextCursor: undefined,
+      });
+    });
+
+    it('rejects malformed importer bindings', async () => {
+      await expect(
+        store.setImportState({ importerId: 'calendar', binding: 'ambiguous:binding', key: 'cursor', value: 'one' }),
+      ).rejects.toThrow('must encode a [source, scope] tuple');
+    });
+
     it('clears only canonical Knowledge state', async () => {
       const run = await store.createImportRun({
         importerId: 'clear-test',
-        binding: 'project',
+        binding: knowledgeImporterBindingKey({ source: 'clear-test', scope: 'project:mastra' }),
         importKind: 'static',
         triggerKind: 'programmatic',
       });
