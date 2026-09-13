@@ -12,7 +12,7 @@
  */
 
 import { exec } from 'node:child_process';
-import { resolve, normalize } from 'node:path';
+import { resolve, normalize, relative, isAbsolute, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
@@ -26,9 +26,9 @@ const execAsync = promisify(exec);
  * These are rejected when found in command input.
  */
 const DANGEROUS_PATTERNS = [
-  /[;&|`$(){}[\]<>]/g, // Shell metacharacters
-  /\n|\r/g, // Newlines (command chaining)
-  /\\(?![ ])/g, // Backslashes (except escaped spaces)
+  /[;&|`$(){}[\]<>]/, // Shell metacharacters
+  /\n|\r/, // Newlines (command chaining)
+  /\\(?![ ])/, // Backslashes (except escaped spaces)
 ];
 
 /**
@@ -126,7 +126,15 @@ function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean 
   const normalizedTarget = normalize(resolve(targetPath));
   return allowedBasePaths.some(basePath => {
     const normalizedBase = normalize(resolve(basePath));
-    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
+    if (normalizedTarget === normalizedBase) return true;
+    // `relative` compares path segments rather than raw strings, so this holds
+    // on Windows (where `normalize` yields `\`) and for a base path that
+    // already ends in a separator, such as the filesystem root.
+    const rel = relative(normalizedBase, normalizedTarget);
+    // Compare whole segments: a child directory may legitimately be named
+    // `..cache`, which only a prefix check would mistake for a climb out.
+    const climbsOut = rel === '..' || rel.startsWith(`..${sep}`);
+    return rel !== '' && !climbsOut && !isAbsolute(rel);
   });
 }
 
@@ -137,9 +145,11 @@ function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
   const firstSpace = trimmed.indexOf(' ');
   const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
-  // Handle paths like /usr/bin/git -> git
-  const lastSlash = baseCmd.lastIndexOf('/');
-  return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);
+  // Handle paths like /usr/bin/git -> git. Windows separators count too,
+  // otherwise `.\bin\rm` is treated as its own base command and escapes both
+  // the blocklist and the allowlist.
+  const lastSeparator = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
+  return lastSeparator === -1 ? baseCmd : baseCmd.substring(lastSeparator + 1);
 }
 
 /**
