@@ -417,8 +417,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
   /**
-   * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * Custom instructions for producing the structured output.
+   * With `model`, they become the structuring agent's instructions.
+   * With `jsonPromptInjection`, they are injected in place of the generated
+   * "Return your response as JSON matching this schema" instruction, which embeds
+   * the full JSON schema, so a compact description of the expected fields can be used instead.
+   * If not provided, instructions are generated from the schema.
    */
   instructions?: string;
 

@@ -168,6 +168,94 @@ describe('execute structured output prompt handling', () => {
     expect((capturedPrompt as any[])[1].role).toBe('user');
     expect(JSON.stringify((capturedPrompt as any[])[1])).toContain('Return your response as JSON matching this schema');
   });
+
+  it('injects caller-supplied instructions instead of the generated schema instruction', async () => {
+    const instructions = 'Reply with a JSON object holding a "suggestions" array of short strings.';
+    const capturedPrompts: unknown[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-custom', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"suggestions":["ship"]}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    const messages = [
+      { role: 'system' as const, content: 'Keep this prefix stable.' },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+    ];
+
+    for (const jsonPromptInjection of ['system', 'inline'] as const) {
+      const stream = execute({
+        runId: `test-run-id-custom-${jsonPromptInjection}`,
+        model: model as any,
+        inputMessages: messages,
+        onResult: () => {},
+        methodType: 'stream',
+        structuredOutput: { schema, jsonPromptInjection, instructions },
+      });
+      await readStream(stream);
+    }
+
+    const [systemPrompt, inlinePrompt] = capturedPrompts as any[][];
+    expect(systemPrompt![0]).toEqual({ role: 'system', content: `Keep this prefix stable.\n\n${instructions}` });
+    expect(systemPrompt![1]).toEqual(messages[1]);
+    expect(inlinePrompt![0]).toEqual(messages[0]);
+    expect(inlinePrompt![1].content).toEqual([
+      { type: 'text', text: 'Extract now.' },
+      { type: 'text', text: instructions },
+    ]);
+    for (const prompt of [systemPrompt, inlinePrompt]) {
+      const serialized = JSON.stringify(prompt);
+      expect(serialized).not.toContain('Return your response as JSON matching this schema');
+      expect(serialized).not.toContain('"minItems"');
+    }
+  });
+
+  it('creates a system message for caller-supplied instructions when none exists', async () => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-custom-no-system', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"suggestions":["ship"]}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const stream = execute({
+      runId: 'test-run-id-custom-no-system',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: { schema, jsonPromptInjection: 'system', instructions: 'Answer as JSON.' },
+    });
+    await readStream(stream);
+
+    expect((capturedPrompt as any[])[0]).toEqual({ role: 'system', content: 'Answer as JSON.' });
+    expect((capturedPrompt as any[])[1]).toEqual(inputMessages[0]);
+  });
   it('does not inject processor schema instructions into the main prompt when useAgent is enabled', async () => {
     let capturedPrompt: unknown;
     const model = new MockLanguageModelV2({

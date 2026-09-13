@@ -246,6 +246,22 @@ Use an explicit mode when you need to override the capability-based choice:
 - `true` or `'system'`: Add the schema instructions to the system message.
 - `'auto'`: Use native structured output when the model supports it. Otherwise, use inline prompt injection.
 
+By default the injected instruction embeds the full JSON schema. For large schemas, pass `instructions` to inject your own description of the expected output instead; the response is still validated against `schema`.
+
+```typescript
+const response = await testAgent.generate('Tell me about TypeScript.', {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      keyFeatures: z.array(z.string()),
+    }),
+    jsonPromptInjection: 'system',
+    instructions:
+      'Reply with a JSON object: "summary" (one paragraph) and "keyFeatures" (3-5 short strings). No markdown.',
+  },
+})
+```
+
 :::note[Gemini 2.5 with tools]
 
 Gemini 2.5 models don't support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.

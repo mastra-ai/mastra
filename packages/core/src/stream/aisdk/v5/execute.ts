@@ -91,18 +91,41 @@ function injectJsonInstructionIntoMessages(
   }) as unknown as LanguageModelV2Prompt;
 }
 
-function buildJsonInstruction(schema: unknown) {
-  return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
+function buildJsonInstruction(schema: unknown, instructions?: string) {
+  return (
+    instructions ??
+    `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`
+  );
+}
+
+/**
+ * Append caller-supplied JSON instructions to the leading system message (creating
+ * one when the prompt has none), without embedding the JSON schema.
+ */
+function injectInstructionsIntoSystemMessage({
+  messages,
+  instructions,
+}: {
+  messages: LanguageModelV2Prompt;
+  instructions: string;
+}): LanguageModelV2Prompt {
+  const [first, ...rest] = messages;
+  if (first?.role === 'system') {
+    return [{ ...first, content: first.content ? `${first.content}\n\n${instructions}` : instructions }, ...rest];
+  }
+  return [{ role: 'system', content: instructions }, ...messages];
 }
 
 function injectJsonInstructionIntoLatestUserMessage({
   messages,
   schema,
+  instructions,
 }: {
   messages: LanguageModelV2Prompt;
   schema: unknown;
+  instructions?: string;
 }): LanguageModelV2Prompt {
-  const instruction = buildJsonInstruction(schema);
+  const instruction = buildJsonInstruction(schema, instructions);
   const prompt = messages.map(message => ({
     ...message,
     content: Array.isArray(message.content) ? [...message.content] : message.content,
@@ -220,18 +243,24 @@ export function execute<OUTPUT = undefined>({
   );
   const injectionMode = resolvedJsonPromptInjection === true ? 'system' : resolvedJsonPromptInjection;
 
-  // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
+  // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection.
+  // Caller-supplied `instructions` replace the generated instruction (and the embedded schema).
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {
-    prompt =
-      injectionMode === 'inline'
-        ? injectJsonInstructionIntoLatestUserMessage({
-            messages: inputMessages,
-            schema: responseFormat.schema,
-          })
-        : injectJsonInstructionIntoMessages({
-            messages: inputMessages,
-            schema: responseFormat.schema,
-          });
+    const instructions = structuredOutput?.instructions;
+    if (injectionMode === 'inline') {
+      prompt = injectJsonInstructionIntoLatestUserMessage({
+        messages: inputMessages,
+        schema: responseFormat.schema,
+        instructions,
+      });
+    } else if (instructions) {
+      prompt = injectInstructionsIntoSystemMessage({ messages: inputMessages, instructions });
+    } else {
+      prompt = injectJsonInstructionIntoMessages({
+        messages: inputMessages,
+        schema: responseFormat.schema,
+      });
+    }
   }
 
   // For processor mode without agent reuse, inject a custom prompt to inform the main agent

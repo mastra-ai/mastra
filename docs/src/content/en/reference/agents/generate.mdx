@@ -438,7 +438,8 @@ const result = await agent.generate('message for agent')
                     name: 'instructions',
                     type: 'string',
                     isOptional: true,
-                    description: 'Additional instructions for the structured output model.',
+                    description:
+                      'Custom instructions for producing the structured output. Used as the structuring agent instructions when `model` is set, and injected in place of the generated schema instruction when `jsonPromptInjection` is enabled.',
                   },
                 ],
               },
