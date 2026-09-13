@@ -1365,24 +1365,39 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async deleteRecordBySource(input: { id: string; source: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecordBySource(input: {
+    id: string;
+    source: string;
+    version: number;
+    importRunId?: string;
+  }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
-      await this.#deleteRecordPermanently(tx, record.id, input.importRunId);
+      await this.#deleteRecordPermanently(tx, record.id, input.importRunId, input.version);
       return record;
     });
   }
 
-  async #deleteRecordPermanently(tx: Executor, id: string, importRunId?: string): Promise<void> {
+  async #deleteRecordPermanently(
+    tx: Executor,
+    id: string,
+    importRunId?: string,
+    expectedVersion?: number,
+  ): Promise<void> {
     const record = await this.#getRecord(tx, id, true);
     if (!record) return;
+    if (expectedVersion !== undefined && record.version !== expectedVersion) throw new KnowledgeConflictError(id);
     const scopeIds = await this.#getRecordScopeIds(tx, id);
     await this.#activity(tx, 'delete', 'record', id, undefined, importRunId);
     await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
-    await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?`, args: [id] });
+    const result = await tx.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${expectedVersion === undefined ? '' : ' AND version=?'}`,
+      args: expectedVersion === undefined ? [id] : [id, expectedVersion],
+    });
+    if (expectedVersion !== undefined && result.rowsAffected === 0) throw new KnowledgeConflictError(id);
   }
 
   async getImportState(input: {
@@ -1537,6 +1552,26 @@ export class KnowledgePG extends KnowledgeStorage {
         completedAt: input.status === 'running' ? run.completedAt : timestamp,
       };
     });
+  }
+
+  async recordImportSkip(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+    contextScopeId: string;
+    importRunId: string;
+    details: Record<string, unknown>;
+  }): Promise<void> {
+    await this.#transaction(tx =>
+      this.#activity(
+        tx,
+        'skip',
+        input.targetType,
+        input.targetId,
+        input.contextScopeId,
+        input.importRunId,
+        input.details,
+      ),
+    );
   }
 
   async listActivity(input: {
