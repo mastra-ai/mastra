@@ -7,18 +7,67 @@
 import type { Edge, Node } from '@xyflow/react';
 
 import type {
+  KnowledgeBoundaryNode,
   KnowledgeGraphEdge,
   KnowledgeGraphRecord,
   KnowledgeGraphNode,
   KnowledgeRung,
 } from '../../services/knowledge';
+import { parseRecordSegments } from './recordText';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
 /** Unlabeled leaf nodes (no incoming records) render as small dots. */
 export const NODE_SIZE_DOT = 26;
+/** Boundary endpoints stay compact regardless of their incoming degree. */
+export const BOUNDARY_NODE_SIZE = 72;
 /** Being pointed AT is what importance means — incoming counts double. */
 const INCOMING_WEIGHT = 2;
+
+/** Add compact authorized endpoints that a windowed record actually links. */
+export function graphNodesWithBoundaries(
+  nodes: KnowledgeGraphNode[],
+  boundaries: KnowledgeBoundaryNode[],
+  records: KnowledgeGraphRecord[],
+): KnowledgeGraphNode[] {
+  const known = new Set(nodes.map(node => node.id));
+  const related = new Set(records.flatMap(record => record.nodeIds));
+  return [
+    ...nodes,
+    ...boundaries
+      .filter(boundary => !known.has(boundary.id) && related.has(boundary.id))
+      .map(
+        (boundary): KnowledgeGraphNode => ({
+          ...boundary,
+          kind: 'outside view',
+          isBoundary: true,
+          pinned: false,
+          recordCount: 0,
+        }),
+      ),
+  ];
+}
+
+/** Attach boundary endpoints to the same record elements as their in-window owners. */
+export function graphRecordsWithBoundaries(
+  records: KnowledgeGraphRecord[],
+  boundaries: KnowledgeBoundaryNode[],
+): KnowledgeGraphRecord[] {
+  const boundaryByName = new Map<string, KnowledgeBoundaryNode>();
+  for (const boundary of boundaries) {
+    const key = boundary.name.trim().toLocaleLowerCase();
+    if (!boundaryByName.has(key)) boundaryByName.set(key, boundary);
+  }
+  return records.map(record => {
+    const nodeIds = [...record.nodeIds];
+    for (const segment of parseRecordSegments(record.text)) {
+      if (segment.type !== 'wikilink') continue;
+      const boundary = boundaryByName.get(segment.value.trim().toLocaleLowerCase());
+      if (boundary && !nodeIds.includes(boundary.id)) nodeIds.push(boundary.id);
+    }
+    return nodeIds.length === record.nodeIds.length ? record : { ...record, nodeIds };
+  });
+}
 
 export interface NodeDegree {
   incoming: number;
@@ -90,7 +139,7 @@ export function filterGraph(
     }
   }
   const keep = (node: KnowledgeGraphNode): boolean => {
-    if (filters.rungs.size > 0 && !filters.rungs.has(node.rung)) return false;
+    if (filters.rungs.size > 0 && (!node.rung || !filters.rungs.has(node.rung))) return false;
     if (filters.pinnedOnly && !node.pinned && !pinnedEdgeIds.has(node.id)) return false;
     return true;
   };
@@ -229,6 +278,15 @@ export function recordPairEdges(records: KnowledgeGraphRecord[]): KnowledgeGraph
   return edges;
 }
 
+/** Records replace payload wikilinks, never independent containment edges. */
+export function graphTraversalEdges(
+  payloadEdges: KnowledgeGraphEdge[],
+  records: KnowledgeGraphRecord[],
+): KnowledgeGraphEdge[] {
+  if (records.length === 0) return payloadEdges;
+  return [...payloadEdges.filter(edge => edge.type === 'contains'), ...recordPairEdges(records)];
+}
+
 export type NodeFlowNode = Node<{
   node: KnowledgeGraphNode;
   size: number;
@@ -246,13 +304,23 @@ export type RecordFlowNode = Node<{
 }>;
 
 export type KnowledgeFlowEdge = Edge<{
-  recordId: string;
-  linkType: 'wikilink';
+  recordId?: string;
+  linkType: 'wikilink' | 'contains';
   pinned: boolean;
   text?: string;
   /** The edge belongs to the record currently selected in the flyout. */
   focused?: boolean;
 }>;
+
+/** A11 record edges replace wikilinks only; containment remains visible. */
+export function renderedGraphEdges(
+  nodeEdges: KnowledgeFlowEdge[],
+  recordEdges: KnowledgeFlowEdge[],
+  hasRecords: boolean,
+): KnowledgeFlowEdge[] {
+  if (!hasRecords) return nodeEdges;
+  return [...nodeEdges.filter(edge => edge.data?.linkType === 'contains'), ...recordEdges];
+}
 
 /** Map A11 record elements into React Flow nodes/edges (positions from the layout). */
 export function toRecordFlow(
@@ -298,6 +366,7 @@ export function toFlowGraph(
   edges: KnowledgeGraphEdge[],
   positions?: ReadonlyMap<string, { x: number; y: number }>,
   focusId?: string | null,
+  labelAll?: boolean,
 ): { nodes: NodeFlowNode[]; edges: KnowledgeFlowEdge[] } {
   const degrees = degreeMap(edges);
   let maxWeighted = 0;
@@ -308,8 +377,15 @@ export function toFlowGraph(
   return {
     nodes: nodes.map(node => {
       const degree = degrees.get(node.id) ?? { incoming: 0, outgoing: 0 };
+      // Structural member listings carry no intra-scope edges; labeling every
+      // member keeps the lens readable as a directory instead of bare dots.
+      const effectiveDegree = labelAll && degree.incoming === 0 ? { incoming: 1, outgoing: degree.outgoing } : degree;
       const focused = node.id === focusId;
-      const size = focused ? NODE_SIZE_MAX : nodeSize(degree, maxWeighted);
+      const size = node.isBoundary
+        ? BOUNDARY_NODE_SIZE
+        : focused
+          ? NODE_SIZE_MAX
+          : nodeSize(effectiveDegree, maxWeighted);
       // The force layout positions circle CENTERS; React Flow positions the
       // node's TOP-LEFT corner — convert here or differently-sized nodes skew
       // into each other (the sim thinks they're apart, the render stacks them).
@@ -323,7 +399,10 @@ export function toFlowGraph(
         // the DOM measures it.
         width: size,
         height: size,
-        data: { node, size, degree, focused },
+        draggable: !node.isBoundary,
+        selectable: !node.isBoundary,
+        focusable: !node.isBoundary,
+        data: { node, size, degree: effectiveDegree, focused },
       } satisfies NodeFlowNode;
     }),
     edges: edges.map(edge => ({

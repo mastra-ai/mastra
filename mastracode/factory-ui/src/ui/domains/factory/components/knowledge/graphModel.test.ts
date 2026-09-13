@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../../services/knowledge';
+import type {
+  KnowledgeBoundaryNode,
+  KnowledgeGraphEdge,
+  KnowledgeGraphNode,
+  KnowledgeGraphRecord,
+} from '../../services/knowledge';
 import {
+  BOUNDARY_NODE_SIZE,
   degreeMap,
   deriveRecordElements,
   egoGraph,
   filterGraph,
+  graphNodesWithBoundaries,
+  graphRecordsWithBoundaries,
+  graphTraversalEdges,
   RECORD_DOT_SIZE,
   RECORD_JUNCTION_SIZE,
   RECORD_PIN_SIZE,
   recordPairEdges,
+  renderedGraphEdges,
   NODE_SIZE_DOT,
   NODE_SIZE_MAX,
   NODE_SIZE_MIN,
@@ -38,6 +48,47 @@ function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowledg
 function edge(source: string, target: string, type: 'wikilink' = 'wikilink'): KnowledgeGraphEdge {
   return { id: `${type}:${source}:${target}`, source, target, type, recordId: 'f-1' };
 }
+
+describe('bounded graph endpoints', () => {
+  it('connects record wikilinks to authorized nodes outside the node window', () => {
+    const boundary: KnowledgeBoundaryNode = {
+      id: 'outside',
+      name: 'Elsewhere',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const records: KnowledgeGraphRecord[] = [
+      { id: 'record', nodeIds: ['owner'], pinned: false, text: 'See [[Elsewhere]] and [[Elsewhere]].' },
+    ];
+    expect(graphNodesWithBoundaries([node('owner')], [boundary], records)).toEqual([node('owner')]);
+    const connected = graphRecordsWithBoundaries(records, [boundary]);
+    const graphNodes = graphNodesWithBoundaries([node('owner')], [boundary], connected);
+
+    expect(graphNodes).toEqual([
+      node('owner'),
+      {
+        ...boundary,
+        kind: 'outside view',
+        isBoundary: true,
+        pinned: false,
+        recordCount: 0,
+      },
+    ]);
+    expect(connected[0]?.nodeIds).toEqual(['owner', 'outside']);
+    const pairEdges = recordPairEdges(connected);
+    expect(pairEdges).toEqual([expect.objectContaining({ source: 'owner', target: 'outside', recordId: 'record' })]);
+    expect(toFlowGraph(graphNodes, pairEdges).nodes[1]).toEqual(
+      expect.objectContaining({
+        id: 'outside',
+        width: BOUNDARY_NODE_SIZE,
+        height: BOUNDARY_NODE_SIZE,
+        draggable: false,
+        selectable: false,
+        focusable: false,
+      }),
+    );
+  });
+});
 
 describe('nodeSize (Amendments A3 + A5)', () => {
   it('weights incoming edges heavier than outgoing', () => {
@@ -215,6 +266,25 @@ describe('egoGraph (Amendment A5)', () => {
     const edges = recordPairEdges(records);
     const result = egoGraph(nodes, edges, 'a', records);
     expect(result.nodes.map(node => node.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+});
+
+describe('structural lens edge composition', () => {
+  it('keeps containment edges when records replace payload wikilinks', () => {
+    const contains: KnowledgeGraphEdge = {
+      id: 'contains:scope:a',
+      source: 'scope',
+      target: 'a',
+      type: 'contains',
+    };
+    const records = [{ id: 'm1', nodeIds: ['a', 'b'], pinned: false, text: 'record m1' }];
+    const traversal = graphTraversalEdges([contains, edge('a', 'b')], records);
+    expect(traversal.map(edge => edge.type)).toEqual(['contains', 'wikilink']);
+
+    const nodeFlow = toFlowGraph([node('scope'), node('a'), node('b')], traversal);
+    const recordFlow = toFlowGraph([node('a'), node('b')], recordPairEdges(records));
+    const rendered = renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true);
+    expect(rendered.map(edge => edge.data?.linkType)).toEqual(['contains', 'wikilink']);
   });
 });
 

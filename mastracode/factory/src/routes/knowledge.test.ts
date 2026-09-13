@@ -1,10 +1,21 @@
-import { InMemoryDB, InMemoryKnowledgeStorage } from '@mastra/core/storage';
+import { Knowledge } from '@mastra/core/knowledge';
+import {
+  InMemoryDB,
+  InMemoryKnowledgeStorage,
+  InMemoryStore,
+  KnowledgeUnsupportedCapabilityError,
+} from '@mastra/core/storage';
 import type { KnowledgeNode, KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import type { KnowledgeNodePayload, KnowledgeGraphPayload, KnowledgeRouteLimits } from './knowledge.js';
+import type {
+  KnowledgeNodePayload,
+  KnowledgeGraphPayload,
+  KnowledgeRouteLimits,
+  KnowledgeScopeTreePayload,
+} from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
@@ -14,10 +25,19 @@ const OTHER_ORG = 'org-2';
 interface Harness {
   app: Hono;
   knowledge: KnowledgeStorage;
+  instance: Knowledge;
   projectId: string;
   orgScope: KnowledgeScope;
   projectScope: KnowledgeScope;
   threadScope: (threadId: string) => KnowledgeScope;
+}
+
+/** Wrap a bare domain in the Knowledge-instance shape the route resolves. */
+function instanceOver(store: KnowledgeStorage): Knowledge {
+  return {
+    getStorage: async () => store,
+    materializeScope: async () => ({ scopes: {}, createdScopeIds: [], changed: false, accessEpoch: 0 }),
+  } as unknown as Knowledge;
 }
 
 async function createHarness(
@@ -26,16 +46,21 @@ async function createHarness(
     user?: { workosId: string; organizationId?: string };
     orgId?: string;
     knowledge?: KnowledgeStorage;
+    knowledgeResolver?: (key: string) => Promise<Knowledge | undefined>;
+    defaultKnowledgeKey?: string;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId, userId: 'user-1', input: { name: 'Graph project' } });
-  const knowledge = options.knowledge ?? new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+  const realInstance = new Knowledge({ id: 'knowledge', storage: new InMemoryStore() });
+  const knowledge = options.knowledge ?? (await realInstance.getStorage());
+  const instance = options.knowledge ? instanceOver(knowledge) : realInstance;
   const routes = new KnowledgeRoutes({
     auth: fakeRouteAuth(),
     projects: seed.projects,
-    knowledge: async () => knowledge,
+    knowledge: options.knowledgeResolver ?? (async () => instance),
+    ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
   }).routes();
   const app = new Hono();
@@ -49,6 +74,7 @@ async function createHarness(
   return {
     app,
     knowledge,
+    instance,
     projectId: project.id,
     orgScope: [`org:${orgId}`],
     projectScope,
@@ -94,9 +120,24 @@ async function record(
   });
 }
 
+function selectedQuery(query: string): string {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  if (!params.has('scopeLevel')) params.set('scopeLevel', params.has('threadId') ? 'thread' : 'resource');
+  return `?${params}`;
+}
+
 async function graph(h: Harness, query = ''): Promise<{ status: number; body: KnowledgeGraphPayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph${query}`);
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/subgraph${selectedQuery(query)}`,
+  );
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeGraphPayload };
+}
+
+async function activity(h: Harness, query = ''): Promise<{ status: number; body: { events: unknown[] } }> {
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/activity${selectedQuery(query)}`,
+  );
+  return { status: response.status, body: (await response.json().catch(() => ({}))) as { events: unknown[] } };
 }
 
 async function nodeDetail(
@@ -104,11 +145,333 @@ async function nodeDetail(
   entityId: string,
   query = '',
 ): Promise<{ status: number; body: KnowledgeNodePayload }> {
-  const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${query}`);
+  const response = await h.app.request(
+    `/web/factory/projects/${h.projectId}/knowledge/nodes/${entityId}${selectedQuery(query)}`,
+  );
   return { status: response.status, body: (await response.json().catch(() => ({}))) as KnowledgeNodePayload };
 }
 
 describe('KnowledgeRoutes', () => {
+  it('ignores request-supplied knowledge keys and reads only the host-selected runtime', async () => {
+    const first = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const second = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const resolve = vi.fn(async (key: string) =>
+      key === 'default' ? instanceOver(first) : key === 'second' ? instanceOver(second) : undefined,
+    );
+    const h = await createHarness({ knowledgeResolver: resolve });
+    const a = await node(first, 'First runtime', h.projectScope);
+    const b = await node(second, 'Second runtime', h.projectScope);
+    await record(first, a, 'First evidence', h.projectScope);
+    await record(second, b, 'Second evidence', h.projectScope);
+
+    // The untrusted query parameter never switches runtimes: every read stays
+    // on the host-selected ('default') store, and content in other registered
+    // runtimes is unreachable.
+    expect((await graph(h, '?knowledgeKey=second')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await graph(h, '?knowledgeKey=missing')).body.nodes.map(node => node.name)).toEqual(['First runtime']);
+    expect((await nodeDetail(h, b.id, '?knowledgeKey=second')).status).toBe(404);
+    expect((await activity(h, '?knowledgeKey=second')).status).toBe(200);
+    expect(new Set(resolve.mock.calls.map(([key]) => key))).toEqual(new Set(['default']));
+  });
+
+  it('fails closed on every endpoint when the host-selected key does not resolve', async () => {
+    const h = await createHarness({
+      knowledgeResolver: async () => undefined,
+      defaultKnowledgeKey: 'mastra',
+    });
+    const a = await node(new InMemoryKnowledgeStorage({ db: new InMemoryDB() }), 'Unreachable', h.projectScope);
+    for (const endpoint of [
+      'scopes',
+      'subgraph?scopeLevel=resource',
+      'activity?scopeLevel=resource',
+      `nodes/${a.id}?scopeLevel=resource`,
+    ]) {
+      const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/${endpoint}`);
+      expect(response.status).toBe(503);
+    }
+  });
+
+  it('uses the host-selected key when the request omits knowledgeKey', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const resolve = vi.fn(async (key: string) => (key === 'mastra' ? instanceOver(store) : undefined));
+    const h = await createHarness({ knowledge: store, knowledgeResolver: resolve, defaultKnowledgeKey: 'mastra' });
+    await node(store, 'Host runtime', h.projectScope);
+
+    expect((await graph(h)).body.nodes.map(item => item.name)).toEqual(['Host runtime']);
+    expect(resolve).toHaveBeenCalledWith('mastra');
+  });
+
+  it('exposes bounded scope-tree and selected-subgraph reads without a whole-graph endpoint', async () => {
+    const h = await createHarness();
+    const scopes = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(scopes.status).toBe(200);
+    const body = (await scopes.json()) as KnowledgeScopeTreePayload;
+    // The host-vouched identity chain exists as membership-linked scope nodes —
+    // the tree is built from scopes that exist, not from the rung config.
+    const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
+    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    expect(body.scopeNodes).toHaveLength(2);
+    expect(orgNode).toMatchObject({ name: ORG, parentIds: [] });
+    expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
+    expect(body.roots).toEqual([
+      { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
+    ]);
+    expect(body.defaultLevel).toBe('resource');
+    // Materialization is create-only and deduped — a repeat read is stable.
+    const again = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`)
+    ).json()) as KnowledgeScopeTreePayload;
+    expect(again.scopeNodes).toEqual(body.scopeNodes);
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph`)).status).toBe(404);
+    expect((await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph`)).status).toBe(404);
+  });
+
+  it('materializes the session rung as a scope node under the project when a thread is selected', async () => {
+    const h = await createHarness();
+    const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
+    await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?threadId=thread-1`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+    const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
+    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const threadNode = body.scopeNodes?.find(node => node.address === 'thread:thread-1');
+    expect(threadNode).toMatchObject({ name: 'thread-1', parentIds: [resourceNode!.id] });
+    expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
+    expect(body.roots).toEqual([
+      { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
+      { level: 'thread', id: 'thread-1', available: true, scopeNodeId: threadNode!.id, name: 'thread-1' },
+    ]);
+  });
+
+  it('serves the reconciled structural scope tree and its selected members', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: 'mastra' },
+        {
+          address: `resource:${h.projectId}`,
+          name: h.projectId,
+          parentAddresses: [`org:${ORG}`],
+        },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
+        { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
+        { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: [`org:${ORG}`] },
+        { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
+      ],
+    });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+    const byName = new Map((body.scopeNodes ?? []).map(scopeNode => [scopeNode.name, scopeNode]));
+    // The host-vouched project rung materialized as a scope node under the
+    // declared org node, keeping the declared name ('mastra') untouched.
+    const resourceNode = byName.get('Graph project');
+    expect(resourceNode).toMatchObject({ address: `resource:${h.projectId}`, parentIds: [ids[`org:${ORG}`]] });
+    expect([...byName.keys()].sort()).toEqual(
+      ['features', 'Graph project', 'issues', 'mastra', 'memory', 'repo:mastra'].sort(),
+    );
+    // Identity rungs whose addresses are owned by scope nodes carry the
+    // structural match, so the client renders one merged entry per rung.
+    expect(body.roots).toEqual([
+      { level: 'org', id: ORG, available: true, scopeNodeId: ids[`org:${ORG}`], name: 'mastra' },
+      { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
+    ]);
+    expect(byName.get('features')).toMatchObject({
+      address: 'features',
+      kind: 'domain',
+      parentIds: [ids[`org:${ORG}`]],
+    });
+    expect(byName.get('mastra')).toMatchObject({ address: `org:${ORG}`, parentIds: [] });
+    expect(byName.get('memory')).toMatchObject({ description: 'Memory scope', parentIds: [ids['features']] });
+    expect(byName.get('issues')?.parentIds).toEqual([ids['repo:mastra']]);
+
+    const projectLens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`resource:${h.projectId}`]}`,
+    );
+    expect(projectLens.status).toBe(200);
+    expect(((await projectLens.json()) as KnowledgeGraphPayload).nodes[0]).toMatchObject({
+      id: ids[`resource:${h.projectId}`],
+      name: 'Graph project',
+      isScope: true,
+    });
+
+    // Structural lens: the clicked scope node renders as its own graph root.
+    const subgraph = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids[`org:${ORG}`]}`,
+    );
+    expect(subgraph.status).toBe(200);
+    const subgraphBody = (await subgraph.json()) as KnowledgeGraphPayload;
+    expect(subgraphBody.nodes).toMatchObject([
+      { id: ids[`org:${ORG}`], name: 'mastra', isScope: true, scope: null, rung: null },
+    ]);
+    expect(subgraphBody.edges).toEqual([]);
+    expect(subgraphBody.records).toEqual([]);
+    // Unknown or malformed scope nodes fail closed.
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=not-a-uuid`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await h.app.request(
+          `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${crypto.randomUUID()}`,
+        )
+      ).status,
+    ).toBe(404);
+  });
+
+  it('scopes structural member content to the project boundary and derives edges from member records', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: 'features:child', name: 'child', kind: 'domain', parentAddresses: ['features'] },
+      ],
+    });
+
+    const alpha = await h.knowledge.createNode({
+      name: 'Alpha',
+      kind: 'concept',
+      scope: h.projectScope,
+      scopeAddresses: ['features'],
+    });
+    const beta = await h.knowledge.createNode({
+      name: 'Beta',
+      kind: 'concept',
+      scope: h.projectScope,
+      scopeAddresses: ['features'],
+    });
+    await record(h.knowledge, alpha, 'see [[Beta]] for the follow-up', h.projectScope);
+
+    // InMemory keeps reconciled scope rows outside its node map, unlike SQL
+    // adapters. Surface the real child membership shape so this regression
+    // covers a structural lens containing both a child scope and content.
+    const listScopeMembers = h.knowledge.listScopeMembers.bind(h.knowledge);
+    h.knowledge.listScopeMembers = async query => [
+      ...(await listScopeMembers(query)),
+      {
+        id: ids['features:child'],
+        name: 'child',
+        kind: 'domain',
+        scope: null,
+        isScope: true,
+        version: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as KnowledgeNode,
+    ];
+
+    // Same structural scope, but stamped at a sibling resource of the same
+    // org — an org-wide roll-up would include it, a project view must not.
+    const sibling = await h.knowledge.createNode({
+      name: 'Other project',
+      kind: 'concept',
+      scope: [...h.orgScope, 'resource:someone-else'],
+      scopeAddresses: ['features'],
+    });
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids['features']}`,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeGraphPayload;
+
+    const nodeIds = body.nodes.map(item => item.id);
+    expect(nodeIds).toContain(ids['features']);
+    expect(nodeIds).toContain(ids['features:child']);
+    expect(nodeIds).toContain(alpha.id);
+    expect(nodeIds).toContain(beta.id);
+    expect(nodeIds).not.toContain(sibling.id);
+    expect(body.nodes.find(item => item.id === ids['features'])).toMatchObject({ isScope: true, rung: null });
+    expect(body.nodes.find(item => item.id === ids['features:child'])).toMatchObject({ isScope: true, scope: null });
+
+    expect(body.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: ids['features:child'] }),
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: alpha.id }),
+        expect.objectContaining({ type: 'contains', source: ids['features'], target: beta.id }),
+        expect.objectContaining({ type: 'wikilink', source: alpha.id, target: beta.id }),
+      ]),
+    );
+    expect(body.records).toHaveLength(1);
+    expect(body.records[0]).toMatchObject({ nodeIds: [alpha.id, beta.id] });
+    expect(body.nodes.find(item => item.id === alpha.id)?.recordCount).toBe(1);
+
+    const scopeActivity = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/activity?scopeNodeId=${ids['features']}`,
+    );
+    expect(scopeActivity.status).toBe(200);
+    expect(((await scopeActivity.json()) as { events: unknown[] }).events).toHaveLength(3);
+  });
+
+  it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {
+    const unsupported = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    unsupported.listScopeNodes = async () => {
+      throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+    };
+    const h1 = await createHarness({ knowledge: unsupported });
+    const ok = await h1.app.request(`/web/factory/projects/${h1.projectId}/knowledge/scopes`);
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as KnowledgeScopeTreePayload).scopeNodes).toBeUndefined();
+
+    const broken = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    broken.listScopeNodes = async () => {
+      throw new Error('db connection lost');
+    };
+    const h2 = await createHarness({ knowledge: broken });
+    const failed = await h2.app.request(`/web/factory/projects/${h2.projectId}/knowledge/scopes`);
+    expect(failed.status).toBe(500);
+  });
+
+  it('excludes structural scope nodes from the default subgraph window', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    const parent = await node(store, 'Content', h.projectScope);
+    await record(store, parent, 'keeps the graph alive', h.projectScope);
+
+    // SQL adapters return global scope nodes (scope: null) from identity-scope
+    // listNodes reads; the route must exclude them instead of crashing in the
+    // wikilink resolver, which iterates every node's scope.
+    const listNodes = store.listNodes.bind(store);
+    store.listNodes = async query => [
+      ...(await listNodes(query)),
+      {
+        id: crypto.randomUUID(),
+        name: 'mastra',
+        kind: 'scope',
+        scope: null,
+        version: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as KnowledgeNode,
+    ];
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.nodes.map(item => item.name)).toEqual(['Content']);
+  });
+
+  it('fails closed when the selected keyed Knowledge runtime is unavailable', async () => {
+    const absent = await createHarness({ knowledgeResolver: async () => undefined });
+    const failed = await createHarness({
+      knowledgeResolver: async () => {
+        throw new Error('schema reset required');
+      },
+    });
+
+    for (const harness of [absent, failed]) {
+      const response = await graph(harness);
+      expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({ error: 'knowledge_unavailable' });
+      expect(JSON.stringify(response.body)).not.toContain('schema reset required');
+    }
+  });
+
   // 1
   it('returns entities and wikilink edges (owner entity → mentioned entity) from seeded facts', async () => {
     const h = await createHarness();
@@ -215,7 +578,9 @@ describe('KnowledgeRoutes', () => {
     const { body } = await graph(h);
     expect(body.nodes.map(node => node.id)).toEqual([inWindow.id]);
     expect(body.edges).toHaveLength(0);
-    expect(body.outOfWindow).toEqual([{ id: outside.id, name: 'Z outside entity' }]);
+    expect(body.outOfWindow).toEqual([
+      { id: outside.id, name: 'Z outside entity', scope: h.projectScope, rung: 'resource' },
+    ]);
     expect(body.unresolvedCapped.count).toBe(0);
   });
 
@@ -317,10 +682,10 @@ describe('KnowledgeRoutes', () => {
       new KnowledgeRoutes({
         auth: fakeRouteAuth(),
         projects: seed.projects,
-        knowledge: async () => h.knowledge,
+        knowledge: async () => instanceOver(h.knowledge),
       }).routes(),
     );
-    const response = await outsider.request(`/web/factory/projects/${h.projectId}/knowledge/graph`);
+    const response = await outsider.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
     expect(response.status).toBe(404);
   });
 
@@ -419,7 +784,9 @@ describe('KnowledgeRoutes', () => {
     const narrowBody = (await graph(narrow)).body;
     expect(narrowBody.nodes.map(node => node.id)).toEqual([narrowSource.id]);
     expect(narrowBody.edges).toHaveLength(0);
-    expect(narrowBody.outOfWindow).toEqual([{ id: narrowTarget.id, name: 'Z target entity' }]);
+    expect(narrowBody.outOfWindow).toEqual([
+      { id: narrowTarget.id, name: 'Z target entity', scope: narrow.projectScope, rung: 'resource' },
+    ]);
     expect(narrowBody.unresolvedCapped.count).toBe(0);
   });
 
@@ -512,5 +879,48 @@ describe('KnowledgeRoutes', () => {
     const foreignEntity = await node(h.knowledge, 'Foreign Holder', foreign.projectScope);
     await record(h.knowledge, foreignEntity, 'Foreign fact.', foreign.threadScope('t-x19'), 't-x19');
     expect((await nodeDetail(h, threadEntity.id, '?threadId=t-x19')).status).toBe(404);
+  });
+
+  it('does not expose storage record or source-thread identifiers in activity projections', async () => {
+    const h = await createHarness();
+    const entity = await node(h.knowledge, 'Activity Entity', h.projectScope);
+    const created = await record(h.knowledge, entity, 'Activity fact.', h.projectScope, 'private-thread-id');
+    await h.knowledge.removeKnowledge({ id: created.id, deletedBy: 'test' });
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    expect(response.body.events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(response.body)).not.toContain(created.id);
+    expect(JSON.stringify(response.body)).not.toContain('private-thread-id');
+    // Events targeting the deleted record are excluded entirely — never
+    // returned with a blanked scope.
+    expect(response.body.events).not.toContainEqual(expect.objectContaining({ scope: [] }));
+  });
+
+  it('authorizes activity targets before window shaping so a hidden backlog cannot displace visible events', async () => {
+    const h = await createHarness();
+    const visible = await node(h.knowledge, 'Visible Service', h.projectScope);
+    await record(h.knowledge, visible, 'Visible evidence', h.projectScope);
+
+    // Flood the newest end of the activity log with events whose targets are
+    // invisible from the project view: records appended in-view, then rescoped
+    // into an unrelated thread. The append EVENT stays in the activity window,
+    // so only authorize-before-limit keeps them from blanking or displacing.
+    const flood = await node(h.knowledge, 'Flood Node', h.projectScope);
+    for (let i = 0; i < 120; i++) {
+      const flooded = await record(h.knowledge, flood, `Flood ${i}`, h.projectScope);
+      await h.knowledge.rescopeKnowledge({ id: flooded.id, scope: h.threadScope('other-thread') });
+    }
+
+    const response = await activity(h);
+    expect(response.status).toBe(200);
+    // Only the visible node/record events remain — hidden-target events are
+    // excluded BEFORE the window fills, so they cannot push visible events out.
+    expect(response.body.events.length).toBeGreaterThan(0);
+    expect(response.body.events.length).toBeLessThanOrEqual(10);
+    expect(JSON.stringify(response.body)).not.toContain('other-thread');
+    for (const event of response.body.events as Array<{ scope: unknown[] }>) {
+      expect(event.scope.length).toBeGreaterThan(0);
+    }
   });
 });

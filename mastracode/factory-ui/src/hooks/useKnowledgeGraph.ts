@@ -1,16 +1,23 @@
 /**
  * React Query hooks for the knowledge graph page.
  *
- * The graph query keys on `(factoryProjectId, threadId)` so the default
- * project view and each thread drill-down view are distinct cache entries —
- * switching views swaps payloads wholesale instead of mutating one entry.
+ * The graph query keys on `(factoryProjectId, selection, threadId)` so the default
+ * project view, each thread drill-down view, and each structural scope-node lens
+ * are distinct cache entries — switching views swaps payloads wholesale instead of
+ * mutating one entry.
  */
 
 import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchKnowledgeNode, fetchKnowledgeGraph } from '../ui/domains/factory/services/knowledge';
+import {
+  fetchKnowledgeActivity,
+  fetchKnowledgeNode,
+  fetchKnowledgeGraph,
+  fetchKnowledgeScopes,
+} from '../ui/domains/factory/services/knowledge';
+import type { KnowledgeRung, KnowledgeSelection } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
 /**
@@ -25,18 +32,36 @@ export function knowledgeRefetchInterval(error: unknown, paused: boolean): numbe
   return 5_000;
 }
 
+/** Cache-key slot for a selection: the scope node id or the identity rung. */
+function selectionKey(selection: KnowledgeSelection | undefined): string | undefined {
+  return selection?.scopeNodeId ?? selection?.scopeLevel;
+}
+
+export function useKnowledgeScopes(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeScopes(factoryProjectId, threadId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, signal)
+      : skipToken,
+    retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
+  });
+}
+
 export function useKnowledgeGraph(
   factoryProjectId: string | undefined,
+  selection: KnowledgeSelection | undefined,
   threadId?: string,
   options?: { paused?: boolean },
 ) {
   const { baseUrl } = useApiConfig();
   const paused = options?.paused ?? false;
   return useQuery({
-    queryKey: queryKeys.knowledgeGraph(factoryProjectId, threadId),
-    queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, threadId, signal)
-      : skipToken,
+    queryKey: queryKeys.knowledgeGraph(factoryProjectId, selectionKey(selection), threadId),
+    queryFn:
+      factoryProjectId && selection
+        ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, selection, threadId, signal)
+        : skipToken,
     // Live: same 5s cadence as the board (useWorkItems precedent).
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused),
     refetchOnWindowFocus: !paused,
@@ -44,13 +69,34 @@ export function useKnowledgeGraph(
   });
 }
 
-export function useKnowledgeNode(factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) {
+export function useKnowledgeActivity(
+  factoryProjectId: string | undefined,
+  selection: KnowledgeSelection | undefined,
+  threadId?: string,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, threadId),
+    queryKey: queryKeys.knowledgeActivity(factoryProjectId, selectionKey(selection), threadId),
     queryFn:
-      factoryProjectId && nodeId
-        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, threadId, signal)
+      factoryProjectId && selection
+        ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, selection, threadId, signal)
+        : skipToken,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useKnowledgeNode(
+  factoryProjectId: string | undefined,
+  nodeId: string | undefined,
+  scopeLevel: KnowledgeRung | undefined,
+  threadId?: string,
+) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.knowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId),
+    queryFn:
+      factoryProjectId && nodeId && scopeLevel
+        ? ({ signal }) => fetchKnowledgeNode(baseUrl, factoryProjectId, nodeId, { scopeLevel }, threadId, signal)
         : skipToken,
   });
 }

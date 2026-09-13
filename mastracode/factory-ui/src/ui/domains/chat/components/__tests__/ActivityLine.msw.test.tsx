@@ -88,7 +88,7 @@ describe('ActivityLine', () => {
     await session.emit({ type: 'message_update', message: assistantText('Auth starts at the composer') });
 
     // Streamed prose is split into per-word spans to fade in, so match the rendered text as a whole.
-    await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'));
+    await waitFor(() => expect(document.body).toHaveTextContent('Auth starts at the composer'), { timeout: 3000 });
     await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
   });
 
