@@ -57,8 +57,42 @@ const ACTIVITY_LIMIT = 100;
 const ACTIVITY_BATCH = 100;
 /** Hard scan cap so a huge hidden backlog cannot spin the request. */
 const ACTIVITY_SCAN_CAP = 1000;
+/** Maximum visible nodes inspected for non-prefix name matches. */
+const SEARCH_SCAN_CAP = 1000;
+/** Compact result window returned to the search popover. */
+const SEARCH_RESULT_LIMIT = 20;
+/** Prevent an unbounded query string from reaching storage. */
+const SEARCH_QUERY_LIMIT = 128;
+/** Scope nodes returned per parent while lazily expanding the tree. */
+const SCOPE_PAGE_SIZE = 25;
+/** Bound storage pressure while calculating direct-member counts. */
+const SCOPE_COUNT_CONCURRENCY = 8;
 
 export type KnowledgeScopeLevel = 'org' | 'resource' | 'thread';
+
+export interface KnowledgeScopeTreeNode extends KnowledgeScopeNodeSummary {
+  /** Viewer-visible direct members, capped by the route's node window. */
+  memberCount: number;
+  /** True when more direct members may exist beyond `memberCount`. */
+  memberCountTruncated: boolean;
+  /** Direct child scopes available for lazy expansion. */
+  childScopeCount: number;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: KnowledgeScopeLevel | null;
+  /** Present when a thread-scoped content result needs to restore its owning session lens. */
+  threadId?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
+}
 
 export interface KnowledgeScopeTreePayload {
   roots: Array<{
@@ -81,7 +115,11 @@ export interface KnowledgeScopeTreePayload {
    * e.g. `mastra → features → memory` and `repo:mastra → issues/prs`. Omitted
    * only when the storage adapter does not expose structural scope nodes.
    */
-  scopeNodes?: KnowledgeScopeNodeSummary[];
+  scopeNodes?: KnowledgeScopeTreeNode[];
+  /** Cursor for the next sibling page (roots when parentId is omitted). */
+  nextCursor?: string;
+  /** Initial child-page cursors keyed by parent scope id. */
+  childCursors?: Record<string, string>;
 }
 
 /** Window caps. Injectable at construction only — never per-request. */
@@ -208,12 +246,35 @@ export interface KnowledgeNodeRecordPayload {
   metadata?: Record<string, unknown>;
 }
 
+export interface KnowledgeActivityPayload {
+  events: Array<{
+    id: string;
+    action: string;
+    recordType: string;
+    recordId?: string;
+    scope: KnowledgeScope;
+    node: {
+      id: string;
+      name: string;
+      rung: 'org' | 'resource' | 'thread';
+      threadId?: string;
+    };
+    createdAt: string;
+  }>;
+}
+
+interface VisibleKnowledgeActivity {
+  event: KnowledgeActivityEvent;
+  node: KnowledgeNode;
+}
+
 export interface KnowledgeNodePayload {
   node: {
     id: string;
     name: string;
     kind: string;
     content: string;
+    description?: string;
     scope: KnowledgeScope;
     rung: 'org' | 'resource' | 'thread';
     createdAt: string;
@@ -243,6 +304,38 @@ function deepestRung(scope: KnowledgeScope): 'org' | 'resource' | 'thread' {
  */
 function withinViewBoundary(scope: KnowledgeScope, viewScope: KnowledgeScope): boolean {
   return scope.length <= viewScope.length && scope.every((entry, index) => entry === viewScope[index]);
+}
+
+function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSummary): number {
+  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+}
+
+function scopesWithinOrg(nodes: KnowledgeScopeNodeSummary[], orgId: string): KnowledgeScopeNodeSummary[] {
+  const childrenByParent = new Map<string, KnowledgeScopeNodeSummary[]>();
+  for (const node of nodes) {
+    for (const parentId of node.parentIds) {
+      const children = childrenByParent.get(parentId) ?? [];
+      children.push(node);
+      childrenByParent.set(parentId, children);
+    }
+  }
+
+  const visibleIds = new Set<string>();
+  const queue = nodes.filter(node => node.address === `org:${orgId}`);
+  for (let index = 0; index < queue.length; index += 1) {
+    const node = queue[index];
+    if (!node || visibleIds.has(node.id)) continue;
+    visibleIds.add(node.id);
+    queue.push(...(childrenByParent.get(node.id) ?? []));
+  }
+  return nodes.filter(node => visibleIds.has(node.id));
+}
+
+function knowledgeSearchRank(name: string, query: string): number {
+  const normalized = name.toLocaleLowerCase();
+  if (normalized === query) return 0;
+  if (normalized.startsWith(query)) return 1;
+  return 2;
 }
 
 function boundedThreadId(raw: string | undefined): string | undefined {
@@ -566,11 +659,117 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           // themselves — never synthesized from the identity rungs. Adapters
           // without the structural read (MySQL/MongoDB) omit the tree; any
           // other failure is a real storage error and must surface as one.
-          let scopeNodes: KnowledgeScopeNodeSummary[] | undefined;
+          let scopeNodes: KnowledgeScopeTreeNode[] | undefined;
+          let nextCursor: string | undefined;
+          const childCursors: Record<string, string> = {};
+          let storedScopeNodes: KnowledgeScopeNodeSummary[] = [];
           try {
-            scopeNodes = (await view.store.listScopeNodes()).map(node =>
-              node.address === `resource:${view.factoryProjectId}` ? { ...node, name: view.factoryProjectName } : node,
-            );
+            storedScopeNodes = scopesWithinOrg(await view.store.listScopeNodes(), view.orgId);
+            const scopeNodeById = new Map(storedScopeNodes.map(node => [node.id, node]));
+            const childScopeCountByParent = new Map<string, number>();
+            for (const node of storedScopeNodes) {
+              for (const parentId of node.parentIds) {
+                childScopeCountByParent.set(parentId, (childScopeCountByParent.get(parentId) ?? 0) + 1);
+              }
+            }
+
+            const parentId = loose(c).req.query('parentId');
+            const cursor = loose(c).req.query('cursor');
+            if (parentId && !UUID_RE.test(parentId)) {
+              return c.json({ error: 'invalid_scope_parent' }, 400);
+            }
+            if (cursor && !UUID_RE.test(cursor)) {
+              return c.json({ error: 'invalid_scope_cursor' }, 400);
+            }
+            if (parentId && !scopeNodeById.has(parentId)) {
+              return c.json({ error: 'scope_not_found' }, 404);
+            }
+
+            const siblings = storedScopeNodes
+              .filter(node => (parentId ? node.parentIds.includes(parentId) : node.parentIds.length === 0))
+              .sort(compareScopeNodes);
+            const cursorIndex = cursor ? siblings.findIndex(node => node.id === cursor) : -1;
+            if (cursor && cursorIndex < 0) {
+              return c.json({ error: 'invalid_scope_cursor' }, 400);
+            }
+            const pageStart = cursorIndex + 1;
+            const siblingPage = siblings.slice(pageStart, pageStart + SCOPE_PAGE_SIZE);
+            if (pageStart + siblingPage.length < siblings.length) {
+              nextCursor = siblingPage.at(-1)?.id;
+            }
+
+            const returnedById = new Map(siblingPage.map(node => [node.id, node]));
+            if (!parentId) {
+              // Initial load: roots plus their first page of immediate children.
+              // Deeper levels are fetched only when that scope is expanded.
+              for (const root of siblingPage) {
+                const children = storedScopeNodes
+                  .filter(node => node.parentIds.includes(root.id))
+                  .sort(compareScopeNodes);
+                const returnedChildren: KnowledgeScopeNodeSummary[] = [];
+                for (const child of children.slice(0, SCOPE_PAGE_SIZE)) {
+                  if (returnedById.size >= this.#limits.maxNodes) break;
+                  returnedById.set(child.id, child);
+                  returnedChildren.push(child);
+                }
+                if (returnedChildren.length < children.length) {
+                  const lastChild = returnedChildren.at(-1);
+                  if (lastChild) childCursors[root.id] = lastChild.id;
+                }
+              }
+
+              // The active identity chain must remain present even when it is
+              // deeper than one level, or rung/tree dedup would regress on a
+              // thread view. Include only those matched nodes and ancestors.
+              const identityAddresses = new Set([
+                `org:${view.orgId}`,
+                `resource:${view.factoryProjectId}`,
+                ...(view.threadId ? [`thread:${view.threadId}`] : []),
+              ]);
+              const includeWithParents = (node: KnowledgeScopeNodeSummary): void => {
+                if (returnedById.has(node.id) || returnedById.size >= this.#limits.maxNodes) return;
+                for (const ancestorId of node.parentIds) {
+                  const ancestor = scopeNodeById.get(ancestorId);
+                  if (ancestor) includeWithParents(ancestor);
+                }
+                returnedById.set(node.id, node);
+              };
+              for (const node of storedScopeNodes) {
+                if (identityAddresses.has(node.address)) includeWithParents(node);
+              }
+            }
+
+            scopeNodes = [];
+            const returnedNodes = [...returnedById.values()].sort(compareScopeNodes);
+            for (let index = 0; index < returnedNodes.length; index += SCOPE_COUNT_CONCURRENCY) {
+              const batch = returnedNodes.slice(index, index + SCOPE_COUNT_CONCURRENCY);
+              scopeNodes.push(
+                ...(await Promise.all(
+                  batch.map(async node => {
+                    const members = await view.store.listScopeMembers({
+                      scopeNodeId: node.id,
+                      limit: this.#limits.maxNodes + 1,
+                    });
+                    const visibleContentCount = members.filter(
+                      member =>
+                        !member.isScope && Array.isArray(member.scope) && withinViewBoundary(member.scope, view.scope),
+                    ).length;
+                    const childScopeCount = childScopeCountByParent.get(node.id) ?? 0;
+                    const directMemberCount = childScopeCount + visibleContentCount;
+                    return {
+                      ...node,
+                      ...(node.address === `resource:${view.factoryProjectId}`
+                        ? { name: view.factoryProjectName }
+                        : {}),
+                      memberCount: Math.min(directMemberCount, this.#limits.maxNodes),
+                      memberCountTruncated:
+                        directMemberCount > this.#limits.maxNodes || members.length >= this.#limits.maxNodes,
+                      childScopeCount,
+                    };
+                  }),
+                )),
+              );
+            }
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
             scopeNodes = undefined;
@@ -578,7 +777,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           // Deduplicate: when a reconciled scope node owns an identity rung's
           // canonical address, the rung entry carries the structural match so
           // the client renders one entry instead of two labels for one scope.
-          const scopeNodeByAddress = new Map((scopeNodes ?? []).map(node => [node.address, node]));
+          const scopeNodeByAddress = new Map(storedScopeNodes.map(node => [node.address, node]));
           const rungs = [
             { level: 'org' as const, id: view.orgId, available: true },
             { level: 'resource' as const, id: view.factoryProjectId, available: true },
@@ -587,11 +786,104 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           return c.json({
             roots: rungs.map(rung => {
               const match = scopeNodeByAddress.get(`${rung.level}:${rung.id}`);
-              return match ? { ...rung, scopeNodeId: match.id, name: match.name } : rung;
+              const name =
+                match?.address === `resource:${view.factoryProjectId}` ? view.factoryProjectName : match?.name;
+              return match ? { ...rung, scopeNodeId: match.id, name } : rung;
             }),
             defaultLevel: 'resource',
             ...(scopeNodes ? { scopeNodes } : {}),
+            ...(nextCursor ? { nextCursor } : {}),
+            ...(Object.keys(childCursors).length > 0 ? { childCursors } : {}),
           } satisfies KnowledgeScopeTreePayload);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/search', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const view = await this.#resolveView(loose(c));
+          if ('response' in view) return view.response;
+
+          const query = (loose(c).req.query('q') ?? '').trim().slice(0, SEARCH_QUERY_LIMIT).toLocaleLowerCase();
+          if (query.length < 2) {
+            return c.json({ results: [], truncated: false } satisfies KnowledgeSearchPayload);
+          }
+
+          const scanLimit = Math.min(SEARCH_SCAN_CAP, this.#limits.maxNodes);
+          const [prefixNodes, scannedNodes] = await Promise.all([
+            view.store.listNodes({ scope: view.scope, namePrefix: query, limit: SEARCH_RESULT_LIMIT + 1 }),
+            view.store.listNodes({ scope: view.scope, limit: scanLimit }),
+          ]);
+          const contentById = new Map<string, KnowledgeNode>();
+          for (const node of [...prefixNodes, ...scannedNodes]) {
+            if (
+              node.isScope ||
+              !Array.isArray(node.scope) ||
+              !withinViewBoundary(node.scope, view.scope) ||
+              !node.name.toLocaleLowerCase().includes(query)
+            ) {
+              continue;
+            }
+            contentById.set(node.id, node);
+          }
+
+          let structuralScopes: KnowledgeScopeNodeSummary[] = [];
+          try {
+            structuralScopes = scopesWithinOrg(await view.store.listScopeNodes(), view.orgId).filter(node =>
+              node.name.toLocaleLowerCase().includes(query),
+            );
+          } catch (error) {
+            if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
+          }
+
+          const results: KnowledgeSearchResult[] = [
+            ...structuralScopes.map(scopeNode => {
+              const rung =
+                scopeNode.address === `org:${view.orgId}`
+                  ? ('org' as const)
+                  : scopeNode.address === `resource:${view.factoryProjectId}`
+                    ? ('resource' as const)
+                    : view.threadId && scopeNode.address === `thread:${view.threadId}`
+                      ? ('thread' as const)
+                      : null;
+              return {
+                id: scopeNode.id,
+                name:
+                  scopeNode.address === `resource:${view.factoryProjectId}` ? view.factoryProjectName : scopeNode.name,
+                kind: scopeNode.kind ?? 'scope',
+                type: 'scope' as const,
+                rung,
+                address: scopeNode.address,
+                ...(scopeNode.description ? { description: scopeNode.description } : {}),
+              };
+            }),
+            ...[...contentById.values()].map(node => {
+              const rung = deepestRung(node.scope);
+              const threadId =
+                rung === 'thread' ? node.scope.find(address => address.startsWith('thread:'))?.slice(7) : undefined;
+              return {
+                id: node.id,
+                name: node.name,
+                kind: node.kind,
+                type: 'node' as const,
+                rung,
+                ...(threadId ? { threadId } : {}),
+              };
+            }),
+          ].sort(
+            (a, b) =>
+              knowledgeSearchRank(a.name, query) - knowledgeSearchRank(b.name, query) ||
+              a.name.localeCompare(b.name) ||
+              a.id.localeCompare(b.id),
+          );
+
+          return c.json({
+            results: results.slice(0, SEARCH_RESULT_LIMIT),
+            truncated:
+              results.length > SEARCH_RESULT_LIMIT ||
+              prefixNodes.length > SEARCH_RESULT_LIMIT ||
+              scannedNodes.length >= scanLimit,
+          } satisfies KnowledgeSearchPayload);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
@@ -618,7 +910,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
             let scopeNodes: KnowledgeScopeNodeSummary[];
             try {
-              scopeNodes = await store.listScopeNodes();
+              scopeNodes = scopesWithinOrg(await store.listScopeNodes(), resolved.orgId);
             } catch (error) {
               // Adapters without the structural read have no lenses to serve.
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
@@ -940,6 +1232,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               name: node.name,
               kind: node.kind,
               content: node.content ?? '',
+              ...(node.description ? { description: node.description } : {}),
               scope: node.scope,
               rung: deepestRung(node.scope),
               createdAt: node.createdAt.toISOString(),
@@ -965,7 +1258,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
             let scopeNodes: KnowledgeScopeNodeSummary[];
             try {
-              scopeNodes = await resolved.store.listScopeNodes();
+              scopeNodes = scopesWithinOrg(await resolved.store.listScopeNodes(), resolved.orgId);
             } catch (error) {
               if (error instanceof KnowledgeUnsupportedCapabilityError) {
                 return c.json({ error: 'scope_not_found' }, 404);
@@ -986,16 +1279,29 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!selected) return c.json({ error: 'scope_not_found' }, 404);
             view = selected;
           }
-          const events = await this.#visibleActivity(view, memberIds);
-          return c.json({
-            events: events.map(event => ({
-              id: event.id,
-              action: event.action,
-              recordType: event.recordType,
-              scope: event.scope,
-              createdAt: event.createdAt.toISOString(),
-            })),
-          });
+          const activity = await this.#visibleActivity(view, memberIds);
+          const payload: KnowledgeActivityPayload = {
+            events: activity.map(({ event, node }) => {
+              const rung = deepestRung(node.scope);
+              const threadId =
+                rung === 'thread' ? node.scope.find(address => address.startsWith('thread:'))?.slice(7) : undefined;
+              return {
+                id: event.id,
+                action: event.action,
+                recordType: event.recordType,
+                ...(event.recordType === 'record' ? { recordId: event.recordId } : {}),
+                scope: event.scope,
+                node: {
+                  id: node.id,
+                  name: node.name,
+                  rung,
+                  ...(threadId ? { threadId } : {}),
+                },
+                createdAt: event.createdAt.toISOString(),
+              };
+            }),
+          };
+          return c.json(payload);
         },
       }),
     ];
@@ -1007,8 +1313,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    * rows are skipped entirely (no action/type/id/time metadata leaks) and a
    * hidden backlog can never displace visible events from the window.
    */
-  async #visibleActivity(view: ResolvedView, memberIds?: Set<string>): Promise<KnowledgeActivityEvent[]> {
-    const out: KnowledgeActivityEvent[] = [];
+  async #visibleActivity(view: ResolvedView, memberIds?: Set<string>): Promise<VisibleKnowledgeActivity[]> {
+    const out: VisibleKnowledgeActivity[] = [];
     let after: string | undefined;
     let scanned = 0;
     while (out.length < ACTIVITY_LIMIT && scanned < ACTIVITY_SCAN_CAP) {
@@ -1017,25 +1323,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       for (const event of batch) {
         after = event.id;
         scanned += 1;
-        const visible =
-          event.recordType === 'node'
-            ? await view.store
-                .getNode(event.recordId)
-                .then(
-                  node =>
-                    node !== null &&
-                    isKnowledgeScopeVisible(node.scope, view.scope) &&
-                    (memberIds === undefined || memberIds.has(node.id)),
-                )
-            : await view.store
-                .getKnowledge({ id: event.recordId })
-                .then(
-                  record =>
-                    record !== null &&
-                    isKnowledgeScopeVisible(record.scope, view.scope) &&
-                    (memberIds === undefined || memberIds.has(record.node)),
-                );
-        if (visible) out.push(event);
+        let targetNode: KnowledgeNode | null;
+        if (event.recordType === 'node') {
+          targetNode = await view.store.getNode(event.recordId);
+        } else {
+          const record = await view.store.getKnowledge({ id: event.recordId });
+          targetNode = record ? await view.store.getNode(record.node) : null;
+          if (record && !isKnowledgeScopeVisible(record.scope, view.scope)) targetNode = null;
+        }
+        if (
+          targetNode &&
+          isKnowledgeScopeVisible(targetNode.scope, view.scope) &&
+          (memberIds === undefined || memberIds.has(targetNode.id))
+        ) {
+          out.push({ event, node: targetNode });
+        }
         if (out.length >= ACTIVITY_LIMIT) break;
       }
     }
