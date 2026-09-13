@@ -295,7 +295,7 @@ describe('Knowledge importer runner', () => {
     const pending = knowledge.getImporter('slack-distiller')!.run(one);
     const pendingAssertion = expect(pending).rejects.toThrow('shut down before the run completed');
     await started.promise;
-    const [running] = (await knowledge.listImportRuns({ importerId: 'slack-distiller' })).runs;
+    const [running] = (await knowledge.listImportRunsInternal({ importerId: 'slack-distiller' })).runs;
     expect(running).toMatchObject({
       status: 'running',
       transcriptThreadId: `knowledge-import-run:${running!.id}`,
@@ -303,7 +303,7 @@ describe('Knowledge importer runner', () => {
 
     await knowledge.shutdownImporters();
     await pendingAssertion;
-    const domain = await knowledge.getStorage();
+    const domain = await knowledge.getStorageInternal();
     await domain.recoverImportRun({
       id: running!.id,
       replacementId: 'replacement-run',
@@ -312,7 +312,7 @@ describe('Knowledge importer runner', () => {
       leaseKey: `__mastra_internal/import-lease/${running!.id}`,
       staleBefore: new Date(Date.now() + 1_000),
     });
-    expect(await knowledge.getImportRun(running!.id)).toMatchObject({
+    expect(await knowledge.getImportRunInternal(running!.id)).toMatchObject({
       status: 'interrupted',
       transcriptThreadId: `knowledge-import-run:${running!.id}`,
     });
