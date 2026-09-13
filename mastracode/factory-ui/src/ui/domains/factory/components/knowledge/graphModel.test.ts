@@ -148,6 +148,15 @@ describe('filterGraph', () => {
     expect(result.edges.map(e => e.id)).toEqual(['wikilink:res-1:res-pinned']);
   });
 
+  it('keeps structural scope nodes when filtering identity rungs', () => {
+    const structural = node('scope-1', { isScope: true, rung: null, scope: null });
+    const result = filterGraph([...nodes, structural], edges, {
+      rungs: new Set(['resource'] as const),
+      pinnedOnly: false,
+    });
+    expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned', 'scope-1']);
+  });
+
   it('pin filter keeps only accented nodes', () => {
     const result = filterGraph(nodes, edges, { rungs: new Set(), pinnedOnly: true });
     expect(result.nodes.map(node => node.id)).toEqual(['res-pinned']);
