@@ -396,7 +396,7 @@ export class MessageHistory implements Processor {
       return transformedMessages;
     }
 
-    return this.addFilteredMessageAnchors(sourceMessages, transformedMessages);
+    return this.addFilteredMessageAnchors(filteredMessages, transformedMessages);
   }
 
   private projectFinalTurnForPersistence(

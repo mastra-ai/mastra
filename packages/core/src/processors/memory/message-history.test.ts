@@ -1437,9 +1437,45 @@ describe('MessageHistory', () => {
         storage: nativeOmStorage,
         toolCallFilter: { exclude: ['secret_tool'] },
         retainFilteredMessageAnchors: true,
-      }).persistMessages({ messages: [message], threadId: 'thread-1', resourceId: 'resource-1' });
+      }).persistMessages({
+        messages: [
+          message,
+          {
+            id: 'msg-empty-preliminary-filter',
+            role: 'assistant',
+            threadId: 'thread-1',
+            resourceId: 'resource-1',
+            createdAt: new Date('2024-01-01T00:00:02Z'),
+            content: { format: 2, parts: [] },
+          },
+          {
+            id: 'msg-working-memory-preliminary-filter',
+            role: 'assistant',
+            threadId: 'thread-1',
+            resourceId: 'resource-1',
+            createdAt: new Date('2024-01-01T00:00:03Z'),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'call',
+                    toolCallId: 'call-update-working-memory',
+                    toolName: 'updateWorkingMemory',
+                    args: { memory: 'hidden' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      });
 
-      expect((nativeOmStorage.saveMessages as any).mock.calls[0][0].messages).toEqual([
+      const nativeOmMessages = (nativeOmStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(nativeOmMessages).toEqual([
         {
           id: 'msg-tool-only-anchor',
           role: 'assistant',
@@ -1449,6 +1485,10 @@ describe('MessageHistory', () => {
           content: { format: 2, parts: [] },
         },
       ]);
+      expect(nativeOmMessages.some(savedMessage => savedMessage.id === 'msg-empty-preliminary-filter')).toBe(false);
+      expect(nativeOmMessages.some(savedMessage => savedMessage.id === 'msg-working-memory-preliminary-filter')).toBe(
+        false,
+      );
 
       const sealedMessage = {
         ...message,

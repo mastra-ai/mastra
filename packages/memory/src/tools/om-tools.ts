@@ -22,12 +22,17 @@ function getMessageParts(msg: MastraDBMessage): any[] {
   return Array.isArray(parts) ? parts : [];
 }
 
-/** Returns true if a message has at least one non-data part with visible content. */
+function getTopLevelTextContent(msg: MastraDBMessage): string | undefined {
+  if (!msg.content || typeof msg.content !== 'object' || Array.isArray(msg.content)) return undefined;
+  const content = (msg.content as { content?: unknown }).content;
+  return typeof content === 'string' ? content : undefined;
+}
+
+/** Returns true if a message has visible content in a non-data part or its top-level content. */
 function hasVisibleParts(msg: MastraDBMessage): boolean {
   if (typeof msg.content === 'string') return (msg.content as string).length > 0;
   const parts = getMessageParts(msg);
-  if (parts.length === 0) return Boolean(msg.content?.content);
-  return parts.some((p: { type?: string; text?: unknown; metadata?: unknown }) => {
+  const hasVisiblePart = parts.some((p: { type?: string; text?: unknown; metadata?: unknown }) => {
     if (p.type?.startsWith('data-')) return false;
     if (p.type === 'text' && p.text === '') {
       const metadata = p.metadata;
@@ -43,6 +48,7 @@ function hasVisibleParts(msg: MastraDBMessage): boolean {
     }
     return true;
   });
+  return hasVisiblePart || Boolean(getTopLevelTextContent(msg));
 }
 
 function getConfiguredToolCallFilter(memory: RecallMemory): MessageHistoryToolCallFilterOptions | undefined {
@@ -673,8 +679,13 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
         parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
       }
     }
-  } else if (msg.content?.content) {
-    parts.push(makePart(msg, 0, 'text', msg.content.content, detail));
+  }
+
+  if (parts.length === 0) {
+    const topLevelContent = getTopLevelTextContent(msg);
+    if (topLevelContent) {
+      parts.push(makePart(msg, 0, 'text', topLevelContent, detail));
+    }
   }
 
   return parts;

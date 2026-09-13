@@ -214,6 +214,7 @@ describe('om-tools', () => {
                   result: { secret: 'RAW_TOP_LEVEL_RESULT' },
                 },
               },
+              { type: 'data-om-observation-end', data: { cycleId: 'top-level-visible-cycle' } },
             ],
           },
           createdAt: new Date('2024-01-01T09:59:00Z'),
@@ -296,6 +297,17 @@ describe('om-tools', () => {
       expect(recalled.messages.some(message => message.id === 'allowed-legacy-tool')).toBe(true);
       expect(recalled.messages.some(message => message.id === 'sealed-marker-only')).toBe(true);
       expect(recalled.messages.some(message => message.id === 'payload-free-anchor')).toBe(false);
+
+      const topLevelVisibleRecall = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'cursor-before',
+        page: -1,
+        limit: 1,
+      });
+      expect(topLevelVisibleRecall.messages).toContain('Top-level visible answer');
+      expect(topLevelVisibleRecall.messages.match(/Top-level visible answer/g)).toHaveLength(1);
 
       const forward = await recallMessages({
         memory: filteredMemory as any,
