@@ -121,8 +121,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <h3 className="text-neutral5 text-ui-md font-medium">Clone Thread</h3>
               <p className="text-neutral3 text-ui-sm mt-1">Create a copy of this conversation</p>
             </div>
-            <Button onClick={handleCloneThread} disabled={isCloning}>
-              <GitFork className="mr-2 h-4 w-4" />
+            <Button onClick={handleCloneThread} disabled={isCloning} icon={<GitFork />}>
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>

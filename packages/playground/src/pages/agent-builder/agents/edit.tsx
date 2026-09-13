@@ -1,5 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -183,6 +185,7 @@ const MobileInitialCtas = () => {
   return (
     <div className="flex flex-col gap-2 lg:hidden" data-testid="agent-builder-mobile-initial-ctas">
       <Button
+        icon={<AgentIcon />}
         variant="primary"
         onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
         data-testid="agent-builder-mobile-initial-cta-chat"
@@ -190,6 +193,7 @@ const MobileInitialCtas = () => {
         Chat with my agent
       </Button>
       <Button
+        icon={<Settings2 />}
         variant="outline"
         onClick={() => startViewTransition(() => next())}
         data-testid="agent-builder-mobile-initial-cta-config"

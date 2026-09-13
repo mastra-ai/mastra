@@ -1482,6 +1482,34 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 
 `trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
 
+#### `mastra api trace query`
+
+Queries completed observability traces with recursive predicates over trace and related span or score fields. The inline JSON input is required. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace query <input>
+mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+```
+
+Inspect the target server's exact request contract before constructing a query:
+
+```bash
+mastra api trace query --schema
+```
+
+The response remains nested under `data` to preserve cursor pagination:
+
+```json
+{
+  "data": {
+    "traces": [],
+    "page": { "next": "opaque-cursor" }
+  }
+}
+```
+
+Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
+
 #### `mastra api trace get`
 
 Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full trace payload.

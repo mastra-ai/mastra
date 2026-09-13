@@ -270,22 +270,22 @@ html.light {
   --text-ui-smd: 0.8125rem;
   --text-ui-md: 0.875rem;
   --text-ui-lg: 1rem;
-  --text-header-xs: 1rem;
-  --text-header-sm: 1.125rem;
-  --text-header-md: 1.25rem;
-  --text-header-lg: 1.5rem;
-  --text-header-xl: 1.75rem;
+  --text-header-xs: 0.875rem;
+  --text-header-sm: 0.9375rem;
+  --text-header-md: 1rem;
+  --text-header-lg: 1.125rem;
+  --text-header-xl: 1.375rem;
 
   --leading-ui-xs: 160%;
   --leading-ui-sm: 150%;
   --leading-ui-smd: 150%;
   --leading-ui-md: 143%;
   --leading-ui-lg: 150%;
-  --leading-header-xs: 137%;
+  --leading-header-xs: 143%;
   --leading-header-sm: 133%;
-  --leading-header-md: 140%;
+  --leading-header-md: 150%;
   --leading-header-lg: 133%;
-  --leading-header-xl: 129%;
+  --leading-header-xl: 127%;
 
   /* Paired line-heights: `text-ui-md` alone yields the DS line-height. */
   --text-ui-xs--line-height: var(--leading-ui-xs);
@@ -326,16 +326,16 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
-  --spacing-form-xs: 1.5rem;
-  --spacing-form-sm: 1.75rem;
-  --spacing-form-md: 2rem;
-  --spacing-form-default: 2.25rem;
-  --spacing-form-lg: 2.5rem;
-  --height-header-default: 48px;
+  --spacing-form-xs: 1.25rem;
+  --spacing-form-sm: 1.5rem;
+  --spacing-form-md: 1.75rem;
+  --spacing-form-default: 1.75rem;
+  --spacing-form-lg: 2rem;
+  --height-header-default: 40px;
   --height-table-header: 28px;
-  --height-table-row: 56px;
-  --height-table-row-small: 40px;
-  --height-badge-default: 28px;
+  --height-table-row: 40px;
+  --height-table-row-small: 32px;
+  --height-badge-default: 20px;
   --height-avatar-sm: 24px;
   --height-avatar-md: 32px;
   --height-avatar-lg: 40px;
@@ -344,11 +344,11 @@ html.light {
   --max-height-icon-default: 16px;
   --max-height-icon-lg: 20px;
   --max-height-icon-sm: 12px;
-  --max-height-header-default: 48px;
+  --max-height-header-default: 40px;
   --max-height-table-header: 28px;
-  --max-height-table-row: 56px;
-  --max-height-table-row-small: 40px;
-  --max-height-badge-default: 28px;
+  --max-height-table-row: 40px;
+  --max-height-table-row-small: 32px;
+  --max-height-badge-default: 20px;
   --max-height-avatar-sm: 24px;
   --max-height-avatar-md: 32px;
   --max-height-avatar-lg: 40px;
@@ -358,11 +358,11 @@ html.light {
   --width-icon-lg: 20px;
   --width-icon-sm: 12px;
   /* Using --spacing-form-* for both height and width */
-  --width-header-default: 48px;
+  --width-header-default: 40px;
   --width-table-header: 28px;
-  --width-table-row: 56px;
-  --width-table-row-small: 40px;
-  --width-badge-default: 28px;
+  --width-table-row: 40px;
+  --width-table-row-small: 32px;
+  --width-badge-default: 20px;
   --width-avatar-sm: 24px;
   --width-avatar-md: 32px;
   --width-avatar-lg: 40px;
@@ -372,11 +372,11 @@ html.light {
   --container-icon-lg: 20px;
   --container-icon-sm: 12px;
   /* Using --spacing-form-* for container sizing */
-  --container-header-default: 48px;
+  --container-header-default: 40px;
   --container-table-header: 28px;
-  --container-table-row: 56px;
-  --container-table-row-small: 40px;
-  --container-badge-default: 28px;
+  --container-table-row: 40px;
+  --container-table-row-small: 32px;
+  --container-badge-default: 20px;
   --container-avatar-sm: 24px;
   --container-avatar-md: 32px;
   --container-avatar-lg: 40px;

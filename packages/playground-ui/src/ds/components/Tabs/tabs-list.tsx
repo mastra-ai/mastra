@@ -10,7 +10,7 @@ import type { TabMeasurement } from './tabs-context';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-const tabListVariants = cva('relative flex items-center text-ui-lg', {
+const tabListVariants = cva('relative flex items-center text-ui-md', {
   variants: {
     variant: {
       line: 'w-max min-w-full border-b border-border1',

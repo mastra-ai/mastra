@@ -81,7 +81,7 @@ const CommandDialog = ({
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
             '[&_[data-slot=command-input-wrapper]_svg]:size-5',
             '**:[[cmdk-input]]:h-12',
-            '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-3',
+            '**:[[cmdk-item]]:p-2',
             '[&_[cmdk-item]_svg]:size-5',
             commandClassName,
           )}
@@ -108,7 +108,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-10 min-w-0 flex-1 rounded-md bg-transparent py-3 text-ui-smd leading-ui-sm text-neutral6',
+          'flex h-form-lg min-w-0 flex-1 rounded-md bg-transparent py-2 text-ui-smd leading-ui-sm text-neutral6',
           'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,

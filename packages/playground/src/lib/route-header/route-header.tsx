@@ -68,8 +68,8 @@ export function RouteHeader() {
             size="sm"
             aria-label={docs.label ?? 'Documentation'}
             className="max-w-[14rem] min-w-0"
+            icon={<DocsIcon />}
           >
-            <DocsIcon />
             <span className="min-w-0 truncate">{docs.label ?? 'Documentation'}</span>
           </Button>
         )}

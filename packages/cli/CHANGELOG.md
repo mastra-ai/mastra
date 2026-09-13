@@ -1,5 +1,15 @@
 # mastra
 
+## 1.30.0-alpha.4
+
+### Minor Changes
+
+- Added the `mastra api trace query` command for advanced observability trace predicates and cursor pagination. ([#23680](https://github.com/mastra-ai/mastra/pull/23680))
+
+  ```bash
+  mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
+  ```
+
 ## 1.29.1-alpha.3
 
 ### Patch Changes

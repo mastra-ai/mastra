@@ -14,9 +14,9 @@ const textareaVariants = cva(
   cn(
     // Base styles with enhanced transitions
     'flex w-full border bg-transparent text-neutral6',
-    'duration-normal transition-all ease-out-custom',
+    'transition-all duration-normal ease-out-custom',
     // Better placeholder styling
-    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
+    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70',
     // Textarea specific
     'min-h-20 resize-y',
@@ -33,9 +33,9 @@ const textareaVariants = cva(
       // so a Textarea reads at the same size as a sibling Input.
       size: {
         sm: 'px-2 py-1.5 text-ui-sm',
-        md: 'px-3 py-2 text-ui-md',
-        default: 'px-3 py-2 text-ui-md',
-        lg: 'px-4 py-3 text-ui-lg',
+        md: 'px-2.5 py-1.5 text-ui-smd',
+        default: 'px-2.5 py-1.5 text-ui-smd',
+        lg: 'px-3 py-2 text-ui-md',
       },
     },
     defaultVariants: {

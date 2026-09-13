@@ -40,10 +40,7 @@ export function AgentViewHeader({ agentId }: AgentViewHeaderProps) {
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2 py-2">
           {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
-              <Icon size="sm">
-                <Pencil />
-              </Icon>
+            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath} icon={<Pencil />}>
               Edit
             </Button>
           )}

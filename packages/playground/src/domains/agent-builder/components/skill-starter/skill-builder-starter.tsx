@@ -108,8 +108,8 @@ export const SkillBuilderStarter = () => {
   };
 
   return (
-    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-6 py-24">
-      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-12">
+    <div className="starter-aurora bg-surface1 flex min-h-full flex-col items-center justify-center px-4 py-16">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
         <h1 className="starter-heading text-neutral6 text-header-lg md:text-header-xl text-center font-serif tracking-tight">
           What skill do you want to build?
         </h1>

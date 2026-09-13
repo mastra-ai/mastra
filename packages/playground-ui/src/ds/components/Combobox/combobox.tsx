@@ -190,8 +190,8 @@ export function Combobox(props: ComboboxProps) {
                   size="sm"
                   className="w-full justify-start"
                   onClick={clearSelection}
+                  icon={<X />}
                 >
-                  <X />
                   {clearLabel}
                 </Button>
               </div>
