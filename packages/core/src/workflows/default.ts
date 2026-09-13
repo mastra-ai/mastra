@@ -154,19 +154,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }): Promise<WorkflowRunStatus | 'superseded' | undefined> {
     if (params.transientExecution) return undefined;
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+    const executionState = await workflowsStore?.getWorkflowExecutionState({
       workflowName: params.workflowId,
       runId: params.runId,
     });
-    if (!snapshot) return undefined;
-    if (snapshot.executionGeneration !== params.executionGeneration) return 'superseded';
+    if (!executionState) return undefined;
+    if (executionState.executionGeneration !== params.executionGeneration) return 'superseded';
     if (
-      snapshot.status === 'success' ||
-      snapshot.status === 'failed' ||
-      snapshot.status === 'canceled' ||
-      snapshot.status === 'tripwire' ||
-      snapshot.status === 'bailed' ||
-      snapshot.status === 'skipped'
+      executionState.status === 'success' ||
+      executionState.status === 'failed' ||
+      executionState.status === 'canceled' ||
+      executionState.status === 'tripwire' ||
+      executionState.status === 'bailed' ||
+      executionState.status === 'skipped'
     ) {
       // executeEntry persists this execution's own step result before control
       // returns here. Do not mistake that local write for an independently
@@ -174,8 +174,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       // and the canonical workflow terminal sequence. A remote terminal write
       // remains distinguishable because it did not update this engine-local
       // persisted-status marker.
-      if (this.getLastPersistedStatus(params.runId) === snapshot.status) return undefined;
-      return snapshot.status;
+      if (this.getLastPersistedStatus(params.runId) === executionState.status) return undefined;
+      return executionState.status;
     }
     return undefined;
   }

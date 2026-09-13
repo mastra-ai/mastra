@@ -51,6 +51,7 @@ import type {
   StorageListWorkflowRunsInput,
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
+  WorkflowExecutionState,
 } from '../../types';
 import { StorageDomain } from '../base';
 
@@ -243,6 +244,26 @@ export abstract class WorkflowsStorage extends StorageDomain {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null>;
+
+  /**
+   * Load only the workflow state required for lifecycle authority checks.
+   * Adapters with status/generation projections should override this method;
+   * the default preserves compatibility by projecting a full snapshot read.
+   */
+  async getWorkflowExecutionState({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowExecutionState | null> {
+    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+    if (!snapshot) return null;
+    return {
+      status: snapshot.status,
+      ...(snapshot.executionGeneration === undefined ? {} : { executionGeneration: snapshot.executionGeneration }),
+    };
+  }
 
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
