@@ -144,12 +144,28 @@ async function askCustomPackName(ctx: SlashCommandContext, defaultName?: string)
   });
 }
 
+/** Detail line fragment: dim lead-in with the chain itself highlighted. */
+function fallbackChainLine(leadIn: string, chain: string): string {
+  return `${theme.fg('dim', leadIn)}${theme.fg('textHighlight', chain)}`;
+}
+
 /** Detail line for the "Set fallback…" row of a pack's action menu. */
 function fallbackActionDetail(packs: ModePack[], packId: string): string {
   const chain = formatPackFallbackChain(loadSettings(), packs, packId);
   return chain
-    ? theme.fg('dim', `  When every account is unavailable, hop to: ${chain}`)
+    ? fallbackChainLine('  When every account is unavailable, hop to: ', chain)
     : theme.fg('dim', '  No fallback — when this pack is unavailable the error surfaces.');
+}
+
+/** "Activate" detail: the pack's model lines plus its fallback chain when one is set. */
+export function activateActionDetail(
+  baseDetail: string,
+  settings: GlobalSettings,
+  packs: ModePack[],
+  packId: string,
+): string {
+  const chain = formatPackFallbackChain(settings, packs, packId);
+  return baseDetail + (chain ? `\n${fallbackChainLine('  fallback → ', chain)}` : '');
 }
 
 async function askCustomPackAction(
@@ -178,7 +194,7 @@ async function askCustomPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: getPackDetail(pack),
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
       fallback: fallbackActionDetail(packs, pack.id),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
@@ -244,7 +260,7 @@ async function askBuiltinPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: getPackDetail(pack),
+      activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
       fallback: fallbackActionDetail(packs, pack.id),
     };
 
@@ -303,7 +319,12 @@ async function askModifiedBuiltinPackAction(
     const selectList = new SelectList(items, items.length, getSelectListTheme());
     const detailText = new Text('', 0, 0);
     const detailById: Record<string, string> = {
-      activate: `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+      activate: activateActionDetail(
+        `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+        loadSettings(),
+        packs,
+        pack.id,
+      ),
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
       fallback: fallbackActionDetail(packs, pack.id),
     };
@@ -773,21 +794,45 @@ export function formatPackFallbackChain(settings: GlobalSettings, packs: ModePac
  * currently highlighted candidate on every cursor move (null = "Clear fallback").
  * Walks a preview copy of settings so hovering never mutates the real ones.
  */
-export function formatFallbackChainPreview(
+function fallbackChainPreviewParts(
   settings: GlobalSettings,
   packs: ModePack[],
   pack: ModePack,
   fallbackId: string | null,
-): string {
+): { leadIn: string; chain: string | null } {
   const preview: GlobalSettings = {
     ...settings,
     models: { ...settings.models, packFallbacks: { ...settings.models.packFallbacks } },
   };
   setPackFallback(preview, pack.id, fallbackId);
   const chain = formatPackFallbackChain(preview, packs, pack.id);
-  return chain
-    ? `When ${pack.name} is unavailable: ${pack.name} → ${chain}`
-    : `No fallback — when ${pack.name} is unavailable the error surfaces.`;
+  return {
+    leadIn: chain
+      ? `When ${pack.name} is unavailable: ${pack.name} → `
+      : `No fallback — when ${pack.name} is unavailable the error surfaces.`,
+    chain,
+  };
+}
+
+export function formatFallbackChainPreview(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return chain ? `${leadIn}${chain}` : leadIn;
+}
+
+/** Picker preview line: dim lead-in with the chain highlighted so it stands out. */
+export function formatFallbackChainPreviewStyled(
+  settings: GlobalSettings,
+  packs: ModePack[],
+  pack: ModePack,
+  fallbackId: string | null,
+): string {
+  const { leadIn, chain } = fallbackChainPreviewParts(settings, packs, pack, fallbackId);
+  return `  ${theme.fg('dim', leadIn)}${chain ? theme.fg('textHighlight', chain) : ''}`;
 }
 
 async function askFallbackTarget(
@@ -801,7 +846,7 @@ async function askFallbackTarget(
 
   const items: SelectItem[] = candidates.map(p => ({
     value: p.id,
-    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('dim', ' (current)') : ''}`,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
   }));
   if (current) {
     items.unshift({
@@ -824,7 +869,7 @@ async function askFallbackTarget(
     };
 
     const chainPreview = (fallbackId: string | null): string =>
-      theme.fg('dim', `  ${formatFallbackChainPreview(settings, packs, pack, fallbackId)}`);
+      formatFallbackChainPreviewStyled(settings, packs, pack, fallbackId);
 
     selectList.onSelectionChange = item => {
       detailText.setText(chainPreview(item.value === '__clear__' ? null : item.value));
@@ -952,7 +997,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       if (!pack) return;
       const fallbackChain = formatPackFallbackChain(settings, packs, packId);
       detailText.setText(
-        getPackDetail(pack) + (fallbackChain ? `\n${theme.fg('dim', `  fallback → ${fallbackChain}`)}` : ''),
+        getPackDetail(pack) + (fallbackChain ? `\n${fallbackChainLine('  fallback → ', fallbackChain)}` : ''),
       );
       ctx.state.ui.requestRender();
     };

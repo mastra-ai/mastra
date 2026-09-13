@@ -201,6 +201,8 @@ export const packFallbackScenario: McE2eScenario = {
 
     terminal.write('\r');
     await runtime.waitForScreenText(/Custom pack: hop-kimi/i, terminal, 8_000);
+    // The Activate detail shows the pack's fallback chain (item: activate preview).
+    await runtime.waitForScreenText(/fallback → anthropic/i, terminal, 8_000);
 
     // Rows: [Activate, Edit, Share, Set fallback…, Delete].
     terminal.write('\x1b[B\x1b[B\x1b[B');
@@ -221,6 +223,23 @@ export const packFallbackScenario: McE2eScenario = {
     // Cancel out without saving; the seeded fallback must be untouched.
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Fallback for hop-kimi/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+
+    // chain-b's fallback (chain-c) IS an accessible pack here, so its picker
+    // row carries the "(current)" marker and its Activate detail shows the chain.
+    terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Custom pack: chain-b/i, terminal, 8_000);
+    await runtime.waitForScreenText(/fallback → chain-c/i, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Fallback for chain-b/i, terminal, 8_000);
+    await runtime.waitForScreenText(/chain-c\s+.*\(current\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/When chain-b is unavailable: chain-b → chain-c/i, terminal, 8_000);
+
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Fallback for chain-b/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.write('\x1b');
