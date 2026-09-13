@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaResetTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
   KNOWLEDGE_TABLE_NAMES,
@@ -96,41 +96,36 @@ async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>)
   );
 }
 
-describe('KnowledgeLibSQL initialization', () => {
-  it('rejects a recognized populated v1 schema without mutation until explicitly reset', async () => {
-    const client = createClient({ url: ':memory:' });
-    try {
-      await seedPublishedKnowledgeV1(client);
-      await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
-      await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
-      await client.execute({
-        sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        args: [
-          '01LEGACY000000000000000000',
-          'node',
-          'Legacy',
-          'legacy',
-          'task',
-          'legacy body',
-          JSON.stringify(['org:acme', 'resource:mastra']),
-          'org:acme\u001fresource:mastra',
-          1,
-          null,
-          new Date().toISOString(),
-          new Date().toISOString(),
-        ],
-      });
-      const beforeSchema = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
-      const beforeNodes = await client.execute('SELECT * FROM mastra_knowledge_nodes');
-
-      const store = new KnowledgeLibSQL({ client });
-      expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
-      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(beforeSchema.rows);
-      expect((await client.execute('SELECT * FROM mastra_knowledge_nodes')).rows).toEqual(beforeNodes.rows);
-
-      await store.dangerouslyReset();
-      expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+createKnowledgeSchemaResetTests(async () => {
+  const client = createClient({ url: ':memory:' });
+  await seedPublishedKnowledgeV1(client);
+  await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+  await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
+  await client.execute({
+    sql: `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    args: [
+      '01LEGACY000000000000000000',
+      'node',
+      'Legacy',
+      'legacy',
+      'task',
+      'legacy body',
+      JSON.stringify(['org:acme', 'resource:mastra']),
+      'org:acme\u001fresource:mastra',
+      1,
+      null,
+      new Date().toISOString(),
+      new Date().toISOString(),
+    ],
+  });
+  const store = new KnowledgeLibSQL({ client });
+  return {
+    store,
+    snapshot: async () => ({
+      schema: (await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows,
+      nodes: (await client.execute('SELECT * FROM mastra_knowledge_nodes')).rows,
+    }),
+    assertResetResult: async () => {
       expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
       expect((await client.execute(`SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}"`)).rows).toEqual([]);
       const tables = await client.execute(
@@ -140,11 +135,12 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(
         (await client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`)).rows[0]?.epoch,
       ).toBe(0);
-    } finally {
-      client.close();
-    }
-  });
+    },
+    cleanup: async () => client.close(),
+  };
+});
 
+describe('KnowledgeLibSQL initialization', () => {
   it.each([
     'CREATE TABLE mastra_knowledge_unknown (id TEXT)',
     'CREATE TRIGGER custom_knowledge_trigger AFTER INSERT ON mastra_knowledge_nodes BEGIN SELECT 1; END',
