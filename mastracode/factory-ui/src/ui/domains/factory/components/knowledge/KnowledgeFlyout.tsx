@@ -166,9 +166,7 @@ function RecordCard({
                 <button
                   type="button"
                   className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
-                  onClick={() => {
-                    if (record.sourceThreadId) onOpenThread?.(record.sourceThreadId);
-                  }}
+                  onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <Txt as="span" variant="body-sm" className="max-w-40 truncate">
                     {record.sourceThreadId}
@@ -188,7 +186,7 @@ function RecordCard({
               </>
             ) : null}
             <dt>Scope chain</dt>
-            <dd className="break-all">{record.scopeIds.join(' → ')}</dd>
+            <dd className="break-all">{record.scope.join(' → ')}</dd>
             <dt>Pinned</dt>
             <dd>{record.pinned ? 'yes' : 'no'}</dd>
           </dl>
@@ -234,7 +232,7 @@ function RecordCard({
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
-  scopeId: string;
+  scopeLevel: KnowledgeRung;
   threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
@@ -248,7 +246,7 @@ export interface KnowledgeFlyoutProps {
 export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
-  scopeId,
+  scopeLevel,
   threadId,
   focusRecordId,
   onSelectRecord,
@@ -256,7 +254,7 @@ export function KnowledgeFlyout({
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeId, threadId);
+  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
 
   return (
     <aside
@@ -293,11 +291,14 @@ export function KnowledgeFlyout({
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
             {nodeQuery.data.node.description?.trim() ? (
+              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+            ) : null}
+            {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
-                <SectionHeader title="Description" />
+                <SectionHeader title="Content" />
                 <CollapsibleContent>
                   <p className="text-foreground px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
-                    <RecordText text={nodeQuery.data.node.description} onNodeRef={onNodeRef} />
+                    <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
                   </p>
                 </CollapsibleContent>
               </Collapsible>
@@ -310,7 +311,7 @@ export function KnowledgeFlyout({
                   <dt>Kind</dt>
                   <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
                   <dt>Scope</dt>
-                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scopeIds.join(' → ')}</dd>
+                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
                   <dt>Created</dt>
                   <dd className="text-foreground text-right">
                     {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
