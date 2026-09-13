@@ -945,16 +945,32 @@ describe('KnowledgeRoutes', () => {
   });
 
   // 7b
-  it('keeps records out of the bounded subgraph and loads them on demand for node detail', async () => {
+  it('projects bounded record relationships with opaque identities and preserves node detail', async () => {
     const h = await createHarness();
     const owner = await node(h.knowledge, 'Deploy Runbook', h.projectScope, 'doc');
     await node(h.knowledge, 'Release Train', h.projectScope, 'process');
     const solo = await record(h.knowledge, owner, 'Runbook owner is the release captain.', h.projectScope, 't-1');
     const pair = await record(h.knowledge, owner, 'Ships on the [[Release Train]].', h.projectScope, 't-1');
 
-    const { body } = await graph(h);
-    expect(body.records).toEqual([]);
+    const { body } = await rawGraph(h);
+    expect(body.records).toHaveLength(2);
+    const ownerHandle = body.nodes.find(entry => entry.name === owner.name)!.id;
+    const targetHandle = body.nodes.find(entry => entry.name === 'Release Train')!.id;
+    expect(body.records).toEqual(
+      expect.arrayContaining([
+        { id: expect.stringMatching(/^kh_/), nodeIds: [ownerHandle], pinned: false, text: solo.text },
+        {
+          id: expect.stringMatching(/^kh_/),
+          nodeIds: [ownerHandle, targetHandle],
+          pinned: false,
+          text: pair.text,
+        },
+      ]),
+    );
+    expect(body.records.map(entry => entry.id)).not.toContain(solo.id);
+    expect(body.records.map(entry => entry.id)).not.toContain(pair.id);
     expect(body.edges).toHaveLength(1);
+    expect(body.edges[0]).toMatchObject({ source: ownerHandle, target: targetHandle });
 
     const detail = await nodeDetail(h, owner.id);
     expect(detail.status, JSON.stringify(detail.body)).toBe(200);
