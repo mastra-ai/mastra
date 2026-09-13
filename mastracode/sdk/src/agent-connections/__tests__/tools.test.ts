@@ -292,7 +292,12 @@ describe('agent connection tools', () => {
         priority: 'high',
         summary: 'Please review this',
         dedupeKey: 'agent-signal:code-agent:resource-1:thread-1:request-1',
-        attributes: { expectsReply: true, messageId: 'request-1', returnPeerId: 'code-agent:resource-1:thread-1' },
+        attributes: {
+          expectsReply: true,
+          messageId: 'request-1',
+          sourcePeerId: 'code-agent:resource-1:thread-1',
+          returnPeerId: 'code-agent:resource-1:thread-1',
+        },
       }),
       expect.objectContaining({
         resourceId: 'resource-2',
@@ -300,6 +305,58 @@ describe('agent connection tools', () => {
         ifIdle: { behavior: 'wake', requireClaimedOwner: true },
       }),
     );
+  });
+
+  it('attributes concurrent fire-and-forget signals from different peer threads', async () => {
+    const sendNotificationSignal = createSignalRuntime();
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const first = createContext([savedPeer()], 'sender-one');
+    const second = createContext([savedPeer()], 'sender-two');
+
+    await Promise.all([
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'First update',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'fire-and-forget-one',
+        },
+        first.context,
+      ),
+      (tools.agent_signal_send as any).execute(
+        {
+          targetId: PEER_ID,
+          summary: 'Second update',
+          priority: 'low',
+          expectsReply: false,
+          messageId: 'fire-and-forget-two',
+        },
+        second.context,
+      ),
+    ]);
+
+    const attributes: Array<Record<string, unknown>> = sendNotificationSignal.mock.calls.map(
+      (call: unknown[]) => (call[0] as { attributes: Record<string, unknown> }).attributes,
+    );
+    expect(attributes).toEqual(
+      expect.arrayContaining([
+        {
+          expectsReply: false,
+          messageId: 'fire-and-forget-one',
+          sourcePeerId: 'code-agent:resource-1:sender-one',
+        },
+        {
+          expectsReply: false,
+          messageId: 'fire-and-forget-two',
+          sourcePeerId: 'code-agent:resource-1:sender-two',
+        },
+      ]),
+    );
+    expect(attributes.every(attributes => !Object.hasOwn(attributes, 'returnPeerId'))).toBe(true);
   });
 
   it('reports unacknowledged delivery as retryable and does not record sent history', async () => {
