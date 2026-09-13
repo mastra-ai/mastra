@@ -13,6 +13,19 @@ import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
+  /**
+   * Ran once this step's suspended snapshot is durably persisted, while the
+   * step's stream is still open.
+   *
+   * A step that announces its own suspension (the agent loop emits
+   * `tool-call-approval` so a UI can render an approval card) must not announce
+   * it before the snapshot exists: the caller can answer immediately, and
+   * `approveToolCall()` would then look for a suspension that has not been
+   * written yet and reject a run that is genuinely suspended
+   * (AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED). Announcing from here makes
+   * "this run is resumable by this id" true at the moment the caller learns it.
+   */
+  onSuspendPersisted?: () => void | Promise<void>;
 } & Record<string, any>;
 
 // Create a unique symbol that only exists at the type level
