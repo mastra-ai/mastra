@@ -23,7 +23,7 @@ function StreamingPreview() {
   const [active, setActive] = useState(true);
 
   return (
-    <div className="flex w-120 flex-col items-start gap-4">
+    <div className="flex w-[min(30rem,calc(100vw-2rem))] flex-col items-start gap-4">
       <Shimmer active={active} className="text-ui-md text-neutral5">
         The assistant keeps the same text node while streaming settles.
       </Shimmer>

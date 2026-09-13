@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fn } from 'storybook/test';
 
 import { SelectDataFilter } from './select-data-filter';
@@ -67,8 +67,14 @@ type Story = StoryObj<typeof SelectDataFilter>;
 function FilterPreview(props: SelectDataFilterProps) {
   const [value, setValue] = useState<SelectDataFilterState>(props.value);
 
+  // Keep the preview in sync when the `value` arg is edited from the Controls panel,
+  // which re-renders the story rather than remounting it.
+  useEffect(() => {
+    setValue(props.value);
+  }, [props.value]);
+
   return (
-    <div className="flex min-h-64 w-120 flex-col items-start gap-4">
+    <div className="flex min-h-64 w-[min(30rem,calc(100vw-2rem))] flex-col items-start gap-4">
       <SelectDataFilter
         {...props}
         value={value}
