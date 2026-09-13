@@ -72,6 +72,113 @@ describe('MessageList logical message identity', () => {
     ]);
   });
 
+  it('binds every signal in the initial input batch and keeps later unlineaged signals unowned after recovery', () => {
+    const list = new MessageList({
+      logicalMessageIdentity: { input: 'input-1', response: 'response-1' },
+    });
+    const initialSignals = [
+      createSignal({ type: 'user-message', contents: 'first' }),
+      createSignal({ type: 'user-message', contents: 'second' }),
+    ];
+
+    list.add(initialSignals, 'input');
+    const initialIds = list.get.all
+      .db()
+      .filter(message => message.role === 'signal')
+      .map(message => getLogicalMessageId(message.content.metadata));
+    expect(initialIds).toEqual(['input-1', 'input-1']);
+
+    const recovered = new MessageList().deserialize(list.serialize());
+    const laterSignal = createSignal({ type: 'user-message', contents: 'later steer' });
+    recovered.add(laterSignal, 'input');
+    expect(
+      getLogicalMessageId(recovered.get.all.db().find(message => message.id === laterSignal.id)?.content.metadata),
+    ).toBeUndefined();
+
+    const direct = new MessageList({
+      logicalMessageIdentity: { input: 'input-direct', response: 'response-direct' },
+    });
+    const firstDirectSignal = createSignal({ type: 'user-message', contents: 'first direct' });
+    const laterDirectSignal = createSignal({ type: 'user-message', contents: 'later direct' });
+    direct.addSignal(firstDirectSignal);
+    direct.addSignal(laterDirectSignal);
+    expect(
+      getLogicalMessageId(direct.get.all.db().find(message => message.id === firstDirectSignal.id)?.content.metadata),
+    ).toBe('input-direct');
+    expect(
+      getLogicalMessageId(direct.get.all.db().find(message => message.id === laterDirectSignal.id)?.content.metadata),
+    ).toBeUndefined();
+
+    const emptyThenSignal = new MessageList({
+      logicalMessageIdentity: { input: 'input-after-empty', response: 'response-after-empty' },
+    });
+    emptyThenSignal.add([], 'input');
+    const signalAfterEmpty = createSignal({ type: 'user-message', contents: 'after empty batch' });
+    emptyThenSignal.addSignal(signalAfterEmpty);
+    expect(
+      getLogicalMessageId(
+        emptyThenSignal.get.all.db().find(message => message.id === signalAfterEmpty.id)?.content.metadata,
+      ),
+    ).toBe('input-after-empty');
+
+    const reactiveThenUser = new MessageList({
+      logicalMessageIdentity: { input: 'input-after-reactive', response: 'response-after-reactive' },
+    });
+    reactiveThenUser.addSignal(createSignal({ type: 'reactive', contents: 'internal reminder' }));
+    const userAfterReactive = createSignal({ type: 'user-message', contents: 'user after reminder' });
+    reactiveThenUser.addSignal(userAfterReactive);
+    expect(
+      getLogicalMessageId(
+        reactiveThenUser.get.all.db().find(message => message.id === userAfterReactive.id)?.content.metadata,
+      ),
+    ).toBe('input-after-reactive');
+  });
+
+  it('overrides stale metadata on ordinary caller input with the active input identity', () => {
+    const list = new MessageList({
+      logicalMessageIdentity: { input: 'input-current', response: 'response-1' },
+    });
+
+    list.add(
+      {
+        ...message('user-1', 'user', 'hello'),
+        content: {
+          ...message('user-1', 'user', 'hello').content,
+          metadata: { logicalMessageId: 'input-old' },
+        },
+      },
+      'input',
+    );
+
+    expect(getLogicalMessageId(list.get.all.db()[0]?.content.metadata)).toBe('input-current');
+  });
+
+  it('keeps a lineaged response separate from a recalled assistant owned by another identity', () => {
+    const list = new MessageList({
+      threadId: 'thread-1',
+      logicalMessageIdentity: { input: 'input-current', response: 'response-current' },
+    });
+
+    list.add(
+      {
+        ...message('recalled-assistant', 'assistant', 'old answer'),
+        content: {
+          ...message('recalled-assistant', 'assistant', 'old answer').content,
+          metadata: { logicalMessageId: 'response-old' },
+        },
+      },
+      'memory',
+    );
+    list.add(message('new-assistant', 'assistant', 'new answer'), 'response');
+
+    const assistants = list.get.all.db().filter(candidate => candidate.role === 'assistant');
+    expect(assistants).toHaveLength(2);
+    expect(assistants.map(candidate => getLogicalMessageId(candidate.content.metadata))).toEqual([
+      'response-old',
+      'response-current',
+    ]);
+  });
+
   it('rejects malformed identity values instead of admitting an untracked turn', () => {
     expect(
       () =>

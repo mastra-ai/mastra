@@ -7785,6 +7785,30 @@ export class Session {
       throw err;
     }
 
+    // A full logical pair owns a fresh response stream. If an active run
+    // appears before the durable reservation, fail at the boundary instead of
+    // letting the native default active-delivery policy silently drop the
+    // response identity. Idempotent retries still attach to their durable
+    // duplicate before this guard rejects new work.
+    if (logicalMessageIdentity !== undefined && sub.activeRunId() !== null) {
+      const duplicate = duplicateProbe !== undefined ? await duplicateProbe.catch(() => undefined) : undefined;
+      if (duplicate) {
+        if (opts.admissionId !== undefined) this._messageAdmissionStarts.delete(opts.admissionId);
+        admissionStart?.resolve(duplicate);
+        try {
+          return await this._returnDuplicateMessageResult(duplicate, opts);
+        } finally {
+          finishOwnedMessageTurn();
+        }
+      }
+      const err = new HarnessConfigError(
+        'message().logicalMessageIdentity',
+        'a full logical message identity cannot be delivered into an active run',
+      );
+      failOwnedMessageTurnBeforeDispatch(err);
+      throw err;
+    }
+
     if (admissionIdentity !== undefined && admissionHash !== undefined && admissionStart !== undefined) {
       try {
         const reservation = await Promise.race([
@@ -7838,6 +7862,9 @@ export class Session {
     reportAdmissionPhase('evidence_reserved');
 
     let signal;
+    let nativeDispatchStarted = false;
+    let nativeAccepted = false;
+    let nativeRejected = false;
     try {
       signal = agent.sendSignal(
         {
@@ -7850,6 +7877,7 @@ export class Session {
           ...(admissionIdentity ? { runId: admissionIdentity.runId } : {}),
           resourceId: this.resourceId,
           threadId: this.threadId,
+          ...(logicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
           ifIdle: {
             behavior: 'wake',
             // The wake branch starts a REAL streamed turn; carry the silent-turn nudge.
@@ -7860,9 +7888,29 @@ export class Session {
           },
         },
       );
+      if (logicalMessageIdentity !== undefined) {
+        nativeDispatchStarted = true;
+        const accepted = await this._awaitSignalNativeAcceptance(
+          signal.accepted,
+          turnAbortSignal,
+          activeTurnWaiter.promise,
+        );
+        if (accepted.action === 'discard') {
+          nativeRejected = true;
+          throw new HarnessConfigError(
+            'message().logicalMessageIdentity',
+            'a full logical message identity cannot be delivered into an active run',
+          );
+        }
+        nativeAccepted = true;
+      }
     } catch (err) {
       let thrown = err;
-      if (admissionIdentity !== undefined && admissionHash !== undefined) {
+      if (
+        admissionIdentity !== undefined &&
+        admissionHash !== undefined &&
+        (!nativeDispatchStarted || nativeAccepted || nativeRejected)
+      ) {
         try {
           await Promise.race([
             this._writeMessageResultEvidence(
@@ -9829,6 +9877,26 @@ export class Session {
       rejectSignalAdmissionStart(err);
     };
 
+    const settleLineagedSignalDispatchRejection = async (runId: string, err: unknown) => {
+      if (signalAdmission === undefined || responseLogicalMessageIdentity === undefined) return;
+      const settled = await this._settleSignalResult(
+        signalAdmission.identity.signalId,
+        {
+          status: 'failed',
+          runId,
+          error: projectHarnessPublicError(err),
+        },
+        signalAdmission,
+      );
+      if (settled === undefined) {
+        throw new HarnessConfigError(
+          'signal().logicalMessageIdentity',
+          'native rejection did not produce durable signal outcome',
+        );
+      }
+      resolveSignalAdmissionStart(settled);
+    };
+
     const isSignalRunActive = (runId: string) => {
       const pendingResume = this._record.pendingResume;
       return (
@@ -10018,6 +10086,7 @@ export class Session {
             runId: dispatching.runId,
             resourceId: this.resourceId,
             threadId: this.threadId,
+            ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
             ifIdle: { behavior: 'discard', streamOptions: {} as never },
             _signalAdmissionAttemptId: dispatching.attemptId,
           } as never,
@@ -10031,6 +10100,15 @@ export class Session {
         const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
         if (accepted.action === 'discard') {
           await stopHeartbeat();
+          if (responseLogicalMessageIdentity !== undefined) {
+            const err = new HarnessConfigError(
+              'signal().logicalMessageIdentity',
+              'a full logical message identity cannot be delivered into an active run',
+            );
+            await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+            claimOwned = false;
+            throw err;
+          }
           await releaseSignalDispatch(dispatching);
           signalAdmissionNativeDispatchStarted = false;
           return undefined;
@@ -10146,9 +10224,23 @@ export class Session {
             {
               resourceId: this.resourceId,
               threadId: this.threadId,
+              ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
               ifIdle: { behavior: 'wake', streamOptions: baseExecOptions as never },
             },
           );
+          if (responseLogicalMessageIdentity !== undefined) {
+            const accepted = await this._awaitSignalNativeAcceptance(
+              dispatched.accepted,
+              turnAbortSignal,
+              activeTurnWaiter.promise,
+            );
+            if (accepted.action === 'discard') {
+              throw new HarnessConfigError(
+                'signal().logicalMessageIdentity',
+                'a full logical message identity cannot be delivered into an active run',
+              );
+            }
+          }
           // Preserve the historical optimistic boundary for ordinary signals:
           // callers receive the handle without waiting for distributed lease or
           // provider preflight.
@@ -10217,6 +10309,7 @@ export class Session {
                   runId: dispatching.runId,
                   resourceId: this.resourceId,
                   threadId: this.threadId,
+                  ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
                   _signalAdmissionAttemptId: dispatching.attemptId,
                   ifIdle: {
                     behavior: 'wake',
@@ -10233,15 +10326,21 @@ export class Session {
               );
               if (accepted.action === 'blocked' || accepted.action === 'discard' || accepted.action === 'persist') {
                 await stopHeartbeat();
-                await releaseSignalDispatch(dispatching);
-                claimOwned = false;
-                signalAdmissionNativeDispatchStarted = false;
-                throw new HarnessConfigError(
+                const err = new HarnessConfigError(
                   'signal()',
                   accepted.action === 'blocked'
                     ? 'signal delivery was blocked by a suspended thread'
                     : `signal delivery was not accepted (${accepted.action})`,
                 );
+                if (accepted.action === 'discard' && responseLogicalMessageIdentity !== undefined) {
+                  await settleLineagedSignalDispatchRejection(dispatching.runId, err);
+                  claimOwned = false;
+                  throw err;
+                }
+                await releaseSignalDispatch(dispatching);
+                claimOwned = false;
+                signalAdmissionNativeDispatchStarted = false;
+                throw err;
               }
               signalAdmissionNativeAccepted = true;
               if (accepted.runId !== dispatching.runId) {
@@ -10505,6 +10604,7 @@ export class Session {
           {
             resourceId: this.resourceId,
             threadId: this.threadId,
+            ...(responseLogicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
             // The interleave path ignores streamOptions (they cannot reach an
             // active run), but the ifIdle wake fallback starts a REAL turn —
             // without the ceiling it would die at the agent's 5-step default.
@@ -10513,10 +10613,20 @@ export class Session {
               streamOptions: {
                 maxSteps: HARNESS_SESSION_MAX_STEPS,
                 ...this._createEmptySynthesisOptions(),
+                ...(responseLogicalMessageIdentity ? { logicalMessageIdentity: responseLogicalMessageIdentity } : {}),
               } as never,
             },
           },
         );
+        if (responseLogicalMessageIdentity !== undefined) {
+          const accepted = await this._awaitSignalNativeAcceptance(dispatched.accepted, opts.abortSignal);
+          if (accepted.action === 'discard') {
+            throw new HarnessConfigError(
+              'signal().logicalMessageIdentity',
+              'a full logical message identity cannot be delivered into an active run',
+            );
+          }
+        }
       } catch (err) {
         let thrown = err;
         try {

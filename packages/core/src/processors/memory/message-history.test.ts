@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
-import { createSignal } from '../../agent/signals';
+import { createSignal, isUserAuthoredMessage } from '../../agent/signals';
 import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
@@ -1954,7 +1954,10 @@ describe('MessageHistory', () => {
           resourceId: 'resource-1',
           content: {
             format: 2,
-            metadata: { logicalMessageId: 'input-1', signal: { type: 'user-message' } },
+            metadata: {
+              logicalMessageId: 'input-1',
+              signal: { type: 'user-message', tagName: 'customer-steer' },
+            },
             parts: [{ type: 'text', text: 'hello' }],
           },
         },
@@ -1976,6 +1979,9 @@ describe('MessageHistory', () => {
 
       const saved = (storage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
       expect(saved.map(message => message.id)).toEqual(['logical-input', 'logical-response']);
+      expect(saved[0]?.role).toBe('user');
+      expect(saved[0]?.type).toBeUndefined();
+      expect(isUserAuthoredMessage(saved[0]!)).toBe(true);
       expect(saved.map(message => message.content.metadata)).toEqual([
         { logicalMessageId: 'input-1' },
         { logicalMessageId: 'response-1' },

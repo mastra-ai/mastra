@@ -118,6 +118,7 @@ type MessageListAddOptions = {
 type MessageListInternalAddOptions = {
   assumeNew?: boolean;
   deferFinalization?: boolean;
+  logicalMessageInputBatch?: boolean;
 };
 
 export class MessageList {
@@ -164,6 +165,13 @@ export class MessageList {
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
   private logicalMessageIdentity?: LogicalMessageIdentity;
+  /**
+   * The constructor-created list has one caller input batch that may inherit
+   * the active input identity. This is serialized separately from source
+   * tracking because OM can trim the rows that would otherwise act as the
+   * heuristic for deciding whether the batch is still initial.
+   */
+  private logicalMessageInputBatchPending = false;
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
@@ -214,6 +222,7 @@ export class MessageList {
     this.filterIncompleteToolCalls = filterIncompleteToolCalls ?? true;
     this._agentNetworkAppend = _agentNetworkAppend || false;
     this.logicalMessageIdentity = normalizeLogicalMessageIdentity(logicalMessageIdentity);
+    this.logicalMessageInputBatchPending = this.logicalMessageIdentity !== undefined;
   }
 
   /**
@@ -261,6 +270,16 @@ export class MessageList {
 
   public addSignal(signal: CreatedAgentSignal, options?: { source?: MessageSource }): CreatedAgentSignal {
     const source = options?.source ?? 'input';
+    const logicalMessageInputBatch =
+      source === 'input' && this.logicalMessageInputBatchPending && this.logicalMessageIdentity !== undefined;
+    return this.addSignalInternal(signal, source, logicalMessageInputBatch);
+  }
+
+  private addSignalInternal(
+    signal: CreatedAgentSignal,
+    source: MessageSource,
+    logicalMessageInputBatch = false,
+  ): CreatedAgentSignal {
     const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
     const signalInput = {
@@ -287,7 +306,7 @@ export class MessageList {
     if (signalForTranscript.type !== 'state' && signalForTranscript.transient) {
       this.removeMatchingTransientSignals(dbMessage);
     }
-    this.addOne(dbMessage, source);
+    this.addOne(dbMessage, source, {}, { logicalMessageInputBatch });
     return signalForTranscript;
   }
 
@@ -329,6 +348,11 @@ export class MessageList {
 
     if (!messages) return this;
     const messageArray = Array.isArray(messages) ? messages : [messages];
+    const logicalMessageInputBatch =
+      messageArray.length > 0 &&
+      messageSource === 'input' &&
+      this.logicalMessageInputBatchPending &&
+      this.logicalMessageIdentity !== undefined;
 
     // Record event if recording is enabled
     if (this.isRecording) {
@@ -341,7 +365,7 @@ export class MessageList {
 
     for (const message of messageArray) {
       if (isCreatedAgentSignal(message) && messageSource === 'input') {
-        this.addSignal(message, { source: messageSource });
+        this.addSignalInternal(message, messageSource, logicalMessageInputBatch);
         continue;
       }
 
@@ -365,6 +389,7 @@ export class MessageList {
               : nestedMessage,
             messageSource,
             options,
+            logicalMessageInputBatch ? { logicalMessageInputBatch } : undefined,
           );
         }
         continue;
@@ -379,6 +404,7 @@ export class MessageList {
           : messageInput,
         messageSource,
         options,
+        logicalMessageInputBatch ? { logicalMessageInputBatch } : undefined,
       );
     }
     return this;
@@ -450,6 +476,9 @@ export class MessageList {
       ...(this.logicalMessageIdentity !== undefined
         ? { logicalMessageIdentity: { ...this.logicalMessageIdentity } }
         : {}),
+      ...(this.logicalMessageIdentity !== undefined
+        ? { logicalMessageInputBatchPending: this.logicalMessageInputBatchPending }
+        : {}),
     };
   }
 
@@ -492,6 +521,12 @@ export class MessageList {
     this._agentNetworkAppend = data.agentNetworkAppend;
     if (state.logicalMessageIdentity !== undefined) {
       this.logicalMessageIdentity = normalizeLogicalMessageIdentity(state.logicalMessageIdentity);
+      this.logicalMessageInputBatchPending = state.logicalMessageInputBatchPending ?? false;
+    } else if (this.logicalMessageIdentity !== undefined) {
+      // A pre-lineage snapshot has no reliable way to identify its original
+      // input batch. Keep subsequent recovered signals unowned rather than
+      // inferring ownership from source sets that OM may have trimmed.
+      this.logicalMessageInputBatchPending = false;
     }
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
@@ -2038,15 +2073,24 @@ export class MessageList {
       messageSource === 'response' && messageV2.role === 'assistant'
         ? this.logicalMessageIdentity?.response
         : messageSource === 'input' && isUserAuthoredMessage(messageV2)
-          ? (signalInputLogicalMessageId ??
-            (this.logicalMessageIdentity !== undefined &&
-            (messageV2.role !== 'signal' || this.newUserMessages.size === 0)
-              ? this.logicalMessageIdentity.input
-              : undefined))
+          ? messageV2.role === 'signal'
+            ? (signalInputLogicalMessageId ??
+              (internalOptions.logicalMessageInputBatch === true && this.logicalMessageIdentity !== undefined
+                ? this.logicalMessageIdentity.input
+                : undefined))
+            : this.logicalMessageIdentity?.input
           : undefined;
+    if (
+      messageSource === 'input' &&
+      internalOptions.logicalMessageInputBatch === true &&
+      isUserAuthoredMessage(messageV2)
+    ) {
+      this.logicalMessageInputBatchPending = false;
+    }
     if (logicalMessageId !== undefined) {
       messageV2 = withLogicalMessageId(messageV2, logicalMessageId);
     }
+    const incomingLogicalMessageId = getLogicalMessageId(messageV2.content.metadata);
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -2099,10 +2143,18 @@ export class MessageList {
     // shouldMerge() only decides whether to append to the latest assistant message,
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
+    const latestLogicalMessageId = getLogicalMessageId(latestMessage?.content.metadata);
+    const crossesLogicalResponseBoundary =
+      messageSource === 'response' &&
+      messageV2.role === 'assistant' &&
+      isLatestFromMemory &&
+      incomingLogicalMessageId !== undefined &&
+      latestLogicalMessageId !== incomingLogicalMessageId;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
+      !crossesLogicalResponseBoundary &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {

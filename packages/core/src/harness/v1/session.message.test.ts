@@ -19,10 +19,12 @@ import { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 
 import { buildFakeOutput, extractSignalContents } from './__test-utils__/fake-output';
+import { MockAgent } from './__test-utils__/mock-agent';
 import {
   HarnessAbortedError,
   HarnessAdmissionConflictError,
   HarnessBusyError,
+  HarnessConfigError,
   HarnessOutputGenerationError,
   HarnessValidationError,
 } from './errors';
@@ -377,6 +379,73 @@ describe('Session.message() — default path', () => {
       }),
     ).rejects.toBeInstanceOf(HarnessAdmissionConflictError);
     expect(agent.calls).toHaveLength(1);
+  });
+
+  it('rejects a full logical message when a run becomes active during reservation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+      text: 'active terminal',
+    });
+    const storage = new InMemoryHarness({ db: new InMemoryDB() });
+    const harness = new Harness({
+      agents: { default: agent } as any,
+      modes: [{ id: 'default', agentId: 'default' }],
+      defaultModeId: 'default',
+      sessions: { storage },
+    });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const realWrite = storage.writeMessageResultEvidence.bind(storage);
+    let reservationStarted!: () => void;
+    const reservationObserved = new Promise<void>(resolve => {
+      reservationStarted = resolve;
+    });
+    let releaseReservation!: () => void;
+    const reservationGate = new Promise<void>(resolve => {
+      releaseReservation = resolve;
+    });
+    storage.writeMessageResultEvidence = async record => {
+      if (record.admissionId === 'lineage-message-active-race' && record.status === 'pending') {
+        reservationStarted();
+        await reservationGate;
+      }
+      return realWrite(record);
+    };
+
+    const pending = session.message({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-message-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    await reservationObserved;
+
+    const nativeSubscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    const active = session.message({ content: 'active work' });
+    await vi.waitFor(() => expect(agent.streamCalls).toHaveLength(1));
+    await vi.waitFor(() => expect(nativeSubscription.activeRunId()).not.toBeNull());
+    releaseReservation();
+
+    await expect(pending).rejects.toBeInstanceOf(HarnessConfigError);
+    const identity = (session as any)._messageAdmissionIdentity('lineage-message-active-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'failed' });
+
+    releaseActive();
+    await active;
+    await expect(
+      session.message({
+        content: 'wake with a response owner',
+        admissionId: 'lineage-message-active-race',
+        logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+      }),
+    ).rejects.toMatchObject({ name: 'HarnessExecutionError' });
+    expect(agent.streamCalls).toHaveLength(1);
   });
 
   it('replays a completed admitted message after a cold Harness and storage restart', async () => {

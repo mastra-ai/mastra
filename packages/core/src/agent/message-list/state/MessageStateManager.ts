@@ -362,4 +362,6 @@ export interface SerializedMessageListState {
   newResponseMessagesPersisted: string[];
   userContextMessagesPersisted: string[];
   logicalMessageIdentity?: LogicalMessageIdentity;
+  /** Whether the first admitted input batch may still inherit the active input id. */
+  logicalMessageInputBatchPending?: boolean;
 }

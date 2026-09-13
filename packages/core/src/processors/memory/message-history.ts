@@ -436,8 +436,11 @@ export class MessageHistory implements Processor {
           stableUserContent.experimental_attachments.length > 0);
 
       if (hasStableUserContent) {
+        const { role: _stableUserRole, type: _stableUserType, ...stableUserFields } = stableUser;
         projected.push({
-          ...stableUser,
+          ...stableUserFields,
+          role: stableUser.role === 'signal' ? 'user' : stableUser.role,
+          ...(stableUser.role === 'signal' || stableUser.type === undefined ? {} : { type: stableUser.type }),
           content: {
             ...stableUserContent,
             ...(logicalMessageId ? { metadata: { logicalMessageId } } : {}),

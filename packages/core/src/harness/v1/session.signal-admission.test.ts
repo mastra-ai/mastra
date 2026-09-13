@@ -4,7 +4,12 @@ import { createSignal } from '../../agent/signals';
 import type { InMemoryHarness } from '../../storage/domains/harness/inmemory';
 import { MockAgent } from './__test-utils__/mock-agent';
 import { setupHarness } from './__test-utils__/setup';
-import { HarnessAdmissionConflictError, HarnessSessionNotFoundError, HarnessValidationError } from './errors';
+import {
+  HarnessAdmissionConflictError,
+  HarnessConfigError,
+  HarnessSessionNotFoundError,
+  HarnessValidationError,
+} from './errors';
 import type { HarnessEvent } from './events';
 import type { Session } from './session';
 
@@ -234,6 +239,67 @@ describe('Session.signal() admissionId', () => {
     expect(handle.willInterleave).toBe(false);
     await expect(handle.result).resolves.toMatchObject({ text: 'idle recovery terminal' });
     expect(agent.streamCalls).toHaveLength(2);
+  });
+
+  it('rejects a full logical pair when a run becomes active during its reservation', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let releaseActive!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        releaseActive = resolve;
+      }),
+      text: 'active terminal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+
+    const realWrite = storage.writeMessageResultEvidence.bind(storage);
+    let reservationStarted!: () => void;
+    const reservationObserved = new Promise<void>(resolve => {
+      reservationStarted = resolve;
+    });
+    let releaseReservation!: () => void;
+    const reservationGate = new Promise<void>(resolve => {
+      releaseReservation = resolve;
+    });
+    storage.writeMessageResultEvidence = async record => {
+      if (record.admissionId === 'lineage-active-race' && record.status === 'pending') {
+        reservationStarted();
+        await reservationGate;
+      }
+      return realWrite(record);
+    };
+
+    const pending = session.signal({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    await reservationObserved;
+
+    const active = session.message({ content: 'active work' });
+    await waitForStreamCalls(agent, 1);
+    const nativeSubscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    await waitFor(() => nativeSubscription.activeRunId() !== null, 'native active run registration');
+    releaseReservation();
+
+    await expect(pending).rejects.toBeInstanceOf(HarnessConfigError);
+    const identity = (session as any)._signalAdmissionIdentity('lineage-active-race') as { signalId: string };
+    await expect(session.lookupMessageResult(identity.signalId)).resolves.toMatchObject({ status: 'failed' });
+
+    releaseActive();
+    await active;
+    const duplicate = await session.signal({
+      content: 'wake with a response owner',
+      admissionId: 'lineage-active-race',
+      logicalMessageIdentity: { input: 'input-race', response: 'response-race' },
+    });
+    expect(duplicate).toMatchObject({ accepted: true, willInterleave: true });
+    await expect(duplicate.result).rejects.toMatchObject({ name: 'HarnessExecutionError' });
+    expect(agent.streamCalls).toHaveLength(1);
   });
 
   it('uses the native accepted run id for an admitted active delivery', async () => {
