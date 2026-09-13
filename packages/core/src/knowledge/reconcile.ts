@@ -117,12 +117,11 @@ export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): Kn
   return plan;
 }
 
-export function materializeKnowledgeScopePlan(
+export function resolveKnowledgeScopeType(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
-  input: MaterializeKnowledgeScopeInput,
-): KnowledgeStructurePlan {
+  input: Pick<MaterializeKnowledgeScopeInput, 'address' | 'parameters'>,
+): { pattern: string; config: KnowledgeScopeTypeConfig; parameters: Record<string, string> } {
   assertAddress(input.address);
-  assertAddress(input.contextualScopeAddress);
   const types = validateKnowledgeScopeTypes(scopeTypes);
   const matches = Object.entries(types)
     .filter(([pattern]) => pattern !== 'custom')
@@ -143,6 +142,15 @@ export function materializeKnowledgeScopePlan(
       throw new Error(`Host-vouched Knowledge scope parameter ${key} does not match address ${input.address}`);
     }
   }
+  return { pattern: match?.pattern ?? 'custom', config, parameters };
+}
+
+export function materializeKnowledgeScopePlan(
+  scopeTypes: KnowledgeScopeTypesConfig | undefined,
+  input: MaterializeKnowledgeScopeInput,
+): KnowledgeStructurePlan {
+  assertAddress(input.contextualScopeAddress);
+  const { config, parameters } = resolveKnowledgeScopeType(scopeTypes, input);
 
   const grants = (config.access ?? []).flatMap<KnowledgeStructureGrant>(access => {
     const principal = resolvePrincipal(access.principal, input, parameters);
