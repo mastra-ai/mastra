@@ -112,13 +112,15 @@ describe('static Knowledge importer operations', () => {
     expect(await knowledge.getRecordInternal({ id: imported.id, includeDeleted: true })).toBeNull();
     expect(await knowledge.getRecordInternal({ id: foreign.id })).toEqual(foreign);
 
-    const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
-    const edited = await knowledge.setRecordScopes({
+    const externallyEdited = await node.appendRecord({ id: 'record-edited', text: 'Importer-owned before edit' });
+    const edited = await (
+      await knowledge.getStorageInternal()
+    ).setRecordScopes({
       id: externallyEdited.id,
       version: externallyEdited.version,
       scopeIds: [projectScopeId],
     });
-    expect(await node.removeKnowledge(edited.id)).toBeNull();
+    expect(await node.removeRecord(edited.id)).toBeNull();
     expect(await knowledge.getRecordInternal({ id: edited.id })).toEqual(edited);
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id })).toContainEqual(
       expect.objectContaining({

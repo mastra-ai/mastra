@@ -222,7 +222,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 
   async #getTrackedRecord(id: string): Promise<{ recordId: string; version: number } | undefined> {
-    const state = await this.#knowledge.getImportState({
+    const state = await this.#knowledge.getImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),
@@ -240,7 +240,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async #setTrackedRecord(record: KnowledgeRecord | undefined, id = record?.id): Promise<void> {
     if (!id) return;
-    await this.#knowledge.setImportState({
+    await this.#knowledge.setImportStateInternal({
       importerId: this.#importer.importerId,
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),
