@@ -107,6 +107,23 @@ describe('static Knowledge importer operations', () => {
     expect(await node.removeKnowledge(imported.id)).toBeNull();
     expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
     expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
+
+    const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
+    const edited = await knowledge.setRecordScopes({
+      id: externallyEdited.id,
+      version: externallyEdited.version,
+      scopeIds: [projectScopeId],
+    });
+    expect(await node.removeKnowledge(edited.id)).toBeNull();
+    expect(await knowledge.getRecord({ id: edited.id })).toEqual(edited);
+    expect(await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id })).toContainEqual(
+      expect.objectContaining({
+        action: 'skip',
+        targetType: 'record',
+        targetId: edited.id,
+        details: expect.objectContaining({ reason: 'ownership-changed', source }),
+      }),
+    );
   });
 
   it('keeps reads scoped to the runtime destination binding', async () => {
@@ -180,6 +197,14 @@ describe('static Knowledge importer operations', () => {
     expect(await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
       nodeId: handle.id,
     });
+    expect(await knowledge.listActivity({ scopeIds: [projectScopeId, movedScopeId] })).toContainEqual(
+      expect.objectContaining({
+        action: 'skip',
+        targetType: 'node',
+        targetId: handle.id,
+        details: expect.objectContaining({ reason: 'ownership-changed', source, address: 'event:42' }),
+      }),
+    );
   });
 
   it('enforces append authority and active binding runs', async () => {
