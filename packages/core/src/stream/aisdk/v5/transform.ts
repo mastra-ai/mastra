@@ -658,10 +658,10 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
   return (
     typeof u.inputTokens === 'object' &&
     u.inputTokens !== null &&
-    'total' in (u.inputTokens as object) &&
+    'total' in u.inputTokens &&
     typeof u.outputTokens === 'object' &&
     u.outputTokens !== null &&
-    'total' in (u.outputTokens as object)
+    'total' in u.outputTokens
   );
 }
 
