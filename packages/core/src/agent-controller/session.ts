@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type {
   AgentSignalAttributes,
@@ -680,8 +681,14 @@ export class SessionThread {
     return thread;
   }
 
-  /** Rename the session's active thread. No-op when unbound or storageless. */
-  async rename({ title }: { title: string }): Promise<void> {
+  /**
+   * Rename the session's active thread. No-op when unbound or storageless.
+   *
+   * Renames pin the title by default (`metadata.titlePinned`) so Observational
+   * Memory's title extractor cannot overwrite a user's manual rename. Pass
+   * `pin: false` for programmatic title writes that should keep auto-naming.
+   */
+  async rename({ title, pin = true }: { title: string; pin?: boolean }): Promise<void> {
     const store = this.#store;
     const threadId = this.#threadId;
     if (!threadId || !store?.hasStorage()) return;
@@ -689,7 +696,12 @@ export class SessionThread {
     const thread = await store.getById({ threadId });
     if (thread) {
       await store.saveThread({
-        thread: { ...thread, title, updatedAt: new Date() },
+        thread: {
+          ...thread,
+          title,
+          metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: pin },
+          updatedAt: new Date(),
+        },
       });
       this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
