@@ -5,6 +5,8 @@ import {
   formatArgsSummary,
   formatResult,
   formatToolApproval,
+  formatToolApproved,
+  formatToolDenied,
   formatToolResult,
   formatToolRunning,
   stripToolPrefix,
@@ -335,6 +337,16 @@ export async function editOrPostMessage(args: {
 }
 
 /**
+ * True when a tool message would render as an empty platform message. A
+ * `ToolDisplayFn` that intentionally returns `""` or an empty `{ markdown }`
+ * must not post or edit in a blank bubble, so callers fall back instead.
+ */
+export function isBlankToolMessage(message: PostableMessage): boolean {
+  if (typeof message === 'string') return message.trim().length === 0;
+  return 'markdown' in message && message.markdown.trim().length === 0;
+}
+
+/**
  * Render a built-in `'cards'` or `'text'` tool event as a `PostableMessage`.
  * Both drivers go through this so the lifecycle (post → edit on result) is
  * identical — only the platform-specific post/edit calls differ.
@@ -360,6 +372,12 @@ export function renderBuiltInToolEvent(event: ToolDisplayEvent, mode: 'cards' | 
   }
   if (event.kind === 'error') {
     return formatToolResult(event.displayName, event.argsSummary, event.errorText, true, event.durationMs, useCards);
+  }
+  if (event.kind === 'approved') {
+    return formatToolApproved(event.displayName, event.argsSummary, useCards);
+  }
+  if (event.kind === 'denied') {
+    return formatToolDenied(event.displayName, event.argsSummary, event.byUser, useCards);
   }
   // Approval: always cards (need Approve/Deny buttons). `useCards: false`
   // falls back to a plain "reply approve/deny" hint.
