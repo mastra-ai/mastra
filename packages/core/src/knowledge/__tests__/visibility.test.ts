@@ -162,12 +162,20 @@ describe('Knowledge strict read visibility', () => {
     );
     expect(activity.some(event => event.targetId === hiddenNode.id || event.targetId === secret.id)).toBe(false);
 
+    // Revoke the reader's grant through the governed grant API; reconcile seeds grants
+    // only when it creates a scope, so revocation persists across re-materialization.
+    await storage.removeScopeGrant({ scopeNodeId: visibleScope, scopeRefId: principal });
+    await storage.upsertScopeGrant({
+      scopeNodeId: visibleScope,
+      scopeRefId: structure.scopes['principal:other']!,
+      role: 'readonly',
+    });
     await storage.reconcileStructure({
       scopes: [
         {
           address: 'scope:visible',
           name: 'Visible scope',
-          grants: [{ scopeRefAddress: 'principal:other', role: 'readonly' }],
+          grants: [{ scopeRefAddress: 'principal:reader', role: 'readonly' }],
         },
       ],
     });

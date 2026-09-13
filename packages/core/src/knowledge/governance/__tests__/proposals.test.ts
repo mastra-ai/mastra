@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Knowledge } from '../..';
@@ -286,14 +287,11 @@ describe('Knowledge proposal lifecycle', () => {
       vouchedScopeIds: [ids['principal:suggest']!],
     });
 
-    await storage.reconcileStructure({
-      scopes: [
-        {
-          address: 'scope:source',
-          name: 'Source scope',
-          grants: [{ scopeRefAddress: 'principal:owner', role: 'owner' }],
-        },
-      ],
+    // Revoke the proposer's grant through the governed API; reconcile only seeds grants
+    // at scope creation, so the revocation is durable.
+    await storage.removeScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:suggest']!,
     });
     await expect(lifecycle.list({ vouchedScopeIds: [ids['principal:suggest']!] })).resolves.toMatchObject({
       proposals: [],
@@ -305,14 +303,15 @@ describe('Knowledge proposal lifecycle', () => {
     });
     expect(ownerView.proposals[0]).not.toHaveProperty('proposerContextScopeId');
 
-    await storage.reconcileStructure({
-      scopes: [
-        {
-          address: 'scope:source',
-          name: 'Source scope',
-          grants: [{ scopeRefAddress: 'principal:suggest', role: 'readonly', canSuggest: true }],
-        },
-      ],
+    await storage.removeScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:owner']!,
+    });
+    await storage.upsertScopeGrant({
+      scopeNodeId: ids['scope:source']!,
+      scopeRefId: ids['principal:suggest']!,
+      role: 'readonly',
+      canSuggest: true,
     });
     await expect(lifecycle.list({ vouchedScopeIds: [ids['principal:owner']!] })).resolves.toMatchObject({
       proposals: [],
@@ -354,5 +353,114 @@ describe('Knowledge proposal lifecycle', () => {
       }),
     ).resolves.toMatchObject({ status: 'approved' });
     expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:destination']]);
+  });
+
+  it('applies every governed mutation family with per-target version checks', async () => {
+    const { knowledge, storage, lifecycle, node, ids } = await createFixture();
+    const proposerContextScopeId = ids['principal:suggest']!;
+    const reviewerContextScopeId = ids['principal:owner']!;
+    const proposeAndApprove = async (mutation: Parameters<typeof knowledge.propose>[0]['mutation']) => {
+      const proposal = await knowledge.propose({
+        mutation,
+        proposerContextScopeId,
+        vouchedScopeIds: [proposerContextScopeId],
+      });
+      return lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId,
+        vouchedScopeIds: [reviewerContextScopeId],
+      });
+    };
+
+    const createdId = randomUUID();
+    await proposeAndApprove({
+      kind: 'create-node',
+      mutation: { id: createdId, name: 'Created by proposal', scopeIds: [ids['scope:source']!] },
+    });
+    expect(await storage.getNode(createdId)).toMatchObject({ name: 'Created by proposal' });
+
+    const moved = await storage.getNode(createdId);
+    await proposeAndApprove({
+      kind: 'move-node',
+      mutation: { id: createdId, version: moved!.version, scopeIds: [ids['scope:destination']!] },
+    });
+    expect(await storage.getNodeScopeIds(createdId)).toEqual([ids['scope:destination']]);
+
+    const scopeId = randomUUID();
+    await proposeAndApprove({
+      kind: 'create-scope',
+      address: 'scope:proposed-child',
+      mutation: { id: scopeId, name: 'Proposed child', isScope: true, scopeIds: [ids['scope:source']!] },
+    });
+    expect(await storage.getScopeAddress('scope:proposed-child')).toMatchObject({ scopeNodeId: scopeId });
+
+    await storage.upsertScopeGrant({
+      scopeNodeId: scopeId,
+      scopeRefId: proposerContextScopeId,
+      role: 'readonly',
+      canSuggest: true,
+    });
+    await storage.upsertScopeGrant({ scopeNodeId: scopeId, scopeRefId: reviewerContextScopeId, role: 'owner' });
+    const liveScope = await storage.getNode(scopeId);
+    await proposeAndApprove({
+      kind: 'delete-scope',
+      mutation: { id: scopeId, version: liveScope!.version, deletedBy: proposerContextScopeId },
+    });
+    const deletedScope = await storage.getNodeIncludingDeleted(scopeId);
+    expect(deletedScope?.deletedAt).toBeDefined();
+    await proposeAndApprove({ kind: 'restore-scope', mutation: { id: scopeId, version: deletedScope!.version } });
+    expect((await storage.getNode(scopeId))?.deletedAt).toBeUndefined();
+
+    const record = await storage.createRecord({
+      node: node.id,
+      text: 'Governed record',
+      scopeIds: [ids['scope:source']!],
+    });
+    await proposeAndApprove({
+      kind: 'add-record-scope',
+      mutation: {
+        id: record.id,
+        version: record.version,
+        scopeIds: [ids['scope:source']!, ids['scope:destination']!],
+      },
+    });
+    const stamped = await storage.getRecord({ id: record.id });
+    expect(await storage.getRecordScopeIds(record.id)).toEqual(
+      [ids['scope:destination']!, ids['scope:source']!].sort(),
+    );
+    await proposeAndApprove({
+      kind: 'remove-record-scope',
+      mutation: { id: record.id, version: stamped!.version, scopeIds: [ids['scope:source']!] },
+    });
+
+    const removedStamp = await storage.getRecord({ id: record.id });
+    const deletedRecord = await storage.deleteRecord({
+      id: record.id,
+      version: removedStamp!.version,
+      deletedBy: reviewerContextScopeId,
+    });
+    await proposeAndApprove({
+      kind: 'restore-record',
+      mutation: { id: record.id, version: deletedRecord.version },
+    });
+    expect((await storage.getRecord({ id: record.id }))?.deletedAt).toBeUndefined();
+
+    const deletable = await storage.getNode(createdId);
+    await proposeAndApprove({
+      kind: 'delete-node',
+      mutation: { id: createdId, version: deletable!.version, deletedBy: proposerContextScopeId },
+    });
+    const deletedNode = await storage.getNodeIncludingDeleted(createdId);
+    await proposeAndApprove({
+      kind: 'restore-node',
+      mutation: { id: createdId, version: deletedNode!.version },
+    });
+
+    const mergeSource = await storage.getNode(createdId);
+    await proposeAndApprove({
+      kind: 'merge-nodes',
+      mutation: { sourceId: createdId, targetId: node.id, sourceVersion: mergeSource!.version },
+    });
+    expect(await storage.getNode(createdId)).toBeNull();
   });
 });

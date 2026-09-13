@@ -98,6 +98,8 @@ describe('Knowledge', () => {
     const firstStorage = await first.getStorageInternal();
     await firstStorage.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
     await firstStorage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
+    await firstStorage.upsertScopeGrant({ scopeNodeId: scopeIds[0]!, scopeRefId: scopeIds[0]!, role: 'owner' });
+    await firstStorage.upsertScopeGrant({ scopeNodeId: scopeIds[1]!, scopeRefId: scopeIds[1]!, role: 'owner' });
 
     const nodeId = '10000000-0000-4000-8000-000000000003';
     const node = await firstStorage.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });

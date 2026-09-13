@@ -75,7 +75,7 @@ export interface KnowledgeImportRun {
   completedAt?: Date;
 }
 
-export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted' | 'escalated';
 
 export type KnowledgeProposalApprovalCapability = 'append' | 'edit' | 'delete' | 'createChildren' | 'manageAccess';
 
@@ -91,9 +91,27 @@ export interface KnowledgeProposalTarget {
   type: 'node' | 'record';
   id: string;
   expectedVersion: number;
+  expectedDeleted?: boolean;
   scopeIds: KnowledgeScopeIds;
   approvalCapability: KnowledgeProposalApprovalCapability;
 }
+
+export type KnowledgeProposalMutation =
+  | { kind: 'create-node'; mutation: CreateKnowledgeNodeInput & { id: string; isScope?: false } }
+  | { kind: 'update-node'; mutation: UpdateKnowledgeNodeInput }
+  | { kind: 'move-node'; mutation: UpdateKnowledgeNodeInput & { scopeIds: KnowledgeScopeIds } }
+  | { kind: 'merge-nodes'; mutation: { sourceId: string; targetId: string; sourceVersion: number } }
+  | { kind: 'create-scope'; address: string; mutation: CreateKnowledgeNodeInput & { id: string; isScope: true } }
+  | { kind: 'delete-node'; mutation: DeleteKnowledgeNodeInput }
+  | { kind: 'delete-scope'; mutation: DeleteKnowledgeNodeInput }
+  | { kind: 'restore-node'; mutation: RestoreKnowledgeNodeInput }
+  | { kind: 'restore-scope'; mutation: RestoreKnowledgeNodeInput }
+  | { kind: 'promote-node'; mutation: UpdateKnowledgeNodeInput & { isScope: true } }
+  | { kind: 'restore-record'; mutation: { id: string; version: number } }
+  | {
+      kind: 'add-record-scope' | 'remove-record-scope';
+      mutation: { id: string; version: number; scopeIds: KnowledgeScopeIds };
+    };
 
 export interface KnowledgeProposal {
   id: string;
@@ -137,7 +155,7 @@ export interface ListKnowledgeProposalsOutput {
 
 export interface ReviewKnowledgeProposalInput {
   id: string;
-  status: Exclude<KnowledgeProposalStatus, 'pending' | 'approved'>;
+  status: Exclude<KnowledgeProposalStatus, 'pending'>;
   reviewerContextScopeId: string;
   reviewReason?: string;
   expectedAccessEpoch: number;
@@ -236,7 +254,8 @@ export type KnowledgeActivityAction =
   | 'propose'
   | 'approve'
   | 'reject'
-  | 'conflict';
+  | 'conflict'
+  | 'escalate';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -360,6 +379,22 @@ export interface KnowledgeSemanticOutboxEntry {
 export interface KnowledgeMutationFence {
   /** Access epoch observed by the authorizing facade. Adapters reject stale authorized writes atomically. */
   expectedAccessEpoch?: number;
+}
+
+export interface KnowledgeStructureReconcileOptions extends KnowledgeMutationFence {
+  /** Addresses that the caller proved absent before entering the adapter transaction. */
+  expectedAbsentScopeAddresses?: string[];
+}
+
+export interface DeleteKnowledgeNodeInput extends KnowledgeMutationFence {
+  id: string;
+  version: number;
+  deletedBy: string;
+}
+
+export interface RestoreKnowledgeNodeInput extends KnowledgeMutationFence {
+  id: string;
+  version: number;
 }
 
 export interface CreateKnowledgeNodeInput extends KnowledgeMutationFence {
@@ -647,16 +682,29 @@ export abstract class KnowledgeStorage extends StorageDomain {
       supported: false,
     };
   }
-  async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+  async reconcileStructure(
+    _plan: KnowledgeStructurePlan,
+    _options: KnowledgeStructureReconcileOptions = {},
+  ): Promise<KnowledgeStructureReconcileResult> {
     throw new KnowledgeUnsupportedError();
   }
   async getAccessEpoch(): Promise<number> {
     throw new KnowledgeUnsupportedError();
   }
-  async listScopeGrants(): Promise<KnowledgeScopeGrant[]> {
+  async listScopeGrants(
+    _input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
+  ): Promise<KnowledgeScopeGrant[]> {
     throw new KnowledgeUnsupportedError();
   }
-  async upsertScopeGrant(_grant: KnowledgeScopeGrant): Promise<{ changed: boolean; accessEpoch: number }> {
+  async upsertScopeGrant(
+    _grant: KnowledgeScopeGrant,
+    _fence: KnowledgeMutationFence = {},
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async removeScopeGrant(
+    _input: Pick<KnowledgeScopeGrant, 'scopeNodeId' | 'scopeRefId'> & KnowledgeMutationFence,
+  ): Promise<{ changed: boolean; accessEpoch: number }> {
     throw new KnowledgeUnsupportedError();
   }
   async getImportState(_input: {
@@ -792,6 +840,9 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async getNode(_id: string): Promise<KnowledgeNode | null> {
     throw new KnowledgeUnsupportedError();
   }
+  async getNodeIncludingDeleted(_id: string): Promise<KnowledgeNode | null> {
+    throw new KnowledgeUnsupportedError();
+  }
   async getNodeScopeIds(_nodeId: string): Promise<KnowledgeScopeIds> {
     throw new KnowledgeUnsupportedError();
   }
@@ -805,6 +856,12 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async updateNode(_input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async deleteNode(_input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async restoreNode(_input: RestoreKnowledgeNodeInput): Promise<KnowledgeNode> {
     throw new KnowledgeUnsupportedError();
   }
   async mergeNodes(_input: {

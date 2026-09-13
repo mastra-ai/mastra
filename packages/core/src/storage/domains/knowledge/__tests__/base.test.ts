@@ -298,7 +298,7 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
   });
 
-  it('reconciles exact scope grants and shares access epochs across storage handles', async () => {
+  it('seeds scope grants at creation and shares access epochs across storage handles', async () => {
     const initial = await store.reconcileStructure({
       scopes: [
         { address: 'principal:one', name: 'Principal one' },
@@ -320,26 +320,46 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     expect(await secondHandle.getAccessEpoch()).toBe(1);
     expect(await store.listScopeGrants()).toHaveLength(2);
 
-    const changed = await store.reconcileStructure({
+    // Grant changes on an existing scope flow through the governed grant APIs; reconcile
+    // only seeds grants when it creates the scope.
+    const changed = await store.upsertScopeGrant({
+      scopeNodeId: initial.scopes['project:governed']!,
+      scopeRefId: initial.scopes['principal:one']!,
+      role: 'append',
+      canSuggest: true,
+    });
+    expect(changed.accessEpoch).toBe(2);
+    expect(await secondHandle.getAccessEpoch()).toBe(2);
+    expect(await store.listScopeGrants()).toEqual(
+      expect.arrayContaining([
+        {
+          scopeNodeId: initial.scopes['project:governed'],
+          scopeRefId: initial.scopes['principal:one'],
+          role: 'append',
+          canSuggest: true,
+        },
+      ]),
+    );
+
+    const restated = await store.reconcileStructure({
       scopes: [
         { address: 'principal:one', name: 'Principal one' },
         { address: 'principal:two', name: 'Principal two' },
         {
           address: 'project:governed',
           name: 'Governed',
-          grants: [{ scopeRefAddress: 'principal:one', role: 'append', canSuggest: true }],
+          grants: [{ scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true }],
         },
       ],
     });
-    expect(changed.accessEpoch).toBe(2);
-    expect(await store.listScopeGrants()).toEqual([
-      {
-        scopeNodeId: initial.scopes['project:governed'],
-        scopeRefId: initial.scopes['principal:one'],
-        role: 'append',
-        canSuggest: true,
-      },
-    ]);
+    expect(restated).toMatchObject({ changed: false, accessEpoch: 2 });
+    expect(
+      (await store.listScopeGrants()).find(
+        grant =>
+          grant.scopeNodeId === initial.scopes['project:governed'] &&
+          grant.scopeRefId === initial.scopes['principal:one'],
+      ),
+    ).toMatchObject({ role: 'append', canSuggest: true });
   });
 
   it('rolls back failed structure reconciliation without advancing the access epoch', async () => {

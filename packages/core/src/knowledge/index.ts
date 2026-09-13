@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
@@ -37,17 +38,35 @@ import { getKnowledgeReadableScopeIds, isKnowledgeReadVisible } from './access/r
 import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
+  KnowledgeGapFlags,
+  type FileKnowledgeGapFlagInput,
+  type KnowledgeGapQueueWorkerConfig,
+} from './governance/gaps';
+import {
   KnowledgeProposalLifecycle,
+  type ProposeKnowledgeMutationInput,
   type ProposeKnowledgeNodeUpdateInput,
   type ReviewKnowledgeProposalDecisionInput,
 } from './governance/proposals';
+import {
+  KnowledgeScopeGovernance,
+  type CreateKnowledgeRootScopeInput,
+  type CreateKnowledgeScopeInput,
+  type DeleteGovernedKnowledgeNodeInput,
+  type RestoreGovernedKnowledgeNodeInput,
+  type RestoreKnowledgeRootScopeInput,
+  type RevokeKnowledgeScopeAccessInput,
+  type ShareKnowledgeScopeInput,
+} from './governance/scopes';
 import {
   KnowledgeImporterRegistry,
   type KnowledgeImporterBindingInput,
   type KnowledgeImporterDefinition,
 } from './imports';
 import { KnowledgeImporterRunner } from './imports/runner';
+export * from './governance/gaps';
 export * from './governance/proposals';
+export * from './governance/scopes';
 
 import {
   materializeKnowledgeScopePlan,
@@ -71,7 +90,9 @@ export class Knowledge extends MastraBase {
   #importers = new KnowledgeImporterRegistry();
   #importerRunner = new KnowledgeImporterRunner(this);
   #accessEvaluator?: KnowledgeAccessEvaluator;
+  #gapFlags?: KnowledgeGapFlags;
   #proposalLifecycle?: KnowledgeProposalLifecycle;
+  #scopeGovernance?: KnowledgeScopeGovernance;
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
@@ -143,6 +164,8 @@ export class Knowledge extends MastraBase {
     this.#storage = augmentWithInit(storage);
     this.#storagePromise = undefined;
     this.#accessEvaluator = undefined;
+    this.#proposalLifecycle = undefined;
+    this.#scopeGovernance = undefined;
   }
 
   /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
@@ -204,8 +227,31 @@ export class Knowledge extends MastraBase {
 
   async evaluateAccess(vouchedScopeIds: readonly string[]): Promise<KnowledgeAccessFrontier> {
     const storage = await this.#getStorage();
+    const liveScopeIds: string[] = [];
+    for (const scopeId of vouchedScopeIds) {
+      const scope = await storage.getNode(scopeId);
+      if (scope?.isScope) liveScopeIds.push(scopeId);
+    }
     this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
-    return this.#accessEvaluator.evaluate(vouchedScopeIds);
+    return this.#accessEvaluator.evaluate(liveScopeIds);
+  }
+
+  async fileGapFlag(input: FileKnowledgeGapFlagInput) {
+    return (await this.#getGapFlags()).file(input);
+  }
+
+  async createGapQueueWorker(config: KnowledgeGapQueueWorkerConfig) {
+    return (await this.#getGapFlags()).createWorker(config);
+  }
+
+  async #getGapFlags(): Promise<KnowledgeGapFlags> {
+    const storage = await this.#getStorage();
+    this.#gapFlags ??= new KnowledgeGapFlags(storage, scopeIds => this.evaluateAccess(scopeIds));
+    return this.#gapFlags;
+  }
+
+  async propose(input: ProposeKnowledgeMutationInput) {
+    return (await this.#getProposalLifecycle()).propose(input);
   }
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput) {
@@ -237,6 +283,42 @@ export class Knowledge extends MastraBase {
     const storage = await this.#getStorage();
     this.#proposalLifecycle ??= new KnowledgeProposalLifecycle(storage, scopeIds => this.evaluateAccess(scopeIds));
     return this.#proposalLifecycle;
+  }
+
+  async createScope(input: CreateKnowledgeScopeInput) {
+    return (await this.#getScopeGovernance()).create(input);
+  }
+
+  async createRootScope(input: CreateKnowledgeRootScopeInput) {
+    return (await this.#getScopeGovernance()).createRoot(input);
+  }
+
+  async shareScope(input: ShareKnowledgeScopeInput) {
+    return (await this.#getScopeGovernance()).share(input);
+  }
+
+  async revokeScopeAccess(input: RevokeKnowledgeScopeAccessInput) {
+    return (await this.#getScopeGovernance()).revoke(input);
+  }
+
+  async deleteNode(input: DeleteGovernedKnowledgeNodeInput) {
+    return (await this.#getScopeGovernance()).delete(input);
+  }
+
+  async restoreNode(input: RestoreGovernedKnowledgeNodeInput) {
+    return (await this.#getScopeGovernance()).restore(input);
+  }
+
+  async restoreRootScope(input: RestoreKnowledgeRootScopeInput) {
+    return (await this.#getScopeGovernance()).restoreRoot(input);
+  }
+
+  async #getScopeGovernance(): Promise<KnowledgeScopeGovernance> {
+    const storage = await this.#getStorage();
+    this.#scopeGovernance ??= new KnowledgeScopeGovernance(storage, this.#scopeTypes, scopeIds =>
+      this.evaluateAccess(scopeIds),
+    );
+    return this.#scopeGovernance;
   }
 
   async #resolveReadScopeIds(vouchedScopeIds: KnowledgeScopeIds): Promise<KnowledgeScopeIds> {
@@ -313,12 +395,13 @@ export class Knowledge extends MastraBase {
     return this.#reconcilePromise;
   }
 
+  /** @internal Host-only lazy scope materialization. Agent-created scopes must use createScope(). */
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
     const snapshot = structuredClone(input);
     const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
     const existing = this.#materializePromises.get(snapshot.address);
     if (existing) {
-      if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {
+      if (!isDeepStrictEqual(existing.plan, plan)) {
         throw new Error(`Conflicting materialization is already in progress for Knowledge scope ${snapshot.address}`);
       }
       return existing.promise;

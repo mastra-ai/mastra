@@ -4,7 +4,7 @@ import {
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
 } from '@mastra/core/storage';
-import type { KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeProposalMutation, KnowledgeProposalTarget, KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const ORG_SCOPE_ID = '10000000-0000-4000-8000-000000000001';
@@ -616,6 +616,146 @@ export function createKnowledgeStorageTests(
       }).toEqual(before);
     });
 
+    it('persists recoverable node and empty-scope lifecycle with fenced access changes', async () => {
+      const epoch = await store.getAccessEpoch();
+      await expect(
+        store.upsertScopeGrant(
+          { scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' },
+          { expectedAccessEpoch: epoch + 1 },
+        ),
+      ).rejects.toThrow();
+      const shared = await store.upsertScopeGrant(
+        { scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' },
+        { expectedAccessEpoch: epoch },
+      );
+      expect(shared).toEqual({ changed: true, accessEpoch: epoch + 1 });
+      await expect(
+        store.removeScopeGrant({
+          scopeNodeId: PROJECT_SCOPE_ID,
+          scopeRefId: OTHER_SCOPE_ID,
+          expectedAccessEpoch: epoch,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        store.removeScopeGrant({
+          scopeNodeId: PROJECT_SCOPE_ID,
+          scopeRefId: OTHER_SCOPE_ID,
+          expectedAccessEpoch: shared.accessEpoch,
+        }),
+      ).resolves.toEqual({ changed: true, accessEpoch: shared.accessEpoch + 1 });
+
+      const node = await store.createNode({ name: 'Recoverable node', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Retained through node deletion',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.setNodeAddress({ source: 'recoverable', address: 'node', nodeId: node.id });
+      const deleted = await store.deleteNode({ id: node.id, version: node.version, deletedBy: PROJECT_SCOPE_ID });
+      expect(await store.getNode(node.id)).toBeNull();
+      expect(await store.getNodeIncludingDeleted(node.id)).toMatchObject({ id: node.id, deletedAt: expect.any(Date) });
+      expect(await store.getNodeAddress({ source: 'recoverable', address: 'node' })).toBeNull();
+      expect(await store.listNodeAddresses({ source: 'recoverable' })).toEqual([]);
+      expect(await store.getRecord({ id: record.id })).toMatchObject({ id: record.id, nodeId: node.id });
+      await expect(store.createNode({ name: node.name, scopeIds: [PROJECT_SCOPE_ID] })).rejects.toBeInstanceOf(
+        KnowledgeConflictError,
+      );
+      await expect(store.restoreNode({ id: node.id, version: deleted.version })).resolves.toMatchObject({
+        id: node.id,
+        deletedAt: undefined,
+      });
+      expect(await store.getNodeAddress({ source: 'recoverable', address: 'node' })).toMatchObject({ nodeId: node.id });
+
+      const childScope = await store.createNode({
+        name: 'Recoverable empty scope',
+        isScope: true,
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const member = await store.createNode({ name: 'Blocking member', scopeIds: [childScope.id] });
+      await expect(
+        store.deleteNode({ id: childScope.id, version: childScope.version, deletedBy: PROJECT_SCOPE_ID }),
+      ).rejects.toThrow('Knowledge scope is not empty');
+      await store.deleteNode({ id: member.id, version: member.version, deletedBy: PROJECT_SCOPE_ID });
+      const deletedScope = await store.deleteNode({
+        id: childScope.id,
+        version: childScope.version,
+        deletedBy: PROJECT_SCOPE_ID,
+      });
+      expect((await store.listScopeGrants()).some(grant => grant.scopeNodeId === childScope.id)).toBe(false);
+      await expect(store.restoreNode({ id: childScope.id, version: deletedScope.version })).resolves.toMatchObject({
+        id: childScope.id,
+        deletedAt: undefined,
+      });
+    });
+
+    it('advances owned-record versions so every owner delete and restore cycle re-enqueues vectors', async () => {
+      const node = await store.createNode({ name: 'Cycled owner', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Cycled record body',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      const drain = async () => {
+        const claimed = await store.claimSemanticOutbox({
+          workerId: 'cycle-worker',
+          scopeIds: [PROJECT_SCOPE_ID],
+          limit: 100,
+        });
+        if (claimed.length > 0) {
+          await store.completeSemanticOutbox({ ids: claimed.map(entry => entry.id), workerId: 'cycle-worker' });
+        }
+        return claimed;
+      };
+
+      // Drain the original create upsert to completion so its idempotency
+      // key is consumed — this is the state a real deployment reaches before
+      // any owner lifecycle change.
+      const originalDrain = await drain();
+      expect(originalDrain.some(entry => entry.documentId === documentId && entry.operation === 'upsert')).toBe(true);
+
+      for (let cycle = 1; cycle <= 2; cycle += 1) {
+        const live = await store.getNodeIncludingDeleted(node.id);
+        const deleted = await store.deleteNode({
+          id: node.id,
+          version: live!.version,
+          deletedBy: PROJECT_SCOPE_ID,
+        });
+        expect(await store.search({ query: 'Cycled record body', scopeIds: [PROJECT_SCOPE_ID] })).toEqual([]);
+        const deleteDrain = await drain();
+        expect(deleteDrain.some(entry => entry.documentId === documentId && entry.operation === 'delete')).toBe(true);
+
+        await store.restoreNode({ id: node.id, version: deleted.version });
+        const searchResults = await store.search({ query: 'Cycled record body', scopeIds: [PROJECT_SCOPE_ID] });
+        expect(searchResults.some(result => result.type === 'record' && result.id === record.id)).toBe(true);
+        const restoreDrain = await drain();
+        expect(restoreDrain.some(entry => entry.documentId === documentId && entry.operation === 'upsert')).toBe(true);
+      }
+
+      const finalRecord = await store.getRecord({ id: record.id });
+      // Two full delete/restore cycles advanced the record version twice
+      // beyond the drained create — every cycle left a fresh idempotency key.
+      expect(finalRecord!.version).toBe(record.version + 4);
+    });
+
+    it('filters scope grants by scope node without scanning unrelated grants', async () => {
+      await store.upsertScopeGrant({ scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' });
+      const unrelated = await store.createNode({
+        name: 'Unrelated grant scope',
+        isScope: true,
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      await store.upsertScopeGrant({ scopeNodeId: unrelated.id, scopeRefId: PROJECT_SCOPE_ID, role: 'mirror' });
+
+      const expected = [{ scopeNodeId: PROJECT_SCOPE_ID, scopeRefId: OTHER_SCOPE_ID, role: 'readonly' }];
+      expect(await store.listScopeGrants({ scopeNodeId: PROJECT_SCOPE_ID })).toEqual(expected);
+      expect(await store.listScopeGrants({ scopeNodeId: unrelated.id })).toEqual([
+        { scopeNodeId: unrelated.id, scopeRefId: PROJECT_SCOPE_ID, role: 'mirror' },
+      ]);
+      expect(await store.listScopeGrants({ scopeNodeId: 'missing-scope' })).toEqual([]);
+      expect(await store.listScopeGrants({ scopeNodeId: PROJECT_SCOPE_ID, includeDeleted: true })).toEqual(expected);
+    });
+
     it('accepts memberships only to live scope nodes', async () => {
       const ordinary = await store.createNode({ name: 'Ordinary', scopeIds: [PROJECT_SCOPE_ID] });
       const member = await store.createNode({ name: 'Member', scopeIds: [PROJECT_SCOPE_ID] });
@@ -946,9 +1086,13 @@ export function createKnowledgeStorageTests(
       });
       expect(await store.getScopeAddress('repo:missing')).toBeNull();
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
+      await expect(
+        store.reconcileStructure(plan, { expectedAbsentScopeAddresses: ['repo:mastra'] }),
+      ).rejects.toBeInstanceOf(KnowledgeConflictError);
+      expect(await store.getNodeScopeIds(first.scopes['repo:mastra']!)).toEqual([first.scopes['org:shipyard']!]);
     });
 
-    it('reconciles exact scope grants and advances one shared epoch per transaction', async () => {
+    it('seeds scope grants at creation and never re-imposes them on existing scopes', async () => {
       const epochBefore = await store.getAccessEpoch();
       const initial = await store.reconcileStructure({
         scopes: [
@@ -966,10 +1110,10 @@ export function createKnowledgeStorageTests(
       });
       expect(initial.accessEpoch).toBe(epochBefore + 1);
       expect(await store.getAccessEpoch()).toBe(epochBefore + 1);
-      const governedGrants = (await store.listScopeGrants()).filter(
+      const seededGrants = (await store.listScopeGrants()).filter(
         grant => grant.scopeNodeId === initial.scopes['project:governed'],
       );
-      expect(governedGrants).toEqual(
+      expect(seededGrants).toEqual(
         expect.arrayContaining([
           {
             scopeNodeId: initial.scopes['project:governed'],
@@ -985,7 +1129,7 @@ export function createKnowledgeStorageTests(
           },
         ]),
       );
-      expect(governedGrants).toHaveLength(2);
+      expect(seededGrants).toHaveLength(2);
 
       const unchanged = await store.reconcileStructure({
         scopes: [
@@ -1003,7 +1147,9 @@ export function createKnowledgeStorageTests(
       });
       expect(unchanged).toMatchObject({ changed: false, accessEpoch: epochBefore + 1 });
 
-      const changed = await store.reconcileStructure({
+      // A plan carrying different grants for an existing scope must not mutate governed
+      // grant state: grants are seeded at creation and owned by the governance APIs after.
+      const restated = await store.reconcileStructure({
         scopes: [
           { address: 'principal:one', name: 'Principal one' },
           { address: 'principal:two', name: 'Principal two' },
@@ -1014,17 +1160,79 @@ export function createKnowledgeStorageTests(
           },
         ],
       });
-      expect(changed).toMatchObject({ changed: true, accessEpoch: epochBefore + 2 });
+      expect(restated).toMatchObject({ changed: false, accessEpoch: epochBefore + 1 });
+      expect(
+        (await store.listScopeGrants()).filter(grant => grant.scopeNodeId === initial.scopes['project:governed']),
+      ).toEqual(seededGrants);
+
+      // A governed removal survives re-materialization of the same structure.
+      const removed = await store.removeScopeGrant({
+        scopeNodeId: initial.scopes['project:governed']!,
+        scopeRefId: initial.scopes['principal:two']!,
+      });
+      expect(removed.changed).toBe(true);
+      const epochAfterRemoval = removed.accessEpoch;
+      const rematerialized = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          {
+            address: 'project:governed',
+            name: 'Governed',
+            grants: [
+              { scopeRefAddress: 'principal:one', role: 'readonly', canSuggest: true },
+              { scopeRefAddress: 'principal:two', role: 'mirror' },
+            ],
+          },
+        ],
+      });
+      expect(rematerialized).toMatchObject({ changed: false, accessEpoch: epochAfterRemoval });
       expect(
         (await store.listScopeGrants()).filter(grant => grant.scopeNodeId === initial.scopes['project:governed']),
       ).toEqual([
         {
           scopeNodeId: initial.scopes['project:governed'],
           scopeRefId: initial.scopes['principal:one'],
-          role: 'append',
+          role: 'readonly',
           canSuggest: true,
         },
       ]);
+
+      // A governed grant absent from the plan survives re-materialization too.
+      const shared = await store.upsertScopeGrant({
+        scopeNodeId: initial.scopes['project:governed']!,
+        scopeRefId: initial.scopes['principal:two']!,
+        role: 'readonly',
+      });
+      expect(shared.changed).toBe(true);
+      const reseated = await store.reconcileStructure({
+        scopes: [
+          { address: 'principal:one', name: 'Principal one' },
+          { address: 'principal:two', name: 'Principal two' },
+          { address: 'project:governed', name: 'Governed', grants: [] },
+        ],
+      });
+      expect(reseated).toMatchObject({ changed: false, accessEpoch: shared.accessEpoch });
+      const survivingGrants = (await store.listScopeGrants()).filter(
+        grant => grant.scopeNodeId === initial.scopes['project:governed'],
+      );
+      expect(survivingGrants).toHaveLength(2);
+      expect(survivingGrants).toEqual(
+        expect.arrayContaining([
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:one'],
+            role: 'readonly',
+            canSuggest: true,
+          },
+          {
+            scopeNodeId: initial.scopes['project:governed'],
+            scopeRefId: initial.scopes['principal:two'],
+            role: 'readonly',
+            canSuggest: undefined,
+          },
+        ]),
+      );
     });
 
     it('rejects stale-authority mutations atomically after the access epoch changes', async () => {
@@ -1210,7 +1418,7 @@ export function createKnowledgeStorageTests(
       });
 
       await expect(store.listProposals({ scopeIds: [PROJECT_SCOPE_ID], limit: 1 })).resolves.toEqual({
-        proposals: [expect.objectContaining({ id: visible.id, status: 'pending', reason: 'Correct the title' })],
+        proposals: [],
         nextCursor: undefined,
       });
       await expect(
@@ -1221,7 +1429,8 @@ export function createKnowledgeStorageTests(
         nextCursor: undefined,
       });
       await expect(store.listProposals({ scopeIds: [ORG_SCOPE_ID], limit: 10 })).resolves.toEqual({
-        proposals: [],
+        proposals: [expect.objectContaining({ id: visible.id })],
+        nextCursor: undefined,
       });
 
       const accessEpoch = await store.getAccessEpoch();
@@ -1458,6 +1667,171 @@ export function createKnowledgeStorageTests(
         reviewReason: 'Proposed mutation conflicts with current state',
       });
       await expect(store.getNode(collisionTarget.id)).resolves.toMatchObject({ name: 'Collision target' });
+    });
+
+    it('applies every immutable proposal mutation family atomically', async () => {
+      let proposalIndex = 0;
+      const apply = async (mutation: KnowledgeProposalMutation, targets: KnowledgeProposalTarget[]) => {
+        const expectedAccessEpoch = await store.getAccessEpoch();
+        const proposal = await store.createProposal({
+          id: `proposal-family-${proposalIndex++}`,
+          targets,
+          operation: mutation.kind,
+          payload: mutation,
+          proposerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch,
+        });
+        return store.applyProposal({
+          id: proposal.id,
+          reviewerContextScopeId: PROJECT_SCOPE_ID,
+          expectedAccessEpoch,
+        });
+      };
+      const scopeTarget = async (id: string, capability: KnowledgeProposalTarget['approvalCapability']) => {
+        const scope = await store.getNode(id);
+        return {
+          type: 'node' as const,
+          id,
+          expectedVersion: scope!.version,
+          scopeIds: [id],
+          approvalCapability: capability,
+        };
+      };
+      const nodeTarget = async (
+        id: string,
+        capability: KnowledgeProposalTarget['approvalCapability'],
+        expectedDeleted = false,
+      ) => {
+        const node = await store.getNodeIncludingDeleted(id);
+        return {
+          type: 'node' as const,
+          id,
+          expectedVersion: node!.version,
+          expectedDeleted: expectedDeleted || undefined,
+          scopeIds: await store.getNodeScopeIds(id),
+          approvalCapability: capability,
+        };
+      };
+
+      const createdId = '10000000-0000-4000-8000-000000000071';
+      await apply(
+        { kind: 'create-node', mutation: { id: createdId, name: 'Proposed create', scopeIds: [PROJECT_SCOPE_ID] } },
+        [await scopeTarget(PROJECT_SCOPE_ID, 'append')],
+      );
+      let created = (await store.getNode(createdId))!;
+      await apply(
+        {
+          kind: 'move-node',
+          mutation: { id: created.id, version: created.version, scopeIds: [OTHER_SCOPE_ID] },
+        },
+        [await nodeTarget(created.id, 'manageAccess'), await scopeTarget(OTHER_SCOPE_ID, 'manageAccess')],
+      );
+      expect(await store.getNodeScopeIds(created.id)).toEqual([OTHER_SCOPE_ID]);
+
+      const scopeId = '10000000-0000-4000-8000-000000000072';
+      await apply(
+        {
+          kind: 'create-scope',
+          address: 'scope:proposal-family',
+          mutation: { id: scopeId, name: 'Proposed scope', isScope: true, scopeIds: [PROJECT_SCOPE_ID] },
+        },
+        [await scopeTarget(PROJECT_SCOPE_ID, 'createChildren')],
+      );
+      expect(await store.getScopeAddress('scope:proposal-family')).toMatchObject({ scopeNodeId: scopeId });
+      await apply(
+        {
+          kind: 'delete-scope',
+          mutation: { id: scopeId, version: (await store.getNode(scopeId))!.version, deletedBy: PROJECT_SCOPE_ID },
+        },
+        [await nodeTarget(scopeId, 'manageAccess')],
+      );
+      await apply(
+        {
+          kind: 'restore-scope',
+          mutation: { id: scopeId, version: (await store.getNodeIncludingDeleted(scopeId))!.version },
+        },
+        [await nodeTarget(scopeId, 'manageAccess', true)],
+      );
+
+      const record = await store.createRecord({
+        node: created.id,
+        text: 'Proposal record',
+        scopeIds: [OTHER_SCOPE_ID],
+      });
+      await apply(
+        {
+          kind: 'add-record-scope',
+          mutation: { id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID, PROJECT_SCOPE_ID] },
+        },
+        [
+          {
+            type: 'record',
+            id: record.id,
+            expectedVersion: record.version,
+            scopeIds: [OTHER_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+          await scopeTarget(PROJECT_SCOPE_ID, 'append'),
+        ],
+      );
+      let currentRecord = (await store.getRecord({ id: record.id }))!;
+      await apply(
+        {
+          kind: 'remove-record-scope',
+          mutation: { id: record.id, version: currentRecord.version, scopeIds: [OTHER_SCOPE_ID] },
+        },
+        [
+          {
+            type: 'record',
+            id: record.id,
+            expectedVersion: currentRecord.version,
+            scopeIds: [OTHER_SCOPE_ID, PROJECT_SCOPE_ID],
+            approvalCapability: 'edit',
+          },
+        ],
+      );
+      currentRecord = await store.deleteRecord({
+        id: record.id,
+        version: (await store.getRecord({ id: record.id }))!.version,
+        deletedBy: PROJECT_SCOPE_ID,
+      });
+      await apply({ kind: 'restore-record', mutation: { id: record.id, version: currentRecord.version } }, [
+        {
+          type: 'record',
+          id: record.id,
+          expectedVersion: currentRecord.version,
+          expectedDeleted: true,
+          scopeIds: [OTHER_SCOPE_ID],
+          approvalCapability: 'edit',
+        },
+      ]);
+
+      created = (await store.getNode(created.id))!;
+      await apply(
+        {
+          kind: 'delete-node',
+          mutation: { id: created.id, version: created.version, deletedBy: PROJECT_SCOPE_ID },
+        },
+        [await nodeTarget(created.id, 'manageAccess')],
+      );
+      await apply(
+        {
+          kind: 'restore-node',
+          mutation: { id: created.id, version: (await store.getNodeIncludingDeleted(created.id))!.version },
+        },
+        [await nodeTarget(created.id, 'manageAccess', true)],
+      );
+      created = (await store.getNode(created.id))!;
+      const target = await store.createNode({ name: 'Merge target', scopeIds: [OTHER_SCOPE_ID] });
+      await apply(
+        {
+          kind: 'merge-nodes',
+          mutation: { sourceId: created.id, targetId: target.id, sourceVersion: created.version },
+        },
+        [await nodeTarget(created.id, 'manageAccess'), await nodeTarget(target.id, 'edit')],
+      );
+      expect(await store.getNode(created.id)).toBeNull();
+      expect((await store.getRecord({ id: record.id }))?.nodeId).toBe(target.id);
     });
 
     it('persists tuple-scoped importer state, run lifecycle, and activity linkage', async () => {
