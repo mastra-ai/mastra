@@ -716,6 +716,35 @@ describe('MastraClient', () => {
         );
         expect(result).toEqual(mockMessages);
       });
+
+      it('should pass pagination parameters page, perPage, and orderBy correctly', async () => {
+        const mockResponse = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+          total: 100,
+          page: 1,
+          perPage: 40,
+          hasMore: true,
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+          page: 1,
+          perPage: 40,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1&page=1&perPage=40&orderBy=%7B%22field%22%3A%22createdAt%22%2C%22direction%22%3A%22ASC%22%7D',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockResponse);
+      });
     });
 
     describe('deleteThread', () => {
