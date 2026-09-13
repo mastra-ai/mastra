@@ -525,6 +525,19 @@ function makePart(
   return { messageId: msg.id, partIndex, role: msg.role, type, text, fullText, toolName };
 }
 
+function attachmentUrl(value: unknown): string | undefined {
+  const candidate = value instanceof URL ? value.href : value;
+  // Inline data, local paths and browser-only blob URLs cannot be reused by another tool.
+  if (typeof candidate !== 'string' || !/^https?:\/\//i.test(candidate)) return undefined;
+  try {
+    new URL(candidate);
+    // Keep the original spelling, including signed query parameters.
+    return candidate;
+  } catch {
+    return undefined;
+  }
+}
+
 function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): FormattedPart[] {
   const parts: FormattedPart[] = [];
 
@@ -605,10 +618,23 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
           parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
         }
       } else if (partType === 'image' || partType === 'file') {
-        const filename = (part as any).filename;
+        const attachment = part as {
+          filename?: string;
+          mimeType?: string;
+          mediaType?: string;
+          data?: unknown;
+          image?: unknown;
+          url?: unknown;
+        };
+        const filename = attachment.filename;
         const label = filename ? `: ${filename}` : '';
-        const fullText = `[${partType === 'image' ? 'Image' : 'File'}${label}]`;
-        parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
+        const mediaType = attachment.mediaType ?? attachment.mimeType;
+        const url = attachmentUrl(
+          partType === 'image' ? (attachment.image ?? attachment.url) : (attachment.data ?? attachment.url),
+        );
+        const metadata = url || mediaType ? `\n${JSON.stringify({ mediaType, url })}` : '';
+        const fullText = `[${partType === 'image' ? 'Image' : 'File'}${label}]${metadata}`;
+        parts.push(makePart(msg, i, partType, fullText, detail));
       } else if (partType?.startsWith('data-')) {
         // skip data parts — these are internal OM markers (buffering, observation, etc.)
       } else if (partType) {
@@ -1301,7 +1327,7 @@ export const recallTool = (
           type: 'string',
           enum: ['low', 'high'],
           description:
-            'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
+            'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results and saved HTTP(S) attachment URLs and media types when present. Inline attachment data is not included.',
         },
         partType: {
           type: 'string',
