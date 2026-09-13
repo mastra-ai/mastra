@@ -11,6 +11,7 @@ import {
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
+  isMaybeGoogleWithoutTrailingModelTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
@@ -360,6 +361,53 @@ describe('isMaybeAnthropicWithoutAssistantPrefill', () => {
         { model: 'anthropic/claude-opus-5' },
       ]),
     ).toBe(true);
+  });
+});
+
+describe('isMaybeGoogleWithoutTrailingModelTurn', () => {
+  it('matches Gemini 3 and later Google, Vertex, and gateway-routed models', () => {
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' }),
+    ).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'vertex-ai.google-ai', modelId: 'gemini-3.1-pro-preview' }),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn('google/gemini-3-pro-preview')).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openrouter.chat', modelId: 'google/gemini-3.5-flash-lite' }),
+    ).toBe(true);
+  });
+
+  it('does not match Gemini 2.x, which accepts a trailing model turn', () => {
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' }),
+    ).toBe(false);
+    expect(isMaybeGoogleWithoutTrailingModelTurn('google/gemini-2.0-flash')).toBe(false);
+  });
+
+  it('does not match non-Google models, including Google models behind another provider', () => {
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'gpt-5' })).toBe(false);
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'anthropic.messages', modelId: 'claude-opus-5' })).toBe(
+      false,
+    );
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'openai.chat', modelId: 'google/gemini-3.5-flash-lite' }),
+    ).toBe(false);
+  });
+
+  it('uses a conservative result for unresolved Google model versions and fallback arrays', () => {
+    expect(isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai' })).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn({ provider: 'google.generative-ai', modelId: 'gemini-next-flash' }),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn(() => 'google/gemini-3.5-flash-lite')).toBe(true);
+    expect(
+      isMaybeGoogleWithoutTrailingModelTurn([
+        { model: 'google/gemini-2.5-flash' },
+        { model: 'google/gemini-3.5-flash-lite' },
+      ]),
+    ).toBe(true);
+    expect(isMaybeGoogleWithoutTrailingModelTurn([{ model: 'google/gemini-2.5-flash' }])).toBe(false);
   });
 });
 
