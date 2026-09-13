@@ -1,17 +1,23 @@
 import { ChatAgentContext, ChatRunningContext } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { readToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
+import type { ToolPart } from '@mastra/playground-ui/domains/chat/messages/renderers/tool-part';
 import { WORKSPACE_TOOLS } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MessageRow } from '../../messages/message-row';
+import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
+import { failedParentMessages, partialChildMessages } from './fixtures/failed-delegation';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -20,14 +26,26 @@ const mcpEmptyHandlers = [
   http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
 ];
 
+const queryClients = new Set<QueryClient>();
+
 beforeEach(() => {
   server.use(...mcpEmptyHandlers);
 });
 
-afterEach(() => cleanup());
+afterEach(async () => {
+  cleanup();
+  for (const queryClient of queryClients) queryClient.clear();
+  queryClients.clear();
+  // Unmounting does not cancel React Query notifications already queued on timers.
+  await new Promise(resolve => setTimeout(resolve, 0));
+});
 
 const Providers = ({ children }: { children: ReactNode }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClients.add(client);
+    return client;
+  });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -54,6 +72,14 @@ const Providers = ({ children }: { children: ReactNode }) => {
 };
 
 const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />, { wrapper: Providers });
+
+const ToolPartCard = ({ part }: { part: ToolPart }) => <ToolCard {...readToolPart(part)} />;
+
+const ReloadedDelegation = () => {
+  const { data } = useAgentMessages({ threadId: 'parent-thread', agentId: 'sup', memory: true });
+  const message = data?.messages[0];
+  return message ? <MessageRow message={message} /> : null;
+};
 
 /** Reads the live WorkflowRunContext result so the streaming wiring is observable. */
 const WorkflowResultProbe = ({ onResult }: { onResult: (r: unknown) => void }) => {
@@ -278,6 +304,235 @@ describe('ToolCard dispatch', () => {
       </ChatRunningContext.Provider>,
     );
     expect(screen.getByTestId('tool-badge').getAttribute('data-status')).toBe('error');
+  });
+
+  describe('when a streamed delegation transitions to failure', () => {
+    it('shows the renderer error in the expanded real badge', () => {
+      const part = {
+        type: 'dynamic-tool',
+        toolName: 'agent-head',
+        toolCallId: 'failed-delegation',
+        state: 'input-available',
+        input: { prompt: 'Enrich Acme' },
+      };
+      const { rerender } = render(<ToolPartCard part={part} />, { wrapper: Providers });
+      expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
+      rerender(<ToolPartCard part={{ ...part, state: 'output-error', errorText: 'Provider rejected the request' }} />);
+      expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');
+    });
+  });
+
+  describe('when the user collapses a running delegation before it fails', () => {
+    it('keeps the manual collapse choice while exposing the failure indicator', () => {
+      const part = {
+        type: 'dynamic-tool',
+        toolName: 'agent-head',
+        toolCallId: 'failed-delegation',
+        state: 'input-available',
+        input: {},
+      };
+      const { rerender } = render(<ToolPartCard part={part} />, { wrapper: Providers });
+      fireEvent.click(screen.getByRole('button', { name: 'head' }));
+      rerender(<ToolPartCard part={{ ...part, state: 'output-error', errorText: 'Provider failed' }} />);
+      expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      const button = screen.getByRole('button', { name: /head/ });
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      fireEvent.click(button);
+      expect(screen.getByTestId('agent-error').textContent).toBe('Provider failed');
+    });
+  });
+
+  describe('when a failed delegation includes partial child output', () => {
+    it('shows the partial output alongside the failure', () => {
+      renderToolCard(
+        baseProps({
+          toolName: 'agent-head',
+          state: 'output-error',
+          errorText: 'Provider failed',
+          output: { childMessages: [{ type: 'text', content: 'Partial enrichment' }] },
+        }),
+      );
+      expect(screen.getByText('Partial enrichment')).not.toBeNull();
+      expect(screen.getByTestId('agent-error').textContent).toBe('Provider failed');
+    });
+  });
+
+  describe('when a failed delegation is loaded from memory', () => {
+    it('retrieves the saved child transcript alongside the failure', async () => {
+      const requests: string[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, ({ params, request }) => {
+          requests.push(`${params.threadId}:${new URL(request.url).searchParams.get('agentId')}`);
+          return HttpResponse.json(params.threadId === 'parent-thread' ? failedParentMessages : partialChildMessages);
+        }),
+      );
+      const first = render(<ReloadedDelegation />, { wrapper: Providers });
+      expect(await screen.findByText('Partial enrichment recovered from memory')).not.toBeNull();
+      first.unmount();
+      requests.length = 0;
+      render(<ReloadedDelegation />, { wrapper: Providers });
+      expect(await screen.findByText('Partial enrichment recovered from memory')).not.toBeNull();
+      expect(requests).toEqual(['parent-thread:sup', 'child-thread:head']);
+      expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      expect(screen.getByTestId('agent-error').textContent).toBe('[Agent:sup] - Failed agent tool execution for head');
+    });
+  });
+
+  describe('when a stored tool invocation contains a delegation error', () => {
+    it('passes the error text through the invocation renderer', () => {
+      render(
+        <ToolPartCard
+          part={{
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolName: 'agent-head',
+              toolCallId: 'failed-delegation',
+              args: {},
+              errorText: 'Provider rejected the request',
+            },
+          }}
+        />,
+        { wrapper: Providers },
+      );
+      expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');
+    });
+  });
+
+  describe('when a completed delegation still requires approval', () => {
+    it('keeps the badge expanded with the approval controls visible', () => {
+      render(
+        <AgentBadge
+          agentId="head"
+          messages={[]}
+          toolCallId="approval-call"
+          toolName="agent-head"
+          isNetwork={false}
+          toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
+          isComplete
+        />,
+        { wrapper: Providers },
+      );
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Approve' })).not.toBeNull();
+    });
+  });
+
+  describe('when a completed delegation is still revealing child messages', () => {
+    it('stays expanded until the child messages finish', () => {
+      const props = {
+        agentId: 'head',
+        messages: [],
+        toolCallId: 'streaming-call',
+        toolName: 'agent-head',
+        isNetwork: false,
+        toolApprovalMetadata: undefined,
+        isComplete: true,
+      };
+      const { rerender } = render(<AgentBadge {...props} keepOpenForStreamingChildMessages />, { wrapper: Providers });
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      rerender(<AgentBadge {...props} keepOpenForStreamingChildMessages={false} />);
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  describe('when a child tool returns a falsy output', () => {
+    it.each([false, 0, '', null])('treats %j as complete instead of asking for approval again', toolOutput => {
+      render(
+        <AgentBadge
+          agentId="head"
+          messages={[{ type: 'tool', toolName: 'search', toolCallId: 'child-call', toolOutput }]}
+          toolCallId="approval-call"
+          toolName="agent-head"
+          isNetwork={false}
+          toolApprovalMetadata={{ toolCallId: 'approval-call', toolName: 'agent-head', args: {} }}
+          isComplete
+        />,
+        { wrapper: Providers },
+      );
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    });
+  });
+
+  describe('when a delegation completes successfully', () => {
+    it('does not show an error slot even if stale error text is supplied', () => {
+      render(
+        <AgentBadge
+          agentId="head"
+          messages={[]}
+          toolCallId="successful-delegation"
+          toolName="agent-head"
+          isNetwork={false}
+          toolApprovalMetadata={undefined}
+          isComplete
+          errorText="stale error"
+        />,
+        { wrapper: Providers },
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'head' }));
+      expect(screen.queryByTestId('agent-error')).toBeNull();
+      expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
+    });
+  });
+
+  describe('when a failed delegation has no error text', () => {
+    it('shows the failure indicator without an empty error slot', () => {
+      renderToolCard(baseProps({ toolName: 'agent-head', output: undefined, state: 'output-error' }));
+      expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      expect(screen.queryByTestId('agent-error')).toBeNull();
+    });
+  });
+
+  describe('when a completed delegation is marked failed', () => {
+    it('reopens the collapsed badge and displays the error', () => {
+      const props = {
+        agentId: 'head',
+        messages: [],
+        toolCallId: 'failed-delegation',
+        toolName: 'agent-head',
+        isNetwork: false,
+        toolApprovalMetadata: undefined,
+        isComplete: true,
+      };
+      const { rerender } = render(<AgentBadge {...props} />, { wrapper: Providers });
+      expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+      rerender(<AgentBadge {...props} status="error" errorText="Provider rejected the request" />);
+      expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
+      expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');
+    });
+  });
+
+  describe('when a delegation fails with error text', () => {
+    it('surfaces the failure on the agent badge', () => {
+      const errorText = 'Failed agent tool execution for head: Incorrect API key provided';
+      renderToolCard(
+        baseProps({
+          toolName: 'agent-head',
+          output: undefined,
+          state: 'output-error',
+          errorText,
+        }),
+      );
+      const badge = screen.getByTestId('agent-badge');
+      expect(badge.getAttribute('data-status')).toBe('error');
+      expect(screen.getByTestId('agent-error').textContent).toContain(errorText);
+    });
+  });
+
+  describe('when a generic tool fails with error text', () => {
+    it('displays the failure and error text', () => {
+      renderToolCard(
+        baseProps({ toolName: 'searchDocs', output: undefined, state: 'output-error', errorText: 'boom' }),
+      );
+      const badge = screen.getByTestId('tool-badge');
+      expect(badge.getAttribute('data-status')).toBe('error');
+      fireEvent.click(badge.querySelector('button')!);
+      expect(screen.getByTestId('tool-result').textContent).toContain('boom');
+    });
   });
 
   it('keeps an unsettled call from a finished run quiet', () => {

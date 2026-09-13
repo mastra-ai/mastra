@@ -19,7 +19,7 @@ import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
-import { deserializeToolError } from '../errors';
+import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 /**
@@ -407,6 +407,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
             const reifiedError = deserializeToolError(toolCall.error);
+            const subAgentResult = getSubAgentErrorResult(reifiedError);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
@@ -437,7 +438,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 // plain {name,message,stack} shape after the pubsub JSON round-trip).
                 // Without reification the `instanceof Error` check below falls through to
                 // `safeStringify`, dumping the whole stringified payload into the history.
-                errorText: reifiedError.message || 'Tool execution failed',
+                errorText: reifiedError.message ?? 'Tool execution failed',
+                ...(subAgentResult ? { result: subAgentResult } : {}),
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
@@ -570,6 +572,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
+          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
+          // threw); honor it here too so the loop stops instead of retrying.
+          if (rest.requestContext?.get('__mastra_delegationBailed')) {
+            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+            rest.requestContext.set('__mastra_delegationBailed', false);
+          }
           return {
             ...initialResult,
             messages: {

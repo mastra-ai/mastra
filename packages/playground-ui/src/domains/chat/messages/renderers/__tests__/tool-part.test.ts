@@ -10,6 +10,40 @@ const invocation = (fields: Partial<ToolInvocationPart['toolInvocation']>): Tool
   }) as never;
 
 describe('readToolPart', () => {
+  describe('when a delegation fails after producing partial output', () => {
+    it.each([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'agent-head',
+          toolCallId: 'failed-call',
+          state: 'output-error',
+          args: {},
+          result: { text: 'Partial research' },
+          errorText: 'Delegation failed',
+        },
+      },
+      {
+        type: 'dynamic-tool',
+        toolName: 'agent-head',
+        toolCallId: 'failed-call',
+        state: 'output-error',
+        input: {},
+        output: { text: 'Partial research' },
+        errorText: 'Delegation failed',
+      },
+    ] satisfies MessageFactoryPart[])('preserves the error and output from $type', part => {
+      expect(isToolPart(part)).toBe(true);
+      if (!isToolPart(part)) throw new Error('Expected a tool part');
+      expect(readToolPart(part)).toMatchObject({
+        toolName: 'agent-head',
+        state: 'output-error',
+        errorText: 'Delegation failed',
+        output: { text: 'Partial research' },
+      });
+    });
+  });
+
   it('reads a persisted v4 invocation as input and output', () => {
     expect(readToolPart(invocation({ state: 'result', args: { path: 'a.ts' }, result: { ok: true } }))).toEqual({
       toolName: 'view',
