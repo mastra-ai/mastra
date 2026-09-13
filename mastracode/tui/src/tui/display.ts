@@ -121,6 +121,9 @@ function getErrorHint(errorType: string): string | null {
       return 'Use /new to start a fresh conversation';
     case 'rate_limit':
       return 'Wait a moment and try again';
+    case 'provider_unavailable':
+    case 'server_error':
+      return "Check the provider's status page, or use /model to switch to a different provider";
     case 'network':
       return 'Check your internet connection';
     default:
