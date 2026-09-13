@@ -1,10 +1,37 @@
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from './client';
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
 describe('MastraClient', () => {
+  it('exposes resource-read metadata through the public SDK contract', async () => {
+    const response = {
+      contents: [
+        {
+          uri: 'ui://test/app',
+          text: '<html>App</html>',
+          mimeType: 'text/html;profile=mcp-app',
+          _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
+        },
+      ],
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(response), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const client = new MastraClient({ baseUrl: 'http://localhost:3000' });
+    const result = await client.readMcpServerResource('external/server', 'ui://test/app');
+    expect(result).toEqual(response);
+    expectTypeOf(result.contents[0]!.mimeType).toEqualTypeOf<string | undefined>();
+    expectTypeOf(result.contents[0]!._meta).toEqualTypeOf<Record<string, unknown> | undefined>();
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      'http://localhost:3000/api/mcp/external%2Fserver/resources/read',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ uri: 'ui://test/app' }) }),
+    );
+  });
+
   describe('Route Prefix Configuration', () => {
     const mockFetchResponse = () => {
       (global.fetch as any).mockResolvedValueOnce({

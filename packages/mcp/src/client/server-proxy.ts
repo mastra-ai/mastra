@@ -177,12 +177,16 @@ export class MCPClientServerProxy extends MCPServerBase {
     };
   }
 
-  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  public async readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     const client = await this.getClient();
     const result = await client.resources.read(uri);
     return {
       contents: (result.contents ?? []).map((c: any) => ({
         uri: c.uri ?? uri,
+        ...(c.mimeType !== undefined ? { mimeType: c.mimeType } : {}),
+        ...(c._meta !== undefined ? { _meta: c._meta } : {}),
         ...(c.text !== undefined ? { text: c.text } : {}),
         ...(c.blob !== undefined ? { blob: c.blob } : {}),
       })),

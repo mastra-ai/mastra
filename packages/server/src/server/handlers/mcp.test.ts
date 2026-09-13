@@ -3,6 +3,7 @@ import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/m
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { readResourceResponseSchema } from '../schemas/mcp';
 import { checkRouteFGA } from '../server-adapter';
 import {
   LIST_MCP_SERVERS_ROUTE,
@@ -605,6 +606,38 @@ describe('MCP Registry Handlers', () => {
   });
 
   describe('READ_MCP_SERVER_RESOURCE_ROUTE', () => {
+    it('preserves per-item metadata through the handler and response schema', async () => {
+      const response = {
+        contents: [
+          {
+            uri: 'ui://test/app',
+            text: '<html>App</html>',
+            mimeType: 'text/html;profile=mcp-app',
+            _meta: {
+              ui: { csp: { connectDomains: ['https://api.example.com'] } },
+              'vendor/frame': { width: 640 },
+            },
+          },
+          { uri: 'asset://image', blob: 'aGVsbG8=', mimeType: 'image/png', _meta: {} },
+          { uri: 'plain://text', text: '' },
+        ],
+      };
+      mockMCPServer.readResource = vi.fn().mockResolvedValue(response);
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+      } as unknown as Mastra;
+
+      const result = await READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        uri: 'ui://test/app',
+      });
+
+      expect(result).toEqual(response);
+      expect(readResourceResponseSchema.parse(result)).toEqual(response);
+      expect(mockMCPServer.readResource).toHaveBeenCalledWith('ui://test/app');
+    });
+
     it('should return resource content for a valid URI', async () => {
       const mastra = {
         getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
