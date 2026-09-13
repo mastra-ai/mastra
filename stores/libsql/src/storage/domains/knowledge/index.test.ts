@@ -97,7 +97,7 @@ async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>)
 }
 
 describe('KnowledgeLibSQL initialization', () => {
-  it('destructively replaces a recognized populated v1 schema and preserves unrelated tables', async () => {
+  it('rejects a recognized populated v1 schema without mutation until explicitly reset', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
@@ -120,13 +120,16 @@ describe('KnowledgeLibSQL initialization', () => {
           new Date().toISOString(),
         ],
       });
+      const beforeSchema = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
+      const beforeNodes = await client.execute('SELECT * FROM mastra_knowledge_nodes');
 
       const store = new KnowledgeLibSQL({ client });
       expect(await store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
-      await expect(Promise.all([store.init(), new KnowledgeLibSQL({ client }).init()])).resolves.toEqual([
-        undefined,
-        undefined,
-      ]);
+      await expect(store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(beforeSchema.rows);
+      expect((await client.execute('SELECT * FROM mastra_knowledge_nodes')).rows).toEqual(beforeNodes.rows);
+
+      await store.dangerouslyReset();
       expect(await store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
       expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
       expect((await client.execute(`SELECT id FROM "${TABLE_KNOWLEDGE_RECORDS}"`)).rows).toEqual([]);
@@ -155,40 +158,6 @@ describe('KnowledgeLibSQL initialization', () => {
 
       await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
       expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
-    } finally {
-      client.close();
-    }
-  });
-
-  it('rolls back destructive replacement on canonical creation failure and permits retry', async () => {
-    const client = createClient({ url: ':memory:' });
-    try {
-      await seedPublishedKnowledgeV1(client);
-      await client.execute(
-        `INSERT INTO "mastra_knowledge_nodes" (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'now','now')`,
-      );
-      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
-      const transaction = client.transaction.bind(client);
-      const spy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
-        const tx = await transaction(mode);
-        const execute = tx.execute.bind(tx);
-        vi.spyOn(tx, 'execute').mockImplementation(async statement => {
-          const sql = typeof statement === 'string' ? statement : statement.sql;
-          if (sql.startsWith('CREATE TABLE') && sql.includes(TABLE_KNOWLEDGE_ACCESS_STATE)) {
-            throw new Error('injected schema creation failure');
-          }
-          return execute(statement);
-        });
-        return tx;
-      });
-
-      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow('injected schema creation failure');
-      spy.mockRestore();
-      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
-      expect((await client.execute('SELECT id FROM mastra_knowledge_nodes')).rows[0]?.id).toBe('legacy');
-
-      await expect(new KnowledgeLibSQL({ client }).init()).resolves.toBeUndefined();
-      expect(await new KnowledgeLibSQL({ client }).inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
     } finally {
       client.close();
     }
