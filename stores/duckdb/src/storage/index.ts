@@ -12,8 +12,14 @@ import type {
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
 const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
-const DUCKDB_OBSERVABILITY_FEATURES = ['metrics', 'logs', 'trace-query'] as const;
-const DUCKDB_OBSERVABILITY_DELTA_FEATURES = ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
+const DUCKDB_OBSERVABILITY_FEATURES = ['metrics', 'logs', 'trace-query', 'thread-query'] as const;
+const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
+  'metrics',
+  'logs',
+  'delta-polling',
+  'trace-query',
+  'thread-query',
+] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -208,6 +214,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async queryThreads(
+    ...args: Parameters<ObservabilityStoreImpl['queryThreads']>
+  ): ReturnType<ObservabilityStoreImpl['queryThreads']> {
+    const delegate = await this.requireDelegate();
+    return delegate.queryThreads(...args);
   }
 
   async listTracesLight(

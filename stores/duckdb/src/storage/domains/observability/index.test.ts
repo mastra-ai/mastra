@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createObservabilityVNextTests } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
+import { parseQueryThreadsInput, planThreadQuery } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
@@ -19,6 +20,7 @@ createObservabilityVNextTests({
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
     traceQuery: true,
+    threadQuery: true,
     traceQueryStrictFeedbackValueTypes: false,
   },
   getStorage: async () => {
@@ -108,11 +110,11 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query', 'thread-query']);
 
       coreFeatures.delete('observability-delta-polling');
 
-      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
+      expect(storage.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
       );
@@ -130,15 +132,41 @@ describe('ObservabilityStorageDuckDB', () => {
 
     try {
       coreFeatures.add('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'delta-polling', 'trace-query']);
+      expect(lazyStore.observability.getFeatures()).toEqual([
+        'metrics',
+        'logs',
+        'delta-polling',
+        'trace-query',
+        'thread-query',
+      ]);
 
       coreFeatures.delete('observability-delta-polling');
-      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query']);
+      expect(lazyStore.observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
     } finally {
       coreFeatures.clear();
       for (const feature of originalFeatures) {
         coreFeatures.add(feature);
       }
+      await lazyStore.db.close();
+    }
+  });
+
+  it('forwards thread queries through the lazy store facade', async () => {
+    const lazyStore = new DuckDBStore({ path: ':memory:' });
+    await lazyStore.init();
+
+    try {
+      const response = await lazyStore.observability.queryThreads(
+        planThreadQuery(
+          parseQueryThreadsInput({
+            traces: {
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            },
+          }),
+        ),
+      );
+      expect(response).toEqual({ threads: [], page: { next: null } });
+    } finally {
       await lazyStore.db.close();
     }
   });
