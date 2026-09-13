@@ -75,6 +75,8 @@ export interface KnowledgeScopeTreeNode extends KnowledgeScopeNodeSummary {
   memberCount: number;
   /** True when more direct members may exist beyond `memberCount`. */
   memberCountTruncated: boolean;
+  /** Viewer-visible content nodes directly assigned to this scope. */
+  contentNodeCount: number;
   /** Direct child scopes available for lazy expansion. */
   childScopeCount: number;
 }
@@ -164,6 +166,11 @@ export interface KnowledgeGraphNode {
   pinned: boolean;
   /** Records owned by this node INSIDE the snapshot window (not a total). */
   recordCount: number;
+  /** Viewer-visible direct-member counts, present only for structural scope nodes. */
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+  contentNodeCount?: number;
+  childScopeCount?: number;
   /** Omitted for a structural lens root when the adapter cannot read it back as a node. */
   createdAt?: string;
   updatedAt?: string;
@@ -304,6 +311,24 @@ function deepestRung(scope: KnowledgeScope): 'org' | 'resource' | 'thread' {
  */
 function withinViewBoundary(scope: KnowledgeScope, viewScope: KnowledgeScope): boolean {
   return scope.length <= viewScope.length && scope.every((entry, index) => entry === viewScope[index]);
+}
+
+function directScopeMemberCounts(
+  members: KnowledgeNode[],
+  childScopeCount: number,
+  viewScope: KnowledgeScope,
+  maxNodes: number,
+): Pick<KnowledgeScopeTreeNode, 'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'> {
+  const contentNodeCount = members.filter(
+    member => !member.isScope && Array.isArray(member.scope) && withinViewBoundary(member.scope, viewScope),
+  ).length;
+  const directMemberCount = childScopeCount + contentNodeCount;
+  return {
+    memberCount: Math.min(directMemberCount, maxNodes),
+    memberCountTruncated: directMemberCount > maxNodes || members.length >= maxNodes,
+    contentNodeCount,
+    childScopeCount,
+  };
 }
 
 function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSummary): number {
@@ -750,21 +775,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                       scopeNodeId: node.id,
                       limit: this.#limits.maxNodes + 1,
                     });
-                    const visibleContentCount = members.filter(
-                      member =>
-                        !member.isScope && Array.isArray(member.scope) && withinViewBoundary(member.scope, view.scope),
-                    ).length;
-                    const childScopeCount = childScopeCountByParent.get(node.id) ?? 0;
-                    const directMemberCount = childScopeCount + visibleContentCount;
                     return {
                       ...node,
                       ...(node.address === `resource:${view.factoryProjectId}`
                         ? { name: view.factoryProjectName }
                         : {}),
-                      memberCount: Math.min(directMemberCount, this.#limits.maxNodes),
-                      memberCountTruncated:
-                        directMemberCount > this.#limits.maxNodes || members.length >= this.#limits.maxNodes,
-                      childScopeCount,
+                      ...directScopeMemberCounts(
+                        members,
+                        childScopeCountByParent.get(node.id) ?? 0,
+                        view.scope,
+                        this.#limits.maxNodes,
+                      ),
                     };
                   }),
                 )),
@@ -932,6 +953,50 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             let truncated = bounded.length > limits.maxNodes;
             const members = bounded.slice(0, limits.maxNodes);
             const contentMembers = members.filter(node => !node.isScope);
+            const childScopeCountByParent = new Map<string, number>();
+            for (const node of scopeNodes) {
+              for (const parentId of node.parentIds) {
+                childScopeCountByParent.set(parentId, (childScopeCountByParent.get(parentId) ?? 0) + 1);
+              }
+            }
+            const scopeCountsById = new Map<
+              string,
+              Pick<
+                KnowledgeScopeTreeNode,
+                'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'
+              >
+            >([
+              [
+                root.id,
+                directScopeMemberCounts(
+                  fetched,
+                  childScopeCountByParent.get(root.id) ?? 0,
+                  resolved.scope,
+                  limits.maxNodes,
+                ),
+              ],
+            ]);
+            const memberScopes = members.filter(node => node.isScope);
+            for (let index = 0; index < memberScopes.length; index += SCOPE_COUNT_CONCURRENCY) {
+              const batch = memberScopes.slice(index, index + SCOPE_COUNT_CONCURRENCY);
+              await Promise.all(
+                batch.map(async node => {
+                  const directMembers = await store.listScopeMembers({
+                    scopeNodeId: node.id,
+                    limit: limits.maxNodes + 1,
+                  });
+                  scopeCountsById.set(
+                    node.id,
+                    directScopeMemberCounts(
+                      directMembers,
+                      childScopeCountByParent.get(node.id) ?? 0,
+                      resolved.scope,
+                      limits.maxNodes,
+                    ),
+                  );
+                }),
+              );
+            }
 
             // Record window over content members (newest-first overall), then
             // wikilink resolution — member lenses are connected, not dots.
@@ -1006,6 +1071,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   isScope: true,
                   pinned: false,
                   recordCount: 0,
+                  ...scopeCountsById.get(root.id),
                   ...(rootRow
                     ? { createdAt: rootRow.createdAt.toISOString(), updatedAt: rootRow.updatedAt.toISOString() }
                     : {}),
@@ -1019,7 +1085,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                     ...(node.description ? { description: node.description } : {}),
                     scope: nodeScope,
                     rung: nodeScope ? deepestRung(nodeScope) : null,
-                    ...(node.isScope ? { isScope: true } : {}),
+                    ...(node.isScope ? { isScope: true, ...scopeCountsById.get(node.id) } : {}),
                     pinned: false,
                     recordCount: recordCounts.get(node.id) ?? 0,
                     createdAt: node.createdAt.toISOString(),

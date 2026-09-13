@@ -471,16 +471,20 @@ describe('KnowledgeRoutes', () => {
     const listScopeMembers = h.knowledge.listScopeMembers.bind(h.knowledge);
     h.knowledge.listScopeMembers = async query => [
       ...(await listScopeMembers(query)),
-      {
-        id: ids['features:child'],
-        name: 'child',
-        kind: 'domain',
-        scope: null,
-        isScope: true,
-        version: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as unknown as KnowledgeNode,
+      ...(query.scopeNodeId === ids['features']
+        ? [
+            {
+              id: ids['features:child'],
+              name: 'child',
+              kind: 'domain',
+              scope: null,
+              isScope: true,
+              version: 1,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            } as unknown as KnowledgeNode,
+          ]
+        : []),
     ];
 
     // Same structural scope, but stamped at a sibling resource of the same
@@ -497,6 +501,7 @@ describe('KnowledgeRoutes', () => {
     expect(scopesBody.scopeNodes?.find(item => item.id === ids['features'])).toMatchObject({
       memberCount: 3,
       memberCountTruncated: false,
+      contentNodeCount: 2,
       childScopeCount: 1,
     });
 
@@ -512,8 +517,22 @@ describe('KnowledgeRoutes', () => {
     expect(nodeIds).toContain(alpha.id);
     expect(nodeIds).toContain(beta.id);
     expect(nodeIds).not.toContain(sibling.id);
-    expect(body.nodes.find(item => item.id === ids['features'])).toMatchObject({ isScope: true, rung: null });
-    expect(body.nodes.find(item => item.id === ids['features:child'])).toMatchObject({ isScope: true, scope: null });
+    expect(body.nodes.find(item => item.id === ids['features'])).toMatchObject({
+      isScope: true,
+      rung: null,
+      memberCount: 3,
+      memberCountTruncated: false,
+      contentNodeCount: 2,
+      childScopeCount: 1,
+    });
+    expect(body.nodes.find(item => item.id === ids['features:child'])).toMatchObject({
+      isScope: true,
+      scope: null,
+      memberCount: 0,
+      memberCountTruncated: false,
+      contentNodeCount: 0,
+      childScopeCount: 0,
+    });
 
     expect(body.edges).toEqual(
       expect.arrayContaining([
