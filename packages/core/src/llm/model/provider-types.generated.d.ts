@@ -192,7 +192,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
   ];
-  readonly agentrouter: readonly ['claude-opus-4-8', 'claude-opus-5', 'gpt-5.6-sol'];
+  readonly agentrouter: readonly ['claude-opus-4-8', 'claude-opus-5', 'deepseek-v4-flash', 'glm-5.3', 'gpt-5.6-sol'];
   readonly 'xiaomi-token-plan-cn': readonly [
     'mimo-v2-pro',
     'mimo-v2-tts',
@@ -1014,6 +1014,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-flash',
     'deepseek-v4-flash:0731',
     'deepseek-v4-pro',
+    'deepseek-v4-pro:0813',
     'deepseek-v4.1-flash',
     'gemma4:31b',
     'glm-5.1',
@@ -1490,6 +1491,23 @@ export type ProviderModelsMap = {
     'scx-ai/llama-4-maverick-17b-instruct',
     'scx-ai/minimax-m2.7',
     'scx-ai/qwen3-32b',
+    'tencent/deepseek-v4-flash',
+    'tencent/deepseek-v4-pro',
+    'tencent/glm-5',
+    'tencent/glm-5-turbo',
+    'tencent/glm-5.1',
+    'tencent/glm-5.2',
+    'tencent/glm-5v-turbo',
+    'tencent/hy-mt2-plus',
+    'tencent/hy3',
+    'tencent/hy4-preview',
+    'tencent/kimi-k2.6',
+    'tencent/kimi-k2.7-code',
+    'tencent/kimi-k2.7-code-highspeed',
+    'tencent/kimi-k3',
+    'tencent/mimo-v2.5-pro',
+    'tencent/minimax-m2.7',
+    'tencent/minimax-m3',
     'together-ai/deepseek-v4-flash',
     'together-ai/deepseek-v4-pro',
     'together-ai/gemma-4-31b-it',
@@ -2680,6 +2698,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro-0813@eu',
     'deepseek-v4-pro@eu',
     'deepseek-v4.1-flash',
+    'deepseek-v4.1-flash@eu',
     'devstral-latest',
     'devstral-latest@eu',
     'fugu-ultra',
@@ -2800,8 +2819,6 @@ export type ProviderModelsMap = {
     'seed-2.0-mini',
     'seed-2.0-pro',
     'step-3.7-flash',
-    'thinkingcap-qwen3.6-27b',
-    'thinkingcap-qwen3.6-27b@eu',
   ];
   readonly llmtr: readonly [
     'gemma-4',
@@ -3196,6 +3213,7 @@ export type ProviderModelsMap = {
     'thinkingmachines/inkling',
     'upstage/solar-10.7b-instruct',
     'z-ai/glm-5.2',
+    'z-ai/glm-5.3-flash',
   ];
   readonly jiekou: readonly [
     'baidu/ernie-4.5-300b-a47b-paddle',
@@ -6498,6 +6516,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V4-Flash-0731',
     'deepseek-ai/DeepSeek-V4-Pro',
     'deepseek-ai/DeepSeek-V4-Pro-0813',
+    'deepseek-ai/DeepSeek-V4.1-Flash',
     'essentialai/Rnj-1-Instruct',
     'google/gemma-3n-E4B-it',
     'google/gemma-4-31B-it',
@@ -7179,6 +7198,7 @@ export type ProviderModelsMap = {
     'tensorx/moonshotai/kimi-k2.5',
     'together_ai/deepseek-ai/DeepSeek-V4-Flash-0731',
     'together_ai/deepseek-ai/DeepSeek-V4-Pro-0813',
+    'together_ai/deepseek-ai/DeepSeek-V4.1-Flash',
     'together_ai/meta-models/Muse-Glimmer-30B',
     'together_ai/openai/gpt-oss-120b',
     'together_ai/openai/gpt-oss-20b',
