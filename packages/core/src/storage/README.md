@@ -158,6 +158,24 @@ const snapshot = await workflowsStorage.loadWorkflowSnapshot({
 });
 ```
 
+### Compact workflow execution state
+
+Use `getWorkflowExecutionState` when a workflow runtime needs only the current
+status and execution generation for an authority check:
+
+```typescript
+const executionState = await workflowsStorage.getWorkflowExecutionState({
+  workflowName: 'my-workflow',
+  runId: 'run-123',
+});
+// { status, executionGeneration? } | null
+```
+
+The default implementation loads the full workflow snapshot and projects these
+fields. Storage adapters may override it with a compact status and generation
+projection, but each call must read fresh state and preserve the full read's
+missing-run (`null`) and error behavior.
+
 ## Durable workflow terminalization
 
 Workflow runtimes that consume terminal events from a replayable broker need storage coordination beyond the replaceable workflow snapshot. The terminalization journal and producer outbox provide that coordination for adapters that advertise the corresponding protocol versions.
