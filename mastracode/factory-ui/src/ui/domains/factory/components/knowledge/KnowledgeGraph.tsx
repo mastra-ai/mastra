@@ -6,6 +6,7 @@
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   Background,
   BackgroundVariant,
@@ -34,6 +35,7 @@ import {
   graphNodesWithBoundaries,
   graphRecordsWithBoundaries,
   graphTraversalEdges,
+  knowledgeEdgeHoverText,
   NO_FILTERS,
   renderedGraphEdges,
   shouldShowLabel,
@@ -115,6 +117,19 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </span>
         ) : null}
       </div>
+      {node.isScope && node.memberCount !== undefined && node.memberCount > 0 ? (
+        <div className="absolute -top-1 -right-1 z-10">
+          <Badge
+            variant="neutral"
+            emphasis="muted"
+            size="xs"
+            aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
+          >
+            {node.memberCount}
+            {node.memberCountTruncated ? '+' : ''}
+          </Badge>
+        </div>
+      ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
@@ -681,6 +696,15 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
             <>
               <dt>Type</dt>
               <dd>{node.kind === 'scope' ? 'Structural scope' : node.kind}</dd>
+              <dt>Content nodes</dt>
+              <dd>{node.contentNodeCount ?? '—'}</dd>
+              <dt>Child scopes</dt>
+              <dd>{node.childScopeCount ?? '—'}</dd>
+              <dt>Direct members</dt>
+              <dd>
+                {node.memberCount ?? '—'}
+                {node.memberCountTruncated ? '+' : ''}
+              </dd>
             </>
           ) : (
             <>
@@ -690,12 +714,12 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
               <dd>{node.rung ? RUNG_LABELS[node.rung] : '—'}</dd>
               <dt>Knowledge records</dt>
               <dd>{node.recordCount}</dd>
+              <dt>Connections</dt>
+              <dd>
+                {degree.incoming} in · {degree.outgoing} out
+              </dd>
             </>
           )}
-          <dt>Connections</dt>
-          <dd>
-            {degree.incoming} in · {degree.outgoing} out
-          </dd>
           <dt>Updated</dt>
           <dd>{node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}</dd>
         </dl>
@@ -729,9 +753,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
         style={style}
       >
         <div className="text-icon6">{source && target ? `${source} → ${target}` : 'Record'}</div>
-        <div className="text-icon4 mt-0.5 leading-relaxed">
-          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
-        </div>
+        <div className="text-icon4 mt-0.5 leading-relaxed">{knowledgeEdgeHoverText(hover.edge)}</div>
       </div>
     );
   }

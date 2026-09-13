@@ -24,6 +24,8 @@ export interface KnowledgeScopeNode {
   memberCount: number;
   /** True when more direct members may exist beyond `memberCount`. */
   memberCountTruncated: boolean;
+  /** Viewer-visible content nodes directly assigned to this scope. */
+  contentNodeCount: number;
   /** Direct child scopes available for lazy expansion. */
   childScopeCount: number;
 }
@@ -74,8 +76,7 @@ export interface KnowledgeScopeTreePayload {
  * for activity/flyout context).
  */
 export type KnowledgeSelection =
-  | { scopeLevel: KnowledgeRung; scopeNodeId?: never }
-  | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
+  { scopeLevel: KnowledgeRung; scopeNodeId?: never } | { scopeNodeId: string; scopeLevel?: KnowledgeRung };
 
 export interface KnowledgeGraphNode {
   id: string;
@@ -93,6 +94,11 @@ export interface KnowledgeGraphNode {
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
   recordCount: number;
+  /** Viewer-visible direct members. Present only for structural scope nodes. */
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+  contentNodeCount?: number;
+  childScopeCount?: number;
   /** Omitted for a structural lens root the adapter cannot read back as a node. */
   createdAt?: string;
   updatedAt?: string;
