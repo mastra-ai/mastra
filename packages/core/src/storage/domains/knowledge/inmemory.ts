@@ -1952,7 +1952,31 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #isProposalTargetVisible(target: KnowledgeProposal['targets'][number], visibleScopeIds: KnowledgeScopeIds): boolean {
-    return isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds);
+    if (target.type === 'record') {
+      const record = this.#db.knowledgeRecords.get(target.id);
+      return Boolean(
+        record &&
+        (target.expectedDeleted ? record.deletedAt : !record.deletedAt) &&
+        this.#isRecordVisible(record, visibleScopeIds),
+      );
+    }
+    const node = this.#db.knowledgeNodes.get(target.id);
+    return Boolean(
+      node &&
+      (target.expectedDeleted ? node.deletedAt : !node.deletedAt) &&
+      isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), visibleScopeIds),
+    );
+  }
+
+  #proposalTargetScopeIds(target: KnowledgeProposal['targets'][number]): KnowledgeScopeIds | undefined {
+    if (target.type === 'record') {
+      const record = this.#db.knowledgeRecords.get(target.id);
+      if (!record || (target.expectedDeleted ? !record.deletedAt : Boolean(record.deletedAt))) return undefined;
+      return this.#recordScopeIds(record.id);
+    }
+    const node = this.#db.knowledgeNodes.get(target.id);
+    if (!node || (target.expectedDeleted ? !node.deletedAt : Boolean(node.deletedAt))) return undefined;
+    return node.isScope && !target.expectedDeleted ? [node.id] : this.#nodeScopeIds(node.id);
   }
 
   /**
@@ -1968,14 +1992,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const proposerContextScopeId = proposal.proposerContextScopeId;
     if (
       proposerContextScopeId !== undefined &&
-      readable.includes(proposerContextScopeId) &&
+      (readable.includes(proposerContextScopeId) ||
+        isKnowledgeScopeVisible(this.#nodeScopeIds(proposerContextScopeId), readable)) &&
       proposal.targets.every(target => this.#isProposalTargetVisible(target, readable))
     ) {
       return true;
     }
     return proposal.targets.every(target => {
       const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
-      return Boolean(authorizedScopeIds?.some(scopeId => target.scopeIds.includes(scopeId)));
+      const currentScopeIds = this.#proposalTargetScopeIds(target);
+      return Boolean(currentScopeIds && authorizedScopeIds?.some(scopeId => currentScopeIds.includes(scopeId)));
     });
   }
 
