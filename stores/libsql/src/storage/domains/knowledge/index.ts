@@ -2043,31 +2043,87 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     };
   }
 
-  /**
-   * SQL fragment for the full proposal visibility disjunction:
-   * (proposer-context read AND every target readable) OR direct write
-   * authority over every target. Mutates `args` — call it last before the
-   * LIMIT placeholder so argument order stays aligned.
-   */
   #proposalVisibilityPredicate(
     scopeIds: string[],
     approvalScopeIds: KnowledgeProposalApprovalScopeIds | undefined,
     args: InValue[],
   ): string {
-    // An empty readable set disables the read branch (an empty IN () list is
-    // not valid SQL); the readable set binds positionally before the
-    // capability branches and appears twice, so push two copies.
+    const inScope = (expression: string, ids: string[]) => {
+      args.push(...ids);
+      return `${expression} IN (${ids.map(() => '?').join(',')})`;
+    };
+    const nodeVisible = (nodeAlias: string, ids: string[]) =>
+      `((${nodeAlias}.isScope=1 AND ${inScope(`${nodeAlias}.id`, ids)}) OR (${nodeAlias}.isScope=0 AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" visibleNodeScope
+        WHERE visibleNodeScope.nodeId=${nodeAlias}.id AND ${inScope('visibleNodeScope.scopeNodeId', ids)}
+      )))`;
+    const targetValue = (field: string) => `json_extract(target.value, '$.${field}')`;
+    const currentTargetVisible = (ids: string[], includeMentionClosure: boolean) => `(
+      (${targetValue('type')}='node' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" targetNode
+        WHERE targetNode.id=${targetValue('id')}
+          AND ((COALESCE(${targetValue('expectedDeleted')},0)=1 AND targetNode.deletedAt IS NOT NULL)
+            OR (COALESCE(${targetValue('expectedDeleted')},0)=0 AND targetNode.deletedAt IS NULL))
+          AND ${nodeVisible('targetNode', ids)}
+      )) OR
+      (${targetValue('type')}='record' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord
+        JOIN "${TABLE_KNOWLEDGE_NODES}" ownerNode ON ownerNode.id=targetRecord.nodeId AND ownerNode.deletedAt IS NULL
+        WHERE targetRecord.id=${targetValue('id')}
+          AND ((COALESCE(${targetValue('expectedDeleted')},0)=1 AND targetRecord.deletedAt IS NOT NULL)
+            OR (COALESCE(${targetValue('expectedDeleted')},0)=0 AND targetRecord.deletedAt IS NULL))
+          AND ${nodeVisible('ownerNode', ids)}
+          AND EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" visibleRecordScope
+            WHERE visibleRecordScope.recordId=targetRecord.id AND ${inScope('visibleRecordScope.scopeNodeId', ids)}
+          )
+          ${
+            includeMentionClosure
+              ? `AND NOT EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" mention
+            JOIN "${TABLE_KNOWLEDGE_NODES}" mentionNode ON mentionNode.id=mention.targetNodeId
+            WHERE mention.recordId=targetRecord.id
+              AND (mentionNode.deletedAt IS NOT NULL OR NOT ${nodeVisible('mentionNode', ids)})
+          )`
+              : ''
+          }
+      ))
+    )`;
+
+    const currentTargetScopeIntersects = (ids: string[]) => `(
+      (${targetValue('type')}='node' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" targetNode
+        WHERE targetNode.id=${targetValue('id')}
+          AND ((COALESCE(${targetValue('expectedDeleted')},0)=1 AND targetNode.deletedAt IS NOT NULL)
+            OR (COALESCE(${targetValue('expectedDeleted')},0)=0 AND targetNode.deletedAt IS NULL))
+          AND ((targetNode.isScope=1 AND COALESCE(${targetValue('expectedDeleted')},0)=0 AND ${inScope('targetNode.id', ids)})
+            OR ((targetNode.isScope=0 OR COALESCE(${targetValue('expectedDeleted')},0)=1) AND EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" writableNodeScope
+              WHERE writableNodeScope.nodeId=targetNode.id AND ${inScope('writableNodeScope.scopeNodeId', ids)}
+            )))
+      )) OR
+      (${targetValue('type')}='record' AND EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" targetRecord
+        WHERE targetRecord.id=${targetValue('id')}
+          AND ((COALESCE(${targetValue('expectedDeleted')},0)=1 AND targetRecord.deletedAt IS NOT NULL)
+            OR (COALESCE(${targetValue('expectedDeleted')},0)=0 AND targetRecord.deletedAt IS NULL))
+          AND EXISTS (
+            SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" writableRecordScope
+            WHERE writableRecordScope.recordId=targetRecord.id AND ${inScope('writableRecordScope.scopeNodeId', ids)}
+          )
+      ))
+    )`;
+
     let readBranch = 'FALSE';
     if (scopeIds.length > 0) {
-      const scopePlaceholders = scopeIds.map(() => '?').join(',');
-      args.push(...scopeIds, ...scopeIds);
-      readBranch = `(proposerContextScopeId IN (${scopePlaceholders}) AND NOT EXISTS (
-      SELECT 1 FROM json_each(json_extract(changes, '$.targets')) AS target
-      WHERE NOT EXISTS (
-        SELECT 1 FROM json_each(json_extract(target.value, '$.scopeIds')) AS targetScope
-        WHERE targetScope.value IN (${scopePlaceholders})
-      )
-    ))`;
+      const contextVisible = `(${inScope('proposerContextScopeId', scopeIds)} OR EXISTS (
+        SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" contextScope
+        WHERE contextScope.nodeId=proposerContextScopeId AND ${inScope('contextScope.scopeNodeId', scopeIds)}
+      ))`;
+      readBranch = `(${contextVisible} AND NOT EXISTS (
+        SELECT 1 FROM json_each(json_extract(changes, '$.targets')) AS target
+        WHERE NOT ${currentTargetVisible(scopeIds, true)}
+      ))`;
     }
     const capabilityBranches: string[] = [];
     for (const [capability, authorizedScopeIds] of Object.entries(approvalScopeIds ?? {}) as [
@@ -2075,14 +2131,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       string[],
     ][]) {
       if (!authorizedScopeIds || authorizedScopeIds.length === 0) continue;
-      const authorizedPlaceholders = authorizedScopeIds.map(() => '?').join(',');
+      args.push(capability);
       capabilityBranches.push(
-        `(json_extract(target.value, '$.approvalCapability')=? AND EXISTS (
-          SELECT 1 FROM json_each(json_extract(target.value, '$.scopeIds')) AS targetScope
-          WHERE targetScope.value IN (${authorizedPlaceholders})
-        ))`,
+        `(${targetValue('approvalCapability')}=? AND ${currentTargetScopeIntersects(authorizedScopeIds)})`,
       );
-      args.push(capability, ...authorizedScopeIds);
     }
     const writeBranch =
       capabilityBranches.length === 0
