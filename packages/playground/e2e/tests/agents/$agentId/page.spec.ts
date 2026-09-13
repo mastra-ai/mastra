@@ -72,8 +72,17 @@ test.describe('Agent detail page', () => {
     });
 
     test('persists model settings across a reload', async ({ page }) => {
+      // Reload the same saved chat: /threads/new creates a fresh identity on each visit.
+      const threadId = 'model-settings-reload';
+      const response = await page.request.post('/api/memory/threads?agentId=weather-agent', {
+        data: { threadId, resourceId: 'weather-agent', title: 'Model settings reload' },
+      });
+      expect(response.ok()).toBeTruthy();
+      await page.goto(`/agents/weather-agent/threads/${threadId}`);
+      await page.getByTestId('composer-model-settings-trigger').click();
+
       // Arrange
-      await page.isVisible('text=Chat Method');
+      await expect(page.getByText('Chat Method', { exact: true })).toBeVisible();
       await page.click('text=Generate');
       await page.click('text=Advanced Settings');
       await page.getByLabel('Top K').fill('9');
