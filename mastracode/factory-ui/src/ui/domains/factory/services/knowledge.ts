@@ -29,8 +29,8 @@ export interface KnowledgeScopeTreePayload {
     available: boolean;
     /**
      * Set when a reconciled scope node owns this rung's address — the client
-     * renders ONE merged entry (structural name, identity marker) that opens
-     * the structural lens, instead of duplicating the scope under two labels.
+     * renders ONE entry (structural name, identity kind) that opens the
+     * structural lens, instead of duplicating the scope under two labels.
      */
     scopeNodeId?: string;
     /** Structural name of the matched scope node (present iff scopeNodeId). */
@@ -61,6 +61,8 @@ export interface KnowledgeGraphNode {
   rung: KnowledgeRung | null;
   /** True for structural scope nodes (member-lens drill targets); absent for content nodes. */
   isScope?: boolean;
+  /** Client-rendered authorized target beyond the bounded node window. */
+  isBoundary?: boolean;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
@@ -100,6 +102,13 @@ export interface KnowledgeGraphRecord {
   text: string;
 }
 
+export interface KnowledgeBoundaryNode {
+  id: string;
+  name: string;
+  scope: string[];
+  rung: KnowledgeRung;
+}
+
 export interface KnowledgeGraphPayload {
   view: 'project' | 'thread';
   threadId?: string;
@@ -107,7 +116,7 @@ export interface KnowledgeGraphPayload {
   edges: KnowledgeGraphEdge[];
   records: KnowledgeGraphRecord[];
   truncated: boolean;
-  outOfWindow: Array<{ id: string; name: string; scope: string[]; rung: KnowledgeRung }>;
+  outOfWindow: KnowledgeBoundaryNode[];
   unresolvedCapped: { count: number; names: string[] };
   pinCensus: { resource: number; thread: number | null };
   version: string | null;
