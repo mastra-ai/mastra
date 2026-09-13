@@ -20,6 +20,7 @@ import { SignalsErrorState } from '../signals-error-state';
 import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import type { ThemeFlowResponse } from '../types';
 import {
+  absentStageThemeFlowResponse,
   duplicateLabelThemeFlowResponse,
   earlierThemeFlowResponse,
   emptyThemeSnapshotsResponse,
@@ -36,7 +37,7 @@ import {
   themeSnapshotsResponse,
   unlinkedGoalStageThemeFlowResponse,
 } from './fixtures/theme-flow';
-import { buildSankeyChartGraph } from '@/ds/components/SankeyChart';
+import { buildSankeyChartGraph, nodeColorMuted } from '@/ds/components/SankeyChart';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
@@ -422,6 +423,35 @@ describe('SankeySignals', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(columnHeaderLabels()).toEqual(['OUTCOME', 'BEHAVIOR', 'SENTIMENT']);
       expect(screen.queryByLabelText('Reorder Goal')).toBeNull();
+    });
+  });
+
+  describe('when a stage holds an absent passthrough bucket', () => {
+    it('renders the bucket neutral, labeled, and inert', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(absentStageThemeFlowResponse),
+        ),
+      );
+
+      const { container } = renderSankeySignals();
+
+      const flowRegion = await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      const absentLabel = within(flowRegion)
+        .getAllByText('None observed')
+        .find(element => element.tagName === 'text');
+      expect(absentLabel).not.toBeUndefined();
+      // The bucket drops its column hue for the neutral fill; themed nodes keep hues.
+      expect(container.querySelectorAll(`rect[fill="${nodeColorMuted()}"]`)).toHaveLength(1);
+      expect(container.querySelector(`stop[stop-color="${nodeColorMuted()}"]`)).not.toBeNull();
+      // Absence is not drillable: the bucket never becomes a button.
+      const absentNode = within(flowRegion).getByLabelText('None observed: 15 traces (38%)');
+      expect(absentNode.getAttribute('role')).toBeNull();
+      const themedNode = within(flowRegion).getByLabelText('Request resolved: 25 traces (63%)');
+      expect(themedNode.getAttribute('role')).toBe('button');
     });
   });
 

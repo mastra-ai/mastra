@@ -96,7 +96,11 @@ export type ThemeNode =
     }
   | {
       nodeId: string;
-      kind: 'noise' | 'other';
+      /**
+       * 'absent' is a passthrough bucket for cohort traces that never produced
+       * this stage's signal (labeled "None observed" by the server).
+       */
+      kind: 'noise' | 'other' | 'absent';
       label: string;
       description?: string;
       traceCount: number;
