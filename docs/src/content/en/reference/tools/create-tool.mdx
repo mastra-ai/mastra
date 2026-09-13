@@ -240,7 +240,8 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
                     name: 'workflow',
                     type: 'WorkflowToolExecutionContext',
                     isOptional: true,
-                    description: 'Workflow-specific context (state, setState, suspend, etc.)',
+                    description:
+                      'Workflow-specific context (state, setState, suspend, etc.). The optional rootRun contains the outermost workflowId and runId, including inside nested workflows. Use this identity to resume an outer workflow by a suspension label. It is preserved in snapshots by the default and evented engines; older snapshots and other engines may omit it. The immediate workflowId and runId still identify the workflow directly executing the tool.',
                   },
                   {
                     name: 'mcp',

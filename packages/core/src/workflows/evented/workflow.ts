@@ -70,6 +70,7 @@ import type {
   WorkflowEngineType,
   WorkflowRunStatus,
   WorkflowRunState,
+  WorkflowRunIdentity,
   StepParams,
   ToolStep,
   DefaultEngineType,
@@ -1755,6 +1756,7 @@ export class EventedWorkflow<
 
   async createRun(options?: {
     runId?: string;
+    rootRun?: WorkflowRunIdentity | null;
     resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
@@ -1790,6 +1792,7 @@ export class EventedWorkflow<
       this.runs.get(runIdToUse) ??
       new EventedRun({
         workflowId: this.id,
+        rootRun: options?.rootRun,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         isInternalWorkflow: this.isInternal,
@@ -1833,6 +1836,7 @@ export class EventedWorkflow<
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
+        rootRun: run.rootRun,
         status: 'pending',
         value: {},
         context: {} as WorkflowRunState['context'],
@@ -1849,6 +1853,7 @@ export class EventedWorkflow<
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        createOnly: workflowsStore.supportsAtomicWorkflowStarts(),
         resourceId: options?.resourceId,
         snapshot: this.options?.pruneSnapshot
           ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
@@ -1870,6 +1875,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    rootRun?: WorkflowRunIdentity | null;
     resourceId?: string;
     isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
@@ -1959,31 +1965,35 @@ export class EventedRun<
     });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    // Always persist the initial run record regardless of shouldPersistSnapshot.
-    // The evented engine relies on this record for parallel branch result
-    // aggregation (aggregateBranchResults reads stepResults via storage).
-    const initialRunSnapshot: WorkflowRunState = {
-      runId: this.runId,
-      serializedStepGraph: this.serializedStepGraph,
-      status: 'running',
-      value: {},
-      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
-      activePaths: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-    });
+    const claimed = await this._claimStart(inputDataToUse, initialStateToUse, requestContext);
+    if (!claimed) {
+      // Always persist the initial run record regardless of shouldPersistSnapshot.
+      // The evented engine relies on this record for parallel branch result
+      // aggregation (aggregateBranchResults reads stepResults via storage).
+      const initialRunSnapshot: WorkflowRunState = {
+        rootRun: this.rootRun,
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+        requestContext: requestContext.toJSON(),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: this.executionEngine.options?.pruneSnapshot
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+      });
+    }
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -2093,31 +2103,35 @@ export class EventedRun<
     });
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    // Always persist the initial run record regardless of shouldPersistSnapshot.
-    // The evented engine relies on this record for parallel branch result
-    // aggregation (aggregateBranchResults reads stepResults via storage).
-    const initialRunSnapshot: WorkflowRunState = {
-      runId: this.runId,
-      serializedStepGraph: this.serializedStepGraph,
-      status: 'running',
-      value: {},
-      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
-      activePaths: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-    });
+    const claimed = await this._claimStart(inputDataToUse, initialStateToUse, requestContext);
+    if (!claimed) {
+      // Always persist the initial run record regardless of shouldPersistSnapshot.
+      // The evented engine relies on this record for parallel branch result
+      // aggregation (aggregateBranchResults reads stepResults via storage).
+      const initialRunSnapshot: WorkflowRunState = {
+        rootRun: this.rootRun,
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+        requestContext: requestContext.toJSON(),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: this.executionEngine.options?.pruneSnapshot
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+      });
+    }
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');

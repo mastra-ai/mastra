@@ -248,7 +248,9 @@ export async function processWorkflowForEach(
         const iterResult = currentResult.output[i];
         if (iterResult?.status === 'suspended') {
           if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-            Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+            for (const [label, target] of Object.entries(iterResult.suspendPayload.__workflow_meta.resumeLabels)) {
+              collectedResumeLabels[label] = { ...(target as { stepId: string }), foreachIndex: i };
+            }
           }
           if (firstSuspendedIterationPayload === undefined) {
             firstSuspendedIterationPayload = iterResult.suspendPayload;

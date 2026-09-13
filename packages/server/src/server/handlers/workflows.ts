@@ -1454,6 +1454,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 // `workflowId` and `runId` are taken from path params (single source of
 // truth); they are intentionally omitted from the request body schema.
 const stepExecutionBodySchema = z.object({
+  rootRun: z.object({ workflowId: z.string().min(1), runId: z.string().min(1) }).optional(),
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
   stepResults: z.record(z.string(), z.unknown()),
@@ -1525,6 +1526,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
       const result = await strategy.executeStep({
         workflowId,
         runId,
+        rootRun: body.rootRun,
         stepId: body.stepId,
         executionPath: body.executionPath,
         stepResults: body.stepResults,

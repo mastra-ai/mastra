@@ -58,6 +58,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
 
     return executor.execute({
       workflowId: params.workflowId,
+      rootRun: params.rootRun,
       entry,
       runId: params.runId,
       stepResults: params.stepResults as Record<string, StepResult<any, any, any, any>>,

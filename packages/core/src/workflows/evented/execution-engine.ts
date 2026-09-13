@@ -188,6 +188,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       } else if (params.restart) {
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
         const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
+        const beforeFirstStep =
+          params.restart.activePaths.length === 1 &&
+          params.restart.activePaths[0] === 0 &&
+          Object.keys(params.restart.stepResults).every(key => key === 'input');
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -197,7 +201,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
             executionPath: params.restart.activePaths,
             stepResults: params.restart.stepResults,
             restart: params.restart,
-            prevResult: { status: 'success', output: prevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: beforeFirstStep ? params.restart.stepResults.input : prevResult?.payload,
+            },
             requestContext: params.requestContext.toJSON(),
             format: params.format,
             perStep: params.perStep,
