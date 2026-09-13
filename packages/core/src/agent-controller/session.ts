@@ -1158,8 +1158,8 @@ export class SessionSuspensions {
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
    * dropped entries so callers can retract the corresponding prompts.
    */
-  clear(): Array<{ toolCallId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
+  clear(): Array<{ toolCallId: string; runId: string; toolName: string }> {
+    const dropped = [...this.#pending].map(([toolCallId, { runId, toolName }]) => ({ toolCallId, runId, toolName }));
     this.#pending.clear();
     return dropped;
   }
@@ -3119,6 +3119,8 @@ export class Session<TState = unknown> {
     return this.stream.activeRunId() ?? this.run.getRunId();
   }
 
+  #abortedSuspensions: Array<{ toolCallId: string; runId: string; toolName: string }> = [];
+
   /**
    * Abort the session's active run: drop any parked tool suspensions, abort the
    * live subscription's in-flight run, and mark the run as aborting so the
@@ -3143,7 +3145,9 @@ export class Session<TState = unknown> {
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
-    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+    this.#abortedSuspensions = this.suspensions.clear();
+    this.run.requestAbort({ deferSignal: true });
+    for (const { toolCallId, toolName } of this.#abortedSuspensions) {
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
 
@@ -3155,13 +3159,9 @@ export class Session<TState = unknown> {
     // signal to the engine, which fires them once the decline has landed.
     const wasGated = this.approval.isArmed();
     this.approval.cancel();
-    if (wasGated) {
-      this.run.requestAbort({ deferSignal: true });
-      return;
-    }
+    if (wasGated) return;
 
-    this.stream.abort();
-    this.run.requestAbort();
+    void this.completeDeferredAbort();
   }
 
   /**
@@ -3170,9 +3170,19 @@ export class Session<TState = unknown> {
    * Called by the run engine once the gated call's decline has been driven
    * through the agent, so the denial is persisted before the run is torn down.
    */
-  completeDeferredAbort(): void {
-    this.stream.abort();
-    this.run.requestAbort();
+  async completeDeferredAbort(): Promise<void> {
+    const suspensions = this.#abortedSuspensions;
+    this.#abortedSuspensions = [];
+    try {
+      if (suspensions.length > 0) {
+        await this.runEngine.settleSuspendedToolCallsAsDenied(suspensions);
+      }
+    } catch (error) {
+      this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+    } finally {
+      this.stream.abort();
+      this.run.requestAbort();
+    }
   }
 
   /**
