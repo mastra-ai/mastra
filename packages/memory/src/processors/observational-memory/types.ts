@@ -82,6 +82,30 @@ export type ContinuationHintsConfig =
       suggestedResponse?: boolean;
     };
 
+/**
+ * Policy controlling behavior when synchronous observation fails after retries are exhausted.
+ * - 'throw': rethrow the error, failing the synchronous turn (default).
+ * - 'warn': log a warning/error and continue the turn with observed: false.
+ * - 'bypass': silently bypass the failure and continue the turn with observed: false.
+ */
+export type ObservationFailurePolicy = 'throw' | 'warn' | 'bypass';
+
+/**
+ * Bounded retry configuration for observational memory operations.
+ */
+export interface ObservationRetryConfig {
+  /** Maximum number of retry attempts (total tries = maxRetries + 1). @default 8 */
+  maxRetries?: number;
+  /** Initial backoff delay in milliseconds. @default 1000 */
+  initialDelayMs?: number;
+  /** Multiplier applied to the delay after each failed attempt. @default 2 */
+  backoffFactor?: number;
+  /** Cap on per-attempt delay in milliseconds. @default 120000 */
+  maxDelayMs?: number;
+  /** Random jitter as a fraction of the computed delay (e.g. 0.2 = ±20%). @default 0.2 */
+  jitter?: number;
+}
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
@@ -279,6 +303,21 @@ export interface ObservationConfig {
    * @default ['image/*', 'application/pdf']
    */
   observeAttachments?: 'auto' | boolean | string[];
+
+  /**
+   * Policy controlling behavior when synchronous observation fails after retries are exhausted.
+   * - 'throw': rethrow the error, failing the synchronous agent turn (default).
+   * - 'warn': log a warning/error and continue the agent turn with observed: false.
+   * - 'bypass': silently bypass the observation failure and continue the agent turn.
+   *
+   * @default 'throw'
+   */
+  failurePolicy?: ObservationFailurePolicy;
+
+  /**
+   * Bounded retry schedule configuration for observation calls.
+   */
+  retry?: ObservationRetryConfig;
 }
 
 /**
@@ -1097,6 +1136,19 @@ export interface ObservationalMemoryConfig {
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;
+
+  /**
+   * Policy controlling behavior when synchronous observation fails after retries are exhausted.
+   * Can also be set individually on `observation.failurePolicy`.
+   * @default 'throw'
+   */
+  failurePolicy?: ObservationFailurePolicy;
+
+  /**
+   * Bounded retry schedule configuration for observation calls.
+   * Can also be set individually on `observation.retry`.
+   */
+  retry?: ObservationRetryConfig;
 }
 
 /**
@@ -1136,6 +1188,10 @@ export interface ResolvedObservationConfig {
   observeAttachments: 'auto' | boolean | string[];
   /** Resolved observer extractors, including enabled built-ins and user extractors */
   extractors: Extractor<any>[];
+  /** Policy when synchronous observation fails */
+  failurePolicy: ObservationFailurePolicy;
+  /** Bounded retry schedule configuration */
+  retry?: ObservationRetryConfig;
 }
 
 export interface ResolvedReflectionConfig {

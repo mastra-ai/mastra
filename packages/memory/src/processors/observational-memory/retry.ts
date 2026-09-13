@@ -128,11 +128,12 @@ export function isTransientLLMError(error: unknown): boolean {
  *
  * @internal
  */
-export function computeDelay(attempt: number): number {
-  const base = RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffFactor, attempt);
-  const capped = Math.min(base, RETRY_CONFIG.maxDelayMs);
-  if (RETRY_CONFIG.jitter <= 0) return capped;
-  const jitterRange = capped * RETRY_CONFIG.jitter;
+export function computeDelay(attempt: number, retryConfig?: Partial<typeof RETRY_CONFIG>): number {
+  const config = { ...RETRY_CONFIG, ...retryConfig };
+  const base = config.initialDelayMs * Math.pow(config.backoffFactor, attempt);
+  const capped = Math.min(base, config.maxDelayMs);
+  if (config.jitter <= 0) return capped;
+  const jitterRange = capped * config.jitter;
   // Symmetric jitter in [-jitterRange, +jitterRange].
   const offset = (Math.random() * 2 - 1) * jitterRange;
   return Math.max(0, Math.round(capped + offset));
@@ -163,6 +164,8 @@ export interface WithRetryOptions {
   label: string;
   /** Optional abort signal — cancels both in-flight attempts and backoff waits. */
   abortSignal?: AbortSignal;
+  /** Optional retry configuration overrides. */
+  retryConfig?: Partial<typeof RETRY_CONFIG>;
 }
 
 /**
@@ -174,7 +177,8 @@ export interface WithRetryOptions {
  * @internal
  */
 export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions): Promise<T> {
-  const { label, abortSignal } = opts;
+  const { label, abortSignal, retryConfig } = opts;
+  const config = { ...RETRY_CONFIG, ...retryConfig };
   let attempt = 0;
   // total tries = maxRetries + 1 (the initial attempt isn't a "retry")
   while (true) {
@@ -185,7 +189,7 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
       return await fn();
     } catch (error) {
       if (isAbortError(error) || abortSignal?.aborted) throw error;
-      if (attempt >= RETRY_CONFIG.maxRetries || !isTransientLLMError(error)) {
+      if (attempt >= config.maxRetries || !isTransientLLMError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${
@@ -195,7 +199,7 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: WithRetryOptions)
         }
         throw error;
       }
-      const delay = computeDelay(attempt);
+      const delay = computeDelay(attempt, config);
       attempt++;
       omDebug(
         `[OM:retry:${label}] transient error on attempt ${attempt}, retrying in ${delay}ms: ${

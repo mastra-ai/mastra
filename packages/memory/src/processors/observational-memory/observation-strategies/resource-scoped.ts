@@ -76,7 +76,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     return true;
   }
   get rethrowOnFailure() {
-    return true;
+    return (this.observationConfig.failurePolicy ?? 'throw') === 'throw';
   }
 
   async prepare() {

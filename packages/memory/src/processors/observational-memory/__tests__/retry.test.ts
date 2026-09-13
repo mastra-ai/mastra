@@ -229,4 +229,33 @@ describe('withRetry', () => {
     // Exactly one attempt happened before we aborted the backoff wait.
     expect(fn).toHaveBeenCalledTimes(1);
   });
+
+  it('respects custom retryConfig.maxRetries override in withRetry', async () => {
+    const fn = vi.fn().mockRejectedValue(new TypeError('terminated'));
+
+    // Override default 3 retries to only 1 retry (total 2 attempts)
+    await expect(withRetry(fn, { label: 'test', retryConfig: { maxRetries: 1 } })).rejects.toThrow('terminated');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('respects custom retryConfig.maxRetries: 0 (no retries)', async () => {
+    const fn = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(withRetry(fn, { label: 'test', retryConfig: { maxRetries: 0 } })).rejects.toThrow('fetch failed');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects custom retryConfig delay parameters in computeDelay', () => {
+    const customConfig = {
+      initialDelayMs: 500,
+      backoffFactor: 3,
+      maxDelayMs: 10_000,
+      jitter: 0,
+    };
+
+    expect(computeDelay(0, customConfig)).toBe(500);
+    expect(computeDelay(1, customConfig)).toBe(1500);
+    expect(computeDelay(2, customConfig)).toBe(4500);
+    expect(computeDelay(3, customConfig)).toBe(10_000); // capped at maxDelayMs
+  });
 });

@@ -146,7 +146,9 @@ export abstract class ObservationStrategy {
         };
         await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
         if (abortSignal?.aborted) throw error;
-        omError('[OM] Observation failed', error);
+        if (this.observationConfig.failurePolicy !== 'bypass') {
+          omError('[OM] Observation failed', error);
+        }
         return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 

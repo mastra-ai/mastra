@@ -479,7 +479,7 @@ export class ReflectorRunner {
                 return streamResult.getFullOutput();
               }, abortSignal),
           }),
-        { label: 'reflector', abortSignal },
+        { label: 'reflector', abortSignal, retryConfig: this.observationConfig.retry },
       );
 
       omDebug(

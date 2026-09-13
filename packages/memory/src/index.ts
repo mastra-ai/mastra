@@ -116,6 +116,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
   hooks?: ObservationalMemoryConfig['hooks'];
+  failurePolicy?: ObservationalMemoryConfig['failurePolicy'];
+  retry?: ObservationalMemoryConfig['retry'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {

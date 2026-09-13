@@ -365,7 +365,7 @@ export class ObserverRunner {
                 }
               }, abortSignal),
           }),
-        { label: 'observer', abortSignal },
+        { label: 'observer', abortSignal, retryConfig: this.observationConfig.retry },
       );
     };
 
@@ -676,7 +676,7 @@ export class ObserverRunner {
                 }
               }, abortSignal),
           }),
-        { label: 'observer-multi-thread', abortSignal },
+        { label: 'observer-multi-thread', abortSignal, retryConfig: this.observationConfig.retry },
       );
     };
 

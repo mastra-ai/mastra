@@ -621,6 +621,8 @@ export class ObservationalMemory {
         extract: config.observation?.extract,
         continuationHints: config.observation?.continuationHints,
       }),
+      failurePolicy: config.observation?.failurePolicy ?? config.failurePolicy ?? 'throw',
+      retry: config.observation?.retry ?? config.retry,
     };
 
     // Resolve reflection config with defaults
