@@ -7,6 +7,7 @@ import {
   tryStreamWithJsonFallback,
   isSupportedLanguageModel,
   resolveThreadIdFromArgs,
+  resolveSuspendedToolRunId,
 } from './utils';
 
 function makeAgent(generate: ReturnType<typeof vi.fn>): Agent {
@@ -306,6 +307,22 @@ describe('agent/utils', () => {
     it('should return undefined if no ID can be resolved', () => {
       const result = resolveThreadIdFromArgs({});
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('resolveSuspendedToolRunId', () => {
+    it.each(['null', 'undefined', 'none', 'nil', ' NULL ', 'Null', 'NONE', '', '   '])('treats %j as absent', value => {
+      expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+    });
+
+    it.each([null, undefined, 42, {}, [], true, Symbol('run-id')])('treats non-string %p as absent', value => {
+      expect(resolveSuspendedToolRunId(value)).toBeUndefined();
+    });
+
+    it('returns a usable run id unchanged, including surrounding whitespace', () => {
+      const runId = '3f1a5d2e-9c47-4b8a-8f0e-2a6d1c9b7e55';
+      expect(resolveSuspendedToolRunId(runId)).toBe(runId);
+      expect(resolveSuspendedToolRunId(' call_abc123 ')).toBe(' call_abc123 ');
     });
   });
 });

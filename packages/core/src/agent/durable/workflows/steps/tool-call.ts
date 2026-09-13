@@ -20,6 +20,7 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { resolveSuspendedToolRunId } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -819,20 +820,29 @@ export function createDurableToolCallStep() {
       // delegate cannot select each other's run. Auto-resume calls already pass
       // suspendedToolRunId in their arguments and keep that value unchanged.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
-      const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+      const suspendedToolRunId = resolveSuspendedToolRunId(
+        (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+      );
+      // The model authors this field, and some models echo a sentinel such as the literal
+      // string "null" for it. That value is truthy, so leaving it in place would shadow the
+      // framework-resolved id injected below and turn a resume into a silent fresh run
+      // (see #23739). Resolve the args-side value so a malformed one counts as absent.
+      const argsSuspendedToolRunId = resolveSuspendedToolRunId((cleanedArgs as any).suspendedToolRunId);
       // When the delegation tool is itself approval-gated, an `{ approved: true }`
       // resume is ambiguous: it can answer this step's pre-execution gate (execute
       // fresh) or a delegated approval raised mid-execution by the sub-agent. The
       // suspend payload disambiguates — only the delegated approval persists an
       // inner suspended run id, so its decision must resume that inner run.
-      const isDelegatedApprovalResume = !!approvalGrant && isResumableTool && typeof suspendedToolRunId === 'string';
-      if (
-        (isResumingFromSuspension || isDelegatedApprovalResume) &&
-        isResumableTool &&
-        !cleanedArgs.suspendedToolRunId &&
-        typeof suspendedToolRunId === 'string'
-      ) {
+      const isDelegatedApprovalResume = !!approvalGrant && isResumableTool && !!suspendedToolRunId;
+      if ((isResumingFromSuspension || isDelegatedApprovalResume) && isResumableTool && suspendedToolRunId) {
+        // The framework-resolved id is authoritative — it is what the per-toolCallId lookup
+        // found — so it overrides a model-authored value, matching the non-durable path, which
+        // overwrites args with the lookup result unconditionally.
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
+      } else if (!argsSuspendedToolRunId) {
+        // Neither side resolved to a usable id: drop a sentinel so downstream consumers and
+        // persisted arguments never see it as a real run id.
+        delete (cleanedArgs as any).suspendedToolRunId;
       }
 
       // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).

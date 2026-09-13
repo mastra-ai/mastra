@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
@@ -158,9 +159,17 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
 
       try {
         const args = { ...task.args };
-        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
-        if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
+        const suspendedToolRunId = resolveSuspendedToolRunId(
+          (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+        );
+        // `task.args` are model-authored and can carry a sentinel such as the literal string
+        // "null", which is truthy and would suppress the framework's suspended run id below
+        // (see #23739). Resolve the args-side value so a malformed one counts as absent.
+        const argsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
+        if (resumeData !== undefined && !argsSuspendedToolRunId && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
+        } else if (!argsSuspendedToolRunId) {
+          delete args.suspendedToolRunId;
         }
 
         const result = await executor.execute(args, {

@@ -191,3 +191,35 @@ export function resolveThreadIdFromArgs(args: {
 
   return resolved;
 }
+
+/**
+ * Model-supplied sentinels for `suspendedToolRunId`. Some models serialize an
+ * absent value as one of these literal strings, so a truthy check alone would
+ * adopt it as a real run id.
+ */
+const SUSPENDED_TOOL_RUN_ID_SENTINELS = new Set(['null', 'undefined', 'none', 'nil']);
+
+/**
+ * Accept a `suspendedToolRunId` only when it is a usable run id.
+ *
+ * `suspendedToolRunId` is exposed to the model (see #16738) and the auto-resume
+ * prompt instructs the model to echo a run id back into it, but models also emit
+ * sentinels such as the literal string `"null"` on ordinary calls. Because such a
+ * value is truthy it defeats a `|| randomUUID()` fallback, and run ids key the
+ * per-workflow run cache, so independent calls then share one suspended run and
+ * one request is silently lost (#23739).
+ *
+ * Returns the value for a usable id and `undefined` for a non-string, an empty
+ * or whitespace-only string, or one of the sentinels. An accepted value is
+ * returned unchanged — never trimmed — so a legitimate id is preserved
+ * byte-for-byte. The check is deliberately not an id-format whitelist:
+ * `mastra.generateId()` is user-replaceable and documented for custom id
+ * formats, so restricting the shape would break legitimate resumes.
+ */
+export function resolveSuspendedToolRunId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (SUSPENDED_TOOL_RUN_ID_SENTINELS.has(trimmed.toLowerCase())) return undefined;
+  return value;
+}

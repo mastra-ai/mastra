@@ -233,7 +233,12 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
+import {
+  isSupportedLanguageModel,
+  resolveSuspendedToolRunId,
+  resolveThreadIdFromArgs,
+  supportedLanguageModelSpecifications,
+} from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -5365,7 +5370,10 @@ export class Agent<
               });
 
               let result: any;
-              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+              // Resolve the model-authored field before the gate below: a sentinel such as the
+              // literal string "null" is truthy and would otherwise be treated as a run to
+              // resume (see #23739).
+              const suspendedToolRunId = resolveSuspendedToolRunId((inputData as any).suspendedToolRunId);
 
               const { resumeData, suspend } = context?.agent ?? {};
 
@@ -6082,14 +6090,28 @@ export class Agent<
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
+            // Declared outside `try` so the error path below can report the resolved run id.
+            let resolvedToolRunId: string | undefined;
             try {
-              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
+              const {
+                initialState,
+                inputData: workflowInputData,
+                suspendedToolRunId: suspendedToolRunIdInput,
+              } = inputData as any;
               // Use a unique runId for each workflow tool call to prevent parallel calls
               // from sharing the same cached Run instance (see #13473).
               // For resume cases, suspendedToolRunId is injected into inputData by
               // tool-call-step (from metadata stored during suspension).
               // For fresh calls: generate a new unique runId.
+              //
+              // The field is also exposed to the model (#16738), which sometimes echoes a
+              // sentinel such as the literal string "null" on ordinary calls. That value is
+              // truthy, so it defeats the fallback below and makes every call share the run id
+              // "null" — collapsing independent calls onto one cached Run (see #23739).
+              // Resolve it first so a malformed value is treated as absent.
+              const suspendedToolRunId = resolveSuspendedToolRunId(suspendedToolRunIdInput);
               const runIdToUse = suspendedToolRunId || randomUUID();
+              resolvedToolRunId = runIdToUse;
               this.logger.debug('Executing workflow as tool', {
                 agent: this.name,
                 workflow: workflowName,
@@ -6227,7 +6249,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: (inputData as any).suspendedToolRunId || runId || '',
+                    runId: resolvedToolRunId || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },

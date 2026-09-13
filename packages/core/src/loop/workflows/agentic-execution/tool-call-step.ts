@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { normalizeModelOutput } from '../../../agent/durable/workflows/steps/normalize-model-output';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
+import { resolveSuspendedToolRunId } from '../../../agent/utils';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -474,6 +475,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const { resumeData: resumeDataFromInput, ...argsFromInput } = inputData.args;
           args = argsFromInput;
           resumeDataFromArgs = resumeDataFromInput;
+        }
+
+        // The model authors this field, and some models echo a sentinel such as the literal
+        // string "null" for it. Normalize it once here — before any consumer tests it for
+        // truthiness — so a malformed value is treated as absent everywhere downstream and the
+        // framework-resolved suspension id is never shadowed (see #23739).
+        if (args && typeof args === 'object' && 'suspendedToolRunId' in args) {
+          args.suspendedToolRunId = resolveSuspendedToolRunId((args as any).suspendedToolRunId);
         }
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;
