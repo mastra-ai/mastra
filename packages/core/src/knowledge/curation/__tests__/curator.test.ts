@@ -197,7 +197,10 @@ describe('Knowledge curator', () => {
         destinationScopeId: value.ids['scope:hidden']!,
       }),
     ).rejects.toBeInstanceOf(KnowledgeNotFoundError);
-    const proposals = await value.knowledge.listProposals({ vouchedScopeIds: [value.ids['principal:suggest']!] });
+    const proposals = await value.knowledge.listProposals({
+      vouchedScopeIds: [value.ids['principal:suggest']!],
+      status: 'pending',
+    });
     expect(proposals.proposals).toEqual([expect.objectContaining({ operation: 'update-node', status: 'pending' })]);
   });
 
