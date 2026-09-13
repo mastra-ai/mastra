@@ -20,7 +20,9 @@ import {
   sanitizeKnowledgeImportError,
 } from './base';
 import type {
+  ApplyKnowledgeProposalInput,
   ClaimKnowledgeImportRunInput,
+  CreateKnowledgeProposalInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
@@ -35,6 +37,9 @@ import type {
   KnowledgeImportState,
   KnowledgeNode,
   KnowledgeNodeAddress,
+  KnowledgeProposal,
+  KnowledgeProposalApprovalCapability,
+  KnowledgeProposalApprovalScopeIds,
   KnowledgeRecord,
   KnowledgeScopeAddress,
   KnowledgeScopeGrant,
@@ -51,8 +56,11 @@ import type {
   ListKnowledgeImportRunsInput,
   ListKnowledgeImportRunsOutput,
   ListKnowledgeNodesInput,
+  ListKnowledgeProposalsInput,
+  ListKnowledgeProposalsOutput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
+  ReviewKnowledgeProposalInput,
   UpdateKnowledgeImportRunInput,
   UpdateKnowledgeNodeInput,
 } from './base';
@@ -80,6 +88,14 @@ function cloneNode(node: KnowledgeNode): KnowledgeNode {
 
 function nodeReferenceId(node: KnowledgeNode | string): string {
   return typeof node === 'string' ? node : node.id;
+}
+
+function cloneProposal(proposal: KnowledgeProposal): KnowledgeProposal {
+  return {
+    ...structuredClone(proposal),
+    createdAt: new Date(proposal.createdAt),
+    reviewedAt: proposal.reviewedAt ? new Date(proposal.reviewedAt) : undefined,
+  };
 }
 
 function cloneRecord(record: KnowledgeRecord): KnowledgeRecord {
@@ -1252,6 +1268,137 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       input.importRunId,
       input.details,
     );
+  async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+    const [primaryTarget] = input.targets;
+    if (!primaryTarget) throw new Error('A knowledge proposal requires at least one target');
+    const proposal: KnowledgeProposal = {
+      id: input.id ?? createKnowledgeUlid(),
+      targetType: primaryTarget.type,
+      targetId: primaryTarget.id,
+      expectedVersion: primaryTarget.expectedVersion,
+      targets: structuredClone(input.targets),
+      operation: input.operation,
+      payload: structuredClone(input.payload),
+      reason: input.reason,
+      proposerContextScopeId: input.proposerContextScopeId,
+      status: 'pending',
+      createdAt: new Date(),
+    };
+    if (this.#db.knowledgeProposals.has(proposal.id)) throw new KnowledgeConflictError(proposal.id);
+    this.#db.knowledgeProposals.set(proposal.id, proposal);
+    this.#recordActivity('propose', proposal.targetType, proposal.targetId, input.proposerContextScopeId, undefined, {
+      proposalId: proposal.id,
+    });
+    return cloneProposal(proposal);
+  }
+
+  async getProposal(id: string): Promise<KnowledgeProposal | null> {
+    const proposal = this.#db.knowledgeProposals.get(id);
+    return proposal ? cloneProposal(proposal) : null;
+  }
+
+  async getVisibleProposal(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    approvalScopeIds?: KnowledgeProposalApprovalScopeIds;
+  }): Promise<KnowledgeProposal | null> {
+    const proposal = this.#db.knowledgeProposals.get(input.id);
+    return proposal && this.#isProposalVisible(proposal, input) ? cloneProposal(proposal) : null;
+  }
+
+  async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    const cursor = input.cursor ? this.#db.knowledgeProposals.get(input.cursor) : undefined;
+    if (
+      input.cursor &&
+      (!cursor || (input.status && cursor.status !== input.status) || !this.#isProposalVisible(cursor, input))
+    ) {
+      return { proposals: [] };
+    }
+    const proposals = [...this.#db.knowledgeProposals.values()]
+      .filter(proposal => !input.status || proposal.status === input.status)
+      .filter(
+        proposal =>
+          !cursor ||
+          proposal.createdAt < cursor.createdAt ||
+          (proposal.createdAt.getTime() === cursor.createdAt.getTime() && proposal.id < cursor.id),
+      )
+      .filter(proposal => this.#isProposalVisible(proposal, input))
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
+    const page = proposals.slice(0, limit);
+    return {
+      proposals: page.map(cloneProposal),
+      nextCursor: proposals.length > limit ? page.at(-1)?.id : undefined,
+    };
+  }
+
+  async reviewProposal(input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+    const proposal = this.#db.knowledgeProposals.get(input.id);
+    if (!proposal) throw new KnowledgeNotFoundError('proposal', input.id);
+    if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+    proposal.status = input.status;
+    proposal.reviewerContextScopeId = input.reviewerContextScopeId;
+    proposal.reviewReason = input.reviewReason;
+    proposal.reviewedAt = new Date();
+    this.#recordActivity(
+      input.status === 'rejected' ? 'reject' : 'conflict',
+      proposal.targetType,
+      proposal.targetId,
+      input.reviewerContextScopeId,
+      undefined,
+      { proposalId: proposal.id, reason: input.reviewReason },
+    );
+    return cloneProposal(proposal);
+  }
+
+  async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      const proposal = this.#db.knowledgeProposals.get(input.id);
+      if (!proposal) throw new KnowledgeNotFoundError('proposal', input.id);
+      if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
+      for (const target of proposal.targets) {
+        const entity =
+          target.type === 'node' ? this.#db.knowledgeNodes.get(target.id) : this.#db.knowledgeRecords.get(target.id);
+        if (!entity || entity.deletedAt || entity.version !== target.expectedVersion) {
+          return this.#markProposalConflicted(
+            proposal,
+            input.reviewerContextScopeId,
+            `Expected ${target.type} ${target.id} version ${target.expectedVersion}`,
+          );
+        }
+      }
+      const payload = proposal.payload as { kind?: unknown; mutation?: unknown };
+      if (payload.kind !== 'update-node' || !payload.mutation || typeof payload.mutation !== 'object') {
+        throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
+      }
+      try {
+        this.#updateNode({
+          ...(structuredClone(payload.mutation) as UpdateKnowledgeNodeInput),
+          contextScopeId: input.reviewerContextScopeId,
+          importRunId: undefined,
+          expectedAccessEpoch: input.expectedAccessEpoch,
+        });
+      } catch (error) {
+        if (error instanceof KnowledgeConflictError) {
+          return this.#markProposalConflicted(
+            proposal,
+            input.reviewerContextScopeId,
+            'Proposed mutation conflicts with current state',
+          );
+        }
+        throw error;
+      }
+      proposal.status = 'approved';
+      proposal.reviewerContextScopeId = input.reviewerContextScopeId;
+      proposal.reviewedAt = new Date();
+      this.#recordActivity('approve', proposal.targetType, proposal.targetId, input.reviewerContextScopeId, undefined, {
+        proposalId: proposal.id,
+      });
+      return cloneProposal(proposal);
+    });
   }
 
   async listActivity(input: {
@@ -1418,6 +1565,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         ...event,
         createdAt: new Date(event.createdAt),
       })),
+      proposals: new Map([...this.#db.knowledgeProposals].map(([id, proposal]) => [id, cloneProposal(proposal)])),
       outbox: new Map(
         [...this.#db.knowledgeSemanticOutbox].map(([id, entry]) => [id, cloneSemanticOutboxEntry(entry)]),
       ),
@@ -1447,6 +1595,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#db.knowledgeMentions.clear();
       snapshot.mentions.forEach((mentions, key) => this.#db.knowledgeMentions.set(key, mentions));
       this.#db.knowledgeActivity.splice(0, this.#db.knowledgeActivity.length, ...snapshot.activity);
+      this.#db.knowledgeProposals.clear();
+      snapshot.proposals.forEach((proposal, id) => this.#db.knowledgeProposals.set(id, proposal));
       this.#db.knowledgeSemanticOutbox.clear();
       snapshot.outbox.forEach((entry, id) => this.#db.knowledgeSemanticOutbox.set(id, entry));
       this.#db.knowledgeSemanticIdempotency.clear();
@@ -1496,6 +1646,50 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   #recordScopeIds(recordId: string): KnowledgeScopeIds {
     return [...(this.#db.knowledgeRecordScopes.get(recordId) ?? [])].sort();
+  }
+
+  #markProposalConflicted(
+    proposal: KnowledgeProposal,
+    reviewerContextScopeId: string,
+    reviewReason: string,
+  ): KnowledgeProposal {
+    proposal.status = 'conflicted';
+    proposal.reviewerContextScopeId = reviewerContextScopeId;
+    proposal.reviewReason = reviewReason;
+    proposal.reviewedAt = new Date();
+    this.#recordActivity('conflict', proposal.targetType, proposal.targetId, reviewerContextScopeId, undefined, {
+      proposalId: proposal.id,
+      reason: reviewReason,
+    });
+    return cloneProposal(proposal);
+  }
+
+  #isProposalTargetVisible(target: KnowledgeProposal['targets'][number], visibleScopeIds: KnowledgeScopeIds): boolean {
+    return isKnowledgeScopeVisible(target.scopeIds, visibleScopeIds);
+  }
+
+  /**
+   * Full proposal visibility disjunction: (proposer-context read AND every
+   * target readable) OR direct write authority — the caller can satisfy every
+   * target's approval capability on at least one of that target's scopes.
+   */
+  #isProposalVisible(
+    proposal: KnowledgeProposal,
+    input: { scopeIds: KnowledgeScopeIds; approvalScopeIds?: KnowledgeProposalApprovalScopeIds },
+  ): boolean {
+    const readable = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const proposerContextScopeId = proposal.proposerContextScopeId;
+    if (
+      proposerContextScopeId !== undefined &&
+      readable.includes(proposerContextScopeId) &&
+      proposal.targets.every(target => this.#isProposalTargetVisible(target, readable))
+    ) {
+      return true;
+    }
+    return proposal.targets.every(target => {
+      const authorizedScopeIds = input.approvalScopeIds?.[target.approvalCapability];
+      return Boolean(authorizedScopeIds?.some(scopeId => target.scopeIds.includes(scopeId)));
+    });
   }
 
   #isRecordVisible(record: KnowledgeRecord, visibleScopeIds: KnowledgeScopeIds): boolean {
