@@ -1,5 +1,4 @@
 ---
-'@mastra/core': minor
 '@mastra/memory': minor
 ---
 
