@@ -102,7 +102,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
       return;
     }
 
-    const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
+    const { projectId, projectId2, distinctId, command, nodeEnv } = getServerTelemetryContext();
     const cursorPath = options.cursorPath ?? getDefaultCursorPath();
     const lastSyncedAt = readCursor(cursorPath, projectId);
     const now = options.now ?? new Date();
@@ -149,6 +149,7 @@ export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelem
         command,
         node_env: nodeEnv,
         project_id: projectId,
+        ...(projectId2 ? { project_id2: projectId2 } : {}),
         is_first_sync: isFirstSync,
         window_start: lastSyncedAt?.toISOString() ?? null,
         window_end: now.toISOString(),
