@@ -123,13 +123,43 @@ export function combineObservationGroupRanges(groups: ObservationGroup[]): strin
     return '';
   }
 
-  const firstSegment = segments[0];
-  const lastSegment = segments[segments.length - 1];
-  const firstStart = firstSegment?.split(':')[0]?.trim();
-  const lastEnd = lastSegment?.split(':').at(-1)?.trim();
+  // Groups are not guaranteed to arrive in ascending range order — they are
+  // collected across threads and re-filtered per reflection section — so span
+  // the lowest start to the highest end rather than trusting array position,
+  // which would emit an inverted range like `10:5`.
+  let lowestStart: number | undefined;
+  let highestEnd: number | undefined;
+  let lowestStartLabel = '';
+  let highestEndLabel = '';
 
-  if (firstStart && lastEnd) {
-    return `${firstStart}:${lastEnd}`;
+  for (const segment of segments) {
+    const bounds = segment.split(':');
+    const startLabel = bounds[0]?.trim();
+    const endLabel = bounds.at(-1)?.trim();
+    if (!startLabel || !endLabel) {
+      continue;
+    }
+
+    const start = Number(startLabel);
+    const end = Number(endLabel);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      // A non-numeric range (e.g. a timestamp label) cannot be ordered
+      // reliably; fall back to listing the distinct segments.
+      return Array.from(new Set(segments)).join(',');
+    }
+
+    if (lowestStart === undefined || start < lowestStart) {
+      lowestStart = start;
+      lowestStartLabel = startLabel;
+    }
+    if (highestEnd === undefined || end > highestEnd) {
+      highestEnd = end;
+      highestEndLabel = endLabel;
+    }
+  }
+
+  if (lowestStartLabel && highestEndLabel) {
+    return `${lowestStartLabel}:${highestEndLabel}`;
   }
 
   return Array.from(new Set(segments)).join(',');
@@ -142,10 +172,19 @@ export function renderObservationGroupsForReflection(observations: string): stri
   }
 
   // Walk the string positionally: keep ungrouped text in place, replace each
-  // <observation-group> tag with the rendered ## Group heading.
-  const groupsByContent = new Map(groups.map(g => [g.content.trim(), g]));
-  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, _attrs: string, content: string) => {
-    const group = groupsByContent.get(content.trim());
+  // <observation-group> tag with the rendered ## Group heading. Groups are
+  // consumed in document order rather than looked up by content, so two groups
+  // that share identical content keep their own ids and ranges.
+  let nextGroupIndex = 0;
+  const result = observations.replace(OBSERVATION_GROUP_PATTERN, (_match, attrs: string, content: string) => {
+    // `parseObservationGroups` skips tags missing an id or range; skip them
+    // here too so the two sequences stay aligned.
+    const attributes = parseObservationGroupAttributes(attrs ?? '');
+    if (!attributes.id || !attributes.range) {
+      return content.trim();
+    }
+
+    const group = groups[nextGroupIndex++];
     if (!group) return content.trim();
     return `## Group \`${group.id}\`\n_range: \`${group.range}\`_\n\n${group.content}`;
   });
