@@ -397,10 +397,21 @@ export class Memory extends MastraMemory {
     this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
   }
 
+  private pendingSubconsciousWork = new Set<Promise<void>>();
+
+  /** @internal Track observation-dispatched work without blocking the observation turn. */
+  trackSubconsciousWork(work: Promise<void>): void {
+    this.pendingSubconsciousWork.add(work);
+    void work.then(
+      () => this.pendingSubconsciousWork.delete(work),
+      () => this.pendingSubconsciousWork.delete(work),
+    );
+  }
+
   /**
    * Resolve once all background work this Memory started has finished: observational-memory
-   * cycles (buffered observation and reflection, including the nested agent runs they spawn)
-   * and vector cleanup from `deleteThread` / `deleteMessages`.
+   * cycles (buffered observation and reflection, including the nested agent runs they spawn),
+   * observation-dispatched Subconscious curator runs, and vector cleanup from `deleteThread` / `deleteMessages`.
    *
    * Callers that own the storage connection should await this before closing it, otherwise
    * background statements can race the close.
@@ -416,6 +427,9 @@ export class Memory extends MastraMemory {
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
     await engine?.settled();
+    while (this.pendingSubconsciousWork.size) {
+      await Promise.all([...this.pendingSubconsciousWork]);
+    }
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }

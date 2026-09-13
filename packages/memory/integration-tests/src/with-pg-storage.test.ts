@@ -11,9 +11,11 @@ if (!process.env.DB_URL) {
 
 const __dirname = fileURLToPath(import.meta.url);
 const connectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
+const managesDocker = !process.env.DB_URL;
 
 describe('PostgreSQL Storage Tests', () => {
   beforeAll(async () => {
+    if (!managesDocker) return;
     await $({
       cwd: join(__dirname, '..'),
       stdio: 'inherit',
@@ -25,6 +27,7 @@ describe('PostgreSQL Storage Tests', () => {
   // This afterAll runs last (vitest runs them in reverse registration order)
   // so by this point all PG pools have been gracefully closed.
   afterAll(async () => {
+    if (!managesDocker) return;
     return $({
       cwd: join(__dirname, '..'),
     })`docker compose down --volumes postgres`;
