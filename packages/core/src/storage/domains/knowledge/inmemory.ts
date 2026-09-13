@@ -1837,12 +1837,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
       assertKnowledgeProposalMutationSemantics(mutation, targets);
       try {
-        this.#applyProposalMutation(
-          mutation,
-          input.reviewerContextScopeId,
-          input.expectedAccessEpoch,
-          proposal.targets,
-        );
+        this.#applyProposalMutation(mutation, input.reviewerContextScopeId, input.expectedAccessEpoch, targets);
       } catch (error) {
         if (error instanceof KnowledgeConflictError) {
           return this.#markProposalConflicted(
