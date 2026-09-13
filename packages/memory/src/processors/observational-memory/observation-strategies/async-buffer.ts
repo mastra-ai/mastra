@@ -144,6 +144,18 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     if (!processed.observations) return;
 
     const { record, threadId, resourceId, messages } = this.opts;
+
+    // `Memory.deleteThread` clears the observational-memory record along with the
+    // thread, so a buffered cycle that finishes after the delete would write to a
+    // removed row and index vectors the already-finished cleanup will never delete.
+    // Keying off the record rather than the thread row matters: observation can
+    // legitimately run for a thread that was never persisted.
+    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    if (!liveRecord) {
+      omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
+      return;
+    }
+
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
     await withRetry(
       () =>
