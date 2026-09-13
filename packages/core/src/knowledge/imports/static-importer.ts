@@ -1,5 +1,6 @@
 import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
+import { deepEqual } from '../../utils/deep-equal';
 import type { Knowledge } from '../index';
 import type { KnowledgeImporterBindingHandle } from './types';
 
@@ -120,7 +121,28 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async appendKnowledge(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
     await this.#assertMutationAllowed();
-    return this.#knowledge.createRecord({
+    if (input.id !== undefined) {
+      const storage = await this.#knowledge.getStorage();
+      const existing = await storage.getRecord({ id: input.id, includeDeleted: true });
+      if (existing) {
+        // Someone deleted this importer's record; a re-run must not resurrect it.
+        if (existing.deletedAt && existing.nodeId === this.node.id && existing.source === this.#importer.source)
+          return existing;
+        const reemitted =
+          !existing.deletedAt &&
+          existing.nodeId === this.node.id &&
+          existing.source === this.#importer.source &&
+          existing.text === input.text &&
+          // jsonb (pg) does not preserve key order, so compare metadata structurally.
+          deepEqual(existing.metadata, input.metadata) &&
+          isExactScope(await storage.getRecordScopeIds(existing.id), this.#importer.scopeId);
+        if (reemitted) return existing;
+        throw new Error(
+          `Knowledge record ${input.id} already exists with different content; importer ${this.#importer.importerId} will not overwrite it`,
+        );
+      }
+    }
+    const record = await this.#knowledge.createRecord({
       ...input,
       node: this.node.id,
       source: this.#importer.source,
@@ -129,6 +151,8 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
     });
+    await this.#setTrackedRecord(record);
+    return record;
   }
 
   async listKnowledge(): Promise<KnowledgeRecord[]> {
@@ -176,7 +200,52 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
         `Knowledge importer ${this.#importer.importerId} cannot remove knowledge owned by another binding`,
       );
     }
-    return storage.deleteRecordBySource({ id, source: this.#importer.source, importRunId: this.#importRunId });
+    const tracked = await this.#getTrackedRecord(id);
+    if (tracked?.recordId !== record.id || tracked.version !== record.version) {
+      await storage.recordImportSkip({
+        targetType: 'record',
+        targetId: record.id,
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+        details: { reason: 'ownership-changed', source: this.#importer.source },
+      });
+      return null;
+    }
+    const deleted = await storage.deleteRecordBySource({
+      id,
+      source: this.#importer.source,
+      version: tracked.version,
+      importRunId: this.#importRunId,
+    });
+    await this.#setTrackedRecord(undefined, id);
+    return deleted;
+  }
+
+  async #getTrackedRecord(id: string): Promise<{ recordId: string; version: number } | undefined> {
+    const state = await this.#knowledge.getImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: trackedRecordVersionKey(id),
+    });
+    if (!state?.value) return undefined;
+    try {
+      const tracked = JSON.parse(state.value) as { recordId?: unknown; version?: unknown };
+      return typeof tracked.recordId === 'string' && typeof tracked.version === 'number'
+        ? { recordId: tracked.recordId, version: tracked.version }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #setTrackedRecord(record: KnowledgeRecord | undefined, id = record?.id): Promise<void> {
+    if (!id) return;
+    await this.#knowledge.setImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: trackedRecordVersionKey(id),
+      value: record ? JSON.stringify({ recordId: record.id, version: record.version }) : '',
+    });
   }
 
   async #assertMutationAllowed(): Promise<void> {
@@ -300,6 +369,13 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       nodeScopeIds.length !== 1 ||
       nodeScopeIds[0] !== this.#importer.scopeId
     ) {
+      await storage.recordImportSkip({
+        targetType: 'node',
+        targetId: node.id,
+        contextScopeId: this.#importer.scopeId,
+        importRunId: this.#importRunId,
+        details: { reason: 'ownership-changed', source: this.#importer.source, address: normalized },
+      });
       return { node, deleted: false };
     }
     const result = await storage.deleteNodeByAddress({
@@ -365,6 +441,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 
 function trackedVersionKey(address: string): string {
   return `mastra:static-importer:node-version:${address}`;
+}
+
+function trackedRecordVersionKey(id: string): string {
+  return `mastra:static-importer:record-version:${id}`;
 }
 
 function normalizeAddress(address: string): string {
