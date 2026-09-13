@@ -106,6 +106,66 @@ describe('Session.signal() admissionId', () => {
     });
   });
 
+  it('reconstructs a duplicate signal from the normalized identity snapshot', async () => {
+    const agent = new MockAgent({ id: 'default' });
+    let release!: () => void;
+    agent.enqueueRun({
+      holdUntil: new Promise<void>(resolve => {
+        release = resolve;
+      }),
+      text: 'normalized signal',
+    });
+    const { harness, storage } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const identity = {
+      input: 'signal-input',
+      response: 'signal-response',
+      extra: 'ignored by the native identity contract',
+    } as any;
+
+    const first = await session.signal({
+      content: 'signal snapshot',
+      admissionId: 'signal-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    expect(first.signal.metadata).toEqual({ logicalMessageId: 'signal-input' });
+
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'signal-normalized-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const duplicatePromise = session.signal({
+      content: 'signal snapshot',
+      admissionId: 'signal-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    await lookupStartedPromise;
+    identity.input = 'mutated-after-duplicate-admission';
+    identity.response = 'mutated-response-after-duplicate-admission';
+    releaseLookup();
+
+    const duplicate = await duplicatePromise;
+    expect(duplicate.signal.metadata).toEqual({ logicalMessageId: 'signal-input' });
+    expect(duplicate.id).toBe(first.id);
+    release();
+    await Promise.all([first.result, duplicate.result]);
+  });
+
   it('deduplicates concurrent exact admissions before a second idle dispatch', async () => {
     const agent = new MockAgent({ id: 'default' });
     let release!: () => void;

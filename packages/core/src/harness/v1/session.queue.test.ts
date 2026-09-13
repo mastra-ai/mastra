@@ -27,6 +27,7 @@ import { InMemoryStore } from '../../storage/mock';
 import { extractSignalContents, MockAgent, setupHarness } from './__test-utils__';
 import {
   HarnessAdmissionConflictError,
+  HarnessConfigError,
   HarnessQueueFullDroppedError,
   HarnessQueueFullError,
   HarnessSessionDeletedError,
@@ -188,6 +189,63 @@ describe('Session.queue() — admission', () => {
     expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
       metadata: { logicalMessageId: 'input-queued' },
     });
+    await session.close();
+  });
+
+  it('rejects a lineaged queued turn when another native run becomes active during dispatch preparation', async () => {
+    let releaseActive!: () => void;
+    const activeRun = new Promise<void>(resolve => {
+      releaseActive = resolve;
+    });
+    const agent = new MockAgent({
+      id: 'default',
+      defaultOutput: { holdUntil: activeRun, text: 'foreign active run' },
+    });
+    const { harness } = setupHarness({ agents: { default: agent } });
+    const session = await harness.session({ resourceId: 'u', threadId: { fresh: true } });
+
+    let releaseContents!: () => void;
+    let contentsStarted!: () => void;
+    const contentsStartedPromise = new Promise<void>(resolve => {
+      contentsStarted = resolve;
+    });
+    const contentsGate = new Promise<void>(resolve => {
+      releaseContents = resolve;
+    });
+    (session as any)._buildSignalContentsWithAttachments = async () => {
+      contentsStarted();
+      await contentsGate;
+      return 'lineaged queued work';
+    };
+
+    const queued = session.queue({
+      content: 'lineaged queued work',
+      logicalMessageIdentity: { input: 'input-queued-race', response: 'response-queued-race' },
+    });
+    await contentsStartedPromise;
+    const queuedItemId = session.getRecord().pendingQueue?.[0]?.id;
+    expect(queuedItemId).toBeDefined();
+    agent.enqueueRun({ text: 'queued run must not start' });
+
+    await agent.stream('foreign active run', {
+      memory: { thread: session.threadId, resource: session.resourceId },
+    });
+    const subscription = await agent.subscribeToThread({
+      resourceId: session.resourceId,
+      threadId: session.threadId,
+    });
+    await vi.waitFor(() => expect(subscription.activeRunId()).not.toBeNull());
+    releaseContents();
+
+    await expect(queued).rejects.toBeInstanceOf(HarnessConfigError);
+    expect(session.getRecord().queueAdmissionReceipts?.[queuedItemId!]).toMatchObject({ status: 'failed' });
+    const signalId = session.getRecord().queueAdmissionReceipts?.[queuedItemId!]?.signalId;
+    expect(signalId).toBeDefined();
+    await expect(session.lookupMessageResult(signalId!)).resolves.toMatchObject({ status: 'failed' });
+    expect(agent.streamCalls).toHaveLength(1);
+
+    releaseActive();
+    subscription.unsubscribe();
     await session.close();
   });
 

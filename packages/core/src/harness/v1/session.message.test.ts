@@ -534,6 +534,49 @@ describe('Session.message() — default path', () => {
     expect(agent.calls).toHaveLength(1);
   });
 
+  it('freezes the normalized logical identity before admitMessage awaits or dispatches', async () => {
+    const { harness, agent, storage } = setup();
+    const session = await harness.session({ resourceId: 'u1', threadId: { fresh: true } });
+    const identity = {
+      input: 'admit-input',
+      response: 'admit-response',
+      extra: 'ignored by the native identity contract',
+    } as any;
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const lookupStartedPromise = new Promise<void>(resolve => {
+      lookupStarted = resolve;
+    });
+    const lookupGate = new Promise<void>(resolve => {
+      releaseLookup = resolve;
+    });
+    const realResolve = storage.resolveOperationAdmissionEvidence.bind(storage);
+    let gated = false;
+    storage.resolveOperationAdmissionEvidence = async options => {
+      if (!gated && options.admissionId === 'admit-normalized-identity') {
+        gated = true;
+        lookupStarted();
+        await lookupGate;
+      }
+      return realResolve(options);
+    };
+
+    const pending = session.admitMessage({
+      content: 'freeze this identity',
+      admissionId: 'admit-normalized-identity',
+      logicalMessageIdentity: identity,
+    });
+    await lookupStartedPromise;
+    identity.response = 'mutated-after-admission-start';
+    releaseLookup();
+
+    await expect(pending).resolves.toMatchObject({ accepted: true, duplicate: false });
+    expect(agent.calls[0]?.options.logicalMessageIdentity).toEqual({
+      input: 'admit-input',
+      response: 'admit-response',
+    });
+  });
+
   it('returns message admission before a slow stream output is available', async () => {
     const agent = new SlowStreamStartFakeAgent('default');
     const storage = new InMemoryHarness({ db: new InMemoryDB() });

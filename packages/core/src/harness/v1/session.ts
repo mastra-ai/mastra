@@ -8314,6 +8314,11 @@ export class Session {
    */
   async admitMessage(opts: MessageOptionsDefault): Promise<MessageAdmissionResult> {
     this._assertLive('admitMessage()');
+    const logicalMessageIdentity = normalizeSessionLogicalMessageIdentity(
+      opts.logicalMessageIdentity,
+      'admitMessage()',
+    );
+    const admittedOpts = logicalMessageIdentity === undefined ? opts : { ...opts, logicalMessageIdentity };
     if (opts.admissionId === undefined || opts.admissionId.length === 0) {
       throw new HarnessValidationError('admitMessage().admissionId', 'admissionId must be a non-empty string');
     }
@@ -8328,7 +8333,7 @@ export class Session {
     }
 
     const effectiveModeId = opts.mode ?? this._record.modeId;
-    const admissionHashes = this._computeMessageAdmissionHashes(opts, {
+    const admissionHashes = this._computeMessageAdmissionHashes(admittedOpts, {
       modeId: effectiveModeId,
       modelId: opts.model ?? this._record.modelId,
     });
@@ -8374,7 +8379,7 @@ export class Session {
       };
     }
 
-    const streamPromise = this.message({ ...opts, stream: true });
+    const streamPromise = this.message({ ...admittedOpts, stream: true });
     void streamPromise.catch(() => {});
     const admissionStart = await this._waitForMessageAdmissionStart(opts.admissionId, streamPromise);
     const evidence =
@@ -9668,7 +9673,7 @@ export class Session {
         });
         if (existing !== undefined && !this._signalAdmissionCanRedispatch(existing)) {
           this._assertOpenForTurn('signal()');
-          return await this._returnDuplicateSignalResult(existing, opts, signalAdmissionIdentity);
+          return await this._returnDuplicateSignalResult(existing, admittedOpts, signalAdmissionIdentity);
         }
         if (existing !== undefined && 'status' in existing && this._signalAdmissionCanRedispatch(existing)) {
           redispatchEvidence = existing;
@@ -9684,7 +9689,7 @@ export class Session {
             );
           }
           const admitted = await inFlight.promise;
-          return await this._returnDuplicateSignalResult(admitted, opts, signalAdmissionIdentity);
+          return await this._returnDuplicateSignalResult(admitted, admittedOpts, signalAdmissionIdentity);
         }
       } catch (err) {
         throw internal === undefined ? redactPublicBoundaryRejection(err) : err;
@@ -9765,7 +9770,7 @@ export class Session {
         });
         if (existing !== undefined && !this._signalAdmissionCanRedispatch(existing)) {
           this._assertOpenForTurn('signal()');
-          return await this._returnDuplicateSignalResult(existing, opts, identity);
+          return await this._returnDuplicateSignalResult(existing, admittedOpts, identity);
         }
 
         const inFlight = this._messageAdmissionStarts.get(opts.admissionId);
@@ -9774,7 +9779,7 @@ export class Session {
             throw new HarnessAdmissionConflictError(this.id, opts.admissionId, inFlight.admissionHash, admissionHash);
           }
           const admitted = await inFlight.promise;
-          return await this._returnDuplicateSignalResult(admitted, opts, identity);
+          return await this._returnDuplicateSignalResult(admitted, admittedOpts, identity);
         }
 
         signalAdmissionStart = createDeferred<AgentSignalResultEvidence | OperationAdmissionTombstone>();
@@ -9814,7 +9819,7 @@ export class Session {
         ) {
           signalAdmissionStart.resolve(reservedEvidence);
           this._messageAdmissionStarts.delete(opts.admissionId);
-          return await this._returnDuplicateSignalResult(reservedEvidence, opts, identity);
+          return await this._returnDuplicateSignalResult(reservedEvidence, admittedOpts, identity);
         }
         signalAdmission = {
           admissionId: opts.admissionId,
@@ -9917,7 +9922,7 @@ export class Session {
     ): Promise<SessionSignalResult> => {
       if (claim.kind === 'duplicate') {
         resolveSignalAdmissionStart(claim.evidence);
-        return this._returnDuplicateSignalResult(claim.evidence, opts, signalAdmission!.identity);
+        return this._returnDuplicateSignalResult(claim.evidence, admittedOpts, signalAdmission!.identity);
       }
 
       const err = new HarnessConfigError(
@@ -9935,7 +9940,7 @@ export class Session {
       );
       const evidence = await this._loadSignalAdmissionEvidence(signalAdmission!);
       resolveSignalAdmissionStart(evidence);
-      return this._returnDuplicateSignalResult(evidence, opts, signalAdmission!.identity);
+      return this._returnDuplicateSignalResult(evidence, admittedOpts, signalAdmission!.identity);
     };
 
     // The awaited durable reservation can outlive the run observed above.
@@ -15510,6 +15515,7 @@ export class Session {
           runId: identity.runId,
           resourceId: this.resourceId,
           threadId: this.threadId,
+          ...(item.logicalMessageIdentity ? { ifActive: { behavior: 'discard' } } : {}),
           ifIdle: {
             behavior: 'wake',
             // The wake branch starts a REAL streamed turn; carry the silent-turn nudge.
@@ -15520,6 +15526,26 @@ export class Session {
           },
         },
       );
+      if (item.logicalMessageIdentity !== undefined) {
+        const accepted = await this._awaitSignalNativeAcceptance(
+          signal.accepted,
+          turnAbortController.signal,
+          activeTurnWaiter.promise,
+        );
+        if (accepted.action === 'discard') {
+          const err = new HarnessConfigError(
+            'queue().logicalMessageIdentity',
+            'a full logical message identity cannot be delivered into an active run',
+          );
+          await this._writeQueueSignalResultEvidence({
+            status: 'failed',
+            signalId: identity.signalId,
+            runId: identity.runId,
+            error: projectHarnessPublicError(err),
+          });
+          throw err;
+        }
+      }
       const signalIdentity =
         signal.runId === identity.runId && signal.signal.id === identity.signalId
           ? identity
