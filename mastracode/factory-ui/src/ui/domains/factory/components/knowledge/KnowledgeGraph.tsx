@@ -9,6 +9,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
  * shows a summary card. Dragging a node re-pins it (the layout keeps it put).
  */
 
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   Background,
   BackgroundVariant,
@@ -38,6 +39,7 @@ import {
   graphNodesWithBoundaries,
   graphRecordsWithBoundaries,
   graphTraversalEdges,
+  knowledgeEdgeHoverText,
   NO_FILTERS,
   renderedGraphEdges,
   shouldShowLabel,
@@ -112,6 +114,19 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </Txt>
         ) : null}
       </div>
+      {node.isScope && node.memberCount !== undefined && node.memberCount > 0 ? (
+        <div className="absolute -top-1 -right-1 z-10">
+          <Badge
+            variant="neutral"
+            emphasis="muted"
+            size="xs"
+            aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
+          >
+            {node.memberCount}
+            {node.memberCountTruncated ? '+' : ''}
+          </Badge>
+        </div>
+      ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
@@ -682,6 +697,15 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
             <>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Type</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind === 'scope' ? 'Structural scope' : node.kind}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Content nodes</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.contentNodeCount ?? '—'}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Child scopes</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.childScopeCount ?? '—'}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Direct members</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+                {node.memberCount ?? '—'}
+                {node.memberCountTruncated ? '+' : ''}
+              </dd>
             </>
           ) : (
             <>
@@ -691,16 +715,14 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.rung ? RUNG_LABELS[node.rung] : '—'}</dd>
               <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
               <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
+              <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Connections</dt>
+              <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+                {degree.incoming} in · {degree.outgoing} out
+              </dd>
             </>
           )}
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Connections</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {degree.incoming} in · {degree.outgoing} out
-          </dd>
           <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}
-          </dd>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.updatedAt ? new Date(node.updatedAt).toLocaleString() : '—'}</dd>
         </dl>
       </div>
     );
@@ -739,7 +761,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           {source && target ? `${source} → ${target}` : 'Record'}
         </Txt>
         <Txt as="p" variant="body-sm" tone="muted" className="mt-0.5">
-          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
+          {knowledgeEdgeHoverText(hover.edge)}
         </Txt>
       </div>
     );
