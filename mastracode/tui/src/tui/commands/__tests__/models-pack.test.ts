@@ -1,10 +1,14 @@
+import { stripVTControlCharacters } from 'node:util';
 import type { ModePack } from '@mastra/code-sdk/onboarding/packs';
 import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
+import chalk from 'chalk';
 import { describe, expect, it } from 'vitest';
 import {
+  activateActionDetail,
   deserializePack,
   fallbackPackCandidates,
   formatFallbackChainPreview,
+  formatFallbackChainPreviewStyled,
   formatPackFallbackChain,
   getOverriddenPackModes,
   handleModelsPackCommand,
@@ -358,6 +362,51 @@ describe('formatFallbackChainPreview', () => {
 
     // Hovering never mutates the real settings.
     expect(settings.models.packFallbacks).toEqual({ openai: 'github-copilot' });
+  });
+});
+
+describe('fallback chain highlighting', () => {
+  const packs: ModePack[] = [
+    { id: 'anthropic', name: 'Anthropic', description: '', models: {} },
+    { id: 'openai', name: 'OpenAI', description: '', models: {} },
+    { id: 'github-copilot', name: 'GitHub Copilot', description: '', models: {} },
+  ];
+  const anthropic = packs[0]!;
+
+  it('activate detail appends the fallback chain only when one is set', () => {
+    const settings = createSettings();
+    const base = '  plan  → anthropic/some-model';
+    expect(stripVTControlCharacters(activateActionDetail(base, settings, packs, 'anthropic'))).toBe(base);
+
+    setPackFallback(settings, 'anthropic', 'openai');
+    expect(stripVTControlCharacters(activateActionDetail(base, settings, packs, 'anthropic'))).toBe(
+      `${base}\n  fallback → OpenAI`,
+    );
+  });
+
+  it('styled preview matches the plain text and highlights the chain in color', () => {
+    const settings = createSettings();
+    setPackFallback(settings, 'openai', 'github-copilot');
+
+    const plain = formatFallbackChainPreview(settings, packs, anthropic, 'openai');
+    const esc = String.fromCharCode(27);
+
+    const previousLevel = chalk.level;
+    chalk.level = 3;
+    try {
+      const styled = formatFallbackChainPreviewStyled(settings, packs, anthropic, 'openai');
+      // Same words as the plain preview, with ANSI color in the output.
+      expect(stripVTControlCharacters(styled).trim()).toBe(plain);
+      expect(styled).toContain(`${esc}[`);
+
+      // The no-fallback line has no chain to highlight but the same words.
+      const cleared = formatFallbackChainPreviewStyled(settings, packs, anthropic, null);
+      expect(stripVTControlCharacters(cleared).trim()).toBe(
+        'No fallback — when Anthropic is unavailable the error surfaces.',
+      );
+    } finally {
+      chalk.level = previousLevel;
+    }
   });
 });
 
