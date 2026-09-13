@@ -372,6 +372,30 @@ export class DsqlDB extends MastraBase {
     });
   }
 
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: typeof TABLE_SPANS;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const table = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const result = await this.client.query(
+      `DELETE FROM ${table} WHERE ("traceId", "spanId") IN (
+        SELECT "traceId", "spanId" FROM ${table} WHERE "${column}" < $1 ORDER BY "${column}" LIMIT $2
+      )`,
+      [cutoff, limit],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await withRetry(
@@ -572,6 +596,23 @@ export class DsqlDB extends MastraBase {
           }
         }
       }
+
+      // The startedAtZ column may have been added with DEFAULT NOW(), which assigns migration time to legacy rows.
+      // Reconcile it in bounded transactions from the original startedAt value so retention preserves each span's age.
+      const backfillBatchSize = 1000;
+      let backfilled: number;
+      do {
+        const result = await this.client.query(`
+          UPDATE ${fullTableName}
+          SET "startedAtZ" = "startedAt"
+          WHERE ("traceId", "spanId") IN (
+            SELECT "traceId", "spanId" FROM ${fullTableName}
+            WHERE "startedAtZ" IS DISTINCT FROM "startedAt"
+            LIMIT ${backfillBatchSize}
+          )
+        `);
+        backfilled = result.rowCount ?? 0;
+      } while (backfilled === backfillBatchSize);
 
       this.logger?.info?.(`Migration completed for ${fullTableName}`);
     } catch (error) {

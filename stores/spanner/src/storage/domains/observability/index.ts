@@ -2,8 +2,11 @@ import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  executeRetentionPrune,
   listTracesArgsSchema,
   ObservabilityStorage,
+  resolveRetentionTargets,
+  retentionCutoffMs,
   TABLE_SCHEMAS,
   TABLE_SPANS,
   toTraceSpans,
@@ -45,6 +48,10 @@ import type {
   SpanRecord,
   TracingStorageStrategy,
   UpdateSpanArgs,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig, SpannerInitMode } from '../../db';
@@ -70,6 +77,11 @@ function invalidTraceFilterKey(kind: string, key: string): MastraError {
  * waterfall view, and root-span pagination with the listTraces filters.
  */
 export class ObservabilitySpanner extends ObservabilityStorage {
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: false },
+    metrics: { table: TABLE_AI_METRICS, column: 'timestamp', indexed: false },
+  };
+
   private database: Database;
   private db: SpannerDB;
   private readonly skipDefaultIndexes?: boolean;
@@ -106,6 +118,47 @@ export class ObservabilitySpanner extends ObservabilityStorage {
     this.indexes = indexes?.filter(idx =>
       (ObservabilitySpanner.MANAGED_TABLES as readonly string[]).includes(idx.table),
     );
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const descriptor: RetentionTablesDescriptor = this.disableMetrics
+      ? { spans: { table: TABLE_SPANS, column: 'startedAt', indexed: false } }
+      : ObservabilitySpanner.retentionTables;
+    const targets = resolveRetentionTargets({ policies, descriptor, order: ['spans', 'metrics'] });
+    return executeRetentionPrune({
+      domain: 'observability',
+      targets,
+      options,
+      cutoffFor: (target, now) => new Date(retentionCutoffMs(target.policy, now)).toISOString(),
+      deleteBatch: async (target, cutoff, limit) => {
+        const table = quoteIdent(target.table, 'table name');
+        const column = quoteIdent(target.column, 'column name');
+        const keyPredicate =
+          target.table === TABLE_SPANS
+            ? `(traceId, spanId) IN (SELECT AS STRUCT traceId, spanId FROM ${table} WHERE ${column} < @cutoff ORDER BY ${column} LIMIT @limit)`
+            : `metricId IN (SELECT metricId FROM ${table} WHERE ${column} < @cutoff ORDER BY ${column} LIMIT @limit)`;
+        return this.db.runWithAbortRetry(async () => {
+          let deleted = 0;
+          await this.database.runTransactionAsync(async tx => {
+            try {
+              const [count] = await tx.runUpdate({
+                sql: `DELETE FROM ${table} WHERE ${keyPredicate}`,
+                params: { cutoff, limit },
+                types: { cutoff: 'timestamp' },
+              });
+              deleted = Number(count ?? 0);
+              await tx.commit();
+            } catch (error) {
+              await tx.rollback().catch(rollbackError => {
+                throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+              });
+              throw error;
+            }
+          });
+          return deleted;
+        });
+      },
+    });
   }
 
   /** Build the read-options object that every metrics read path threads through. */

@@ -226,6 +226,70 @@ async function filterAppliedMigrations(
   });
 }
 
+async function readRetentionCreateQueries(
+  client: ClickHouseClient,
+  tables: readonly string[],
+): Promise<Map<string, string>> {
+  const result = await client.query({
+    query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
+  return new Map(rows.map(row => [row.name, row.create_table_query ?? '']));
+}
+
+function retentionEntryMatches(createQuery: string | undefined, entry: RetentionEntry): boolean {
+  if (!createQuery) return false;
+  const current = parseTtlExpression(createQuery);
+  return current?.column === entry.column && current.days === entry.days;
+}
+
+type ClusterRetentionSnapshot = {
+  hostCount: number;
+  createQueries: Map<string, string[]>;
+};
+
+async function readClusterRetentionSnapshot(
+  client: ClickHouseClient,
+  tables: readonly string[],
+  cluster: string,
+): Promise<ClusterRetentionSnapshot> {
+  const hostCountResult = await client.query({
+    query: `SELECT count() AS host_count FROM system.clusters WHERE cluster = {cluster:String}`,
+    query_params: { cluster },
+    format: 'JSONEachRow',
+  });
+  const [{ host_count: hostCountValue } = { host_count: 0 }] = (await hostCountResult.json()) as Array<{
+    host_count: number | string;
+  }>;
+  const hostCount = Number(hostCountValue);
+
+  const createQueriesResult = await client.query({
+    query: `SELECT name, create_table_query FROM clusterAllReplicas({cluster:String}, system.tables) WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { cluster, tables },
+    format: 'JSONEachRow',
+  });
+  const rows = (await createQueriesResult.json()) as Array<{ name: string; create_table_query: string }>;
+  const createQueries = new Map<string, string[]>();
+  for (const row of rows) {
+    const tableQueries = createQueries.get(row.name) ?? [];
+    tableQueries.push(row.create_table_query ?? '');
+    createQueries.set(row.name, tableQueries);
+  }
+
+  return { hostCount, createQueries };
+}
+
+function retentionEntryMatchesEveryClusterHost(snapshot: ClusterRetentionSnapshot, entry: RetentionEntry): boolean {
+  if (!Number.isInteger(snapshot.hostCount) || snapshot.hostCount <= 0) return false;
+  const createQueries = snapshot.createQueries.get(entry.table) ?? [];
+  return (
+    createQueries.length === snapshot.hostCount &&
+    createQueries.every(createQuery => retentionEntryMatches(createQuery, entry))
+  );
+}
+
 /**
  * Returns retention entries whose `MODIFY TTL` would actually change the
  * table's TTL. Falls back to running every entry if introspection fails.
@@ -233,31 +297,58 @@ async function filterAppliedMigrations(
 async function filterAppliedRetention(
   client: ClickHouseClient,
   entries: readonly RetentionEntry[],
+  replication?: ClickhouseReplicationConfig,
 ): Promise<readonly RetentionEntry[]> {
   if (entries.length === 0) return entries;
 
-  const tables = [...new Set(entries.map(e => e.table))];
-
-  let createQueries: Map<string, string>;
+  const tables = [...new Set(entries.map(entry => entry.table))];
   try {
-    const result = await client.query({
-      query: `SELECT name, create_table_query FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
-      query_params: { tables },
-      format: 'JSONEachRow',
-    });
-    const rows = (await result.json()) as Array<{ name: string; create_table_query: string }>;
-    createQueries = new Map(rows.map(r => [r.name, r.create_table_query ?? '']));
+    const cluster = replication?.cluster?.trim();
+    if (cluster) {
+      const snapshot = await readClusterRetentionSnapshot(client, tables, cluster);
+      return entries.filter(entry => !retentionEntryMatchesEveryClusterHost(snapshot, entry));
+    }
+
+    const createQueries = await readRetentionCreateQueries(client, tables);
+    return entries.filter(entry => !retentionEntryMatches(createQueries.get(entry.table), entry));
   } catch {
     return entries;
   }
+}
 
-  return entries.filter(e => {
-    const createQuery = createQueries.get(e.table);
-    if (!createQuery) return true;
-    const current = parseTtlExpression(createQuery);
-    if (!current) return true;
-    return current.column !== e.column || current.days !== e.days;
-  });
+/**
+ * Applies configured observability TTLs to existing ClickHouse tables.
+ * Statements whose current TTL already matches are skipped.
+ */
+export async function applyClickHouseRetention(args: {
+  client: ClickHouseClient;
+  retention: RetentionConfig;
+  replication?: ClickhouseReplicationConfig;
+}): Promise<readonly RetentionEntry[]> {
+  const pending = await filterAppliedRetention(args.client, buildRetentionEntries(args.retention), args.replication);
+  for (const entry of pending) {
+    try {
+      await args.client.command({ query: addOnClusterToDDL(entry.sql, args.replication) });
+    } catch (error) {
+      try {
+        const cluster = args.replication?.cluster?.trim();
+        const installed = cluster
+          ? retentionEntryMatchesEveryClusterHost(
+              await readClusterRetentionSnapshot(args.client, [entry.table], cluster),
+              entry,
+            )
+          : retentionEntryMatches(
+              (await readRetentionCreateQueries(args.client, [entry.table])).get(entry.table),
+              entry,
+            );
+        if (installed) continue;
+      } catch {
+        // Preserve the ALTER error when the reconciliation check also fails.
+      }
+      throw error;
+    }
+  }
+  return pending;
 }
 
 /**
@@ -474,6 +565,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   // Initialization
   // -------------------------------------------------------------------------
 
+  async applyRetention(retention: RetentionConfig = this.#retention ?? {}): Promise<readonly RetentionEntry[]> {
+    return applyClickHouseRetention({
+      client: this.#client,
+      retention,
+      replication: this.#replication,
+    });
+  }
+
   async init(): Promise<void> {
     const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
     if (migrationStatus.needsMigration) {
@@ -547,10 +646,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // metadata version unconditionally, so re-issuing it on every boot is the
       // primary source of replica-catch-up races in deployments with retention.
       if (this.#retention) {
-        const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
-        for (const entry of pendingRetention) {
-          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
-        }
+        await this.applyRetention();
       }
 
       // Burn `cursorId = 0` for every delta stream on the `serial` strategy.
