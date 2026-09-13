@@ -259,6 +259,63 @@ describe('Knowledge importer runner', () => {
     ]);
   });
 
+  it('durably links interrupted agent transcripts before Agent execution', async () => {
+    const started = deferred();
+    const agent = {
+      getMemory: async () => ({
+        getMergedThreadConfig: () => ({ observationalMemory: { scope: 'resource' } }),
+      }),
+      generate: async (_prompt: string, options: { abortSignal: AbortSignal }) => {
+        started.resolve();
+        await new Promise<void>((_resolve, reject) => {
+          options.abortSignal.addEventListener('abort', () => reject(options.abortSignal.reason), { once: true });
+        });
+        return { text: 'unreachable' };
+      },
+    } as unknown as Agent;
+    const storage = new InMemoryStore({ id: 'import-runner-agentic-interruption' });
+    const knowledge = new Knowledge({
+      storage,
+      structure,
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async ctx => {
+            await ctx.agentImport!({ instructions: 'Integrate evidence.', data: {}, checkpoint: 'message-44' });
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const pending = knowledge.getImporter('slack-distiller')!.run(one);
+    const pendingAssertion = expect(pending).rejects.toThrow('shut down before the run completed');
+    await started.promise;
+    const [running] = (await knowledge.listImportRuns({ importerId: 'slack-distiller' })).runs;
+    expect(running).toMatchObject({
+      status: 'running',
+      transcriptThreadId: `knowledge-import-run:${running!.id}`,
+    });
+
+    await knowledge.shutdownImporters();
+    await pendingAssertion;
+    const domain = await knowledge.getStorage();
+    await domain.recoverImportRun({
+      id: running!.id,
+      replacementId: 'replacement-run',
+      payloadKey: `__mastra_internal/import-payload/${running!.id}`,
+      replacementPayloadKey: '__mastra_internal/import-payload/replacement-run',
+      leaseKey: `__mastra_internal/import-lease/${running!.id}`,
+      staleBefore: new Date(Date.now() + 1_000),
+    });
+    expect(await knowledge.getImportRun(running!.id)).toMatchObject({
+      status: 'interrupted',
+      transcriptThreadId: `knowledge-import-run:${running!.id}`,
+    });
+  });
+
   it('replays a failed window after graph writes without duplicates and commits its cursor last', async () => {
     let attempt = 0;
     const knowledge = new Knowledge({
