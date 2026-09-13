@@ -71,6 +71,7 @@ import type {
   WorkflowTerminalContinuationPlanRecord,
   WorkflowTerminalizationCapabilities,
   WorkflowResumeCapabilities,
+  WorkflowExecutionState,
 } from '../../types';
 import { matchesExpectedWorkflowState } from '../../types';
 import {
@@ -1728,6 +1729,26 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
     // Return a deep copy to prevent mutation
     return snapshot ? cloneRunData(snapshot) : null;
+  }
+
+  async getWorkflowExecutionState({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowExecutionState | null> {
+    const stored = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
+    if (!stored) return null;
+
+    // In-memory workflow rows already hold the snapshot object. Read only the
+    // two authority fields so lifecycle checks do not clone the full state.
+    const snapshot = typeof stored.snapshot === 'string' ? JSON.parse(stored.snapshot) : stored.snapshot;
+    if (!snapshot) return null;
+    return {
+      status: snapshot.status,
+      ...(snapshot.executionGeneration === undefined ? {} : { executionGeneration: snapshot.executionGeneration }),
+    };
   }
 
   async listWorkflowRuns({

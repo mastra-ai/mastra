@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../../events';
 import type { Mastra } from '../../../../mastra';
+import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { DefaultExecutionEngine } from '../../../../workflows/default';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -38,30 +39,37 @@ describe.each(['before-next-stage', 'before-terminal-publication'] as const)(
       let observedGeneration: string | undefined;
       let canceledObserved = false;
       let executionWorkflowRunId: string | undefined;
+      let toolCallEmitted = false;
+      const originalCompact = workflowsStore.getWorkflowExecutionState.bind(workflowsStore);
       const originalLoad = workflowsStore.loadWorkflowSnapshot.bind(workflowsStore);
       const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
-      const load = vi.spyOn(workflowsStore, 'loadWorkflowSnapshot').mockImplementation(async args => {
+      const compact = vi.spyOn(workflowsStore, 'getWorkflowExecutionState').mockImplementation(async args => {
         const stack = new Error().stack ?? '';
         const authorityRead = stack.includes('getAuthoritativeExecutionDisposition');
-        const snapshot = await originalLoad(args);
+        const executionState = await originalCompact(args);
         if (args.workflowName === 'executionWorkflow' && !executionWorkflowRunId) executionWorkflowRunId = args.runId;
-        if (args.workflowName !== 'executionWorkflow' || args.runId !== executionWorkflowRunId || !snapshot)
-          return snapshot;
+        if (args.workflowName !== 'executionWorkflow' || args.runId !== executionWorkflowRunId || !executionState)
+          return executionState;
 
         if (authorityRead) authorityReads++;
         const beforeNextStage =
-          schedule === 'before-next-stage' && authorityRead && !stack.includes('isAuthoritativelyCanceled');
+          schedule === 'before-next-stage' &&
+          authorityRead &&
+          toolCallEmitted &&
+          !stack.includes('isAuthoritativelyCanceled');
         const beforeTerminalPublication =
           schedule === 'before-terminal-publication' && stack.includes('isAuthoritativelyCanceled');
-        if (injected > 0 || (!beforeNextStage && !beforeTerminalPublication)) return snapshot;
+        if (injected > 0 || (!beforeNextStage && !beforeTerminalPublication)) return executionState;
 
         injected++;
-        canceledGeneration = snapshot.executionGeneration;
+        canceledGeneration = executionState.executionGeneration;
+        const snapshot = await originalLoad(args);
+        if (!snapshot) return executionState;
         await originalPersist({
           ...args,
           snapshot: { ...snapshot, status: 'canceled' },
         });
-        const reread = await originalLoad(args);
+        const reread = await originalCompact(args);
         canceledObserved = reread?.status === 'canceled';
         observedGeneration = reread?.executionGeneration;
         return reread;
@@ -100,6 +108,11 @@ describe.each(['before-next-stage', 'before-terminal-publication'] as const)(
           maxSteps: 4,
           stopWhen: stepCountIs(4),
           abortSignal: abortController.signal,
+          onChunk: (chunk: ChunkType) => {
+            // The stream exposes the model tool call before the tool step
+            // starts, which is the observable boundary for this schedule.
+            if (schedule === 'before-next-stage' && chunk.type === 'tool-call') toolCallEmitted = true;
+          },
           fixtures,
         });
 
@@ -143,7 +156,7 @@ describe.each(['before-next-stage', 'before-terminal-publication'] as const)(
           ]);
         }
       } finally {
-        load.mockRestore();
+        compact.mockRestore();
         published.mockRestore();
         executions.mockRestore();
         if (previousEvented === undefined) delete process.env.MASTRA_EVENTED_EXECUTION;

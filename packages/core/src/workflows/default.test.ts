@@ -147,6 +147,63 @@ describe('DefaultExecutionEngine.serializeRequestContext', () => {
   });
 });
 
+describe('DefaultExecutionEngine.getAuthoritativeExecutionDisposition', () => {
+  function createEngineWithCompactState(executionState: unknown) {
+    const getWorkflowExecutionState = vi.fn().mockResolvedValue(executionState);
+    const loadWorkflowSnapshot = vi.fn();
+    const engine = new DefaultExecutionEngine({
+      mastra: {
+        getStorage: () => ({
+          getStore: async () => ({ getWorkflowExecutionState, loadWorkflowSnapshot }),
+        }),
+      } as any,
+      options: { validateInputs: false, shouldPersistSnapshot: () => false },
+    });
+    return { engine, getWorkflowExecutionState, loadWorkflowSnapshot };
+  }
+
+  it('uses compact execution state for remote terminal authority', async () => {
+    const { engine, getWorkflowExecutionState, loadWorkflowSnapshot } = createEngineWithCompactState({
+      status: 'canceled',
+      executionGeneration: 'wfeg:authority',
+    });
+
+    await expect(
+      engine.getAuthoritativeExecutionDisposition({
+        workflowId: 'workflow',
+        runId: 'run-1',
+        executionGeneration: 'wfeg:authority',
+      }),
+    ).resolves.toBe('canceled');
+    expect(getWorkflowExecutionState).toHaveBeenCalledWith({ workflowName: 'workflow', runId: 'run-1' });
+    expect(loadWorkflowSnapshot).not.toHaveBeenCalled();
+
+    engine.setLastPersistedStatus('run-1', 'canceled');
+    await expect(
+      engine.getAuthoritativeExecutionDisposition({
+        workflowId: 'workflow',
+        runId: 'run-1',
+        executionGeneration: 'wfeg:authority',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('keeps generation fencing on compact execution state', async () => {
+    const { engine } = createEngineWithCompactState({
+      status: 'running',
+      executionGeneration: 'wfeg:newer',
+    });
+
+    await expect(
+      engine.getAuthoritativeExecutionDisposition({
+        workflowId: 'workflow',
+        runId: 'run-1',
+        executionGeneration: 'wfeg:older',
+      }),
+    ).resolves.toBe('superseded');
+  });
+});
+
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
   let pubsub: PubSub;

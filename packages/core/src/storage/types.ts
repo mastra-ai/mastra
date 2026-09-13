@@ -76,6 +76,15 @@ export interface WorkflowResumeCapabilities {
   fencedStepUpdateVersion?: 1;
 }
 
+/**
+ * Compact workflow execution state used by lifecycle authority checks.
+ *
+ * Unlike a full workflow snapshot, this projection excludes step results and
+ * other potentially large execution data. Storage adapters may implement the
+ * corresponding read directly against their status/generation columns.
+ */
+export type WorkflowExecutionState = Pick<WorkflowRunState, 'status' | 'executionGeneration'>;
+
 export interface PersistWorkflowStepUpdateInput {
   workflowName: string;
   runId: string;

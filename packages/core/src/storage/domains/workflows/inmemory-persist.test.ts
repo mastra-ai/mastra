@@ -46,6 +46,31 @@ describe('WorkflowsInMemory persistWorkflowSnapshot', () => {
     expect(new Date(second!.updatedAt).getTime()).toBeGreaterThan(createdAtBefore);
   });
 
+  it('returns compact execution state without loading the full snapshot', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const workflowName = 'compact-execution-state';
+    const runId = 'run-compact-state';
+
+    await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        ...makeSnapshot(runId, 'running'),
+        executionGeneration: 'wfeg:compact-state',
+        value: { large: 'x'.repeat(10_000) },
+      },
+    });
+    const load = vi.spyOn(workflows, 'loadWorkflowSnapshot');
+
+    await expect(workflows.getWorkflowExecutionState({ workflowName, runId })).resolves.toEqual({
+      status: 'running',
+      executionGeneration: 'wfeg:compact-state',
+    });
+    expect(load).not.toHaveBeenCalled();
+    await expect(workflows.getWorkflowExecutionState({ workflowName, runId: 'missing-run' })).resolves.toBeNull();
+  });
+
   it('atomically replaces both terminal state views with a storage-clock timestamp', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-12T15:00:00.000Z'));

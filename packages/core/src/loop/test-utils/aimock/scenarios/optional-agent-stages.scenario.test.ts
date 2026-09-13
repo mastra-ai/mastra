@@ -13,7 +13,14 @@ describe('AIMock loop scenario: optional agent stages storage baseline', () => {
 
     if (!workflowsStore) throw new Error('AIMock agent did not create a workflows store');
 
-    const counts = { totalLoads: 0, authorityLoads: 0, pendingWrites: 0, deletions: 0 };
+    const counts = {
+      fullReads: 0,
+      authorityFullReads: 0,
+      compactChecks: 0,
+      authorityCompactChecks: 0,
+      pendingWrites: 0,
+      deletions: 0,
+    };
     const graphLengths = new Set<number>();
     const recordGraphLength = (workflowName: string, snapshot: unknown) => {
       if (workflowName !== 'executionWorkflow' || !snapshot || typeof snapshot !== 'object') return;
@@ -25,11 +32,17 @@ describe('AIMock loop scenario: optional agent stages storage baseline', () => {
     const originalPersist = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
     const originalRemove = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
     const load = vi.spyOn(workflowsStore, 'loadWorkflowSnapshot').mockImplementation(async args => {
-      counts.totalLoads++;
-      if (new Error().stack?.includes('getAuthoritativeExecutionDisposition')) counts.authorityLoads++;
+      counts.fullReads++;
+      if (new Error().stack?.includes('getAuthoritativeExecutionDisposition')) counts.authorityFullReads++;
       const snapshot = await originalLoad(args);
       recordGraphLength(args.workflowName, snapshot);
       return snapshot;
+    });
+    const originalCompact = workflowsStore.getWorkflowExecutionState.bind(workflowsStore);
+    const compact = vi.spyOn(workflowsStore, 'getWorkflowExecutionState').mockImplementation(async args => {
+      counts.compactChecks++;
+      if (new Error().stack?.includes('getAuthoritativeExecutionDisposition')) counts.authorityCompactChecks++;
+      return originalCompact(args);
     });
     const persist = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot').mockImplementation(async args => {
       if (args.snapshot.status === 'pending') counts.pendingWrites++;
@@ -57,14 +70,17 @@ describe('AIMock loop scenario: optional agent stages storage baseline', () => {
       const measured = { ...counts, graphLengths: [...graphLengths] };
       console.info(`OPTIONAL_AGENT_STAGES_BASELINE ${JSON.stringify(measured)}`);
       expect(measured).toEqual({
-        totalLoads: 19,
-        authorityLoads: 15,
+        fullReads: 4,
+        authorityFullReads: 0,
+        compactChecks: 21,
+        authorityCompactChecks: 21,
         pendingWrites: 2,
         deletions: 3,
         graphLengths: [6],
       });
     } finally {
       load.mockRestore();
+      compact.mockRestore();
       persist.mockRestore();
       remove.mockRestore();
       if (previousEvented === undefined) delete process.env.MASTRA_EVENTED_EXECUTION;
