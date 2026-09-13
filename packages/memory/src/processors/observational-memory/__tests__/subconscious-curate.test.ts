@@ -112,7 +112,7 @@ describe('Subconscious observation curator', () => {
   it('uses the selected Knowledge runtime for observation and derived agent memory', async () => {
     const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
     const { memory, context, extractor } = fixture(knowledge);
-    const selectedStore = await knowledge.getStorage();
+    const selectedStore = await knowledge.getStorageInternal();
     const legacyStore = await memory.storage.getStore('knowledge');
     expect(selectedStore).not.toBe(legacyStore);
     expect(await memory.createSubconsciousMemory().getKnowledgeStore()).toBe(selectedStore);
@@ -190,7 +190,7 @@ describe('Subconscious observation curator', () => {
 
       const derivedMemory = await agent?.getMemory();
       if (!(derivedMemory instanceof Memory)) throw new Error('Expected curator Memory');
-      expect(await derivedMemory.getKnowledgeStore()).toBe(await knowledge.getStorage());
+      expect(await derivedMemory.getKnowledgeStore()).toBe(await knowledge.getStorageInternal());
       expect(await derivedMemory.getKnowledgeStore()).not.toBe(await memory.storage.getStore('knowledge'));
     },
   );

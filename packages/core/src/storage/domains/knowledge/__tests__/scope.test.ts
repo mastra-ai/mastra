@@ -23,6 +23,7 @@ describe('knowledge scope-node IDs', () => {
     expect(isKnowledgeScopeVisible([orgScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([orgScopeId, otherScopeId], context)).toBe(true);
     expect(isKnowledgeScopeVisible([siblingScopeId], context)).toBe(false);
+    expect(isKnowledgeScopeVisible([], context)).toBe(false);
   });
 
   it('requires canonical UUID identities while allowing an empty membership set', () => {

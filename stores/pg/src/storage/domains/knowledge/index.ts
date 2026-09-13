@@ -110,6 +110,19 @@ interface Executor {
   execute(statement: string | { sql: string; args?: QueryValues }): Promise<QueryResult>;
 }
 
+const ACTIVITY_VISIBILITY_SCOPE_IDS = '__visibilityScopeIds';
+
+function activityVisibilityScopeIds(details?: Record<string, unknown>): string[] {
+  const value = details?.[ACTIVITY_VISIBILITY_SCOPE_IDS];
+  return Array.isArray(value) ? value.filter(scopeId => typeof scopeId === 'string') : [];
+}
+
+function publicActivityDetails(details?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!details) return undefined;
+  const { [ACTIVITY_VISIBILITY_SCOPE_IDS]: _, ...visibleDetails } = details;
+  return Object.keys(visibleDetails).length ? visibleDetails : undefined;
+}
+
 const camelCaseColumns = [
   'createdAt',
   'updatedAt',
@@ -1060,6 +1073,15 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#getRecord(this.#readExecutor, input.id, input.includeDeleted ?? false);
   }
 
+  async getVisibleRecord(input: {
+    id: string;
+    scopeIds: KnowledgeScopeIds;
+    includeDeleted?: boolean;
+  }): Promise<KnowledgeRecord | null> {
+    const record = await this.#getRecord(this.#executor, input.id, input.includeDeleted ?? false);
+    return record && (await this.#isRecordVisible(this.#executor, record, input.scopeIds)) ? record : null;
+  }
+
   async getRecordScopeIds(recordId: string): Promise<KnowledgeScopeIds> {
     return this.#getRecordScopeIds(this.#readExecutor, recordId);
   }
@@ -1406,11 +1428,16 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (remaining.rows[0]) return { node, deleted: false };
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
-      await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
+      await this.#activity(tx, 'delete', 'node', node.id, undefined, input.importRunId, {
+        [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
+      });
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [node.id] });
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [node.id] });
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id=?`, args: [node.id] });
+      const now = new Date();
+      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE "nodeId"=?`, args: [node.id] });
+      await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,"updatedAt"=?,"deletedAt"=?,"deletedBy"=? WHERE id=?`,
+        args: [now, now, `importer:${input.source}`, node.id],
+      });
       return { node, deleted: true };
     });
   }
@@ -1439,8 +1466,24 @@ export class KnowledgePG extends KnowledgeStorage {
     if (!record) return;
     if (expectedVersion !== undefined && record.version !== expectedVersion) throw new KnowledgeConflictError(id);
     const scopeIds = await this.#getRecordScopeIds(tx, id);
-    await this.#activity(tx, 'delete', 'record', id, scopeIds[0], importRunId);
-    await this.#outbox(tx, 'record', id, 'delete', record.version + 1, scopeIds);
+    const mentions = await tx.execute({
+      sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? LIMIT 1`,
+      args: [id],
+    });
+    await this.#activity(
+      tx,
+      'delete',
+      'record',
+      id,
+      undefined,
+      importRunId,
+      mentions.rows[0] ? undefined : { [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds },
+    );
+    await tx.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE documentId=?`,
+      args: [knowledgeSemanticDocumentId('record', id)],
+    });
+    await this.#outbox(tx, 'record', id, 'delete', record.version + 1, mentions.rows[0] ? [] : scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
     const result = await tx.execute({
@@ -1638,7 +1681,7 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (input.transcriptThreadId) {
         await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET transcriptThreadId=? WHERE id=?`,
+          sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET "transcriptThreadId"=COALESCE("transcriptThreadId",?) WHERE id=?`,
           args: [input.transcriptThreadId, input.id],
         });
       }
@@ -1772,6 +1815,18 @@ export class KnowledgePG extends KnowledgeStorage {
       clauses.push('importerId=?');
       args.push(input.importerId);
     }
+    if (input.importerIds) {
+      if (input.importerIds.length === 0) return { runs: [], nextCursor: undefined };
+      clauses.push(`importerId IN (${input.importerIds.map(() => '?').join(',')})`);
+      args.push(...input.importerIds);
+    }
+    if (input.scopeIds) {
+      if (input.scopeIds.length === 0) return { runs: [], nextCursor: undefined };
+      clauses.push(
+        `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" sa WHERE sa.address=(binding::jsonb ->> 1) AND sa."scopeNodeId" IN (${input.scopeIds.map(() => '?').join(',')}))`,
+      );
+      args.push(...input.scopeIds);
+    }
     if (binding) {
       clauses.push('binding=?');
       args.push(binding);
@@ -1879,8 +1934,13 @@ export class KnowledgePG extends KnowledgeStorage {
     for (const row of result.rows) {
       if (row.contextScopeId != null && !visible.has(String(row.contextScopeId))) continue;
       const action = String(row.action) as KnowledgeActivityAction;
-      const visibleDeletion = action === 'delete' && row.contextScopeId != null;
+      const details = row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details);
       const targetType = String(row.targetType) as KnowledgeSemanticDocumentType;
+      const visibleDeletion =
+        action === 'delete' &&
+        (targetType === 'record'
+          ? isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds)
+          : row.contextScopeId != null || isKnowledgeScopeVisible(activityVisibilityScopeIds(details), scopeIds));
       const targetId = String(row.targetId);
       if (targetType === 'node') {
         const node = await this.#getNodeIncludingDeleted(this.#readExecutor, targetId);
@@ -1891,8 +1951,7 @@ export class KnowledgePG extends KnowledgeStorage {
           continue;
       } else {
         const record = await this.#getRecord(this.#readExecutor, targetId, true);
-        if (!visibleDeletion && (!record || !(await this.#isRecordVisible(this.#readExecutor, record, scopeIds))))
-          continue;
+        if (record ? !(await this.#isRecordVisible(this.#readExecutor, record, scopeIds)) : !visibleDeletion) continue;
       }
       events.push({
         id: String(row.id),
@@ -1901,7 +1960,7 @@ export class KnowledgePG extends KnowledgeStorage {
         targetId,
         contextScopeId: row.contextScopeId == null ? undefined : String(row.contextScopeId),
         importRunId: row.importRunId == null ? undefined : String(row.importRunId),
-        details: row.details == null ? undefined : parseJson<Record<string, unknown>>(row.details),
+        details: publicActivityDetails(details),
         createdAt: toDate(row.createdAt),
       });
       if (events.length >= (input.limit ?? 100)) break;
@@ -1913,32 +1972,62 @@ export class KnowledgePG extends KnowledgeStorage {
     input: { status?: KnowledgeSemanticOutboxEntry['status']; scopeIds?: KnowledgeScopeIds; limit?: number } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
     const args: QueryValues = [];
-    const where = input.status ? ' WHERE status=?' : '';
-    if (input.status) args.push(input.status);
+    const clauses: string[] = [];
+    if (input.status) {
+      clauses.push('status=?');
+      args.push(input.status);
+    }
+    const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds) {
+      if (!scopeIds.length) return [];
+      clauses.push(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements_text(scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`,
+      );
+      args.push(...scopeIds);
+    }
+    if (scopeIds) {
+      const visibility = this.#semanticOutboxVisibilityPredicate(scopeIds, '');
+      clauses.push(visibility.sql);
+      args.push(...visibility.args);
+    }
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+    args.push(limit);
     const result = await this.#executor.execute({
-      sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${where} ORDER BY createdAt ASC,id ASC`,
+      sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
       args,
     });
-    const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
-    return result.rows
-      .map(parseOutbox)
-      .filter(entry => !scopeIds || isKnowledgeScopeVisible(entry.scopeIds, scopeIds))
-      .slice(0, input.limit ?? 100);
+    return result.rows.map(parseOutbox);
   }
 
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
     const now = input.now ?? new Date();
     const stale = new Date(now.getTime() - (input.claimTimeoutMs ?? 60_000));
     return this.#transaction(async tx => {
-      const selected = await tx.execute({
-        sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE availableAt <= ? AND (status='pending' OR (status='processing' AND claimedAt <= ?)) ORDER BY createdAt ASC,id ASC FOR UPDATE SKIP LOCKED`,
-        args: [now.toISOString(), stale.toISOString()],
-      });
       const scopeIds = input.scopeIds && canonicalizeKnowledgeScopeIds(input.scopeIds);
-      const entries = selected.rows
-        .map(parseOutbox)
-        .filter(entry => !scopeIds || isKnowledgeScopeVisible(entry.scopeIds, scopeIds))
-        .slice(0, input.limit ?? 100);
+      if (scopeIds && !scopeIds.length) return [];
+      const scopeClause = scopeIds
+        ? ` AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(o.scopeIds) AS scope(value) WHERE scope.value IN (${scopeIds.map(() => '?').join(',')}))`
+        : '';
+      const predecessorClause = ` AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" earlier WHERE earlier.documentId=o.documentId AND earlier.status!='completed' AND (earlier.createdAt < o.createdAt OR (earlier.createdAt = o.createdAt AND earlier.id < o.id)))`;
+      const visibilityClause = scopeIds ? ` AND ${this.#semanticOutboxVisibilityPredicate(scopeIds, 'o.').sql}` : '';
+      const visibilityArgs = scopeIds ? this.#semanticOutboxVisibilityPredicate(scopeIds, 'o.').args : [];
+      const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
+      const selected = await tx.execute({
+        sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${scopeClause}${visibilityClause}${predecessorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ?`,
+        args: [now.toISOString(), stale.toISOString(), ...(scopeIds ?? []), ...visibilityArgs, limit],
+      });
+      const visibleCandidates: KnowledgeSemanticOutboxEntry[] = selected.rows.map(parseOutbox);
+      if (!visibleCandidates.length) return [];
+      const locked = await tx.execute({
+        sql: `SELECT o.*,json(o.scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" o WHERE o.id IN (${visibleCandidates.map(() => '?').join(',')}) AND o.availableAt <= ? AND (o.status='pending' OR (o.status='processing' AND o.claimedAt <= ?))${predecessorClause} ORDER BY o.createdAt ASC,o.id ASC LIMIT ? FOR UPDATE SKIP LOCKED`,
+        args: [...visibleCandidates.map(entry => entry.id), now.toISOString(), stale.toISOString(), limit],
+      });
+      const entries: KnowledgeSemanticOutboxEntry[] = [];
+      for (const row of locked.rows) {
+        const entry = parseOutbox(row);
+        if (scopeIds && !(await this.#isSemanticOutboxEntryVisible(tx, entry, scopeIds))) continue;
+        entries.push(entry);
+      }
       for (const entry of entries)
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='processing',attempts=attempts+1,claimedAt=?,claimedBy=? WHERE id=?`,
@@ -2140,6 +2229,100 @@ export class KnowledgePG extends KnowledgeStorage {
         return false;
     }
     return true;
+  }
+
+  #semanticOutboxVisibilityPredicate(
+    scopeIds: KnowledgeScopeIds,
+    aliasPrefix: string,
+  ): {
+    sql: string;
+    args: QueryValues;
+  } {
+    const o = aliasPrefix;
+    const inList = scopeIds.map(() => '?').join(',');
+    const sql = `(
+      (${o}documentType='node' AND ${o}operation='delete')
+      OR (
+        ${o}documentType='node'
+        AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" n
+          WHERE n.id=substr(${o}documentId,16) AND n."deletedAt" IS NULL
+            AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId" IN (${inList}))
+        )
+      )
+      OR (
+        ${o}documentType='record' AND ${o}operation='delete'
+        AND (
+          NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" rd WHERE rd.id=substr(${o}documentId,18))
+          OR (
+            EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" own
+              WHERE own.id=(SELECT "nodeId" FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=substr(${o}documentId,18))
+                AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nso WHERE nso."nodeId"=own.id AND nso."scopeNodeId" IN (${inList}))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" md LEFT JOIN "${TABLE_KNOWLEDGE_NODES}" tnd ON tnd.id=md."targetNodeId"
+              WHERE md."recordId"=substr(${o}documentId,18)
+                AND (tnd.id IS NULL OR tnd."deletedAt" IS NOT NULL
+                  OR NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nsd WHERE nsd."nodeId"=md."targetNodeId" AND nsd."scopeNodeId" IN (${inList})))
+            )
+          )
+        )
+      )
+      OR (
+        ${o}documentType='record' AND ${o}operation!='delete'
+        AND EXISTS (
+          SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" r
+          WHERE r.id=substr(${o}documentId,18) AND r."deletedAt" IS NULL
+            AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs."recordId"=r.id AND rs."scopeNodeId" IN (${inList}))
+            AND EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" own
+              WHERE own.id=r."nodeId" AND own."deletedAt" IS NULL
+                AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nso WHERE nso."nodeId"=own.id AND nso."scopeNodeId" IN (${inList}))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_NODES}" tn ON tn.id=m."targetNodeId"
+              WHERE m."recordId"=r.id
+                AND (tn.id IS NULL OR tn."deletedAt" IS NOT NULL
+                  OR NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" nsm WHERE nsm."nodeId"=m."targetNodeId" AND nsm."scopeNodeId" IN (${inList})))
+            )
+        )
+      )
+    )`;
+    return { sql, args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds] };
+  }
+
+  async #isSemanticOutboxEntryVisible(
+    executor: Executor,
+    entry: KnowledgeSemanticOutboxEntry,
+    visibleScopeIds: KnowledgeScopeIds,
+  ): Promise<boolean> {
+    const scopesVisible =
+      entry.documentType === 'record'
+        ? isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds)
+        : isKnowledgeScopeVisible(entry.scopeIds, visibleScopeIds);
+    if (!scopesVisible) return false;
+    const id = entry.documentId.slice(`knowledge:${entry.documentType}:`.length);
+    if (entry.documentType === 'node') {
+      if (entry.operation === 'delete') return true;
+      const node = await this.#getNode(executor, id);
+      return Boolean(node && isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, id), visibleScopeIds));
+    }
+    const record = await this.#getRecord(executor, id, true);
+    if (!record) return entry.operation === 'delete';
+    if (entry.operation === 'delete') {
+      const mentions = await executor.execute({
+        sql: `SELECT targetNodeId FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`,
+        args: [record.id],
+      });
+      for (const nodeId of [record.nodeId, ...mentions.rows.map(row => String(row.targetNodeId))]) {
+        const node = await this.#getNode(executor, nodeId);
+        if (!node || !isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(executor, nodeId), visibleScopeIds))
+          return false;
+      }
+      return true;
+    }
+    return !record.deletedAt && (await this.#isRecordVisible(executor, record, visibleScopeIds));
   }
 
   async #queryKnowledge(

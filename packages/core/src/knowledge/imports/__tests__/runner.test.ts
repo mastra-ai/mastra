@@ -55,13 +55,15 @@ describe('Knowledge importer runner', () => {
     await firstStarted.promise;
     const second = importer.run(one, { address: 'second' });
     const binding = knowledgeImporterBindingKey(one);
-    expect((await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' }))?.value).toBeUndefined();
+    expect(
+      (await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' }))?.value,
+    ).toBeUndefined();
     releaseFirst.resolve();
 
     await expect(first).resolves.toMatchObject({ status: 'succeeded' });
     await expect(second).resolves.toMatchObject({ status: 'succeeded' });
     expect(order).toEqual(['start:first', 'end:first', 'start:second', 'end:second']);
-    expect(await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).toMatchObject({
+    expect(await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' })).toMatchObject({
       value: 'second',
     });
   });
@@ -184,7 +186,7 @@ describe('Knowledge importer runner', () => {
     };
     const first = new Knowledge({ storage, structure, importers: [definition] });
     await first.reconcile();
-    const domain = await first.getStorage();
+    const domain = await first.getStorageInternal();
     const binding = knowledgeImporterBindingKey(one);
     await domain.enqueueImportRun({
       id: 'crashed-run',
@@ -218,7 +220,7 @@ describe('Knowledge importer runner', () => {
     restarted.__registerMastra({} as never);
     await vi.waitFor(() => expect(processed).toEqual(['42', '43']));
     await vi.waitFor(async () => {
-      const runs = await restarted.listImportRuns({ importerId: 'calendar' });
+      const runs = await restarted.listImportRunsInternal({ importerId: 'calendar' });
       expect(runs.runs).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'crashed-run', status: 'interrupted' }),
@@ -254,7 +256,7 @@ describe('Knowledge importer runner', () => {
     await started.promise;
     await knowledge.shutdownImporters();
     await pendingAssertion;
-    expect((await knowledge.listImportRuns({ importerId: 'calendar' })).runs).toEqual([
+    expect((await knowledge.listImportRunsInternal({ importerId: 'calendar' })).runs).toEqual([
       expect.objectContaining({ status: 'running' }),
     ]);
   });
@@ -293,7 +295,7 @@ describe('Knowledge importer runner', () => {
     const pending = knowledge.getImporter('slack-distiller')!.run(one);
     const pendingAssertion = expect(pending).rejects.toThrow('shut down before the run completed');
     await started.promise;
-    const [running] = (await knowledge.listImportRuns({ importerId: 'slack-distiller' })).runs;
+    const [running] = (await knowledge.listImportRunsInternal({ importerId: 'slack-distiller' })).runs;
     expect(running).toMatchObject({
       status: 'running',
       transcriptThreadId: `knowledge-import-run:${running!.id}`,
@@ -301,7 +303,7 @@ describe('Knowledge importer runner', () => {
 
     await knowledge.shutdownImporters();
     await pendingAssertion;
-    const domain = await knowledge.getStorage();
+    const domain = await knowledge.getStorageInternal();
     await domain.recoverImportRun({
       id: running!.id,
       replacementId: 'replacement-run',
@@ -310,7 +312,7 @@ describe('Knowledge importer runner', () => {
       leaseKey: `__mastra_internal/import-lease/${running!.id}`,
       staleBefore: new Date(Date.now() + 1_000),
     });
-    expect(await knowledge.getImportRun(running!.id)).toMatchObject({
+    expect(await knowledge.getImportRunInternal(running!.id)).toMatchObject({
       status: 'interrupted',
       transcriptThreadId: `knowledge-import-run:${running!.id}`,
     });
@@ -338,13 +340,13 @@ describe('Knowledge importer runner', () => {
     const binding = knowledgeImporterBindingKey(one);
 
     await expect(knowledge.getImporter('calendar')!.run(one)).resolves.toMatchObject({ status: 'failed' });
-    expect(await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).toBeNull();
+    expect(await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' })).toBeNull();
     await expect(knowledge.getImporter('calendar')!.run(one)).resolves.toMatchObject({ status: 'succeeded' });
-    expect(await knowledge.getImportState({ importerId: 'calendar', binding, key: 'cursor' })).toMatchObject({
+    expect(await knowledge.getImportStateInternal({ importerId: 'calendar', binding, key: 'cursor' })).toMatchObject({
       value: 'event:42',
     });
 
-    const scope = await (await knowledge.getStorage()).getScopeAddress(one.scope);
+    const scope = await (await knowledge.getStorageInternal()).getScopeAddress(one.scope);
     expect(scope).toBeTruthy();
     expect(
       (await knowledge.listNodes({ scopeIds: [scope!.scopeNodeId] })).filter(
@@ -375,7 +377,7 @@ describe('Knowledge importer runner', () => {
       error: 'Error: secret token',
     });
     expect(
-      await knowledge.getImportState({
+      await knowledge.getImportStateInternal({
         importerId: 'calendar',
         binding: knowledgeImporterBindingKey(one),
         key: 'cursor',
@@ -464,13 +466,13 @@ describe('Knowledge importer runner', () => {
     );
     expect(executions[0]!.prompt).toContain('Curated Shipyard feature knowledge');
     expect(
-      await knowledge.getImportState({
+      await knowledge.getImportStateInternal({
         importerId: 'slack-distiller',
         binding: knowledgeImporterBindingKey(one),
         key: 'checkpoint',
       }),
     ).toMatchObject({ value: 'message-42' });
-    const scope = await (await knowledge.getStorage()).getScopeAddress(one.scope);
+    const scope = await (await knowledge.getStorageInternal()).getScopeAddress(one.scope);
     const nodes = await knowledge.listNodes({ scopeIds: [scope!.scopeNodeId] });
     const imported = nodes.filter(node => node.name === 'Architecture decision');
     expect(imported).toHaveLength(1);
@@ -560,7 +562,7 @@ describe('Knowledge importer runner', () => {
     });
     expect(run.error).toContain('did not acknowledge checkpoint message-43');
     expect(
-      await knowledge.getImportState({
+      await knowledge.getImportStateInternal({
         importerId: 'slack-distiller',
         binding: knowledgeImporterBindingKey(one),
         key: 'checkpoint',

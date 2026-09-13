@@ -246,6 +246,131 @@ describe('KnowledgeLibSQL shared access epochs', () => {
 });
 
 describe('KnowledgeLibSQL semantic outbox claims', () => {
+  it('claims disjoint visible scopes without scanning or claiming a hidden backlog', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-outbox-scopes-${randomUUID()}.db`);
+    const url = `file:${path}`;
+    const firstClient = createClient({ url });
+    const secondClient = createClient({ url });
+    try {
+      const first = new KnowledgeLibSQL({ client: firstClient, storageIsolationKey: url });
+      const second = new KnowledgeLibSQL({ client: secondClient, storageIsolationKey: url });
+      await first.init();
+      await second.init();
+      const firstScopeId = randomUUID();
+      const secondScopeId = randomUUID();
+      await first.createNode({ id: firstScopeId, name: 'First claim scope', isScope: true, scopeIds: [] });
+      await first.createNode({ id: secondScopeId, name: 'Second claim scope', isScope: true, scopeIds: [] });
+      for (let index = 0; index < 50; index++) {
+        await first.createNode({ name: `Second hidden subject ${index}`, scopeIds: [secondScopeId] });
+      }
+      const firstSubject = await first.createNode({ name: 'First visible subject', scopeIds: [firstScopeId] });
+
+      const [firstClaim, secondClaim] = await Promise.all([
+        first.claimSemanticOutbox({ workerId: 'first-scope-worker', scopeIds: [firstScopeId], limit: 1 }),
+        second.claimSemanticOutbox({ workerId: 'second-scope-worker', scopeIds: [secondScopeId], limit: 1 }),
+      ]);
+
+      expect(firstClaim).toHaveLength(1);
+      expect(firstClaim[0]?.documentId).toContain(firstSubject.id);
+      expect(secondClaim).toHaveLength(1);
+      expect(secondClaim[0]?.scopeIds).toEqual([secondScopeId]);
+    } finally {
+      firstClient.close();
+      secondClient.close();
+      await rm(path, { force: true });
+    }
+  });
+
+  it('keeps outbox reads bounded when stale scope stamps overlap the caller but current visibility fails', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-outbox-stale-${randomUUID()}.db`);
+    const url = `file:${path}`;
+    const realClient = createClient({ url });
+    let statements = 0;
+    const client = new Proxy(realClient, {
+      get(target, prop, receiver) {
+        if (prop === 'execute') {
+          const execute = target.execute.bind(target);
+          return async (...args: Parameters<typeof execute>) => {
+            statements += 1;
+            return execute(...args);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    try {
+      const store = new KnowledgeLibSQL({ client, storageIsolationKey: url });
+      await store.init();
+      const callerScopeId = randomUUID();
+      const hiddenScopeId = randomUUID();
+      await store.createNode({ id: callerScopeId, name: 'Caller scope', isScope: true, scopeIds: [] });
+      await store.createNode({ id: hiddenScopeId, name: 'Hidden scope', isScope: true, scopeIds: [] });
+
+      // Stale-overlap backlog: nodes enqueued under the caller scope, then
+      // moved into the hidden scope. Their outbox rows keep the caller-stamped
+      // scopeIds but current visibility fails, so the SQL predicate must
+      // exclude them — without walking the whole table client-side.
+      const staleEntries = 50;
+      for (let index = 0; index < staleEntries; index++) {
+        const node = await store.createNode({ name: `Stale subject ${index}`, scopeIds: [callerScopeId] });
+        await store.updateNode({ id: node.id, version: node.version, scopeIds: [hiddenScopeId] });
+      }
+      // Mention-closure staleness: a visible record whose mentioned node moved
+      // out of view keeps a caller-stamped row that current visibility fails.
+      const mentionTarget = await store.createNode({ name: 'MentionTarget', scopeIds: [callerScopeId] });
+      const owner = await store.createNode({ name: 'Record owner', scopeIds: [callerScopeId] });
+      await store.createRecord({
+        node: owner.id,
+        text: 'See [[MentionTarget]] for details.',
+        scopeIds: [callerScopeId],
+      });
+      await store.updateNode({
+        id: mentionTarget.id,
+        version: mentionTarget.version,
+        scopeIds: [hiddenScopeId],
+      });
+      // The one entry that stays genuinely visible.
+      const visible = await store.createNode({ name: 'Visible subject', scopeIds: [callerScopeId] });
+
+      // Visible to the caller: the one live upsert plus the reindex `delete`
+      // entries (stamped with the caller scope at move time) — never a stale
+      // upsert whose current scope state is hidden.
+      statements = 0;
+      const listed = await store.listSemanticOutbox({ scopeIds: [callerScopeId], limit: 200 });
+      expect(listed).toHaveLength(53);
+      for (const entry of listed) {
+        if (entry.operation === 'upsert') {
+          // the live node plus the record-owner node are the only visible upserts
+          expect([visible.id, owner.id].some(id => entry.documentId.includes(id))).toBe(true);
+        } else {
+          expect(entry.operation).toBe('delete');
+        }
+      }
+      expect(statements).toBe(1);
+
+      statements = 0;
+      const claimed = await store.claimSemanticOutbox({
+        workerId: 'stale-worker',
+        scopeIds: [callerScopeId],
+        limit: 5,
+      });
+      // reindex deletes queue behind their stale (filtered) upserts, so only
+      // the two legitimate upserts are claimable — the stale backlog is never
+      // walked client-side
+      expect(claimed).toHaveLength(2);
+      for (const entry of claimed) {
+        expect(entry.operation).toBe('upsert');
+        expect([visible.id, owner.id].some(id => entry.documentId.includes(id))).toBe(true);
+      }
+      // one bounded SELECT plus one guarded claim UPDATE per row — no scan loop
+      expect(statements).toBeLessThanOrEqual(3);
+    } finally {
+      realClient.close();
+      await rm(path, { force: true });
+    }
+  });
+
   it('claims each entry through only one client', async () => {
     const path = join(tmpdir(), `mastra-knowledge-outbox-${randomUUID()}.db`);
     const url = `file:${path}`;
