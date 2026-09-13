@@ -12,6 +12,21 @@ import { ChunkFrom } from '../../stream/types';
 
 import { TokenLimiterProcessor } from './token-limiter';
 
+/** True when the string contains a UTF-16 surrogate that is not part of a pair. */
+function containsLoneSurrogate(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      i++;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Mock logger that implements all required methods
 const mockLogger: IMastraLogger = {
   debug: vi.fn(),
@@ -730,6 +745,44 @@ describe('TokenLimiterProcessor', () => {
 
       // Verify all parts are present and the message structure is intact
       expect(result[0].content.parts.every(part => part.type === 'text')).toBe(true);
+    });
+    /**
+     * `sliceByTokens` cuts at a UTF-16 boundary, which can fall inside a
+     * surrogate pair. A lone surrogate does not survive a UTF-8 round-trip and
+     * strict JSON parsers reject it outright, so truncation must repair it.
+     */
+    it('does not leave a lone surrogate when truncation splits an emoji', async () => {
+      processor = new TokenLimiterProcessor({ limit: 4, strategy: 'truncate' });
+
+      const messages = [createTestMessage('\u{1F600}'.repeat(20))];
+      const result = await processor.processOutputResult({ messages, abort: mockAbort });
+      const text = (result[0].content.parts[0] as TextPart).text;
+
+      expect(containsLoneSurrogate(text)).toBe(false);
+      expect(Buffer.from(text, 'utf8').toString('utf8')).toBe(text);
+    });
+
+    it('keeps truncated astral text UTF-8 safe across limits', async () => {
+      for (const limit of [1, 2, 3, 5, 8, 13, 21]) {
+        processor = new TokenLimiterProcessor({ limit, strategy: 'truncate' });
+
+        const messages = [createTestMessage('\u{1F600}'.repeat(50))];
+        const result = await processor.processOutputResult({ messages, abort: mockAbort });
+        const text = (result[0].content.parts[0] as TextPart).text;
+
+        expect(containsLoneSurrogate(text), `limit=${limit}`).toBe(false);
+      }
+    });
+
+    it('leaves truncated ASCII text unchanged', async () => {
+      processor = new TokenLimiterProcessor({ limit: 5, strategy: 'truncate' });
+
+      const messages = [createTestMessage('hello world this is plain ascii text here')];
+      const result = await processor.processOutputResult({ messages, abort: mockAbort });
+      const text = (result[0].content.parts[0] as TextPart).text;
+
+      expect(text).not.toContain('\uFFFD');
+      expect('hello world this is plain ascii text here'.startsWith(text)).toBe(true);
     });
   });
 

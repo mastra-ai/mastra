@@ -7,6 +7,13 @@ import type { ChunkType } from '../../stream';
 import type { ProcessInputStepArgs, ProcessOutputStreamArgs, Processor } from '../index';
 
 /**
+ * Matches a lone UTF-16 surrogate without matching a complete pair, so a cut
+ * that lands inside an astral character can be repaired. Unicode mode is what
+ * makes the pair-aware behavior work.
+ */
+const UNPAIRED_SURROGATE_RE = /[\uD800-\uDFFF]/gu;
+
+/**
  * Configuration options for TokenLimiter processor
  */
 export interface TokenLimiterOptions {
@@ -438,9 +445,16 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             if (this.strategy === 'abort') {
               abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
             } else {
-              // Truncate the text to fit within the remaining token limit
+              // Truncate the text to fit within the remaining token limit.
+              // The cut can land inside a surrogate pair (an emoji, or any
+              // astral codepoint), which leaves a lone surrogate that does not
+              // survive a UTF-8 round-trip and that strict JSON parsers reject
+              // outright, so repair it the way workspace tool output does.
               const remainingTokens = Math.max(0, limit - cumulativeTokens);
-              const truncatedText = remainingTokens > 0 ? sliceByTokens(textContent, 0, remainingTokens) : '';
+              const truncatedText =
+                remainingTokens > 0
+                  ? sliceByTokens(textContent, 0, remainingTokens).replace(UNPAIRED_SURROGATE_RE, '\uFFFD')
+                  : '';
               cumulativeTokens += this.countTokens(truncatedText);
 
               return {
