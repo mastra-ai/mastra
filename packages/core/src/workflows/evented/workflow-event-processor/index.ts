@@ -404,6 +404,30 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Resolves the live, in-process workflow instance for a run described by
+   * `{ workflowId, runId, parentWorkflow }`. Internal (run-scoped) registrations
+   * win, then nested workflows are located through their parent chain, and
+   * finally the public registry is consulted.
+   */
+  #resolveLiveWorkflow({
+    workflowId,
+    runId,
+    parentWorkflow,
+  }: {
+    workflowId: string;
+    runId: string;
+    parentWorkflow?: ParentWorkflow;
+  }): Workflow | null | undefined {
+    if (this.mastra.__hasInternalWorkflow(workflowId, runId)) {
+      return this.mastra.__getInternalWorkflow(workflowId, runId);
+    }
+    if (parentWorkflow) {
+      return getNestedWorkflow(this.mastra, parentWorkflow);
+    }
+    return this.#tryResolveWorkflow(workflowId);
+  }
+
+  /**
    * Stale-build fence for scheduled fires (#19169).
    *
    * A `workflow.start` published by the scheduler carries no step graph —
@@ -759,8 +783,15 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // handle nested workflow
     if (parentWorkflow) {
-      // get the step from the parent workflow and process it if it's a loop
-      const step = parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
+      // get the step from the parent workflow and process it if it's a loop.
+      // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
+      // Streams etc.) strips the loop `condition` function from its stepGraph
+      // copy, so resolve the live loop-owning workflow from the registry and only
+      // fall back to the payload copy if it can't be found.
+      const liveParentWorkflow = this.#resolveLiveWorkflow(parentWorkflow);
+      const step =
+        liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
+        parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
@@ -3092,14 +3123,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    let workflow;
-    if (this.mastra.__hasInternalWorkflow(workflowData.workflowId, workflowData.runId)) {
-      workflow = this.mastra.__getInternalWorkflow(workflowData.workflowId, workflowData.runId);
-    } else if (workflowData.parentWorkflow) {
-      workflow = getNestedWorkflow(this.mastra, workflowData.parentWorkflow);
-    } else {
-      workflow = this.#tryResolveWorkflow(workflowData.workflowId);
-    }
+    let workflow = this.#resolveLiveWorkflow(workflowData);
 
     if (!workflow) {
       // For terminal/cleanup events (`workflow.fail`, `workflow.end`,
