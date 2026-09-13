@@ -182,6 +182,14 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description:
       "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
   },
+  {
+    name: 'onToolError',
+    type: "'throw' | 'return'",
+    isOptional: true,
+    defaultValue: "'throw'",
+    description:
+      "How a tool execution failure (a CallToolResult with `isError: true`) is surfaced. With 'throw' (the default), the tool call rejects with a MastraError so agents map it onto the failed-tool-call path and the model sees the error text. With 'return', the call resolves with the tool result so a non-LLM consumer can inspect it directly. See the Tool error handling section below.",
+  },
 ]}
 />
 
@@ -252,6 +260,73 @@ const mcp = new MCPClient({
 Per the MCP specification: **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints and provide no security boundary. A malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
+
+## Tool error handling
+
+Per the MCP specification, a tool that fails during execution reports the failure **in-band**: the server returns a normal `CallToolResult` with `isError: true`, the failure details in `content`, and (optionally) structured error data in `structuredContent`. The `onToolError` server option controls how `MCPClient` surfaces that result.
+
+### `onToolError: 'throw'` (default)
+
+The tool call rejects with a `MastraError` (`id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED'`). This is the right default for agents: the error maps onto Mastra's failed-tool-call path so tool spans, stream chunks, scorers, and persisted message parts reflect the failure, and the model sees the error text so it can self-correct.
+
+The server's `structuredContent`, when present, is preserved on the thrown error as a JSON string under `details.structuredContent`, so a caller that catches the error can recover the structured data:
+
+```typescript
+import { MastraError } from '@mastra/core/error'
+
+try {
+  await tool.execute(input)
+} catch (error) {
+  if (error instanceof MastraError && error.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED') {
+    const structured = error.details?.structuredContent
+      ? JSON.parse(error.details.structuredContent as string)
+      : undefined
+    // structured?.code, structured?.validationResults, ...
+  }
+}
+```
+
+### `onToolError: 'return'`
+
+The tool call resolves instead of rejecting, so a non-LLM consumer (for example, an MCP App UI host) can inspect the result directly. The resolved value keeps the same shape it has on success — the bare `structuredContent` when the server returns it, otherwise the full `CallToolResult` — so existing field access is unchanged.
+
+Because a resolved value looks the same whether the tool succeeded or failed, read the failure signal and preserved metadata with these helpers exported from `@mastra/mcp`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'getMcpCallToolIsError(result)',
+    type: 'boolean | undefined',
+    description:
+      'Returns `true` when the result came from a tool call that reported `isError: true`. Returns `undefined` for successful results and for scalar results that cannot carry the flag.',
+  },
+  {
+    name: 'getMcpCallToolContent(result)',
+    type: 'unknown',
+    description:
+      'Returns the MCP `content` blocks (the model-facing text) preserved alongside a structured result. Returns `undefined` when no content channel is present.',
+  },
+  {
+    name: 'getMcpCallToolMeta(result)',
+    type: 'Record<string, unknown> | undefined',
+    description:
+      'Returns the result-level `_meta` preserved on a structured result (for example `ui.resourceUri` for MCP App detection). Returns `undefined` when the result carried no `_meta`.',
+  },
+]}
+/>
+
+```typescript
+import { getMcpCallToolIsError, getMcpCallToolContent } from '@mastra/mcp'
+
+const result = await tool.execute(input)
+
+if (getMcpCallToolIsError(result)) {
+  // The tool failed. `result` still exposes its structured fields directly,
+  // and getMcpCallToolContent(result) returns the human-readable error text.
+}
+```
+
+These helpers read non-enumerable symbol channels, so the failure signal and metadata do not appear in `Object.keys()`, `JSON.stringify()`, or a `console.log` of the result — always read them through the helpers.
 
 ## Server instructions
 
