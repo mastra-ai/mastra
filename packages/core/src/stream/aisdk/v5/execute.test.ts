@@ -2,7 +2,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
-import { execute, resolveJsonPromptInjection } from './execute';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
+import { execute, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
@@ -313,5 +314,125 @@ describe('execute sampling-param stripping (issue #23319)', () => {
     expect(captured.options.temperature).toBe(0);
     expect(captured.options.topP).toBe(0.5);
     expect(captured.options.topK).toBe(10);
+  });
+});
+
+describe('execute OpenAI strict-mode schema preparation', () => {
+  const strictSchema = z.object({
+    tags: z.array(z.string()).min(1).max(3),
+    nested: z.object({ subject: z.string(), note: z.string().optional() }),
+  });
+
+  function makeCapturingModel(provider: string, options: { supportsStructuredOutputs?: boolean } = {}) {
+    const captured: { options?: any } = {};
+    const model = new MockLanguageModelV2({
+      provider,
+      modelId: 'gpt-4o',
+      doStream: async (options: any) => {
+        captured.options = options;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-strict', modelId: 'gpt-4o', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"tags":["a"],"nested":{"subject":"s","note":"n"}}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    // `@ai-sdk/openai-compatible` chat models carry this flag as an own property
+    if (options.supportsStructuredOutputs !== undefined) {
+      (model as any).supportsStructuredOutputs = options.supportsStructuredOutputs;
+    }
+    return { model, captured };
+  }
+
+  async function run(model: MockLanguageModelV2, providerOptions?: Record<string, any>) {
+    const stream = execute({
+      runId: 'test-run-id-strict',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: { schema: strictSchema },
+      providerOptions,
+    });
+    await readStream(stream);
+  }
+
+  function expectStrictSchema(schema: any) {
+    expect(schema.required).toEqual(['tags', 'nested']);
+    expect(schema.additionalProperties).toBe(false);
+    expect(schema.properties.tags.minItems).toBeUndefined();
+    expect(schema.properties.tags.maxItems).toBeUndefined();
+    expect(schema.properties.nested.required).toEqual(['subject', 'note']);
+    expect(schema.properties.nested.additionalProperties).toBe(false);
+  }
+
+  function expectUntouchedSchema(schema: any) {
+    expect(schema.properties.tags.minItems).toBe(1);
+    expect(schema.properties.tags.maxItems).toBe(3);
+    expect(schema.properties.nested.required).toEqual(['subject']);
+  }
+
+  it('prepares the schema and opts into strict mode for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.chat');
+    await run(model);
+    expectStrictSchema(captured.options.responseFormat.schema);
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
+  });
+
+  it('prepares the schema for OpenAI-compatible models that send strict json_schema by default', async () => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', { supportsStructuredOutputs: true });
+    await run(model);
+    expectStrictSchema(captured.options.responseFormat.schema);
+    // The compatible model already defaults to strict; no OpenAI-specific option is injected.
+    expect(captured.options.providerOptions?.openai).toBeUndefined();
+  });
+
+  it('leaves the schema alone when strict mode is disabled through provider options', async () => {
+    for (const providerOptions of [
+      { openaiCompatible: { strictJsonSchema: false } },
+      { 'azure-foundry': { strictJsonSchema: false } },
+      { azureFoundry: { strictJsonSchema: false } },
+    ]) {
+      const { model, captured } = makeCapturingModel('azure-foundry.chat', { supportsStructuredOutputs: true });
+      await run(model, providerOptions);
+      expectUntouchedSchema(captured.options.responseFormat.schema);
+    }
+  });
+
+  it('leaves the schema alone for models that do not send a strict json_schema', async () => {
+    for (const { model, captured } of [
+      makeCapturingModel('mock-provider'),
+      makeCapturingModel('azure-foundry.chat', { supportsStructuredOutputs: false }),
+    ]) {
+      await run(model);
+      expectUntouchedSchema(captured.options.responseFormat.schema);
+    }
+  });
+
+  it('detects strict mode from the provider id or the compatible-model flag', () => {
+    expect(usesOpenAIStrictJsonSchema({ provider: 'openai.responses' })).toBe(true);
+    expect(usesOpenAIStrictJsonSchema({ provider: 'my-gateway.chat', supportsStructuredOutputs: true })).toBe(true);
+    expect(
+      usesOpenAIStrictJsonSchema(
+        { provider: 'my-gateway.chat', supportsStructuredOutputs: true },
+        { myGateway: { strictJsonSchema: false } },
+      ),
+    ).toBe(false);
+    expect(usesOpenAIStrictJsonSchema({ provider: 'my-gateway.chat', supportsStructuredOutputs: false })).toBe(false);
+    expect(usesOpenAIStrictJsonSchema({ provider: 'anthropic.messages' })).toBe(false);
+  });
+
+  it('keeps deciding by provider id for model-router models', () => {
+    // The router advertises supportsStructuredOutputs for every provider it can resolve.
+    expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('anthropic/claude-sonnet-4-6'))).toBe(false);
+    expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('openai/gpt-5-mini'))).toBe(true);
   });
 });

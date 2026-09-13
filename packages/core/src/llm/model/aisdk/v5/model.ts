@@ -76,6 +76,11 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   readonly modelId: string;
   readonly gatewayId?: string;
   /**
+   * Mirrors the flag `@ai-sdk/openai-compatible` chat models expose. When it is set the
+   * model sends a JSON response format as a `json_schema` with `strict: true` by default.
+   */
+  readonly supportsStructuredOutputs?: boolean;
+  /**
    * Supported URL patterns by media type for the provider.
    *
    * The keys are media type patterns or full media types (e.g. `*\/*` for everything, `audio/*`, `video/*`, or `application/pdf`).
@@ -93,6 +98,10 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
     this.gatewayId = (config as { gatewayId?: string }).gatewayId;
+    const supportsStructuredOutputs = (config as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs;
+    if (typeof supportsStructuredOutputs === 'boolean') {
+      this.supportsStructuredOutputs = supportsStructuredOutputs;
+    }
     this.supportedUrls = this.#model.supportedUrls;
   }
 

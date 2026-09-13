@@ -169,4 +169,41 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
       },
     });
   });
+
+  it('sends an OpenAI-strict structured output schema to OpenAI-compatible providers', async () => {
+    let responseFormat: any;
+    // `createOpenAICompatible({ name: 'azure-foundry', supportsStructuredOutputs: true })` produces
+    // provider id `azure-foundry.chat` and sends `strict: true` with the schema by default.
+    const model = createMockOpenAIModel({
+      provider: 'azure-foundry.chat',
+      modelId: 'gpt-4o',
+      response: { name: 'Ada', tags: ['a'], nested: { subject: 's', note: 'n' } },
+      onGenerate: options => {
+        responseFormat = options.responseFormat;
+      },
+    });
+    (model as any).supportsStructuredOutputs = true;
+    const agent = new Agent({ id: 'test', name: 'test', instructions: 'test', model });
+
+    const result = await agent.generate('test', {
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          tags: z.array(z.string()).min(1).max(3),
+          nested: z.object({ subject: z.string(), note: z.string().optional() }),
+        }),
+      },
+    });
+
+    expect(result.object).toEqual({ name: 'Ada', tags: ['a'], nested: { subject: 's', note: 'n' } });
+    expect(responseFormat?.schema).toMatchObject({
+      required: ['name', 'tags', 'nested'],
+      additionalProperties: false,
+      properties: {
+        nested: { required: ['subject', 'note'], additionalProperties: false },
+      },
+    });
+    expect(responseFormat?.schema?.properties?.tags?.minItems).toBeUndefined();
+    expect(responseFormat?.schema?.properties?.tags?.maxItems).toBeUndefined();
+  });
 });
