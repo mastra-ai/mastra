@@ -36,6 +36,16 @@ import { Route } from './route.js';
 const PINNED_NODE_NAME = 'pinned';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Maximum visible nodes inspected for non-prefix name matches. */
+const SEARCH_SCAN_CAP = 1000;
+/** Compact result window returned to the search popover. */
+const SEARCH_RESULT_LIMIT = 20;
+/** Prevent an unbounded query string from reaching storage. */
+const SEARCH_QUERY_LIMIT = 128;
+/** Bound storage pressure while calculating direct-member counts. */
+const SCOPE_COUNT_CONCURRENCY = 8;
+
+/** Window caps. Injectable at construction only — never per-request. */
 export interface KnowledgeRouteLimits {
   maxNodes: number;
   maxRecords: number;
@@ -89,9 +99,15 @@ export interface KnowledgeGraphNode {
   name: string;
   kind: string;
   description?: string;
-  rung: 'org' | 'resource' | 'thread';
+  rung: 'org' | 'resource' | 'thread' | null;
+  isScope?: boolean;
   pinned: boolean;
   recordCount: number;
+  /** Viewer-visible direct-member counts, present only for structural scope nodes. */
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+  contentNodeCount?: number;
+  childScopeCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,8 +116,8 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  type: 'wikilink';
-  recordId: string;
+  type: 'wikilink' | 'contains';
+  recordId?: string;
   pinned?: boolean;
 }
 
@@ -118,6 +134,10 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
+  memberCount: number;
+  memberCountTruncated: boolean;
+  contentNodeCount: number;
+  childScopeCount: number;
 }
 
 export interface KnowledgeScopeTreePayload {
@@ -223,6 +243,25 @@ export interface KnowledgeProposalPayload {
   actions: Array<'approve' | 'reject' | 're-review'>;
   createdAt: string;
   reviewedAt?: string;
+}
+
+function directScopeMemberCounts(
+  members: KnowledgeNode[],
+  maxNodes: number,
+): Pick<KnowledgeScopeTreeNode, 'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'> {
+  const visibleMembers = members.slice(0, maxNodes);
+  const childScopeCount = visibleMembers.filter(member => member.isScope).length;
+  const contentNodeCount = visibleMembers.length - childScopeCount;
+  return {
+    memberCount: visibleMembers.length,
+    memberCountTruncated: members.length > maxNodes,
+    contentNodeCount,
+    childScopeCount,
+  };
+}
+
+function compareScopeNodes(a: KnowledgeScopeTreeNode, b: KnowledgeScopeTreeNode): number {
+  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 }
 
 const MAX_TRANSCRIPT_MESSAGE_PREVIEW_BYTES = 2_000;
@@ -956,6 +995,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     projectId: string,
     perspectiveKey: string,
     node: KnowledgeNode,
+    counts: Pick<
+      KnowledgeScopeTreeNode,
+      'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'
+    >,
     label?: ScopeLabel,
   ): KnowledgeScopeTreeNode {
     const description = metadataString(node.metadata, 'description');
@@ -965,6 +1008,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       name: label?.name ?? node.name,
       kind: label?.kind ?? node.kind ?? 'scope',
       ...(description ? { description } : {}),
+      ...counts,
     };
   }
 
@@ -1393,12 +1437,46 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             )),
             ...(await this.#scopeLabels(view, page, selected.id)),
           ]);
+          const countsById = new Map<
+            string,
+            Pick<
+              KnowledgeScopeTreeNode,
+              'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'
+            >
+          >();
+          const scopeNodes = [selected, ...page];
+          for (let index = 0; index < scopeNodes.length; index += SCOPE_COUNT_CONCURRENCY) {
+            const batch = scopeNodes.slice(index, index + SCOPE_COUNT_CONCURRENCY);
+            await Promise.all(
+              batch.map(async node => {
+                const members = await view.knowledge.listNodes({
+                  scopeIds: view.scopeIds,
+                  membershipScopeIds: [node.id],
+                  limit: this.#limits.maxNodes + 1,
+                });
+                countsById.set(node.id, directScopeMemberCounts(members, this.#limits.maxNodes));
+              }),
+            );
+          }
+          const emptyCounts = directScopeMemberCounts([], this.#limits.maxNodes);
           const children = page.map(node =>
-            this.#scopeTreeNode(projectId, view.perspectiveKey, node, labels.get(node.id)),
+            this.#scopeTreeNode(
+              projectId,
+              view.perspectiveKey,
+              node,
+              countsById.get(node.id) ?? emptyCounts,
+              labels.get(node.id),
+            ),
           );
           const last = eligible.length > this.#limits.maxNodes ? page.at(-1) : undefined;
           return loose(c).json({
-            scope: this.#scopeTreeNode(projectId, view.perspectiveKey, selected, labels.get(selected.id)),
+            scope: this.#scopeTreeNode(
+              projectId,
+              view.perspectiveKey,
+              selected,
+              countsById.get(selected.id) ?? emptyCounts,
+              labels.get(selected.id),
+            ),
             children,
             ...(last
               ? {
@@ -1436,13 +1514,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const fetched = await view.knowledge.listNodes({
             scopeIds: view.scopeIds,
             membershipScopeIds: scopeIds,
-            isScope: false,
-            limit: this.#limits.maxNodes + 1,
+            limit: this.#limits.maxNodes,
           });
-          let truncated = fetched.length > this.#limits.maxNodes;
+          let truncated = fetched.length >= this.#limits.maxNodes;
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
-          const nodes = fetched.slice(0, this.#limits.maxNodes).filter(node => !pinnedNodeIdSet.has(node.id));
+          const members = fetched
+            .filter(node => node.id !== selected.id && !pinnedNodeIdSet.has(node.id))
+            .slice(0, Math.max(0, this.#limits.maxNodes - 1));
+          const nodes = members.filter(node => !node.isScope);
+          const scopeNodes = members.filter(node => node.isScope);
           const recordWindow: KnowledgeRecord[] = [];
           for (const node of nodes) {
             if (recordWindow.length > this.#limits.maxRecords) break;
@@ -1460,7 +1541,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             recordWindow.length = this.#limits.maxRecords;
           }
           const resolver = await WikilinkResolver.create(view.knowledge, store, nodes, this.#limits.maxFallbackLookups);
-          const edges: KnowledgeGraphEdge[] = [];
+          const edges: KnowledgeGraphEdge[] = members.map(member => ({
+            id: `contains:${selected.id}:${member.id}`,
+            source: selected.id,
+            target: member.id,
+            type: 'contains',
+          }));
           const boundaryNodes = new Map<string, KnowledgeNode>();
           const edgeSeen = new Set<string>();
           const recordCounts = new Map<string, number>();
@@ -1471,7 +1557,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               const target = await resolver.resolve(name, resolutionScopeIds);
               if (!target || target.id === record.nodeId) continue;
               if (!resolver.inWindowId(target.id)) {
-                if (!boundaryNodes.has(target.id) && nodes.length + boundaryNodes.size >= this.#limits.maxNodes)
+                if (!boundaryNodes.has(target.id) && members.length + 1 + boundaryNodes.size >= this.#limits.maxNodes)
                   continue;
                 boundaryNodes.set(target.id, target);
               }
@@ -1518,22 +1604,46 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             membershipScopeIds: [selected.id],
             limit: 1,
           });
+          const structuralNodes = [selected, ...scopeNodes];
+          const scopeCounts = new Map<
+            string,
+            Pick<
+              KnowledgeScopeTreeNode,
+              'memberCount' | 'memberCountTruncated' | 'contentNodeCount' | 'childScopeCount'
+            >
+          >();
+          for (let index = 0; index < structuralNodes.length; index += SCOPE_COUNT_CONCURRENCY) {
+            const batch = structuralNodes.slice(index, index + SCOPE_COUNT_CONCURRENCY);
+            await Promise.all(
+              batch.map(async node => {
+                const directMembers = await view.knowledge.listNodes({
+                  scopeIds: view.scopeIds,
+                  membershipScopeIds: [node.id],
+                  limit: this.#limits.maxNodes + 1,
+                });
+                scopeCounts.set(node.id, directScopeMemberCounts(directMembers, this.#limits.maxNodes));
+              }),
+            );
+          }
+          const scopeNodeIdSet = new Set(structuralNodes.map(node => node.id));
           const graphNodes = await Promise.all(
-            [...nodes, ...boundaryNodes.values()].map(async node => {
-              const nodeScopeIds = await store.getNodeScopeIds(node.id);
+            [...structuralNodes, ...nodes, ...boundaryNodes.values()].map(async node => {
+              const isScope = scopeNodeIdSet.has(node.id);
+              const nodeScopeIds = isScope ? [] : await store.getNodeScopeIds(node.id);
               const description = metadataString(node.metadata, 'description');
               return {
-                id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),
-                reference: this.#mintReference(projectId, 'node', node.id),
+                id: this.#mintHandle(projectId, view.perspectiveKey, isScope ? 'scope' : 'node', node.id),
+                reference: this.#mintReference(projectId, isScope ? 'scope' : 'node', node.id),
                 name: node.name,
-                kind: node.kind ?? 'concept',
+                kind: node.kind ?? (isScope ? 'scope' : 'concept'),
                 ...(description ? { description } : {}),
-                rung: rungForScopeIds(nodeScopeIds, view),
-                pinned: accented.has(node.id),
-                recordCount: recordCounts.get(node.id) ?? 0,
+                rung: isScope ? null : rungForScopeIds(nodeScopeIds, view),
+                ...(isScope ? { isScope: true, ...scopeCounts.get(node.id) } : {}),
+                pinned: !isScope && accented.has(node.id),
+                recordCount: isScope ? 0 : (recordCounts.get(node.id) ?? 0),
                 createdAt: node.createdAt.toISOString(),
                 updatedAt: node.updatedAt.toISOString(),
-              };
+              } satisfies KnowledgeGraphNode;
             }),
           );
           const payload: KnowledgeGraphPayload = {
@@ -1543,9 +1653,21 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             edges: edges.map(edge => ({
               ...edge,
               id: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.id),
-              source: this.#mintHandle(projectId, view.perspectiveKey, 'node', edge.source),
-              target: this.#mintHandle(projectId, view.perspectiveKey, 'node', edge.target),
-              recordId: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.recordId),
+              source: this.#mintHandle(
+                projectId,
+                view.perspectiveKey,
+                scopeNodeIdSet.has(edge.source) ? 'scope' : 'node',
+                edge.source,
+              ),
+              target: this.#mintHandle(
+                projectId,
+                view.perspectiveKey,
+                scopeNodeIdSet.has(edge.target) ? 'scope' : 'node',
+                edge.target,
+              ),
+              ...(edge.recordId
+                ? { recordId: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.recordId) }
+                : {}),
             })),
             records: [],
             truncated,
