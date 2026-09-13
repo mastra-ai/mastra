@@ -479,10 +479,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // The model authors this field, and some models echo a sentinel such as the literal
         // string "null" for it. Normalize it once here — before any consumer tests it for
-        // truthiness — so a malformed value is treated as absent everywhere downstream and the
-        // framework-resolved suspension id is never shadowed (see #23739).
+        // truthiness — so a malformed value counts as absent (the key is dropped, matching the
+        // durable and background-task paths) and never shadows a framework-resolved id (#23739).
         if (args && typeof args === 'object' && 'suspendedToolRunId' in args) {
-          args.suspendedToolRunId = resolveSuspendedToolRunId((args as any).suspendedToolRunId);
+          const resolvedSuspendedToolRunId = resolveSuspendedToolRunId((args as any).suspendedToolRunId);
+          if (resolvedSuspendedToolRunId === undefined) {
+            delete (args as any).suspendedToolRunId;
+          } else {
+            args.suspendedToolRunId = resolvedSuspendedToolRunId;
+          }
         }
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;

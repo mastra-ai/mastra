@@ -166,10 +166,12 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // "null", which is truthy and would suppress the framework's suspended run id below
         // (see #23739). Resolve the args-side value so a malformed one counts as absent.
         const argsSuspendedToolRunId = resolveSuspendedToolRunId(args.suspendedToolRunId);
-        if (resumeData !== undefined && !argsSuspendedToolRunId && suspendedToolRunId) {
-          args.suspendedToolRunId = suspendedToolRunId;
-        } else if (!argsSuspendedToolRunId) {
-          delete args.suspendedToolRunId;
+        if (!argsSuspendedToolRunId) {
+          if (resumeData !== undefined && suspendedToolRunId) {
+            args.suspendedToolRunId = suspendedToolRunId;
+          } else {
+            delete args.suspendedToolRunId;
+          }
         }
 
         const result = await executor.execute(args, {

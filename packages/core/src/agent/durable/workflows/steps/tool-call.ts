@@ -817,8 +817,8 @@ export function createDurableToolCallStep() {
       // When resuming a delegated sub-agent/workflow tool, recover the inner
       // suspended run id from this tool call's workflow suspend payload. The
       // payload is partitioned by resumeLabel, so parallel calls to the same
-      // delegate cannot select each other's run. Auto-resume calls already pass
-      // suspendedToolRunId in their arguments and keep that value unchanged.
+      // delegate cannot select each other's run. When this payload resolves to a run id it
+      // overrides whatever the model supplied in its arguments — see the precedence block below.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
       const suspendedToolRunId = resolveSuspendedToolRunId(
         (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
