@@ -32,6 +32,11 @@ function promptContext(overrides: Partial<PromptContext> = {}): PromptContext {
 }
 
 describe('createCodingAgent', () => {
+  it('keeps ProviderHistoryCompat in the default error processors', async () => {
+    const agent = createCodingAgent(baseConfig());
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
   it('returns an Agent', () => {
     const agent = createCodingAgent(baseConfig());
     expect(agent).toBeInstanceOf(Agent);
