@@ -231,6 +231,73 @@ describe('Datasets Handlers', () => {
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
     });
+
+    describe('model override', () => {
+      const baseBody = { targetType: 'agent', targetId: 'my-agent' };
+
+      it('accepts a router id string or a provider config object, rejects other shapes', () => {
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: 'openai/gpt-4o' }).success).toBe(
+          true,
+        );
+        expect(
+          TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: { id: 'openai/gpt-4o', apiKey: 'x' } })
+            .success,
+        ).toBe(true);
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: 42 }).success).toBe(false);
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: { apiKey: 'x' } }).success).toBe(
+          false,
+        );
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: { id: 'gpt-4o' } }).success).toBe(
+          false,
+        );
+      });
+
+      it('forwards the model override to startExperimentAsync', async () => {
+        const startExperimentAsync = vi.fn().mockResolvedValue({
+          experimentId: 'experiment-1',
+          status: 'pending',
+          totalItems: 1,
+        });
+        vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+        const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+          ...baseBody,
+          model: { id: 'openai/gpt-4o', apiKey: 'x' },
+          grouping: { comparisonId: 'cmp', variantId: 'gpt-4o' },
+        });
+        await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: 'dataset-1',
+          ...parsedBody,
+        } as any);
+
+        expect(startExperimentAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ model: { id: 'openai/gpt-4o', apiKey: 'x' } }),
+        );
+      });
+
+      it('rejects a model override on a create-only (start: false) request', () => {
+        const result = TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({
+          ...baseBody,
+          start: false,
+          model: 'openai/gpt-4o',
+        });
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0]?.message).toContain('model override requires start: true');
+      });
+
+      it('rejects a model override on non-agent targets and empty model ids', () => {
+        const workflow = TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({
+          targetType: 'workflow',
+          targetId: 'wf',
+          model: 'openai/gpt-4o',
+        });
+        expect(workflow.success).toBe(false);
+        expect(workflow.error?.issues[0]?.message).toContain('only supported for agent targets');
+
+        expect(TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...baseBody, model: '' }).success).toBe(false);
+      });
+    });
   });
 
   describe('Experiment routes', () => {

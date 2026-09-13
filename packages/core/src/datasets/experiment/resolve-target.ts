@@ -1,3 +1,5 @@
+import type { Agent } from '../../agent';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import type { Target } from './executor';
 
@@ -5,6 +7,12 @@ import type { Target } from './executor';
  * Resolve a target from Mastra's registries by type and ID.
  * When `agentVersion` is provided for an agent target, the returned agent
  * will have the versioned config applied (via `applyStoredOverrides`).
+ *
+ * When `model` is provided for an agent target, the override is applied to a
+ * private copy of the agent (same id) so the registered singleton is never
+ * mutated. A versioned agent is already a private fork, so the override is
+ * applied on it directly — re-forking would drop the "stored version applied"
+ * marker and let execution re-resolve the version, discarding the override.
  *
  * The result is wrapped in `{ target }` because `Workflow` has a `.then`
  * method for step chaining, which makes it thenable. Returning a thenable
@@ -17,7 +25,12 @@ export async function resolveTarget(
   targetType: string,
   targetId: string,
   agentVersion?: string,
+  model?: MastraModelConfig,
 ): Promise<{ target: Target } | null> {
+  if (model && targetType !== 'agent') {
+    throw new Error(`Experiment "model" override is only supported for agent targets (got "${targetType}")`);
+  }
+
   let resolved: Target | null = null;
 
   switch (targetType) {
@@ -39,6 +52,11 @@ export async function resolveTarget(
         } catch {
           // leave null
         }
+      }
+      if (model && resolved) {
+        const agent = agentVersion ? (resolved as Agent) : (resolved as Agent).__fork();
+        agent.__updateModel({ model });
+        resolved = agent;
       }
       break;
     case 'workflow':

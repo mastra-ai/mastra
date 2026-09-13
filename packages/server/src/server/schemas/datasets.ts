@@ -361,7 +361,7 @@ export const updateExperimentBodySchema = z
   })
   .strict();
 
-export const triggerExperimentBodySchema = z.object({
+const triggerExperimentBodyShape = z.object({
   start: z
     .boolean()
     .optional()
@@ -385,6 +385,20 @@ export const triggerExperimentBodySchema = z.object({
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+  model: z
+    .union([
+      z.string().min(1),
+      z.object({
+        id: z.string().regex(/^[^/]+\/.+$/, 'Expected "provider/model-id"'),
+        url: z.string().optional(),
+        apiKey: z.string().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+      }),
+    ])
+    .optional()
+    .describe(
+      'Model override for the target agent (agent targets only, requires start: true). Router id string (e.g. "openai/gpt-5") or provider config object. The registered agent is not mutated.',
+    ),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   provenance: z
     .object({
@@ -417,6 +431,24 @@ export const triggerExperimentBodySchema = z.object({
     })
     .optional()
     .describe('Version overrides for sub-agent delegation during experiment execution'),
+});
+
+export const triggerExperimentBodySchema = triggerExperimentBodyShape.superRefine((body, ctx) => {
+  if (body.model === undefined) return;
+  if (body.start === false) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['model'],
+      message: 'model override requires start: true (create-only experiments have no runner to apply it to)',
+    });
+  }
+  if (body.targetType !== undefined && body.targetType !== 'agent') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['model'],
+      message: `model override is only supported for agent targets (got "${body.targetType}")`,
+    });
+  }
 });
 
 export const runExperimentItemBodySchema = z.object({
