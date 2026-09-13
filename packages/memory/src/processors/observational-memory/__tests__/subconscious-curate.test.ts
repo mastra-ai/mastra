@@ -14,12 +14,21 @@ const semanticInfrastructure = {
   embedder: {} as MastraEmbeddingModel<string>,
 };
 
-function fixture(knowledge?: Knowledge | false) {
-  const memory = new Memory({ storage: new InMemoryStore(), knowledge, ...semanticInfrastructure });
-  const curatorMemory = memory.createSubconsciousMemory();
-  const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
+function fixture(knowledge?: Knowledge | string | false) {
+  const storage = new InMemoryStore();
+  const memory = new Memory({
+    storage,
+    knowledge: knowledge ?? new Knowledge({ id: 'curator', storage }),
+    ...semanticInfrastructure,
+  });
+  const subconscious = new Subconscious();
   const config = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
-  const extractor = new SubconsciousCurateExtractor(config, subconscious.resolved, () => curatorMemory, 'openai/test');
+  const extractor = new SubconsciousCurateExtractor(
+    config,
+    subconscious.resolved,
+    () => memory.createSubconsciousMemory(),
+    'openai/test',
+  );
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
   const context = {
@@ -38,6 +47,49 @@ function fixture(knowledge?: Knowledge | false) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Subconscious observation curator', () => {
+  it('fails closed for an unknown Knowledge key without reading fallback storage', async () => {
+    const { memory, context, extractor } = fixture('unknown');
+    memory.__registerMastra(
+      new Mastra({ knowledge: { known: new Knowledge({ id: 'known', storage: new InMemoryStore() }) }, logger: false }),
+    );
+    const fallback = vi.spyOn(memory.storage, 'getStore');
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
+    const writer = { custom: vi.fn().mockResolvedValue(undefined) };
+    await extractor.onExtracted!({ ...context, writer });
+    await memory.settled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalledWith('knowledge');
+    expect(writer.custom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ agent: 'curate', error: expect.stringContaining('unknown') }),
+      }),
+    );
+  });
+
+  it('settles only after a failed curator stream and delayed error reporting finish', async () => {
+    const { memory, context, extractor } = fixture();
+    const stream = Promise.withResolvers<void>();
+    const reporting = Promise.withResolvers<void>();
+    const consumeStream = vi.fn(() => stream.promise);
+    const writer = { custom: vi.fn(() => reporting.promise) };
+    vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }),
+      signal: {},
+    } as any);
+    await extractor.onExtracted!({ ...context, writer });
+    const completed = vi.fn();
+    const settling = memory.settled().then(completed);
+    await vi.waitFor(() => expect(consumeStream).toHaveBeenCalledOnce());
+    expect(completed).not.toHaveBeenCalled();
+    stream.reject(new Error('curator stream failed'));
+    await vi.waitFor(() => expect(writer.custom).toHaveBeenCalledOnce());
+    expect(completed).not.toHaveBeenCalled();
+    reporting.resolve();
+    await settling;
+    expect(completed).toHaveBeenCalledOnce();
+    await memory.settled();
+  });
+
   it('settles observation-dispatched work including work queued during completion', async () => {
     const memory = new Memory({ storage: new InMemoryStore(), options: { observationalMemory: false } });
     const first = Promise.withResolvers<void>();
@@ -87,12 +139,12 @@ describe('Subconscious observation curator', () => {
           {
             address: 'resource:user-42',
             name: 'Project Atlas',
-            description: 'Store durable Project Atlas launch decisions at resource scope.',
+            metadata: { description: 'Store durable Project Atlas launch decisions at resource scope.' },
           },
           {
             address: 'resource:other',
             name: 'Other project',
-            description: 'This description must not be visible to the current curator.',
+            metadata: { description: 'This description must not be visible to the current curator.' },
           },
         ],
       },
@@ -112,44 +164,6 @@ describe('Subconscious observation curator', () => {
       'resource:user-42 (Project Atlas): Store durable Project Atlas launch decisions at resource scope.',
     );
     expect(instructions).not.toContain('This description must not be visible to the current curator.');
-  });
-
-  it('surfaces structural scope descriptions reachable from the curator frontier', async () => {
-    const knowledge = new Knowledge({
-      id: 'mastra',
-      storage: new InMemoryStore(),
-      structure: {
-        scopes: [
-          { address: 'org:acme', name: 'acme' },
-          { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
-          {
-            address: 'features:memory',
-            name: 'memory',
-            parentAddresses: ['features'],
-            description: 'Knowledge about the memory subsystem belongs here.',
-          },
-          { address: 'org:other', name: 'other' },
-          {
-            address: 'other:things',
-            name: 'things',
-            parentAddresses: ['org:other'],
-            description: 'Unreachable scope description must stay hidden.',
-          },
-        ],
-      },
-    });
-    const { context, extractor } = fixture(knowledge);
-    let curatorAgent: Agent | undefined;
-    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
-      curatorAgent = this;
-      return { accepted: new Promise(() => {}), signal: {} } as any;
-    });
-
-    await extractor.onExtracted!(context);
-
-    const instructions = await curatorAgent!.getInstructions();
-    expect(instructions).toContain('features:memory (memory): Knowledge about the memory subsystem belongs here.');
-    expect(instructions).not.toContain('Unreachable scope description must stay hidden.');
   });
 
   it.each(['instance', 'key'] as const)(
@@ -198,13 +212,14 @@ describe('Subconscious observation curator', () => {
     );
   });
 
-  it('uses the thread as the resource scope fallback', () => {
-    const { context } = fixture();
-
-    expect(resolveCuratorScope({ ...context, resourceId: undefined })).toEqual([
-      'org:acme',
-      'resource:alpha',
-      'thread:alpha',
+  it('uses the thread as the resource scope fallback', async () => {
+    const { memory, context } = fixture();
+    const scopeIds = await resolveCuratorScope(memory, { ...context, resourceId: undefined });
+    const store = await memory.getKnowledgeStore();
+    expect(scopeIds).toEqual([
+      (await store.getScopeAddress('org:acme'))!.scopeNodeId,
+      (await store.getScopeAddress('resource:alpha'))!.scopeNodeId,
+      (await store.getScopeAddress('resource:alpha:thread:alpha'))!.scopeNodeId,
     ]);
   });
 

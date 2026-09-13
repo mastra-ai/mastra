@@ -1,57 +1,35 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../..';
-import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
+import {
+  createKnowledgeWriteTools,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+} from '../../processors/observational-memory/subconscious/knowledge-write-tools';
 
-const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+const scopeIds = [
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000003',
+];
 
-async function fixture() {
-  const memory = new Memory({ storage: new InMemoryStore() });
+async function fixture(toolScopeIds = scopeIds) {
+  const storage = new InMemoryStore();
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
   const store = (await memory.storage.getStore('knowledge'))!;
-  const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scope });
-  const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scope });
+  await store.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+  await store.createNode({ id: scopeIds[1], name: 'User 42', isScope: true, scopeIds: [scopeIds[0]!] });
+  await store.createNode({ id: scopeIds[2], name: 'Thread alpha', isScope: true, scopeIds: [scopeIds[1]!] });
+  const source = await store.createNode({ name: 'Atlas Initiative', kind: 'project', scopeIds: [scopeIds[2]!] });
+  const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
   const tools = createKnowledgeWriteTools(memory, {
-    scope,
+    scopeIds: toolScopeIds,
     sourceThreadId: 'alpha',
-    defaultScope: 'resource',
-    maxScope: 'resource',
   });
   return { store, source, target, tools };
-}
-
-async function structuralFixture() {
-  const knowledge = new Knowledge({
-    id: 'mastra',
-    storage: new InMemoryStore(),
-    structure: {
-      scopes: [
-        { address: 'org:acme', name: 'acme' },
-        { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
-        {
-          address: 'features:memory',
-          name: 'memory',
-          parentAddresses: ['features'],
-          description: 'Memory subsystem knowledge.',
-        },
-        { address: 'org:other', name: 'other' },
-        { address: 'other:things', name: 'things', parentAddresses: ['org:other'] },
-      ],
-    },
-  });
-  const memory = new Memory({ storage: new InMemoryStore(), knowledge });
-  const { scopes: scopeIds } = await knowledge.reconcile();
-  const store = await knowledge.getStorage();
-  const tools = createKnowledgeWriteTools(memory, {
-    scope,
-    sourceThreadId: 'alpha',
-    defaultScope: 'resource',
-    maxScope: 'resource',
-  });
-  return { memory, store, scopeIds, tools };
 }
 
 describe('Subconscious knowledge write tools', () => {
@@ -67,6 +45,26 @@ describe('Subconscious knowledge write tools', () => {
         ]),
       ),
     ).toMatchSnapshot();
+  });
+
+  it('rejects a rescope changed after visibility validation without overwriting the new scopes', async () => {
+    const { store, source, tools } = await fixture();
+    const record = await store.createRecord({ node: source, text: 'Private evidence', scopeIds: [scopeIds[2]!] });
+    const setScopes = store.setRecordScopes.bind(store);
+    const mutation = vi.spyOn(store, 'setRecordScopes').mockImplementationOnce(async input => {
+      await setScopes({ id: record.id, version: record.version, scopeIds: [scopeIds[1]!] });
+      return setScopes(input);
+    });
+    await expect(
+      tools.knowledge_rescope!.execute?.(
+        { recordId: record.id, expectedVersion: record.version, scope: 'org' },
+        {} as any,
+      ),
+    ).rejects.toThrow('version conflict');
+    expect(mutation).toHaveBeenCalledWith({ id: record.id, version: record.version, scopeIds: [scopeIds[0]] });
+    expect(await store.getRecordScopeIds(record.id)).toEqual([scopeIds[1]]);
+    expect(await store.getRecord({ id: record.id })).toMatchObject({ version: record.version + 1 });
+    mutation.mockRestore();
   });
 
   it('creates a node and first record with code-owned provenance and capture time', async () => {
@@ -88,80 +86,99 @@ describe('Subconscious knowledge write tools', () => {
     expect(result.node).toMatchObject({
       name: 'Atlas Launch',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
     });
     expect(result.record).toMatchObject({
-      node: result.node.id,
+      nodeId: result.node.id,
       text: 'Project Atlas launches on 2026-09-15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      when: new Date('2026-09-15T00:00:00.000Z'),
+      metadata: { sourceThreadId: 'alpha', when: '2026-09-15T00:00:00.000Z' },
     });
-    expect(result.record.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(result.record.createdAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(await store.getNode(result.node.id)).toMatchObject({ name: 'Atlas Launch' });
+    expect(await store.getNodeScopeIds(result.node.id)).toEqual([scopeIds[1]]);
+    expect(await store.getRecordScopeIds(result.record.id)).toEqual([scopeIds[1]]);
   });
 
-  it('preserves node-first partial-write semantics when the first record fails', async () => {
-    const { store, tools } = await fixture();
-    vi.spyOn(store, 'appendKnowledge').mockRejectedValueOnce(new Error('record write failed'));
-
+  it('rolls back the node and side effects when the first record fails', async () => {
+    const { store, tools } = await fixture([...scopeIds.slice(0, 2), '10000000-0000-4000-8000-000000000099']);
+    const before = {
+      nodes: await store.listNodes({ scopeIds }),
+      activity: await store.listActivity({ scopeIds }),
+      outbox: await store.listSemanticOutbox({ scopeIds }),
+    };
     await expect(
       tools.knowledge_create!.execute?.(
-        { name: 'Partial Atlas', kind: 'project', text: 'This record fails.' },
+        { name: 'Partial Atlas', kind: 'project', text: 'This record fails.', nodeScope: 'resource', scope: 'thread' },
         {} as any,
       ),
-    ).rejects.toThrow('record write failed');
+    ).rejects.toThrow('Knowledge scope not found: 10000000-0000-4000-8000-000000000099');
 
-    expect(await store.resolveNode({ name: 'Partial Atlas', scope })).toBeTruthy();
+    expect(await store.resolveNode({ name: 'Partial Atlas', scopeIds })).toBeNull();
+    expect({
+      nodes: await store.listNodes({ scopeIds }),
+      activity: await store.listActivity({ scopeIds }),
+      outbox: await store.listSemanticOutbox({ scopeIds }),
+    }).toEqual(before);
   });
 
-  it('places created nodes into visible structural scopes by address', async () => {
-    const { store, scopeIds, tools } = await structuralFixture();
-
-    const result = (await tools.knowledge_create!.execute?.(
-      {
-        name: 'Memory Extraction',
-        kind: 'subsystem',
-        text: 'The memory subsystem extracts observations mid-conversation.',
-        nodeScope: 'features:memory',
-      },
-      {} as any,
-    )) as any;
-
-    // Identity scope still comes from the default rung; placement is additive membership.
-    expect(result.node.scope).toEqual(['org:acme', 'resource:user-42']);
-    expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).toEqual([
-      expect.objectContaining({ id: result.node.id }),
-    ]);
-  });
-
-  it('rejects structural placement outside the curator frontier', async () => {
-    const { tools } = await structuralFixture();
-
-    // Unreachable structural scope (different org root) and a totally unknown address
-    // are both refused before any storage write.
-    for (const nodeScope of ['other:things', 'bogus']) {
-      await expect(
-        tools.knowledge_create!.execute?.({ name: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope }, {} as any),
-      ).rejects.toThrow(`Structural scope is outside the curator's visible scope: ${nodeScope}`);
+  it('replaces every curator record beyond the first page and rejects stale replacement', async () => {
+    const { store, source, tools } = await fixture();
+    const prior = [];
+    for (let index = 0; index < 105; index++) {
+      prior.push(
+        await store.createRecord({ node: source, text: `Prior ${index}`, source: 'subconscious:curate', scopeIds }),
+      );
     }
-  });
-
-  it('rejects structural placement when no Knowledge instance is registered', async () => {
-    const { tools } = await fixture();
-
+    const unrelated = await store.createRecord({
+      node: source,
+      text: 'Imported evidence',
+      source: 'importer',
+      scopeIds,
+    });
+    await tools.knowledge_write_node_content!.execute?.(
+      { name: source.name, content: 'Replacement', expectedVersion: source.version },
+      {} as any,
+    );
+    for (const record of prior) expect(await store.getRecord({ id: record.id })).toBeNull();
+    expect(await store.getRecord({ id: unrelated.id })).toMatchObject({ text: 'Imported evidence' });
+    const before = await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds, limit: 200 });
+    expect(before.records).toHaveLength(1);
     await expect(
-      tools.knowledge_create!.execute?.(
-        { name: 'No instance', kind: 'x', text: 'x', nodeScope: 'features:memory' },
+      tools.knowledge_write_node_content!.execute?.(
+        { name: source.name, content: 'Stale', expectedVersion: source.version },
         {} as any,
       ),
-    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
+    ).rejects.toThrow();
+    expect(await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds, limit: 200 })).toEqual(before);
+  });
+
+  it('preserves existing content and all visible side effects when replacement creation fails', async () => {
+    const { store, source, tools } = await fixture(['10000000-0000-4000-8000-000000000099', ...scopeIds.slice(1)]);
+    await store.createRecord({
+      node: source,
+      text: 'Original [[Project Atlas]]',
+      source: 'subconscious:curate',
+      scopeIds: [scopeIds[1]!],
+    });
+    const snapshot = async () => ({
+      node: await store.getNode(source.id),
+      records: await store.listRecordsBySource({ source: 'subconscious:curate', scopeIds, includeDeleted: true }),
+      activity: await store.listActivity({ scopeIds }),
+      outbox: await store.listSemanticOutbox({ scopeIds }),
+    });
+    const before = await snapshot();
+    await expect(
+      tools.knowledge_write_node_content!.execute?.(
+        { name: source.name, content: 'Replacement', expectedVersion: source.version, scope: 'org' },
+        {} as any,
+      ),
+    ).rejects.toThrow('Knowledge scope not found');
+    expect(await snapshot()).toEqual(before);
   });
 
   it('rejects a non-RFC 3339 `when` at schema validation for create and append, before execute', async () => {
     const { store, source, tools } = await fixture();
-    const createNode = vi.spyOn(store, 'createNode');
-    const append = vi.spyOn(store, 'appendKnowledge');
+    const createNode = vi.spyOn(store, 'createNodeWithRecord');
+    const append = vi.spyOn(store, 'createRecord');
 
     // `format: 'date-time'` alone is a silent no-op under the tool validator's Ajv (no formats
     // plugin), so this proves the schema itself refuses before either tool body runs.
@@ -188,7 +205,7 @@ describe('Subconscious knowledge write tools', () => {
       { node: source.id, text: 'Landed.', when: '2026-09-15T10:00:00+02:00' },
       {} as any,
     )) as any;
-    expect(ok.when).toEqual(new Date('2026-09-15T08:00:00.000Z'));
+    expect(ok.metadata.when).toEqual('2026-09-15T08:00:00.000Z');
     expect(append).toHaveBeenCalledTimes(1);
   });
 
@@ -221,11 +238,12 @@ describe('Subconscious knowledge write tools', () => {
     }
     expect(createNode).not.toHaveBeenCalled();
 
-    // Scope levels are the only scope input the model has, and the ceiling still wins.
+    // Scope selection can only choose from the host-resolved canonical scope IDs.
     for (const tool of ['knowledge_create', 'knowledge_append'] as const) {
       const base =
         tool === 'knowledge_create' ? { name: 'Escalate', kind: 'project', text: 'x' } : { node: source.id, text: 'x' };
-      await expect(tools[tool]!.execute?.({ ...base, scope: 'org' }, {} as any)).rejects.toThrow(/ceiling|scope/i);
+      const valid = (await tools[tool]!.execute?.({ ...base, scope: 'org' }, {} as any)) as any;
+      expect(await store.getRecordScopeIds((valid.record ?? valid).id)).toEqual([scopeIds[0]]);
       const bogus = (await tools[tool]!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
       expect(bogus?.error).toBe(true);
     }
@@ -237,30 +255,29 @@ describe('Subconscious knowledge write tools', () => {
       {} as any,
     )) as any;
     expect(appended).toMatchObject({
-      sourceThreadId: 'alpha',
-      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      metadata: { sourceThreadId: 'alpha' },
       deletedAt: undefined,
     });
-    expect(appended.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(appended.createdAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
     const { store, tools } = await fixture();
+    const foreignScope = await store.createNode({ name: 'Other org', isScope: true, scopeIds: [] });
     const foreign = await store.createNode({
       name: 'Other Tenant',
       kind: 'project',
-      scope: ['org:other', 'resource:user-99'],
+      scopeIds: [foreignScope.id],
     });
-    const foreignRecord = await store.appendKnowledge({
+    const foreignRecord = await store.createRecord({
       node: foreign.id,
       text: 'private',
-      scope: ['org:other', 'resource:user-99'],
-      sourceThreadId: 'zeta',
-      resolutionScope: ['org:other', 'resource:user-99'],
-      defaultScope: ['org:other', 'resource:user-99'],
+      scopeIds: [foreignScope.id],
+      source: 'zeta',
+      metadata: { sourceThreadId: 'zeta' },
     });
-    const append = vi.spyOn(store, 'appendKnowledge');
-    const remove = vi.spyOn(store, 'removeKnowledge');
+    const append = vi.spyOn(store, 'createRecord');
+    const remove = vi.spyOn(store, 'deleteRecord');
 
     await expect(tools.knowledge_append!.execute?.({ node: foreign.id, text: 'poisoned' }, {} as any)).rejects.toThrow(
       'outside the curator',
@@ -270,7 +287,7 @@ describe('Subconscious knowledge write tools', () => {
     );
     expect(append).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
-    expect(await store.getKnowledge({ id: foreignRecord.id })).toMatchObject({ text: 'private' });
+    expect(await store.getRecord({ id: foreignRecord.id })).toMatchObject({ text: 'private' });
   });
 
   it('keeps tool schemas free of top-level composition keywords Gemini rejects', async () => {
@@ -434,8 +451,9 @@ describe('Subconscious knowledge write tools', () => {
       {} as any,
     )) as any;
     expect(merged).toMatchObject({ id: target.id });
-    expect(await store.getNode(source.id)).toMatchObject({ mergedInto: target.id });
-    expect(await store.resolveNode({ name: source.name, scope })).toMatchObject({ id: target.id });
+    expect(await store.getNode(source.id)).toBeNull();
+    expect(await store.getNodeScopeIds(source.id)).toEqual([]);
+    expect(await store.resolveNode({ name: source.name, scopeIds })).toBeNull();
 
     const page = (await tools.knowledge_write_node_content!.execute?.(
       { name: 'Atlas brief', content: 'Owned by [[Project Atlas Prime]].', scope: 'resource' },
@@ -443,7 +461,7 @@ describe('Subconscious knowledge write tools', () => {
     )) as any;
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'Missing CAS version.', scope: 'resource' },
+        { name: 'Atlas brief', content: 'Missing CAS version.', scope: 'resource' },
         {} as any,
       ),
     ).rejects.toThrow('expectedVersion');
@@ -454,13 +472,19 @@ describe('Subconscious knowledge write tools', () => {
       ),
     ).rejects.toThrow('only valid');
     const revised = (await tools.knowledge_write_node_content!.execute?.(
-      { name: page.name, content: 'Launch brief for [[Project Atlas Prime]].', scope: 'resource', expectedVersion: 1 },
+      {
+        name: 'Atlas brief',
+        content: 'Launch brief for [[Project Atlas Prime]].',
+        scope: 'resource',
+        expectedVersion: 1,
+      },
       {} as any,
     )) as any;
-    expect(revised).toMatchObject({ type: 'node', version: 2 });
+    expect(revised).toMatchObject({ nodeId: page.nodeId, text: 'Launch brief for [[Project Atlas Prime]].' });
+    expect(await store.getNode(page.nodeId)).toMatchObject({ version: 2 });
     await expect(
       tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'stale', scope: 'resource', expectedVersion: 1 },
+        { name: 'Atlas brief', content: 'stale', scope: 'resource', expectedVersion: 1 },
         {} as any,
       ),
     ).rejects.toThrow('version');
@@ -490,7 +514,7 @@ describe('Subconscious knowledge write tools', () => {
     const limit = MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH;
     // Exactly at the limit: accepted.
     const atLimit = (await write('x'.repeat(limit), target.version)) as any;
-    expect(atLimit).toMatchObject({ id: target.id, version: 2, description: 'x'.repeat(limit) });
+    expect(atLimit).toMatchObject({ id: target.id, version: 2, metadata: { description: 'x'.repeat(limit) } });
     // One over: rejected by schema validation (maxLength counts code points).
     const schemaRejected = (await write('x'.repeat(limit + 1), 2)) as any;
     expect(schemaRejected).toMatchObject({ error: true });
@@ -500,16 +524,15 @@ describe('Subconscious knowledge write tools', () => {
     const emojiAtLimit = '😀'.repeat(limit / 2);
     expect(emojiAtLimit.length).toBe(limit);
     const astral = (await write(emojiAtLimit, 2)) as any;
-    expect(astral).toMatchObject({ version: 3, description: emojiAtLimit });
+    expect(astral).toMatchObject({ version: 3, metadata: { description: emojiAtLimit } });
     // One more emoji still passes the code-point schema but is 2 units over — execute is authoritative.
     await expect(write(`${emojiAtLimit}😀`, 3)).rejects.toThrow(`limited to ${limit}`);
     // Stale CAS rejected.
     await expect(write('stale write', 1)).rejects.toThrow('version');
     // Empty string is an explicit clear.
     const cleared = (await write('', 3)) as any;
-    expect(cleared).toMatchObject({ version: 4, description: '' });
-    // Content untouched throughout; tool never creates nodes.
-    expect((await store.getNode(target.id))?.content).toBe(target.content);
+    expect(cleared).toMatchObject({ version: 4, metadata: { description: '' } });
+    expect(await store.getNode(target.id)).toMatchObject({ id: target.id, version: 4 });
     await expect(
       tools.knowledge_write_node_description!.execute?.(
         { node: 'missing-node', expectedVersion: 1, description: 'nope' },

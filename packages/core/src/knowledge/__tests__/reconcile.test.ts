@@ -47,7 +47,7 @@ describe('Knowledge structure reconciliation', () => {
         {
           address: 'agent:weather:public',
           name: 'public',
-          description: 'Public agent knowledge',
+          metadata: { description: 'Public agent knowledge' },
           parentAddresses: ['org:acme'],
           grants: [
             { scopeRefAddress: 'resource:weather', role: 'owner', canSuggest: undefined },
@@ -62,18 +62,18 @@ describe('Knowledge structure reconciliation', () => {
   it('materializes built-in uncurated companions with mirrored parent access', () => {
     expect(
       materializeKnowledgeScopePlan(undefined, {
-        address: 'thread:alpha:uncurated',
-        contextualScopeAddress: 'thread:alpha',
-        parentAddresses: ['thread:alpha'],
-        parameters: { threadId: 'alpha' },
+        address: 'resource:project-1:thread:alpha:uncurated',
+        contextualScopeAddress: 'resource:project-1:thread:alpha',
+        parentAddresses: ['resource:project-1:thread:alpha'],
+        parameters: { resourceId: 'project-1', threadId: 'alpha' },
       }),
     ).toMatchObject({
       scopes: [
         {
-          address: 'thread:alpha:uncurated',
-          description: expect.stringContaining('not yet reviewed or integrated'),
-          parentAddresses: ['thread:alpha'],
-          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+          address: 'resource:project-1:thread:alpha:uncurated',
+          metadata: { description: expect.stringContaining('not yet reviewed or integrated') },
+          parentAddresses: ['resource:project-1:thread:alpha'],
+          grants: [{ scopeRefAddress: 'resource:project-1:thread:alpha', role: 'mirror' }],
         },
       ],
     });

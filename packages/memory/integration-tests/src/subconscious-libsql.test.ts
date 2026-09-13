@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent, createSignal } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
@@ -41,6 +42,40 @@ const embedder: EmbeddingModel<string> = {
   },
 };
 
+async function createScopeIds(memory: Memory, store: any, resourceId: string, threadId: string): Promise<string[]> {
+  const knowledge = memory.getKnowledgeInstance();
+  if (knowledge) {
+    const organization = await knowledge.materializeScope({
+      address: 'org:acme',
+      contextualScopeAddress: 'org:acme',
+      parameters: { orgId: 'acme' },
+    });
+    const resourceAddress = `resource:${resourceId}`;
+    const resource = await knowledge.materializeScope({
+      address: resourceAddress,
+      parentAddresses: ['org:acme'],
+      contextualScopeAddress: 'org:acme',
+      parameters: { orgId: 'acme', resourceId },
+    });
+    const threadAddress = `${resourceAddress}:thread:${threadId}`;
+    const thread = await knowledge.materializeScope({
+      address: threadAddress,
+      parentAddresses: [resourceAddress],
+      contextualScopeAddress: resourceAddress,
+      parameters: { orgId: 'acme', resourceId, threadId },
+    });
+    return [organization.scopes['org:acme']!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
+  }
+  const organization = await store.createNode({ name: 'Acme', isScope: true, scopeIds: [] });
+  const resource = await store.createNode({
+    name: `Resource ${resourceId}`,
+    isScope: true,
+    scopeIds: [organization.id],
+  });
+  const thread = await store.createNode({ name: `Thread ${threadId}`, isScope: true, scopeIds: [resource.id] });
+  return [organization.id, resource.id, thread.id];
+}
+
 describe('Subconscious LibSQL integration', () => {
   const directories: string[] = [];
 
@@ -55,7 +90,6 @@ describe('Subconscious LibSQL integration', () => {
     const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
-
     const observerModel = new MockLanguageModelV2({
       doStream: async () => ({
         stream: convertArrayToReadableStream([
@@ -139,6 +173,7 @@ describe('Subconscious LibSQL integration', () => {
     const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
     const memory = new Memory({
       storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
       vector,
       embedder,
       options: {
@@ -169,17 +204,38 @@ describe('Subconscious LibSQL integration', () => {
     expect(curatorStream).toHaveBeenCalledTimes(2);
 
     const knowledge = (await storage.getStore('knowledge'))!;
-    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
-    expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.listKnowledgeAbout({ node: atlas!.id, scope })).records).toHaveLength(1);
-    expect(await knowledge.listActivity({ scope, limit: 20 })).not.toEqual([]);
+    const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
+    const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scopeIds });
+    expect(atlas).toMatchObject({ kind: 'project' });
+    expect((await knowledge.listRecords({ node: atlas!.id, scopeIds })).records).toHaveLength(1);
+    expect(await knowledge.listActivity({ scopeIds, limit: 20 })).not.toEqual([]);
 
-    expect(await memory.drainKnowledgeSemanticIndex(scope)).toBeGreaterThan(0);
-    expect(await knowledge.listSemanticOutbox({ status: 'pending', scope })).toEqual([]);
+    expect(await memory.drainKnowledgeSemanticIndex(scopeIds)).toBeGreaterThan(0);
+    expect(await knowledge.listSemanticOutbox({ status: 'pending', scopeIds })).toEqual([]);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const matches = await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20 });
     expect(matches.map(match => match.id)).toContain(`knowledge:node:${atlas!.id}`);
+    expect(await knowledge.getNodeScopeIds(atlas!.id)).toEqual([scopeIds[1]]);
+    const record = (await knowledge.listRecords({ node: atlas!.id, scopeIds })).records[0]!;
+    await expect(
+      knowledge.updateNode({ id: atlas!.id, version: atlas!.version + 1, name: 'Stale Atlas' }),
+    ).rejects.toThrow('version');
+    await knowledge.deleteRecord({ id: record.id, deletedBy: 'subconscious:curate' });
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
+    expect(await knowledge.getRecord({ id: record.id })).toBeNull();
+    expect(
+      (
+        await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20, filter: { record_id: record.id } })
+      ).some(match => match.id.endsWith(record.id)),
+    ).toBe(false);
+    await knowledge.restoreRecord({ id: record.id });
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
+    expect(await knowledge.getRecord({ id: record.id })).toMatchObject({ deletedAt: undefined, deletedBy: undefined });
+    expect(
+      (
+        await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20, filter: { record_id: record.id } })
+      ).some(match => match.id.endsWith(record.id)),
+    ).toBe(true);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -206,7 +262,8 @@ describe('Subconscious LibSQL integration', () => {
 
     let streamCall = 0;
     let sentReminder = false;
-    const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
+    const reminderRecordId = '10000000-0000-4000-8000-000000000010';
+    const reminder = `Project Atlas launches January 15. Source KnowledgeRecord: ${reminderRecordId}.`;
     const model = new MockLanguageModelV2({
       doStream: async options => {
         streamCall += 1;
@@ -214,7 +271,7 @@ describe('Subconscious LibSQL integration', () => {
         const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
         if (eventId && !sentReminder) {
           sentReminder = true;
-          const input = JSON.stringify({ eventId, reminder, sourceIds: ['record-atlas-launch'] });
+          const input = JSON.stringify({ eventId, reminder, sourceIds: [reminderRecordId] });
           return {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
@@ -259,6 +316,7 @@ describe('Subconscious LibSQL integration', () => {
     });
     const memory = new Memory({
       storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
       vector,
       embedder,
       options: {
@@ -272,19 +330,19 @@ describe('Subconscious LibSQL integration', () => {
     });
     const threadId = randomUUID();
     const resourceId = randomUUID();
-    const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const knowledge = (await storage.getStore('knowledge'))!;
-    const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scope: scope.slice(0, 2) });
-    await knowledge.appendKnowledge({
-      id: 'record-atlas-launch',
-      node: atlas.id,
+    const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadId);
+    const atlas = await knowledge.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
+    await knowledge.createRecord({
+      id: reminderRecordId,
+      node: atlas,
       text: '[[Project Atlas]] launches January 15.',
-      scope: scope.slice(0, 2),
-      sourceThreadId: 'source-thread',
-      resolutionScope: scope,
-      defaultScope: scope.slice(0, 2),
+      scopeIds: [scopeIds[1]!],
+      source: 'source-thread',
+      resolutionScopeIds: scopeIds,
+      metadata: { sourceThreadId: 'source-thread' },
     });
-    await memory.drainKnowledgeSemanticIndex(scope);
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
     await memory.createThread({ threadId, resourceId, title: 'Subconscious remind' });
     await memory.saveMessages({ messages: [message(threadId, resourceId, 'Help me schedule the launch.')] });
     const requestContext = new RequestContext();
@@ -324,13 +382,14 @@ describe('Subconscious LibSQL integration', () => {
 
     const reconstructed = new Memory({
       storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
       vector,
       embedder,
       options: {
         observationalMemory: {
           enabled: true,
           model,
-          experimental_subconscious: new Subconscious({ observation: ['remind'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['remind'] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -367,6 +426,7 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
     const resourceId = randomUUID();
     const threadIds = [randomUUID(), randomUUID()];
+    const reminderRecordId = '10000000-0000-4000-8000-000000000011';
     const observations = threadIds
       .map(threadId => `<thread id="${threadId}">\n- Project Atlas planning is active.\n</thread>`)
       .join('\n');
@@ -379,8 +439,8 @@ describe('Subconscious LibSQL integration', () => {
           sentReminder = true;
           const input = JSON.stringify({
             eventId,
-            reminder: 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.',
-            sourceIds: ['record-atlas-resource-launch'],
+            reminder: `Project Atlas launches January 15. Source KnowledgeRecord: ${reminderRecordId}.`,
+            sourceIds: [reminderRecordId],
           });
           return {
             stream: convertArrayToReadableStream([
@@ -420,13 +480,14 @@ describe('Subconscious LibSQL integration', () => {
         content: [
           {
             type: 'text' as const,
-            text: 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-resource-launch.',
+            text: `Project Atlas launches January 15. Source KnowledgeRecord: ${reminderRecordId}.`,
           },
         ],
       }),
     });
     const memory = new Memory({
       storage,
+      knowledge: new Knowledge({ id: 'default', storage }),
       vector,
       embedder,
       options: {
@@ -440,21 +501,25 @@ describe('Subconscious LibSQL integration', () => {
       },
     });
     const knowledge = (await storage.getStore('knowledge'))!;
+    const scopeIds = await createScopeIds(memory, knowledge, resourceId, threadIds[0]!);
     const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', `resource:${resourceId}`],
+      scopeIds: [scopeIds[1]!],
     });
-    await knowledge.appendKnowledge({
-      id: 'record-atlas-resource-launch',
-      node: node.id,
+    await knowledge.createRecord({
+      id: reminderRecordId,
+      node,
       text: '[[Project Atlas]] launches January 15.',
-      scope: ['org:acme', `resource:${resourceId}`],
-      sourceThreadId: 'source-thread',
-      resolutionScope: ['org:acme', `resource:${resourceId}`, `thread:${threadIds[0]}`],
-      defaultScope: ['org:acme', `resource:${resourceId}`],
+      scopeIds: [scopeIds[1]!],
+      source: 'source-thread',
+      resolutionScopeIds: scopeIds,
+      metadata: { sourceThreadId: 'source-thread' },
     });
-    await memory.drainKnowledgeSemanticIndex(['org:acme', `resource:${resourceId}`]);
+    expect(await memory.getKnowledgeStore()).toBe(knowledge);
+    expect(await knowledge.getNodeScopeIds(node.id)).toEqual([scopeIds[1]]);
+    expect(await knowledge.getRecordScopeIds(reminderRecordId)).toEqual([scopeIds[1]]);
+    await memory.drainKnowledgeSemanticIndex(scopeIds.slice(0, 2));
     for (const threadId of threadIds) {
       await memory.createThread({ threadId, resourceId, title: `Resource reminder ${threadId}` });
       await memory.saveMessages({ messages: [message(threadId, resourceId, 'Plan Project Atlas.')] });
@@ -511,7 +576,7 @@ describe('Subconscious LibSQL integration', () => {
     const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
-    const memory = new Memory({ storage, vector, embedder });
+    const memory = new Memory({ storage, vector, embedder, knowledge: new Knowledge({ id: 'default', storage }) });
     const parentThreadId = randomUUID();
     const resourceId = randomUUID();
     await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Parent' });
@@ -633,7 +698,7 @@ describe('Subconscious LibSQL integration', () => {
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
     await storage.init();
-    const memory = new Memory({ storage });
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
     const parentThreadId = randomUUID();
     const resourceId = randomUUID();
     const reminderThread = await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
@@ -728,7 +793,7 @@ describe('Subconscious LibSQL integration', () => {
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
     await storage.init();
-    const memory = new Memory({ storage });
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
     const ownedParentId = randomUUID();
     const unmarkedParentId = randomUUID();
     const foreignParentId = randomUUID();

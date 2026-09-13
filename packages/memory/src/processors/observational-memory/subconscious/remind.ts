@@ -1,36 +1,18 @@
-import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeScopeIds, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
+import { resolveKnowledgeScopeIds } from './knowledge-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
-import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
 const FRESH_OWN_RECORD_WINDOW_MS = 30 * 60 * 1000;
-
-function resolveScope(context: {
-  requestContext?: { get(key: string): unknown };
-  resourceId?: string;
-  threadId: string;
-}) {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Subconscious remind requires organizationId in the request context.');
-  }
-  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId);
-  if (!resourceId) {
-    throw new Error('Subconscious remind requires a resourceId.');
-  }
-
-  return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`]);
-}
 
 const REMINDER_QUERY_STOP_WORDS = new Set([
   'about',
@@ -55,7 +37,7 @@ const REMINDER_QUERY_STOP_WORDS = new Set([
 
 async function findReminderSources(
   store: KnowledgeStorage,
-  scope: KnowledgeScope,
+  scope: KnowledgeScopeIds,
   observations: string,
 ): Promise<SearchKnowledgeResult[]> {
   const terms = [
@@ -66,7 +48,7 @@ async function findReminderSources(
         .filter(term => !REMINDER_QUERY_STOP_WORDS.has(term)) ?? [],
     ),
   ].slice(0, 12);
-  const results = (await Promise.all(terms.map(query => store.search({ query, scope, limit: 5 })))).flat();
+  const results = (await Promise.all(terms.map(query => store.search({ query, scopeIds: scope, limit: 5 })))).flat();
   return [...new Map(results.map(result => [`${result.type}:${result.id}`, result])).values()].slice(0, 10);
 }
 
@@ -83,13 +65,13 @@ async function dropFreshOwnRecords(
   const checks = await Promise.all(
     sources.map(async source => {
       if (source.type !== 'record') return true;
-      const record = await store.getKnowledge({ id: source.id }).catch(() => null);
+      const record = await store.getRecord({ id: source.id }).catch(() => null);
       if (!record) return true;
-      // KnowledgeRecords written by the thread's own subconscious sub-agents carry a
-      // `subconscious:<threadId>:<agent>` source — they are this thread's too.
-      const isOwnThread =
-        record.sourceThreadId === threadId || record.sourceThreadId.startsWith(`subconscious:${threadId}:`);
-      const isFresh = Date.now() - new Date(record.capturedAt).getTime() < FRESH_OWN_RECORD_WINDOW_MS;
+      // KnowledgeRecords written by the thread's own subconscious sub-agents (curate)
+      // carry a `subconscious:<threadId>:<agent>` source — they are this thread's too.
+      const sourceThreadId = typeof record.metadata?.sourceThreadId === 'string' ? record.metadata.sourceThreadId : '';
+      const isOwnThread = sourceThreadId === threadId || sourceThreadId.startsWith(`subconscious:${threadId}:`);
+      const isFresh = Date.now() - record.createdAt.getTime() < FRESH_OWN_RECORD_WINDOW_MS;
       return !(isOwnThread && isFresh);
     }),
   );
@@ -105,17 +87,20 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
       onExtracted: async context => {
         if (!context.rawObservations?.trim() || !context.memory || !context.sendSignal) return;
 
-        let scope: KnowledgeScope | undefined;
+        let scopeIds: KnowledgeScopeIds | undefined;
         let store: KnowledgeStorage | undefined;
         try {
-          scope = resolveScope(context);
+          scopeIds = await resolveKnowledgeScopeIds(context.memory, {
+            agent: { threadId: context.threadId, resourceId: context.resourceId },
+            requestContext: context.requestContext,
+          });
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
           store = await context.memory.getKnowledgeStore();
           const sources = await dropFreshOwnRecords(
             store,
-            await findReminderSources(store, scope, context.rawObservations),
+            await findReminderSources(store, scopeIds, context.rawObservations),
             context.threadId,
           );
           if (sources.length === 0) return;
@@ -153,7 +138,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           const agent = createReminderAgent({
             model,
             memory: remindMemory,
-            scope,
+            scopeIds,
             threadId: remindThread.id,
             resourceId,
             parentThreadId: context.threadId,
@@ -195,10 +180,10 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             type: 'data-subconscious-error',
             data: { agent: 'remind', error: error instanceof Error ? error.message : String(error) },
           });
-          if (store && scope) {
+          if (store && scopeIds) {
             await publishSubconsciousActivity({
               store,
-              scope,
+              scopeIds,
               recentUpdates: 10,
               sendStateSignal: context.sendStateSignal,
               errors: [`remind: ${error instanceof Error ? error.message : String(error)}`],
