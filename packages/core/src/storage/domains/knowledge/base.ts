@@ -116,6 +116,50 @@ export type KnowledgeProposalMutation =
       mutation: { id: string; version: number; scopeIds: KnowledgeScopeIds };
     };
 
+export function assertKnowledgeProposalMutationSemantics(
+  mutation: KnowledgeProposalMutation,
+  targets: readonly KnowledgeProposalTarget[],
+): void {
+  if (mutation.kind === 'update-node') {
+    const target = targets.find(candidate => candidate.type === 'node' && candidate.id === mutation.mutation.id);
+    const currentScopeIds = canonicalizeKnowledgeScopeIds(target?.scopeIds ?? []);
+    const nextScopeIds = canonicalizeKnowledgeScopeIds(mutation.mutation.scopeIds ?? currentScopeIds);
+    if (
+      mutation.mutation.isScope === true ||
+      currentScopeIds.length !== nextScopeIds.length ||
+      currentScopeIds.some((scopeId, index) => scopeId !== nextScopeIds[index])
+    ) {
+      throw new KnowledgeConflictError('Node updates cannot change scope membership or promote a node');
+    }
+  }
+  if (mutation.kind === 'move-node' && mutation.mutation.isScope === true) {
+    throw new KnowledgeConflictError('Node moves cannot promote a node');
+  }
+  if (mutation.kind === 'promote-node') {
+    const target = targets.find(candidate => candidate.type === 'node' && candidate.id === mutation.mutation.id);
+    const currentScopeIds = canonicalizeKnowledgeScopeIds(target?.scopeIds ?? []);
+    const nextScopeIds = canonicalizeKnowledgeScopeIds(mutation.mutation.scopeIds ?? currentScopeIds);
+    if (
+      mutation.mutation.isScope !== true ||
+      currentScopeIds.length !== nextScopeIds.length ||
+      currentScopeIds.some((scopeId, index) => scopeId !== nextScopeIds[index])
+    ) {
+      throw new KnowledgeConflictError('Node promotion payload is invalid');
+    }
+  }
+  if (mutation.kind === 'add-record-scope' || mutation.kind === 'remove-record-scope') {
+    const target = targets.find(candidate => candidate.type === 'record' && candidate.id === mutation.mutation.id);
+    if (!target) throw new KnowledgeConflictError(`Record ${mutation.mutation.id} is not bound to the proposal`);
+    const current = new Set(canonicalizeKnowledgeScopeIds(target.scopeIds));
+    const next = new Set(canonicalizeKnowledgeScopeIds(mutation.mutation.scopeIds));
+    const valid =
+      mutation.kind === 'add-record-scope'
+        ? current.size < next.size && [...current].every(scopeId => next.has(scopeId))
+        : next.size < current.size && [...next].every(scopeId => current.has(scopeId));
+    if (!valid) throw new KnowledgeConflictError(`Record scope ${mutation.kind} payload is invalid`);
+  }
+}
+
 export interface KnowledgeProposal {
   id: string;
   targetType: 'node' | 'record';
