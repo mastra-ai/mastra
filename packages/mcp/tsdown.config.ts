@@ -14,6 +14,6 @@ export default defineConfig({
     alwaysBundle: ['@mastra/schema-compat'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['hono', 'hono-mcp-server-sse-transport']));
+    await generateTypes(process.cwd(), new Set(['hono-mcp-server-sse-transport']));
   },
 });
