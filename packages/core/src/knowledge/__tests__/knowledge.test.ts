@@ -6,6 +6,70 @@ import { Knowledge } from '../index';
 const scope = ['org:acme', 'resource:mastra'];
 
 describe('Knowledge', () => {
+  it('reconciles configured structure in the background and coalesces explicit waits', async () => {
+    const storage = new InMemoryStore({ id: 'structured' });
+    const domain = storage.stores.knowledge!;
+    vi.spyOn(domain, 'getCapabilities').mockReturnValue({
+      contractVersion: 2,
+      schemaVersion: 2,
+      supportsV2: true,
+      supportsExplicitReset: true,
+    });
+    const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
+    const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
+    const knowledge = new Knowledge({
+      storage,
+      structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] },
+    });
+
+    new Mastra({ knowledge: { default: knowledge }, logger: false });
+
+    await expect(Promise.all([knowledge.reconcile(), knowledge.reconcile()])).resolves.toEqual([result, result]);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies structured plans with the v2 in-memory storage', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'in-memory-structure' }),
+      structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] },
+    });
+
+    const first = await knowledge.reconcile();
+    const second = await knowledge.reconcile();
+    const lazy = await knowledge.materializeScope({
+      address: 'resource:mastra',
+      contextualScopeAddress: 'org:acme',
+      parameters: { resourceId: 'mastra' },
+    });
+
+    expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+    expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+    expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
+  });
+
+  it('coalesces concurrent lazy materialization for one concrete address', async () => {
+    const storage = new InMemoryStore({ id: 'lazy-structured' });
+    const domain = storage.stores.knowledge!;
+    vi.spyOn(domain, 'getCapabilities').mockReturnValue({
+      contractVersion: 2,
+      schemaVersion: 2,
+      supportsV2: true,
+      supportsExplicitReset: true,
+    });
+    const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
+    const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
+    const knowledge = new Knowledge({ storage });
+    const input = { address: 'org:acme', contextualScopeAddress: 'org:acme', parameters: { orgId: 'acme' } };
+
+    const first = knowledge.materializeScope(input);
+    const second = knowledge.materializeScope(input);
+    const conflicting = knowledge.materializeScope({ ...input, name: 'Other Acme' });
+
+    await expect(conflicting).rejects.toThrow('Conflicting materialization is already in progress');
+    await expect(Promise.all([first, second])).resolves.toEqual([result, result]);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
   it('registers default and named instances without eagerly initializing storage', async () => {
     const defaultStorage = new InMemoryStore({ id: 'default-knowledge' });
     const analyticsStorage = new InMemoryStore({ id: 'analytics-knowledge' });

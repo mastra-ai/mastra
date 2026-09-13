@@ -240,6 +240,85 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
   });
 });
 
+describe('PostgreSQL knowledge structured reconciliation', () => {
+  it('creates a plan once and preserves existing scope fields on replay', async () => {
+    const schemaName = `knowledge_reconcile_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const plan = {
+        scopes: [
+          {
+            address: 'org:acme',
+            name: 'Acme',
+            grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+          },
+          { address: 'org:partner', name: 'Partner' },
+          {
+            address: 'resource:mastra',
+            name: 'Mastra',
+            parentAddresses: ['org:acme', 'org:partner'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+          },
+        ],
+      };
+
+      const first = await store.reconcileStructure(plan);
+      const second = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope => ({ ...scope, name: `Changed ${scope.name}` })),
+      });
+
+      expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+      expect(first.createdScopeIds).toHaveLength(3);
+      expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+      expect(
+        (
+          await pool.query(`SELECT name FROM "${schemaName}".mastra_knowledge_nodes WHERE id=$1`, [
+            first.scopes['org:acme'],
+          ])
+        ).rows[0],
+      ).toMatchObject({ name: 'Acme' });
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('reads structural scope nodes and members after reconciliation', async () => {
+    const schemaName = `knowledge_scope_nodes_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const plan = {
+        scopes: [
+          { address: 'org:acme', name: 'mastra' },
+          { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+          { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+        ],
+      };
+      const { scopes } = await store.reconcileStructure(plan);
+
+      const nodes = await store.listScopeNodes();
+      expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
+      const mastra = nodes.find(node => node.name === 'mastra')!;
+      const features = nodes.find(node => node.name === 'features')!;
+      expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
+      expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
+      expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
+      expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
+
+      const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
+      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+});
+
 describe('PostgreSQL knowledge concurrency and indexes', () => {
   it('creates required indexes idempotently and exports its schema', async () => {
     const store = createStore();

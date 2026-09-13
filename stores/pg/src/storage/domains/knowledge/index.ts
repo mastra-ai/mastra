@@ -1,4 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
+import type { KnowledgeScopeNodeSummary } from '@internal/core/knowledge-compat';
 import {
+  MAX_KNOWLEDGE_SCOPE_NODES,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -61,6 +65,8 @@ import type {
   KnowledgeRecord,
   KnowledgeScope,
   KnowledgeSemanticDocumentType,
+  KnowledgeStructurePlan,
+  KnowledgeStructureReconcileResult,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   QueryKnowledgeBySourceInput,
@@ -657,6 +663,138 @@ export class KnowledgePG extends KnowledgeStorage {
       .join(', ');
     await this.#executor.execute(`DROP TABLE IF EXISTS ${tables} CASCADE`);
     await this.init();
+  }
+
+  override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    return this.#transaction(async tx => {
+      await tx.execute({
+        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        args: [`mastra-knowledge-reconcile:${this.#schemaName}`],
+      });
+      const scopes: Record<string, string> = {};
+      const createdScopeIds: string[] = [];
+      const createdAddresses = new Set<string>();
+      const deletedScopeAddresses = new Set<string>();
+      const resolveAddress = async (address: string): Promise<string | undefined> => {
+        if (scopes[address]) return scopes[address];
+        const result = await tx.execute({
+          sql: `SELECT a."scopeNodeId",n."isScope",n."deletedAt" FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a."scopeNodeId" WHERE a.address=?`,
+          args: [address],
+        });
+        const row = result.rows[0];
+        if (!row) return undefined;
+        if (!row.isScope) throw new Error(`Knowledge address ${address} does not reference a scope`);
+        if (row.deletedAt) deletedScopeAddresses.add(address);
+        scopes[address] = String(row.scopeNodeId);
+        return scopes[address];
+      };
+
+      for (const scope of plan.scopes) {
+        const existingId = await resolveAddress(scope.address);
+        if (existingId) continue;
+        const id = randomUUID();
+        const now = new Date();
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",kind,description,"isScope",metadata,version,"createdAt","updatedAt") VALUES (?,'node',?,?,?,?,TRUE,?,1,?,?)`,
+          args: [
+            id,
+            scope.name,
+            canonicalName(scope.name),
+            scope.kind ?? null,
+            scope.description ?? null,
+            scope.metadata ?? null,
+            now,
+            now,
+          ],
+        });
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" (address,"scopeNodeId") VALUES (?,?)`,
+          args: [scope.address, id],
+        });
+        scopes[scope.address] = id;
+        createdAddresses.add(scope.address);
+        createdScopeIds.push(id);
+      }
+
+      for (const scope of plan.scopes) {
+        if (!createdAddresses.has(scope.address)) continue;
+        const scopeNodeId = scopes[scope.address]!;
+        for (const parentAddress of scope.parentAddresses ?? []) {
+          const parentId = await resolveAddress(parentAddress);
+          if (!parentId || deletedScopeAddresses.has(parentAddress)) {
+            throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
+          }
+          const sibling = await tx.execute({
+            sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns."nodeId" WHERE ns."scopeNodeId"=? AND n."canonicalName"=? AND n."deletedAt" IS NULL AND n.id<>? LIMIT 1`,
+            args: [parentId, canonicalName(scope.name), scopeNodeId],
+          });
+          if (sibling.rows.length) {
+            throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
+          }
+          await tx.execute({
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" ("nodeId","scopeNodeId","addedAt") VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+            args: [scopeNodeId, parentId, new Date()],
+          });
+        }
+        for (const grant of scope.grants ?? []) {
+          const scopeRefId = await resolveAddress(grant.scopeRefAddress);
+          if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
+            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+          }
+          await tx.execute({
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?) ON CONFLICT DO NOTHING`,
+            args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
+          });
+        }
+      }
+
+      if (createdScopeIds.length) {
+        await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+      }
+      const state = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+      return {
+        scopes,
+        createdScopeIds,
+        deletedScopeAddresses: [...deletedScopeAddresses],
+        changed: createdScopeIds.length > 0,
+        accessEpoch: Number(state.rows[0]?.epoch ?? 0),
+      };
+    });
+  }
+
+  override async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+    const scopes = await this.#readExecutor.execute({
+      sql: `SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a."scopeNodeId"=n.id WHERE n."isScope" AND n."deletedAt" IS NULL ORDER BY n.name LIMIT ${MAX_KNOWLEDGE_SCOPE_NODES}`,
+    });
+    if (scopes.rows.length === 0) return [];
+    const parents = await this.#readExecutor.execute({
+      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns."nodeId" WHERE c."isScope" AND c."deletedAt" IS NULL`,
+    });
+    const parentsByScopeId = new Map<string, string[]>();
+    for (const row of parents.rows as Array<Record<string, unknown>>) {
+      const scopeId = String(row.nodeId);
+      const parentId = String(row.scopeNodeId);
+      const existing = parentsByScopeId.get(scopeId);
+      if (existing) existing.push(parentId);
+      else parentsByScopeId.set(scopeId, [parentId]);
+    }
+    return (scopes.rows as Array<Record<string, unknown>>).map(row => ({
+      id: String(row.id),
+      address: String(row.address),
+      name: String(row.name),
+      ...(row.kind == null ? {} : { kind: String(row.kind) }),
+      ...(row.description == null ? {} : { description: String(row.description) }),
+      parentIds: parentsByScopeId.get(String(row.id)) ?? [],
+    }));
+  }
+
+  override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
+    const limit = Math.min(Math.max(input.limit ?? 500, 1), 500);
+    const result = await this.#readExecutor.execute({
+      sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args: [input.scopeNodeId, limit],
+    });
+    return (result.rows as Array<Record<string, unknown>>).map(parseNode);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

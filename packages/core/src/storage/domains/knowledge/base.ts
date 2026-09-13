@@ -234,6 +234,54 @@ export interface KnowledgeV2Record {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureGrant {
+  scopeRefAddress: string;
+  role: KnowledgeGrantRole;
+  canSuggest?: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureScope {
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  parentAddresses?: string[];
+  grants?: KnowledgeStructureGrant[];
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructurePlan {
+  scopes: KnowledgeStructureScope[];
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureReconcileResult {
+  scopes: Record<string, string>;
+  createdScopeIds: string[];
+  deletedScopeAddresses?: string[];
+  changed: boolean;
+  accessEpoch: number;
+}
+
+/** A reconciled structural scope node with its containing scope nodes. @experimental */
+export interface KnowledgeScopeNodeSummary {
+  /** UUID of the `isScope` node. */
+  id: string;
+  /** Canonical structural address of the scope (for example `org:acme` or `features:memory`). */
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  /** UUIDs of the scope nodes that contain this scope (membership edges). */
+  parentIds: string[];
+}
+
+/** Hard cap on scope nodes returned by one `listScopeNodes` read. */
+export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeMention {
   sourceType: 'record' | 'node';
   source: string;
@@ -452,6 +500,13 @@ export class KnowledgeSchemaResetRequiredError extends Error {
   }
 }
 
+export class KnowledgeUnsupportedCapabilityError extends Error {
+  constructor(capability: string) {
+    super(`This Knowledge storage adapter does not expose ${capability}.`);
+    this.name = 'KnowledgeUnsupportedCapabilityError';
+  }
+}
+
 export function assertKnowledgeSchemaCompatible(inspection: KnowledgeSchemaInspection): void {
   if (inspection.status === 'compatible' || inspection.status === 'uninitialized') return;
   if (inspection.status === 'incompatible-reset-required') {
@@ -662,6 +717,21 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   async dangerouslyReset(): Promise<void> {
     throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
+  }
+
+  /** Applies an additive, idempotent structured scope plan. */
+  async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    throw new Error('This Knowledge storage adapter does not support structured reconciliation.');
+  }
+
+  /** Lists reconciled structural scope nodes with their parent membership edges (bounded, name-ordered). */
+  async listScopeNodes(): Promise<KnowledgeScopeNodeSummary[]> {
+    throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+  }
+
+  /** Lists the nodes placed inside one structural scope, newest-first (bounded). */
+  async listScopeMembers(_input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
+    throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
