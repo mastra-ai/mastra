@@ -30,6 +30,13 @@ function hasVisibleParts(msg: MastraDBMessage): boolean {
   return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
 }
 
+function getConfiguredToolCallFilter(memory: RecallMemory): MessageHistoryToolCallFilterOptions | undefined {
+  const observationalMemory = memory.getConfig?.().observationalMemory;
+  return observationalMemory && typeof observationalMemory === 'object'
+    ? observationalMemory.toolCallFilter
+    : undefined;
+}
+
 type RecallThread = {
   id: string;
   title?: string;
@@ -95,9 +102,7 @@ type RecallMemory = {
 };
 
 function filterCursorMessages(memory: RecallMemory, messages: MastraDBMessage[]): MastraDBMessage[] {
-  const observationalMemory = memory.getConfig?.().observationalMemory;
-  const toolCallFilter =
-    observationalMemory && typeof observationalMemory === 'object' ? observationalMemory.toolCallFilter : undefined;
+  const toolCallFilter = getConfiguredToolCallFilter(memory);
   if (toolCallFilter === undefined) return messages;
 
   const filteredMessages = filterToolCallMessages(
@@ -927,6 +932,10 @@ export interface RecallResult {
   tokenOffset: number;
 }
 
+// A configured filter can remove many consecutive storage rows. Keep cursor
+// reads bounded while allowing enough raw rows for a visible page to form.
+const MAX_FILTERED_RECALL_SCAN = 10_000;
+
 export async function recallMessages({
   memory,
   threadId,
@@ -1021,12 +1030,11 @@ export async function recallMessages({
   // Fetch skip + limit + 1 to detect whether another page exists beyond this one
   const fetchCount = skip + normalizedLimit + 1;
 
-  const result = await memory.recall({
+  const recallArgs = {
     threadId: resolvedThreadId,
     resourceId,
     page: 0,
-    perPage: fetchCount,
-    orderBy: { field: 'createdAt', direction: isForward ? 'ASC' : 'DESC' },
+    orderBy: { field: 'createdAt' as const, direction: isForward ? ('ASC' as const) : ('DESC' as const) },
     filter: {
       dateRange: isForward
         ? {
@@ -1038,10 +1046,34 @@ export async function recallMessages({
             endExclusive: true,
           },
     },
-  });
+  };
+
+  let result = await memory.recall({ ...recallArgs, perPage: fetchCount });
 
   // Filter out messages with only internal data-* parts so they don't consume page slots.
-  const visibleMessages = result.messages.filter(hasVisibleParts);
+  let visibleMessages = result.messages.filter(hasVisibleParts);
+  const toolCallFilter = getConfiguredToolCallFilter(memory);
+  const visibleTarget = skip + normalizedLimit;
+
+  // Memory.recall reports continuation from the raw storage page. When the
+  // configured filter removes rows, refill the same ordered range so hidden
+  // rows do not make a visible page look complete. The default path remains a
+  // single recall with its existing read size and semantics.
+  if (toolCallFilter !== undefined) {
+    let scanCount = fetchCount;
+    while (result.hasMore && visibleMessages.length <= visibleTarget) {
+      const nextScanCount = Math.min(MAX_FILTERED_RECALL_SCAN, Math.max(scanCount + 1, scanCount * 2));
+      if (nextScanCount <= scanCount) {
+        throw new Error(
+          `Could not find enough visible messages within the configured cursor scan limit of ${MAX_FILTERED_RECALL_SCAN} rows`,
+        );
+      }
+
+      scanCount = nextScanCount;
+      result = await memory.recall({ ...recallArgs, perPage: scanCount });
+      visibleMessages = result.messages.filter(hasVisibleParts);
+    }
+  }
 
   // Memory.recall() always returns messages sorted chronologically (ASC) via MessageList.
   // For forward pagination: take from the start of the ASC array (oldest first after cursor).

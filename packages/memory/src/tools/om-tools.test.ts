@@ -163,6 +163,29 @@ describe('om-tools', () => {
         },
       });
 
+      const secretToolMessage = (id: string, minute: string): MastraDBMessage => ({
+        id,
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: `${id}-call`,
+                toolName: 'secret_tool',
+                args: { secret: `RAW_${id}_ARGS` },
+                result: { secret: `RAW_${id}_RESULT` },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(`2024-01-01T10:${minute}:00Z`),
+      });
+
       await filteredMemory.persistMessages([
         {
           id: 'cursor-before',
@@ -172,35 +195,18 @@ describe('om-tools', () => {
           content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
           createdAt: new Date('2024-01-01T10:00:00Z'),
         },
-        {
-          id: 'tool-only-cursor',
-          threadId,
-          resourceId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolCallId: 'secret-call',
-                  toolName: 'secret_tool',
-                  args: { secret: 'RAW_CURSOR_ARGS' },
-                  result: { secret: 'RAW_CURSOR_RESULT' },
-                },
-              },
-            ],
-          },
-          createdAt: new Date('2024-01-01T10:01:00Z'),
-        },
+        secretToolMessage('hidden-before-1', '01'),
+        secretToolMessage('hidden-before-2', '02'),
+        secretToolMessage('tool-only-cursor', '03'),
+        secretToolMessage('hidden-after-1', '04'),
+        secretToolMessage('hidden-after-2', '05'),
         {
           id: 'cursor-after',
           threadId,
           resourceId,
           role: 'assistant',
           content: { format: 2, parts: [{ type: 'text', text: 'After cursor' }] },
-          createdAt: new Date('2024-01-01T10:02:00Z'),
+          createdAt: new Date('2024-01-01T10:06:00Z'),
         },
       ]);
 
@@ -225,10 +231,8 @@ describe('om-tools', () => {
       expect(forward.messages).toContain('After cursor');
       expect(backward.count).toBe(1);
       expect(backward.messages).toContain('Before cursor');
-      expect(forward.messages).not.toContain('RAW_CURSOR_ARGS');
-      expect(forward.messages).not.toContain('RAW_CURSOR_RESULT');
-      expect(backward.messages).not.toContain('RAW_CURSOR_ARGS');
-      expect(backward.messages).not.toContain('RAW_CURSOR_RESULT');
+      expect(forward.messages).not.toContain('RAW_');
+      expect(backward.messages).not.toContain('RAW_');
     });
 
     it('should browse the cursor thread in resource scope when the cursor belongs to another thread', async () => {
