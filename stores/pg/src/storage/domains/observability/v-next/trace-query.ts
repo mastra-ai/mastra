@@ -519,10 +519,10 @@ export function compilePostgresThreadQuery(schema: string, plan: TrustedThreadQu
     WHERE ${eligibilitySql}
   )`);
   ctes.push(`thread_ids AS (
-    SELECT "threadId"
+    SELECT "threadId" COLLATE "C" AS "threadId"
     FROM eligible_roots
     WHERE "threadId" IS NOT NULL
-    GROUP BY "threadId"
+    GROUP BY "threadId" COLLATE "C"
   )`);
 
   let threadPredicateSql = 'TRUE';

@@ -376,6 +376,8 @@ describe('Postgres advanced trace query', () => {
     });
     const compiled = compilePostgresThreadQuery('public', after);
 
+    expect(compiled.text).toContain('SELECT "threadId" COLLATE "C" AS "threadId"');
+    expect(compiled.text).toContain('GROUP BY "threadId" COLLATE "C"');
     expect(compiled.text).toContain('FROM qualified_threads\nWHERE "threadId" > $3');
     expect(compiled.text).toContain('ORDER BY "threadId" ASC');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
