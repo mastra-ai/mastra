@@ -120,8 +120,8 @@ export function assertKnowledgeProposalMutationSemantics(
   mutation: KnowledgeProposalMutation,
   targets: readonly KnowledgeProposalTarget[],
 ): void {
-  const runtimeIsScope = (mutation.mutation as { isScope?: boolean }).isScope;
-  if (mutation.kind === 'create-node' && runtimeIsScope === true) {
+  const runtimeIsScope = (mutation.mutation as { isScope?: unknown }).isScope;
+  if (mutation.kind === 'create-node' && runtimeIsScope !== undefined && runtimeIsScope !== false) {
     throw new KnowledgeConflictError('Node creation cannot create a scope');
   }
   if (mutation.kind === 'create-scope' && runtimeIsScope !== true) {
