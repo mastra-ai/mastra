@@ -236,6 +236,13 @@ export class MessageMerger {
     anchorMap: Map<number, number>;
     partsToAdd: Map<number, MastraMessageContentV2['parts'][number]>;
   }): void {
+    // Parts injected into `latestMessage` beyond the one-per-incoming-part the
+    // offset arithmetic below assumes — currently the `step-start` that
+    // `pushNewPart` adds ahead of a text part following a tool invocation.
+    // Without this, every later part is placed one slot short and spliced in
+    // front of the part before it, rotating the run.
+    let insertionDrift = 0;
+
     // Walk through incomingMessage, inserting any part not present at the canonical position
     for (let i = 0; i < incomingMessage.content.parts.length; ++i) {
       const part = incomingMessage.content.parts[i];
@@ -257,7 +264,7 @@ export class MessageMerger {
         const offset = leftAnchorV2 === -1 ? i : i - leftAnchorV2;
 
         // Insert at proportional position
-        const insertAt = leftAnchorLatest + offset;
+        const insertAt = leftAnchorLatest + offset + insertionDrift;
 
         const rightAnchorLatest =
           rightAnchorV2 !== -1 ? anchorMap.get(rightAnchorV2)! : latestMessage.content.parts.length;
@@ -269,15 +276,23 @@ export class MessageMerger {
             .slice(insertAt, rightAnchorLatest)
             .some(p => CacheKeyGenerator.fromDBParts([p]) === CacheKeyGenerator.fromDBParts([part]))
         ) {
-          MessageMerger.pushNewPart({
+          // `pushNewPart` reports how many parts it actually inserted, which is
+          // 2 when it injects a `step-start` ahead of the part. Anchors after
+          // the insertion point shift by that count, and anything beyond the
+          // single part this iteration accounts for becomes drift for the rest
+          // of the walk.
+          const insertedCount = MessageMerger.pushNewPart({
             latestMessage,
             newMessage: incomingMessage,
             part,
             insertAt,
           });
-          for (const [v2Idx, latestIdx] of anchorMap.entries()) {
-            if (latestIdx >= insertAt) {
-              anchorMap.set(v2Idx, latestIdx + 1);
+          if (insertedCount > 0) {
+            insertionDrift += insertedCount - 1;
+            for (const [v2Idx, latestIdx] of anchorMap.entries()) {
+              if (latestIdx >= insertAt) {
+                anchorMap.set(v2Idx, latestIdx + insertedCount);
+              }
             }
           }
         }
@@ -292,7 +307,12 @@ export class MessageMerger {
   }
 
   /**
-   * Push a new message part to the latest message
+   * Push a new message part to the latest message.
+   *
+   * Returns how many parts were actually inserted — 0 when the part was
+   * already present, 1 normally, or 2 when a `step-start` was injected ahead of
+   * it. Callers tracking positions in `latestMessage.content.parts` must shift
+   * by this count, not by 1.
    */
   private static pushNewPart({
     latestMessage,
@@ -304,7 +324,7 @@ export class MessageMerger {
     newMessage: MastraDBMessage;
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
-  }): void {
+  }): number {
     const partKey = CacheKeyGenerator.fromDBParts([part]);
     const latestPartCount = latestMessage.content.parts.filter(
       p => CacheKeyGenerator.fromDBParts([p]) === partKey,
@@ -334,17 +354,20 @@ export class MessageMerger {
 
       if (typeof insertAt === 'number') {
         if (needsStepStart) {
-          latestMessage.content.parts.splice(insertAt, 0, stepStartPart);
-          latestMessage.content.parts.splice(insertAt + 1, 0, part);
-        } else {
-          latestMessage.content.parts.splice(insertAt, 0, part);
+          latestMessage.content.parts.splice(insertAt, 0, stepStartPart, part);
+          return 2;
         }
-      } else {
-        if (needsStepStart) {
-          latestMessage.content.parts.push(stepStartPart);
-        }
-        latestMessage.content.parts.push(part);
+        latestMessage.content.parts.splice(insertAt, 0, part);
+        return 1;
       }
+
+      if (needsStepStart) {
+        latestMessage.content.parts.push(stepStartPart);
+      }
+      latestMessage.content.parts.push(part);
+      return needsStepStart ? 2 : 1;
     }
+
+    return 0;
   }
 }
