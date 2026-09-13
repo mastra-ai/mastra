@@ -29,6 +29,8 @@ import type {
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
+const knowledgeInitializations = new WeakMap<KnowledgeStorage, Promise<void>>();
+
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
   workflows?: WorkflowsStorage;
@@ -239,6 +241,7 @@ export interface MastraCompositeStoreConfig {
    * When disableInit is true:
    * - The storage will not automatically create/alter tables on first use
    * - You must call `storage.init()` explicitly in your CI/CD scripts
+   * - If using Knowledge, also call `storage.initKnowledge()` to activate its schema
    *
    * @example
    * // In CI/CD script:
@@ -487,7 +490,37 @@ export class MastraCompositeStore extends MastraBase {
    * ```
    */
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
+    const knowledge = this.stores?.knowledge;
+    if (
+      storeName === 'knowledge' &&
+      knowledge &&
+      !this.disableInit &&
+      process.env.MASTRA_DISABLE_STORAGE_INIT !== 'true'
+    ) {
+      await this.initKnowledge();
+    }
     return this.stores?.[storeName];
+  }
+
+  /**
+   * Explicitly activate Knowledge, including when automatic initialization is disabled.
+   * Ordinary `init()` does not activate this opt-in domain.
+   */
+  async initKnowledge(): Promise<void> {
+    const knowledge = this.stores?.knowledge;
+    if (!knowledge) return;
+    let initialization = knowledgeInitializations.get(knowledge);
+    if (!initialization) {
+      initialization = Promise.resolve()
+        .then(() => this.init())
+        .then(() => knowledge.init())
+        .catch(error => {
+          knowledgeInitializations.delete(knowledge);
+          throw error;
+        });
+      knowledgeInitializations.set(knowledge, initialization);
+    }
+    await initialization;
   }
 
   /**
@@ -609,12 +642,8 @@ export class MastraCompositeStore extends MastraBase {
     };
 
     if (this.stores) {
-      // Iterate every registered domain instead of naming them one by one, so
-      // a domain added to the stores map can never silently dodge init. The
-      // typeof guard skips subclass-set entries that don't expose an init
-      // method.
-      for (const domain of Object.values(this.stores)) {
-        if (typeof domain?.init === 'function') maybeInit(domain);
+      for (const [name, domain] of Object.entries(this.stores)) {
+        if (name !== 'knowledge' && typeof domain?.init === 'function') maybeInit(domain);
       }
     }
 
