@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added deterministic static importer operations for reconciling externally addressed Knowledge nodes and records with ownership-bounded deletion.
+Added deterministic static importer operations that preserve externally edited content and record ownership-conflict skips in activity.
