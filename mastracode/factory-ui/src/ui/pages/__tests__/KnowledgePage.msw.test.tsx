@@ -310,11 +310,14 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'record-created',
+            action: 'create',
             recordType: 'record',
             recordId: 'record-1',
             scope: ['org:org-1', `resource:${FACTORY_ID}`],
             node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
@@ -1550,7 +1553,7 @@ describe('KnowledgePage', () => {
             },
             {
               id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-              address: 'thread:thread-abc-123',
+              address: `resource:${FACTORY_ID}:thread:thread-abc-123`,
               name: 'thread-abc-123',
               parentIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
               memberCount: 1,
