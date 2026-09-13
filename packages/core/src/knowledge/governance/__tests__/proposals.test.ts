@@ -415,6 +415,20 @@ describe('Knowledge proposal lifecycle', () => {
       lifecycle.propose({
         ...input,
         mutation: {
+          kind: 'create-node',
+          mutation: {
+            id: randomUUID(),
+            name: 'Malformed scope flag',
+            isScope: 'true' as unknown as false,
+            scopeIds: [ids['scope:source']!],
+          },
+        },
+      }),
+    ).rejects.toThrow('Node creation cannot create a scope');
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
           kind: 'create-scope',
           address: 'scope:invalid',
           mutation: {
