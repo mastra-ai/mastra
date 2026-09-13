@@ -6,6 +6,7 @@ import { filterObservedMessages, getObservableMessages } from '../message-utils'
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
+import { selectSafeBufferPrefix } from './safe-buffer-prefix';
 import type { ObservationTurn } from './turn';
 import type { StepContext } from './types';
 
@@ -129,8 +130,10 @@ export class ObservationStep {
     }
 
     // ── Check for incomplete tool calls ────────────────────────
-    // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
-    // while the agent loop continues. We must not observe/buffer until they complete.
+    // Tool calls (provider- or client-executed) may still be in state:'call'
+    // while the agent loop continues. Threshold observation must not run until
+    // they complete. Mid-loop buffering is NOT blocked here — it admits only
+    // the safe completed prefix via selectSafeBufferPrefix below.
     const allMsgsForToolCheck = getObservableMessages(messageList);
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
     const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
@@ -153,8 +156,11 @@ export class ObservationStep {
       messages: getObservableMessages(messageList),
     });
 
-    // Trigger buffering if interval boundary crossed (fire-and-forget, all steps)
-    if (statusSnapshot.shouldBuffer && !hasIncompleteToolCalls) {
+    // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
+    // A pending tool call on the newest message doesn't block the whole batch:
+    // admit only the safe prefix before it — the same policy idle buffering
+    // applies at turn end (see selectSafeBufferPrefix).
+    if (statusSnapshot.shouldBuffer) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -167,8 +173,14 @@ export class ObservationStep {
       const candidates = om.getUnobservedMessages(unobservedMessages, statusSnapshot.record, {
         excludeBuffered: true,
       });
-      if (candidates.length > 0) {
-        om.sealMessagesForBuffering(candidates);
+      const safeCandidates = selectSafeBufferPrefix(candidates);
+      // Deferred = there were candidates but none can be buffered yet. Skip buffer()
+      // entirely so the interval boundary isn't advanced and the next step retries.
+      // When there simply are no candidates, still call buffer() (as before) so it
+      // records the boundary and this interval doesn't re-trigger every step.
+      const deferred = candidates.length > 0 && safeCandidates.length === 0;
+      if (safeCandidates.length > 0) {
+        om.sealMessagesForBuffering(safeCandidates);
 
         try {
           await this.turn.hooks?.onBufferChunkSealed?.();
@@ -179,39 +191,41 @@ export class ObservationStep {
         }
 
         if (this.turn.memory) {
-          await this.turn.memory.persistMessages(candidates);
+          await this.turn.memory.persistMessages(safeCandidates);
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer
         // remain in the live response/input buckets. Move the exact same messages
         // into memory so later step-save drains don't pull them back out and grow
         // them again under the old response id.
-        messageList.removeByIds(candidates.map(msg => msg.id));
-        for (const msg of candidates) {
+        messageList.removeByIds(safeCandidates.map(msg => msg.id));
+        for (const msg of safeCandidates) {
           messageList.add(msg, 'memory');
         }
       }
 
-      void om.trackBackgroundWork(
-        om
-          .buffer({
-            threadId,
-            resourceId,
-            messages: unobservedMessages,
-            pendingTokens: statusSnapshot.pendingTokens,
-            record: statusSnapshot.record,
-            writer: this.turn.writer,
-            agent: this.turn.agent,
-            sendSignal: this.turn.sendSignal,
-            sendStateSignal: this.turn.sendStateSignal,
-            requestContext: this.turn.requestContext,
-            observabilityContext: this.turn.observabilityContext,
-          })
-          .catch((err: Error) => {
-            omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
-          }),
-      );
-      buffered = true;
+      if (!deferred) {
+        void om.trackBackgroundWork(
+          om
+            .buffer({
+              threadId,
+              resourceId,
+              messages: safeCandidates,
+              pendingTokens: statusSnapshot.pendingTokens,
+              record: statusSnapshot.record,
+              writer: this.turn.writer,
+              agent: this.turn.agent,
+              sendSignal: this.turn.sendSignal,
+              sendStateSignal: this.turn.sendStateSignal,
+              requestContext: this.turn.requestContext,
+              observabilityContext: this.turn.observabilityContext,
+            })
+            .catch((err: Error) => {
+              omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
+            }),
+        );
+        buffered = true;
+      }
     }
 
     // ── Save messages + threshold observation ──────
