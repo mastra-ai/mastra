@@ -18,7 +18,9 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import type { TaskRecord } from '../storage/domains/thread-state/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import { TASK_STATE_TYPE } from '../tools/builtin/task-tools';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
@@ -997,6 +999,10 @@ export class AgentController<TState = {}> {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
+      getTasks: async ({ threadId }) => {
+        const store = await this.#resolveStorage()?.getStore('threadState');
+        return (await store?.getState<TaskRecord[]>({ threadId, type: TASK_STATE_TYPE })) ?? [];
+      },
       listMessages: async ({ threadId, limit }) => {
         if (limit !== undefined) {
           const result = await this.queryThreadMessages({

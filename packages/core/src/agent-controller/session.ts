@@ -224,6 +224,7 @@ export interface ThreadDataStore {
   }): Promise<AgentControllerThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
+  getTasks?(input: { threadId: string }): Promise<TaskItemSnapshot[]>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
   listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
@@ -759,9 +760,10 @@ export class SessionThread {
 
     this.cleanupSubscription();
     this.set({ threadId: clonedThread.id });
-    await this.loadMetadata();
+    await this.#loadMetadata();
     session.resetTokenUsage();
     session.emit({ type: 'thread_created', thread: clonedThread });
+    await this.#loadTasks();
     await this.ensureCurrentSubscription();
 
     return clonedThread;
@@ -803,11 +805,12 @@ export class SessionThread {
 
     this.set({ threadId });
 
-    await this.loadMetadata();
+    await this.#loadMetadata();
 
     if (emitEvent) {
       session.emit({ type: 'thread_changed', threadId, previousThreadId });
     }
+    await this.#loadTasks();
     await this.ensureCurrentSubscription();
   }
 
@@ -838,13 +841,12 @@ export class SessionThread {
     session.emit({ type: 'thread_deleted', threadId });
   }
 
-  /**
-   * Hydrate the session's per-thread settings from the active thread's metadata:
-   * token usage, the persisted mode (restored first), the per-mode model, and
-   * observer/reflector model ids + thresholds. Best-effort: on any failure the
-   * token tally is reset and the rest is left at defaults.
-   */
   async loadMetadata(): Promise<void> {
+    await this.#loadMetadata();
+    await this.#loadTasks();
+  }
+
+  async #loadMetadata(): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
     const threadId = this.#threadId;
@@ -967,6 +969,25 @@ export class SessionThread {
       // resetting here would replace measured token usage with a false zero.
       // Preserve the existing in-memory tally and leave other settings at their
       // current values.
+    }
+  }
+
+  async #loadTasks(): Promise<void> {
+    const session = this.#owner;
+    const store = this.#store;
+    const threadId = this.#threadId;
+    if (!threadId || !store?.hasStorage()) return;
+
+    const previousTasks = session.displayState.get().tasks;
+    try {
+      const tasks = await store.getTasks?.({ threadId });
+      const snapshotIsCurrent = this.#threadId === threadId && session.displayState.get().tasks === previousTasks;
+      if (tasks && snapshotIsCurrent) {
+        session.displayState.restoreTasks(tasks);
+        session.emit({ type: 'display_state_changed', displayState: session.displayState.get() });
+      }
+    } catch {
+      // Unavailable task storage must not prevent reopening a thread.
     }
   }
 }
