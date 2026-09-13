@@ -1,13 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CommentQuote } from '@mastra/playground-ui/components/Comment';
-import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
+import {
+  Composer,
+  ComposerActions,
+  ComposerBox,
+  ComposerInput,
+  ComposerSuggestions,
+} from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUp } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
-import { ComposerSuggestions } from '../../../chat/components/ComposerParts';
 import { mentionLabel } from './mentions';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
@@ -35,16 +40,18 @@ export function CommentComposer({
   const members = useFactoryMembers(factoryProjectId, { enabled: focused });
   const resolveMentions = useMentionResolver(factoryProjectId);
   const mentions = useMentionAutocomplete({ draft, setDraft, members: members.data ?? [], textareaRef });
+  const suggestionsId = useId();
+  const suggestionItems = mentions.suggestions.map(member => ({
+    id: `${suggestionsId}-${encodeURIComponent(member.id)}`,
+    label: mentionLabel(member),
+  }));
 
   const sendComment = async () => {
     const body = draft.trim();
     if (body.length === 0 || createComment.isPending) return;
-    // The token belongs to one body: a retry of the same text recovers the
-    // stored comment, an edited draft after a failure is a different send.
     if (pendingSend.current?.body !== body) pendingSend.current = { body, clientToken: crypto.randomUUID() };
     const { clientToken } = pendingSend.current;
     setSendError(undefined);
-    // The pending row carries the text, so the box clears message-app style.
     setDraft('');
     createComment.mutate(
       {
@@ -60,7 +67,6 @@ export function CommentComposer({
         },
         onError: cause => {
           setSendError(cause instanceof Error ? cause.message : 'Unable to post comment');
-          // Restore the failed body unless a new draft was started meanwhile.
           setDraft(current => (current.length === 0 ? body : current));
         },
       },
@@ -68,7 +74,6 @@ export function CommentComposer({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // An IME commit fires Enter mid-composition; acting on it would send half a word.
     if (event.nativeEvent.isComposing) return;
     if (mentions.handleKeyDown(event)) return;
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -90,7 +95,8 @@ export function CommentComposer({
         className={variant === 'thread' ? 'rounded-none border-x-0 border-b-0' : 'rounded-xl'}
       >
         <ComposerSuggestions
-          items={mentions.suggestions.map(member => ({ id: member.id, label: mentionLabel(member) }))}
+          id={suggestionsId}
+          items={suggestionItems}
           activeIndex={mentions.activeIndex}
           contextLabel="Mentions"
           onSelect={mentions.pickSuggestion}
@@ -108,6 +114,9 @@ export function CommentComposer({
           value={draft}
           placeholder="Add a comment…"
           aria-label="Comment"
+          aria-autocomplete="list"
+          aria-controls={suggestionItems.length > 0 ? suggestionsId : undefined}
+          aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
           autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
           className={cn('text-ui-sm', variant === 'panel' && 'min-h-9 pt-2')}

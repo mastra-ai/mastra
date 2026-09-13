@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -18,6 +18,7 @@ const COMMAND_NAMES = [
   'think',
   'om',
   'settings',
+  'connect',
   'login',
   'follow-up',
   'abort',
@@ -41,6 +42,17 @@ async function findReadyInput(): Promise<HTMLTextAreaElement> {
 beforeEach(useOverlayControllerHandlers);
 
 describe('Composer slash-command suggestions', () => {
+  describe('when Enter commits an IME candidate', () => {
+    it.each([{ isComposing: true }, { keyCode: 229 }])('keeps the command draft %j', async flags => {
+      const user = userEvent.setup();
+      renderComposer();
+      const input = await findReadyInput();
+      await user.type(input, '/help');
+      fireEvent.keyDown(input, { key: 'Enter', ...flags });
+      expect(input).toHaveValue('/help');
+    });
+  });
+
   describe('when the user types "/" in the composer', () => {
     it('shows every registered slash command', async () => {
       const user = userEvent.setup();
@@ -50,7 +62,7 @@ describe('Composer slash-command suggestions', () => {
       await user.type(input, '/');
 
       for (const name of COMMAND_NAMES) {
-        expect(await screen.findByRole('button', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
+        expect(await screen.findByRole('option', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
       }
     });
   });
@@ -63,12 +75,12 @@ describe('Composer slash-command suggestions', () => {
       const input = await findReadyInput();
       await user.type(input, '/goa');
 
-      expect(await screen.findByRole('button', { name: /^\/goal\s/ })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^\/help\s/ })).not.toBeInTheDocument();
+      expect(await screen.findByRole('option', { name: /^\/goal\s/ })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /^\/help\s/ })).not.toBeInTheDocument();
 
       await user.keyboard('{Tab}');
       expect(input).toHaveValue('/goal ');
-      expect(screen.queryByRole('button', { name: /^\/goal\s/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: /^\/goal\s/ })).not.toBeInTheDocument();
     });
 
     it('opens command options as a second step and returns with Escape', async () => {
