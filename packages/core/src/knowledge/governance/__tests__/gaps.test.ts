@@ -18,6 +18,14 @@ async function createFixture() {
           { scopeRefAddress: 'principal:owner', role: 'owner' },
         ],
       },
+      {
+        address: 'scope:other',
+        name: 'Other',
+        grants: [
+          { scopeRefAddress: 'principal:suggest', role: 'readonly', canSuggest: true },
+          { scopeRefAddress: 'principal:owner', role: 'owner' },
+        ],
+      },
     ],
   });
   const ids = structure.scopes;
@@ -94,6 +102,33 @@ describe('Knowledge gap flags', () => {
       name: 'Unrelated claim',
       version: unrelated.version,
     });
+    await expect(storage.getProposal(flag.id)).resolves.toMatchObject({ status: 'pending' });
+  });
+
+  it('requires structural scope targets to be bound before applying a verified move', async () => {
+    const { knowledge, storage, ids, node } = await createFixture();
+    const flag = await knowledge.fileGapFlag({
+      claim: 'The node belongs elsewhere',
+      evidence: [],
+      targets: [{ type: 'node', id: node.id }],
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    const worker = await knowledge.createGapQueueWorker({
+      vouchedScopeIds: [ids['principal:owner']!],
+      reviewerContextScopeId: ids['principal:owner']!,
+      verify: async () => ({
+        outcome: 'verified',
+        evidence: ['fresh-source:placement'],
+        mutation: {
+          kind: 'move-node',
+          mutation: { id: node.id, version: node.version, scopeIds: [ids['scope:other']!] },
+        },
+      }),
+    });
+
+    await expect(worker.runOnce()).rejects.toThrow('was not bound to the gap flag');
+    await expect(storage.getNodeScopeIds(node.id)).resolves.toEqual([ids['scope:feature']]);
     await expect(storage.getProposal(flag.id)).resolves.toMatchObject({ status: 'pending' });
   });
 

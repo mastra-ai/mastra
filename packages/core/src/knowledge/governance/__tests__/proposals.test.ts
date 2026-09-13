@@ -391,6 +391,48 @@ describe('Knowledge proposal lifecycle', () => {
     expect(await storage.getProposal(proposal.id)).toMatchObject({ status: 'pending' });
   });
 
+  it('rejects mutation kinds whose payload attempts a stronger operation', async () => {
+    const { storage, lifecycle, node, ids } = await createFixture();
+    const input = {
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    };
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
+          kind: 'update-node',
+          mutation: { id: node.id, version: node.version, scopeIds: [ids['scope:destination']!] },
+        },
+      }),
+    ).rejects.toThrow('Node updates cannot change scope membership');
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: { kind: 'update-node', mutation: { id: node.id, version: node.version, isScope: true } },
+      }),
+    ).rejects.toThrow('Node updates cannot change scope membership');
+
+    const record = await storage.createRecord({
+      node: { id: node.id, version: node.version },
+      text: 'Evidence',
+      scopeIds: [ids['scope:source']!],
+    });
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
+          kind: 'remove-record-scope',
+          mutation: {
+            id: record.id,
+            version: record.version,
+            scopeIds: [ids['scope:source']!, ids['scope:destination']!],
+          },
+        },
+      }),
+    ).rejects.toThrow('Record scope remove-record-scope payload is invalid');
+  });
+
   it('requires suggest and approval authority on every scope in a move', async () => {
     const { storage, lifecycle, node, ids } = await createFixture();
     const proposal = await lifecycle.proposeNodeUpdate({

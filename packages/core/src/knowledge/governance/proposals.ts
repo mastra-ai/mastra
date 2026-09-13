@@ -1,6 +1,7 @@
 import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  assertKnowledgeProposalMutationSemantics,
   createKnowledgeUlid,
   type KnowledgeNode,
   type KnowledgeProposal,
@@ -94,6 +95,7 @@ export class KnowledgeProposalLifecycle {
     this.#assertContextScope(frontier, input.proposerContextScopeId);
     const mutation = structuredClone(input.mutation);
     const targets = await this.#proposalTargets(mutation);
+    assertKnowledgeProposalMutationSemantics(mutation, targets);
 
     for (const target of targets) {
       if (mutation.kind === 'restore-scope') continue;

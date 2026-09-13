@@ -1564,9 +1564,9 @@ export function createKnowledgeStorageTests(
             approvalCapability: 'manageAccess',
           },
         ],
-        operation: 'update-node',
+        operation: 'move-node',
         payload: {
-          kind: 'update-node',
+          kind: 'move-node',
           mutation: {
             id: node.id,
             version: node.version,
