@@ -1333,6 +1333,58 @@ describe('MessageHistory', () => {
       expect(savedMessages[0]!.content.toolInvocations).toBeUndefined();
     });
 
+    it('retains native OM cursor anchors without changing standalone filtering', async () => {
+      const message: MastraDBMessage = {
+        id: 'msg-tool-only-anchor',
+        role: 'assistant',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        content: {
+          format: 2,
+          providerMetadata: { mastra: { rawProviderPayload: 'ANCHOR_PROVIDER_SECRET' } },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-anchor',
+                toolName: 'secret_tool',
+                args: { secret: 'ANCHOR_ARGS_SECRET' },
+                result: { secret: 'ANCHOR_RESULT_SECRET' },
+              },
+              providerMetadata: { mastra: { rawToolPayload: 'ANCHOR_PART_SECRET' } },
+            },
+          ],
+        },
+      };
+
+      const standaloneStorage = createPersistenceStorage();
+      await new MessageHistory({
+        storage: standaloneStorage,
+        toolCallFilter: { exclude: ['secret_tool'] },
+      }).persistMessages({ messages: [message], threadId: 'thread-1' });
+      expect(standaloneStorage.saveMessages).not.toHaveBeenCalled();
+
+      const nativeOmStorage = createPersistenceStorage();
+      await new MessageHistory({
+        storage: nativeOmStorage,
+        toolCallFilter: { exclude: ['secret_tool'] },
+        retainFilteredMessageAnchors: true,
+      }).persistMessages({ messages: [message], threadId: 'thread-1', resourceId: 'resource-1' });
+
+      expect((nativeOmStorage.saveMessages as any).mock.calls[0][0].messages).toEqual([
+        {
+          id: 'msg-tool-only-anchor',
+          role: 'assistant',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          createdAt: message.createdAt,
+          content: { format: 2, parts: [] },
+        },
+      ]);
+    });
+
     it('keeps a sealed re-add boundary when the filtered tool part was last', async () => {
       const storage = createPersistenceStorage();
       const processor = new MessageHistory({ storage, toolCallFilter: {} });
@@ -1407,6 +1459,70 @@ describe('MessageHistory', () => {
       expect(readded[1]?.content.parts).toMatchObject([
         { type: 'data-om-observation-end', data: { cycleId: 'cycle-after-seal' } },
         { type: 'text', text: 'new content after appended marker' },
+      ]);
+    });
+
+    it('keeps a payload-free seal before retained post-boundary parts', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({ storage, toolCallFilter: { exclude: ['secret_tool'] } });
+      const sealedAt = 17_044;
+      const message: MastraDBMessage = {
+        id: 'msg-sealed-tool-only',
+        role: 'assistant',
+        threadId: 'thread-1',
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-sealed-anchor',
+                toolName: 'secret_tool',
+                args: { secret: 'SEALED_ARGS_SECRET' },
+                result: { secret: 'SEALED_RESULT_SECRET' },
+              },
+              metadata: { mastra: { sealedAt } },
+            },
+            { type: 'data-om-observation-end', data: { cycleId: 'cycle-after-sealed-tool' } },
+            { type: 'text', text: 'retained post-boundary text' },
+          ],
+        },
+      };
+
+      await processor.persistMessages({ messages: [message], threadId: 'thread-1' });
+
+      const saved = (storage.saveMessages as any).mock.calls[0][0].messages[0] as MastraDBMessage;
+      expect(saved.content.parts).toEqual([
+        { type: 'text', text: '', metadata: { mastra: { sealedAt } } },
+        { type: 'data-om-observation-end', data: { cycleId: 'cycle-after-sealed-tool' } },
+        { type: 'text', text: 'retained post-boundary text' },
+      ]);
+      expect(JSON.stringify(saved)).not.toContain('SEALED_ARGS_SECRET');
+      expect(JSON.stringify(saved)).not.toContain('SEALED_RESULT_SECRET');
+
+      const messageList = new MessageList({ threadId: 'thread-1' });
+      messageList.add(saved, 'memory');
+      messageList.add(
+        {
+          ...saved,
+          content: {
+            ...saved.content,
+            parts: [...saved.content.parts, { type: 'text', text: 'new content after sealed boundary' }],
+          },
+        },
+        'response',
+      );
+
+      const readded = messageList.get.all.db().filter(messageItem => messageItem.role === 'assistant');
+      expect(readded).toHaveLength(2);
+      expect(readded[1]?.id).not.toBe(saved.id);
+      expect(readded[1]?.content.parts).toMatchObject([
+        { type: 'data-om-observation-end', data: { cycleId: 'cycle-after-sealed-tool' } },
+        { type: 'text', text: 'retained post-boundary text' },
+        { type: 'text', text: 'new content after sealed boundary' },
       ]);
     });
 

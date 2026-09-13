@@ -371,24 +371,27 @@ export abstract class ObservationStrategy {
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
-      const messages = this.filterMessagesForHistory(result?.messages ?? []);
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
-      }
+      const messages = result?.messages ?? [];
+      const target = messages.find(msg => msg?.role === 'assistant' && Array.isArray(msg.content?.parts));
+      if (!target) return;
+
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        target.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      const message = {
+        ...target,
+        content: {
+          ...target.content,
+          parts: alreadyPresent ? [...target.content.parts] : [...target.content.parts, marker as any],
+        },
+      };
+
+      await this.messageHistory.persistMessages({
+        messages: [message],
+        threadId,
+        resourceId,
+      });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }

@@ -648,7 +648,16 @@ export function preserveSealedMessageBoundary(
     }
   }
 
-  if (targetIndex === -1) return parts;
+  if (targetIndex === -1) {
+    return [
+      {
+        type: 'text',
+        text: '',
+        metadata: { mastra: { sealedAt: boundary.sealedAt } },
+      },
+      ...parts,
+    ] as MastraDBMessage['content']['parts'];
+  }
 
   const targetPart = parts[targetIndex] as { metadata?: unknown };
   const targetMetadata = targetPart.metadata;
