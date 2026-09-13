@@ -401,6 +401,49 @@ describe('Knowledge proposal lifecycle', () => {
       lifecycle.propose({
         ...input,
         mutation: {
+          kind: 'create-node',
+          mutation: {
+            id: randomUUID(),
+            name: 'Disguised scope',
+            isScope: true,
+            scopeIds: [ids['scope:source']!],
+          },
+        },
+      }),
+    ).rejects.toThrow('Node creation cannot create a scope');
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
+          kind: 'create-scope',
+          address: 'scope:invalid',
+          mutation: {
+            id: randomUUID(),
+            name: 'Disguised node',
+            isScope: false as true,
+            scopeIds: [ids['scope:source']!],
+          },
+        },
+      }),
+    ).rejects.toThrow('Scope creation must create a scope node');
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
+          kind: 'move-node',
+          mutation: {
+            id: node.id,
+            version: node.version,
+            isScope: false,
+            scopeIds: [ids['scope:destination']!],
+          },
+        },
+      }),
+    ).rejects.toThrow('Node moves cannot change whether a node is a scope');
+    await expect(
+      lifecycle.propose({
+        ...input,
+        mutation: {
           kind: 'update-node',
           mutation: { id: node.id, version: node.version, scopeIds: [ids['scope:destination']!] },
         },

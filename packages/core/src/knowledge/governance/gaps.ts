@@ -307,10 +307,16 @@ export class KnowledgeGapQueueWorker {
       case 'restore-scope':
       case 'restore-record':
         throw new KnowledgeConflictError('Verified gap mutations cannot restore deleted targets');
-      case 'add-record-scope':
+      case 'add-record-scope': {
+        const recordTarget = proposal.targets.find(
+          target => target.type === 'record' && target.id === mutation.mutation.id,
+        );
         await assertRecord(mutation.mutation.id, mutation.mutation.version);
-        await assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'append');
+        const retainedScopeIds = new Set(recordTarget?.scopeIds ?? []);
+        const addedScopeIds = mutation.mutation.scopeIds.filter(scopeId => !retainedScopeIds.has(scopeId));
+        await assertCreatedInBoundScopes(addedScopeIds, 'append');
         return [...targets.values()];
+      }
       case 'remove-record-scope':
         await assertRecord(mutation.mutation.id, mutation.mutation.version);
         return [...targets.values()];

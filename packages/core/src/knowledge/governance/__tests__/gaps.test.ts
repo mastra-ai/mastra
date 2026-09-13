@@ -105,6 +105,46 @@ describe('Knowledge gap flags', () => {
     await expect(storage.getProposal(flag.id)).resolves.toMatchObject({ status: 'pending' });
   });
 
+  it('requires append authority only on newly added record scopes', async () => {
+    const { knowledge, storage, ids, node } = await createFixture();
+    const record = await storage.createRecord({
+      node: { id: node.id, version: node.version },
+      text: 'Existing evidence',
+      scopeIds: [ids['scope:feature']!],
+    });
+    const flag = await knowledge.fileGapFlag({
+      claim: 'The evidence also belongs in the other scope',
+      evidence: [],
+      targets: [
+        { type: 'record', id: record.id },
+        { type: 'node', id: ids['scope:other']! },
+      ],
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    const worker = await knowledge.createGapQueueWorker({
+      vouchedScopeIds: [ids['principal:owner']!],
+      reviewerContextScopeId: ids['principal:owner']!,
+      verify: async () => ({
+        outcome: 'verified',
+        evidence: ['fresh-source:placement'],
+        mutation: {
+          kind: 'add-record-scope',
+          mutation: {
+            id: record.id,
+            version: record.version,
+            scopeIds: [ids['scope:feature']!, ids['scope:other']!],
+          },
+        },
+      }),
+    });
+
+    await expect(worker.runOnce()).resolves.toMatchObject({ id: flag.id, status: 'approved' });
+    await expect(storage.getRecordScopeIds(record.id)).resolves.toEqual(
+      [ids['scope:feature']!, ids['scope:other']!].sort(),
+    );
+  });
+
   it('requires structural scope targets to be bound before applying a verified move', async () => {
     const { knowledge, storage, ids, node } = await createFixture();
     const flag = await knowledge.fileGapFlag({
