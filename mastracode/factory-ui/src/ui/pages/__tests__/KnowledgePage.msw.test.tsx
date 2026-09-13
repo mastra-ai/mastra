@@ -557,7 +557,8 @@ describe('KnowledgePage', () => {
 
     // Tree selection changes the lens and opens its scope detail together.
     let flyout = await screen.findByTestId('knowledge-scope-flyout');
-    expect(flyout).toHaveTextContent(`resource:${FACTORY_ID}`);
+    expect(flyout).toHaveTextContent(`project:${FACTORY_ID}`);
+    expect(flyout).not.toHaveTextContent(`resource:${FACTORY_ID}`);
     expect(flyout).toHaveTextContent('Content nodes1');
     expect(flyout).toHaveTextContent('Child scopes1');
     expect(await within(flyout).findByText('knowledge-appended')).toBeInTheDocument();
@@ -572,7 +573,8 @@ describe('KnowledgePage', () => {
     if (!root) throw new Error('Expected the selected structural scope root');
     fireEvent.click(root);
     flyout = await screen.findByTestId('knowledge-scope-flyout');
-    expect(flyout).toHaveTextContent(`resource:${FACTORY_ID}`);
+    expect(flyout).toHaveTextContent(`project:${FACTORY_ID}`);
+    expect(flyout).not.toHaveTextContent(`resource:${FACTORY_ID}`);
   });
 
   it('falls back to plain identity rung entries when the adapter exposes no scope nodes', async () => {
@@ -715,7 +717,7 @@ describe('KnowledgePage', () => {
     const banner = await screen.findByTestId('knowledge-truncation-banner');
     expect(banner).toHaveTextContent(/Partial view/);
     expect(banner).toHaveTextContent(/newest 2 nodes/);
-    expect(banner).toHaveTextContent(/1 linked nodes outside the window/);
+    expect(banner).not.toHaveTextContent(/linked nodes outside the window/);
     expect(banner).toHaveTextContent(/3 links unresolved/);
 
     const boundaryNode = await waitFor(() => {
