@@ -280,7 +280,7 @@ export interface MCPToolExecutionContext {
 }
 
 /**
- * Identifies a tool invocation received by a Mastra MCP server.
+ * Internal metadata for a tool invocation received by a Mastra MCP server.
  *
  * This is intentionally separate from {@link MCPToolExecutionContext}: the latter
  * may be forwarded to tools nested inside an MCP-exposed agent or workflow so they
@@ -289,9 +289,7 @@ export interface MCPToolExecutionContext {
  *
  * @internal
  */
-export interface MCPServerToolInvocation {
-  role: 'server';
-  method: 'tools/call';
+export interface InternalMcpMeta {
   serverName: string;
   serverVersion?: string;
   protocolVersion?: string;
@@ -325,7 +323,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      *
      * @internal
      */
-    mcpServerToolInvocation?: MCPServerToolInvocation;
+    internalMcpMeta?: InternalMcpMeta;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection

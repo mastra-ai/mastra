@@ -816,18 +816,22 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
-      const mcpServerToolInvocation = execOptions?.mcpServerToolInvocation;
+      const internalMcpMeta = execOptions?.internalMcpMeta;
+      const spanMcpMeta = mcpMeta ?? internalMcpMeta;
       const toolSpan = getOrCreateSpan({
-        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
-        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
+        type: spanMcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: spanMcpMeta ? `mcp_tool: '${options.name}' on '${spanMcpMeta.serverName}'` : `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
         entityId: options.name,
         entityName: options.name,
-        attributes: mcpMeta
+        attributes: spanMcpMeta
           ? {
-              mcpServer: mcpMeta.serverName,
-              serverVersion: mcpMeta.serverVersion,
+              mcpServer: spanMcpMeta.serverName,
+              serverVersion: spanMcpMeta.serverVersion,
+              ...(internalMcpMeta?.protocolVersion !== undefined
+                ? { mcpProtocolVersion: internalMcpMeta.protocolVersion }
+                : {}),
               toolType: logType || 'tool',
               toolDescription: options.description,
               toolCallId: execOptions?.toolCallId,
@@ -836,15 +840,6 @@ export class CoreToolBuilder extends MastraBase {
               toolDescription: options.description,
               toolType: logType || 'tool',
               toolCallId: execOptions?.toolCallId,
-              ...(mcpServerToolInvocation
-                ? {
-                    mcpRole: mcpServerToolInvocation.role,
-                    mcpMethod: mcpServerToolInvocation.method,
-                    mcpServer: mcpServerToolInvocation.serverName,
-                    serverVersion: mcpServerToolInvocation.serverVersion,
-                    mcpProtocolVersion: mcpServerToolInvocation.protocolVersion,
-                  }
-                : {}),
             },
         tracingPolicy: options.tracingPolicy,
         tracingContext: tracingContext,

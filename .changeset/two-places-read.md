@@ -2,4 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Added server and protocol context to traces for tools called through an MCP server.
+Added server and negotiated protocol metadata to MCP tool call traces created for incoming server requests.

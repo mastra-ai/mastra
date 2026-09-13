@@ -309,7 +309,7 @@ describe('MCP Tool Tracing', () => {
     );
   });
 
-  it('should preserve TOOL_CALL and annotate tools invoked through an MCP server', async () => {
+  it('should use MCP_TOOL_CALL for tools invoked through an MCP server', async () => {
     const testTool = createTool({
       id: 'server-tool',
       description: 'A tool exposed by an MCP server',
@@ -342,9 +342,7 @@ describe('MCP Tool Tracing', () => {
       {
         toolCallId: 'test-call-id',
         messages: [],
-        mcpServerToolInvocation: {
-          role: 'server',
-          method: 'tools/call',
+        internalMcpMeta: {
           serverName: 'public-mcp-server',
           serverVersion: '1.2.3',
           protocolVersion: '2025-11-25',
@@ -354,15 +352,13 @@ describe('MCP Tool Tracing', () => {
 
     expect(mockParentSpan.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: SpanType.TOOL_CALL,
-        name: "tool: 'server-tool'",
+        type: SpanType.MCP_TOOL_CALL,
+        name: "mcp_tool: 'server-tool' on 'public-mcp-server'",
         input: { value: 'test' },
         attributes: {
           toolDescription: 'A tool exposed by an MCP server',
           toolType: 'tool',
           toolCallId: 'test-call-id',
-          mcpRole: 'server',
-          mcpMethod: 'tools/call',
           mcpServer: 'public-mcp-server',
           serverVersion: '1.2.3',
           mcpProtocolVersion: '2025-11-25',

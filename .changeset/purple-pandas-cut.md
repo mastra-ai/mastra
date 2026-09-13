@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Added MCP server provenance to tool call trace attributes.
+Classified incoming MCP server tool executions as MCP tool call spans with server and protocol metadata.

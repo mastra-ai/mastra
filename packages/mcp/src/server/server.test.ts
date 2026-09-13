@@ -2014,16 +2014,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolExecute).toHaveBeenCalledWith(
       { query: 'direct call' },
       expect.objectContaining({
-        mcpServerToolInvocation: {
-          role: 'server',
-          method: 'tools/call',
+        internalMcpMeta: {
           serverName: 'DirectToolServer',
           serverVersion: '1.0.0',
           protocolVersion: '2025-11-25',
         },
       }),
     );
-    const legacyInvocation = directToolExecute.mock.calls[0]?.[1]?.mcpServerToolInvocation;
+    const legacyInvocation = directToolExecute.mock.calls[0]?.[1]?.internalMcpMeta;
     expect(legacyInvocation).not.toHaveProperty('sessionId');
 
     let agentToolOptions: any = null;
@@ -2197,9 +2195,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(directToolExecute).toHaveBeenCalledWith(
       {},
       expect.objectContaining({
-        mcpServerToolInvocation: {
-          role: 'server',
-          method: 'tools/call',
+        internalMcpMeta: {
           serverName: 'ModernProtocolServer',
           serverVersion: '1.0.0',
           protocolVersion: '2026-07-28',

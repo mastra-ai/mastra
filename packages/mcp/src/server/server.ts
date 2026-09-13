@@ -1147,9 +1147,7 @@ export class MCPServer extends MCPServerBase {
           messages: [],
           toolCallId: '',
           requestContext: proxiedContext,
-          mcpServerToolInvocation: {
-            role: 'server',
-            method: 'tools/call',
+          internalMcpMeta: {
             serverName: this.name,
             serverVersion: this.version,
             protocolVersion: getRequestProtocolVersion(extra, serverInstance),
