@@ -563,9 +563,9 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       },
     });
 
-    // The Tool-level validator stays a no-op so envelope returns (no structuredContent,
-    // isError + onToolError: 'return') aren't validated against the outputSchema.
-    // Enforcement happens inside the execute wrapper on the structuredContent path.
+    // The Tool-level validator stays a no-op so CallToolResult envelope returns are not
+    // validated against the outputSchema. Enforcement happens inside the execute wrapper
+    // for successful structuredContent results.
     const invalidOutput = { result: 'not-a-number', extraField: true };
     expect(calculateTool.outputSchema?.['~standard'].validate(invalidOutput)).toEqual({ value: invalidOutput });
     expect(toStandardSchema(outputSchema)['~standard'].validate(invalidOutput)).toHaveProperty('issues');
@@ -646,49 +646,61 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(getMcpCallToolContent(result)).toEqual(content);
   });
 
-  it('does not schema-validate isError results when onToolError is "return"', async () => {
-    const returnClient = new InternalMastraMCPClient({
-      name: 'output-schema-test-client-return',
-      server: { url: testServer.baseUrl, onToolError: 'return' },
-    });
-    await returnClient.connect();
-    try {
-      const sdkClient = (returnClient as any).client as Client;
-
-      vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
-        tools: [
-          {
-            name: 'calculate',
-            description: 'Calculates a math expression',
-            inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
-            outputSchema: {
-              type: 'object' as const,
-              properties: { result: { type: 'number' } },
-              required: ['result'],
-            },
-          },
-        ],
+  it.each(['return', 'returnEnvelope'] as const)(
+    'does not schema-validate isError results when onToolError is "%s"',
+    async onToolError => {
+      const returnClient = new InternalMastraMCPClient({
+        name: `output-schema-test-client-${onToolError}`,
+        server: { url: testServer.baseUrl, onToolError },
       });
+      await returnClient.connect();
+      try {
+        const sdkClient = (returnClient as any).client as Client;
 
-      const tools = await returnClient.tools();
-      const calculateTool = tools['calculate'];
+        vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+          tools: [
+            {
+              name: 'calculate',
+              description: 'Calculates a math expression',
+              inputSchema: { type: 'object' as const, properties: { expression: { type: 'string' } } },
+              outputSchema: {
+                type: 'object' as const,
+                properties: { result: { type: 'number' } },
+                required: ['result'],
+              },
+            },
+          ],
+        });
 
-      // An error envelope with structuredContent that doesn't match the schema must not
-      // be masked by a validation error — the isError path owns this result.
-      const callToolResult = {
-        content: [{ type: 'text', text: 'boom' }],
-        structuredContent: { result: 'not-a-number' },
-        isError: true,
-      };
-      vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+        const tools = await returnClient.tools();
+        const calculateTool = tools['calculate'];
 
-      const result = await calculateTool.execute?.({ expression: '1 + 1' });
-      expect(result).toEqual(callToolResult.structuredContent);
-      expect((result as any).error).toBeUndefined();
-    } finally {
-      await returnClient.disconnect().catch(() => {});
-    }
-  });
+        // An error result with structuredContent that does not match the schema must not
+        // be masked by a validation error. Legacy return mode still unwraps this value.
+        const callToolResult = {
+          content: [{ type: 'text', text: 'boom' }],
+          structuredContent: { result: 'not-a-number' },
+          isError: true,
+        };
+        vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+        const logSpy = vi.spyOn(returnClient as any, 'log');
+
+        const result = await calculateTool.execute?.({ expression: '1 + 1' });
+        if (onToolError === 'returnEnvelope') {
+          expect(result).toEqual(callToolResult);
+          expect((result as any).isError).toBe(true);
+        } else {
+          expect(result).toEqual(callToolResult.structuredContent);
+          expect((result as any).isError).toBeUndefined();
+          expect(getMcpCallToolContent(result)).toEqual(callToolResult.content);
+        }
+        expect((result as any).error).toBeUndefined();
+        expect(logSpy).not.toHaveBeenCalledWith('debug', 'Tool executed successfully: calculate');
+      } finally {
+        await returnClient.disconnect().catch(() => {});
+      }
+    },
+  );
 });
 
 describe('MastraMCPClient - isError handling', () => {
@@ -765,10 +777,85 @@ describe('MastraMCPClient - isError handling', () => {
     await client.disconnect().catch(() => {});
   });
 
-  it('returns the raw envelope when onToolError is "return" (legacy behaviour)', async () => {
+  it.each(['return', 'returnEnvelope'] as const)(
+    'returns the raw envelope without structuredContent when onToolError is "%s"',
+    async onToolError => {
+      const client = new InternalMastraMCPClient({
+        name: `iserror-${onToolError}-client`,
+        server: { url: testServer.baseUrl, onToolError },
+      });
+      await client.connect();
+
+      const sdkClient = (client as any).client as Client;
+      vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+        tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+      });
+      vi.spyOn(sdkClient, 'callTool').mockResolvedValue(failingResult);
+
+      const tools = await client.tools();
+      const result = await tools['fetch'].execute?.({});
+      expect(result).toEqual(failingResult);
+
+      await client.disconnect().catch(() => {});
+    },
+  );
+
+  it('returns the full error envelope in returnEnvelope mode when structuredContent is present', async () => {
     const client = new InternalMastraMCPClient({
-      name: 'iserror-return-client',
-      server: { url: testServer.baseUrl, onToolError: 'return' },
+      name: 'iserror-return-envelope-structured-client',
+      server: { url: testServer.baseUrl, onToolError: 'returnEnvelope' },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'submitRecipe',
+          description: 'Submits a recipe',
+          inputSchema: { type: 'object' as const },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { code: { type: 'string' as const } },
+          },
+        },
+      ],
+    });
+    const errorResult = {
+      content: [{ type: 'text' as const, text: 'Recipe validation failed.' }],
+      structuredContent: {
+        code: 'VALIDATION_FAILED',
+        validationResults: [
+          { code: 'MISSING_INGREDIENTS', level: 'ERROR', message: 'Ingredient list is required.' },
+        ],
+      },
+      isError: true,
+      _meta: { ui: { resourceUri: 'ui://submit-recipe/error.html' } },
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(errorResult);
+
+    const tools = await client.tools();
+    const result = await tools['submitRecipe'].execute?.({});
+    expect(result).toEqual({
+      ...errorResult,
+      _meta: {
+        ui: {
+          resourceUri: 'ui://submit-recipe/error.html',
+          serverId: 'iserror-return-envelope-structured-client',
+        },
+      },
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it.each([
+    ['number', 0],
+    ['null', null],
+  ])('returns the full error envelope for %s structuredContent in returnEnvelope mode', async (_label, structuredContent) => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-return-envelope-scalar-client',
+      server: { url: testServer.baseUrl, onToolError: 'returnEnvelope' },
     });
     await client.connect();
 
@@ -776,11 +863,60 @@ describe('MastraMCPClient - isError handling', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
     });
-    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(failingResult);
+    const errorResult = {
+      content: [{ type: 'text' as const, text: 'Fetch failed.' }],
+      structuredContent,
+      isError: true,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(errorResult);
 
     const tools = await client.tools();
     const result = await tools['fetch'].execute?.({});
-    expect(result).toEqual(failingResult);
+    expect(result).toEqual(errorResult);
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('includes structuredContent in the thrown MastraError details', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-throw-structured-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'submitRecipe', description: 'Submits a recipe', inputSchema: { type: 'object' as const } }],
+    });
+    const structuredContent = {
+      code: 'VALIDATION_FAILED',
+      validationResults: [
+        { code: 'MISSING_INGREDIENTS', level: 'ERROR', message: 'Ingredient list is required.' },
+      ],
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'Recipe validation failed.' }],
+      structuredContent,
+      isError: true,
+    });
+
+    const tools = await client.tools();
+    let caught: unknown;
+    try {
+      await tools['submitRecipe'].execute?.({});
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+      message: 'Recipe validation failed.',
+      details: {
+        toolName: 'submitRecipe',
+        serverName: 'iserror-throw-structured-client',
+        structuredContent: JSON.stringify(structuredContent),
+      },
+    });
 
     await client.disconnect().catch(() => {});
   });
