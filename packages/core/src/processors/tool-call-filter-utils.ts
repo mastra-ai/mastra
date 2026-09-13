@@ -141,19 +141,64 @@ function getToolInvocations(message: MastraDBMessage): MastraToolInvocationPart[
   return getMessageParts(message).filter((part): part is MastraToolInvocationPart => part.type === 'tool-invocation');
 }
 
-function hasToolInvocations(message: MastraDBMessage): boolean {
-  return (
-    getMessageParts(message).some(part => part.type === 'tool-invocation') ||
-    getTopLevelToolInvocations(message).length > 0
-  );
-}
-
 function hasTopLevelTextContent(message: MastraDBMessage): boolean {
   const content = message.content as unknown;
   if (typeof content === 'string') return content.trim().length > 0;
   if (!content || typeof content !== 'object' || Array.isArray(content)) return false;
   const topLevelContent = (content as { content?: unknown }).content;
   return typeof topLevelContent === 'string' && topLevelContent.trim().length > 0;
+}
+
+type ToolStateFilter = {
+  excludedToolNames: string[] | 'all';
+  excludedToolCallIds: Set<string>;
+  preserveToolCallIds: Set<string>;
+};
+
+function shouldFilterToolState(data: unknown, filter: ToolStateFilter, fallbackToolName?: string): boolean {
+  const stateData = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  const toolCallId = typeof stateData.toolCallId === 'string' ? stateData.toolCallId : undefined;
+  if (toolCallId && filter.preserveToolCallIds.has(toolCallId)) return false;
+
+  if (filter.excludedToolNames === 'all') return true;
+
+  const toolName = typeof stateData.toolName === 'string' ? stateData.toolName : fallbackToolName;
+  return (
+    (toolName !== undefined && filter.excludedToolNames.includes(toolName)) ||
+    (toolCallId !== undefined && filter.excludedToolCallIds.has(toolCallId))
+  );
+}
+
+function filterToolStateMetadata(
+  metadata: MastraDBMessage['content']['metadata'],
+  filter: ToolStateFilter,
+): MastraDBMessage['content']['metadata'] {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata;
+
+  let filteredMetadata = metadata;
+  for (const metadataKey of ['suspendedTools', 'pendingToolApprovals'] as const) {
+    const toolStates = metadata[metadataKey];
+    if (!toolStates || typeof toolStates !== 'object' || Array.isArray(toolStates)) continue;
+
+    const retainedEntries = Object.entries(toolStates).filter(
+      ([toolNameOrCallId, state]) => !shouldFilterToolState(state, filter, toolNameOrCallId),
+    );
+    if (retainedEntries.length === Object.keys(toolStates).length) continue;
+
+    if (filteredMetadata === metadata) filteredMetadata = { ...metadata };
+    if (retainedEntries.length === 0) {
+      delete filteredMetadata[metadataKey];
+    } else {
+      filteredMetadata[metadataKey] = Object.fromEntries(retainedEntries);
+    }
+  }
+
+  return filteredMetadata;
+}
+
+function shouldFilterToolStatePart(part: MastraMessagePart, filter: ToolStateFilter): boolean {
+  if (part.type !== 'data-tool-call-approval' && part.type !== 'data-tool-call-suspended') return false;
+  return shouldFilterToolState((part as { data?: unknown }).data, filter);
 }
 
 function getToolCallId(invocation: MastraToolInvocationPart['toolInvocation']): string | undefined {
@@ -733,12 +778,20 @@ function buildContent(
   toolInvocations: MastraDBMessage['content']['toolInvocations'],
   behavior: ToolCallMessageFilterBehavior,
   retainedBoundaryPart?: MessagePart,
+  toolStateFilter?: ToolStateFilter,
 ): MastraDBMessage['content'] {
   const { toolInvocations: _originalToolInvocations, ...contentWithoutToolInvocations } = message.content;
   const updatedContent: MastraDBMessage['content'] = {
     ...contentWithoutToolInvocations,
     parts: preserveSealedMessageBoundary(message, parts, retainedBoundaryPart),
   };
+
+  if (toolStateFilter) {
+    const filteredMetadata = filterToolStateMetadata(contentWithoutToolInvocations.metadata, toolStateFilter);
+    if (filteredMetadata !== contentWithoutToolInvocations.metadata) {
+      updatedContent.metadata = filteredMetadata;
+    }
+  }
 
   if (behavior.stripMessageProviderMetadata) {
     delete updatedContent.providerMetadata;
@@ -757,16 +810,24 @@ function filterAllToolCalls(
   preserveToolCallIds: Set<string>,
   behavior: ToolCallMessageFilterBehavior,
 ): MastraDBMessage[] {
+  const toolStateFilter: ToolStateFilter = {
+    excludedToolNames: 'all',
+    excludedToolCallIds: new Set(),
+    preserveToolCallIds,
+  };
+
   return messages
     .map(message => {
-      if (!hasToolInvocations(message)) return message;
-
       let changed = false;
       const nonToolParts: MastraMessagePart[] = [];
       let retainedBoundaryPart: MessagePart | undefined;
       const sealedBoundaryPart = getSealedMessageBoundary(message)?.part;
       for (const part of getMessageParts(message)) {
         if (part.type !== 'tool-invocation') {
+          if (shouldFilterToolStatePart(part, toolStateFilter)) {
+            changed = true;
+            continue;
+          }
           nonToolParts.push(part);
           if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
@@ -793,6 +854,7 @@ function filterAllToolCalls(
         return toolCallId !== undefined && preserveToolCallIds.has(toolCallId);
       });
       changed ||= filteredToolInvocations.length !== originalToolInvocations.length;
+      changed ||= filterToolStateMetadata(message.content.metadata, toolStateFilter) !== message.content.metadata;
 
       if (!changed) return message;
 
@@ -806,7 +868,14 @@ function filterAllToolCalls(
 
       return {
         ...message,
-        content: buildContent(message, nonToolParts, filteredToolInvocations, behavior, retainedBoundaryPart),
+        content: buildContent(
+          message,
+          nonToolParts,
+          filteredToolInvocations,
+          behavior,
+          retainedBoundaryPart,
+          toolStateFilter,
+        ),
       };
     })
     .filter((message): message is MastraDBMessage => message !== null);
@@ -833,16 +902,24 @@ function filterSpecificToolCalls(
     }
   }
 
+  const toolStateFilter: ToolStateFilter = {
+    excludedToolNames: options.exclude,
+    excludedToolCallIds,
+    preserveToolCallIds,
+  };
+
   return messages
     .map(message => {
-      if (!hasToolInvocations(message)) return message;
-
       let changed = false;
       const filteredParts: MastraMessagePart[] = [];
       let retainedBoundaryPart: MessagePart | undefined;
       const sealedBoundaryPart = getSealedMessageBoundary(message)?.part;
       for (const part of getMessageParts(message)) {
         if (part.type !== 'tool-invocation') {
+          if (shouldFilterToolStatePart(part, toolStateFilter)) {
+            changed = true;
+            continue;
+          }
           filteredParts.push(part);
           if (part === sealedBoundaryPart) retainedBoundaryPart = part;
           continue;
@@ -882,6 +959,7 @@ function filterSpecificToolCalls(
         );
       });
       changed ||= filteredToolInvocations.length !== originalToolInvocations.length;
+      changed ||= filterToolStateMetadata(message.content.metadata, toolStateFilter) !== message.content.metadata;
 
       if (!changed) return message;
 
@@ -895,7 +973,14 @@ function filterSpecificToolCalls(
 
       return {
         ...message,
-        content: buildContent(message, filteredParts, filteredToolInvocations, behavior, retainedBoundaryPart),
+        content: buildContent(
+          message,
+          filteredParts,
+          filteredToolInvocations,
+          behavior,
+          retainedBoundaryPart,
+          toolStateFilter,
+        ),
       };
     })
     .filter((message): message is MastraDBMessage => message !== null);

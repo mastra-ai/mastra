@@ -218,6 +218,26 @@ describe('om-tools', () => {
           },
           createdAt: new Date('2024-01-01T09:59:00Z'),
         },
+        {
+          id: 'allowed-legacy-tool',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolCallId: 'allowed-legacy-tool-call',
+                toolName: 'allowed_tool',
+                args: { value: 'allowed' },
+                result: { value: 'allowed' },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T09:58:00Z'),
+        },
         secretToolMessage('hidden-before-1', '01'),
         secretToolMessage('hidden-before-2', '02'),
         secretToolMessage('tool-only-cursor', '03'),
@@ -273,6 +293,7 @@ describe('om-tools', () => {
         perPage: false,
       });
       expect(recalled.messages.some(message => message.id === 'top-level-visible')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'allowed-legacy-tool')).toBe(true);
       expect(recalled.messages.some(message => message.id === 'sealed-marker-only')).toBe(true);
       expect(recalled.messages.some(message => message.id === 'payload-free-anchor')).toBe(false);
 

@@ -173,7 +173,8 @@ function isPayloadFreeHistoryAnchor(message: MastraDBMessage): boolean {
     !Array.isArray(content) &&
     Array.isArray(content.parts) &&
     content.parts.length === 0 &&
-    !content.content
+    !content.content &&
+    (!Array.isArray(content.toolInvocations) || content.toolInvocations.length === 0)
   );
 }
 

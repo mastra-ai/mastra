@@ -1333,6 +1333,72 @@ describe('MessageHistory', () => {
       expect(savedMessages[0]!.content.toolInvocations).toBeUndefined();
     });
 
+    it('removes filtered approval and suspension state without leaking its payloads', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({
+        storage,
+        toolCallFilter: { exclude: ['secret_tool'] },
+      });
+      const approvalState = {
+        toolCallId: 'call-secret-approval',
+        toolName: 'secret_tool',
+        args: { secret: 'APPROVAL_ARGS_SENTINEL' },
+        approvedArgs: { secret: 'APPROVED_ARGS_SENTINEL' },
+        approvalInputIdentityDigest: 'APPROVAL_DIGEST_SENTINEL',
+        type: 'approval',
+      };
+      const suspensionState = {
+        toolCallId: 'call-secret-suspension',
+        toolName: 'secret_tool',
+        args: { secret: 'SUSPENSION_ARGS_SENTINEL' },
+        suspendPayload: { secret: 'SUSPEND_PAYLOAD_SENTINEL' },
+        type: 'suspension',
+      };
+      const message: MastraDBMessage = {
+        id: 'msg-filtered-tool-state',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Waiting for a safe answer.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-secret-approval',
+                toolName: 'secret_tool',
+                args: { secret: 'INVOCATION_ARGS_SENTINEL' },
+              },
+            },
+            { type: 'data-tool-call-approval', data: approvalState } as any,
+            { type: 'data-tool-call-suspended', data: suspensionState } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: { 'call-secret-approval': structuredClone(approvalState) },
+            suspendedTools: { 'call-secret-suspension': structuredClone(suspensionState) },
+            retainedMetadata: 'keep-me',
+          },
+        },
+      };
+      const sourceBefore = structuredClone(message);
+
+      await processor.persistMessages({ messages: [message], threadId: 'thread-1' });
+
+      expect(message).toEqual(sourceBefore);
+      const savedMessages = (storage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      const savedMessage = savedMessages[0]!;
+      expect(savedMessage.content.parts).toEqual([{ type: 'text', text: 'Waiting for a safe answer.' }]);
+      expect(savedMessage.content.metadata).toEqual({ retainedMetadata: 'keep-me' });
+      const serialized = JSON.stringify(savedMessages);
+      expect(serialized).not.toContain('APPROVAL_ARGS_SENTINEL');
+      expect(serialized).not.toContain('APPROVED_ARGS_SENTINEL');
+      expect(serialized).not.toContain('APPROVAL_DIGEST_SENTINEL');
+      expect(serialized).not.toContain('SUSPENSION_ARGS_SENTINEL');
+      expect(serialized).not.toContain('SUSPEND_PAYLOAD_SENTINEL');
+      expect(serialized).not.toContain('INVOCATION_ARGS_SENTINEL');
+    });
+
     it('retains native OM cursor anchors without changing standalone filtering', async () => {
       const message: MastraDBMessage = {
         id: 'msg-tool-only-anchor',
