@@ -29,6 +29,16 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Supervisor session tools
+
+Authenticated supervisor chat can use `factory_update_session` without an approval prompt. Pass a `target` of `{ sessionId }`, `{ workItemId, role }`, or `{ all: true }`, and `changes` containing `model`, `mode`, `memory`, or `title`. Only active worker bindings in the current Factory are targeted. Results and human-attributed audit events are per binding.
+
+Model IDs may be any non-empty string; they are not validated against a provider catalog. On a current, idle thread, model and mode changes apply `now`. A busy thread persists the model for `next-run-start` and skips mode and memory changes. Non-current threads persist model and mode for `next-thread-switch`; their titles are skipped. Titles can be updated on the current thread even while it runs.
+
+Memory is session-wide. Use `memory: 'resync'` to restore the Factory's stored settings and defaults, or pass explicit observer/reflector model IDs and observation/reflection thresholds. The tool reports written, unchanged, and skipped knobs, including partial-failure warnings. It cannot change yolo, permissions, or notification settings.
+
+`factory_signal_session` also needs no approval prompt. The supervisor can change a worker's model, inspect the result, then send it a message. Starting work and other governed repairs still require their existing approvals.
+
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
