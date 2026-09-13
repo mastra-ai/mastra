@@ -39,6 +39,7 @@ import type { KnowledgeAccessFrontier } from './access/types';
 import type { KnowledgeConfig } from './config';
 import {
   KnowledgeProposalLifecycle,
+  type ProposeKnowledgeMutationInput,
   type ProposeKnowledgeNodeUpdateInput,
   type ReviewKnowledgeProposalDecisionInput,
 } from './governance/proposals';
@@ -226,6 +227,10 @@ export class Knowledge extends MastraBase {
     }
     this.#accessEvaluator ??= new KnowledgeAccessEvaluator({ instance: this, storage });
     return this.#accessEvaluator.evaluate(liveScopeIds);
+  }
+
+  async propose(input: ProposeKnowledgeMutationInput) {
+    return (await this.#getProposalLifecycle()).propose(input);
   }
 
   async proposeNodeUpdate(input: ProposeKnowledgeNodeUpdateInput) {

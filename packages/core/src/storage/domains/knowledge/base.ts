@@ -91,9 +91,27 @@ export interface KnowledgeProposalTarget {
   type: 'node' | 'record';
   id: string;
   expectedVersion: number;
+  expectedDeleted?: boolean;
   scopeIds: KnowledgeScopeIds;
   approvalCapability: KnowledgeProposalApprovalCapability;
 }
+
+export type KnowledgeProposalMutation =
+  | { kind: 'create-node'; mutation: CreateKnowledgeNodeInput & { id: string; isScope?: false } }
+  | { kind: 'update-node'; mutation: UpdateKnowledgeNodeInput }
+  | { kind: 'move-node'; mutation: UpdateKnowledgeNodeInput & { scopeIds: KnowledgeScopeIds } }
+  | { kind: 'merge-nodes'; mutation: { sourceId: string; targetId: string; sourceVersion: number } }
+  | { kind: 'create-scope'; address: string; mutation: CreateKnowledgeNodeInput & { id: string; isScope: true } }
+  | { kind: 'delete-node'; mutation: DeleteKnowledgeNodeInput }
+  | { kind: 'delete-scope'; mutation: DeleteKnowledgeNodeInput }
+  | { kind: 'restore-node'; mutation: RestoreKnowledgeNodeInput }
+  | { kind: 'restore-scope'; mutation: RestoreKnowledgeNodeInput }
+  | { kind: 'promote-node'; mutation: UpdateKnowledgeNodeInput & { isScope: true } }
+  | { kind: 'restore-record'; mutation: { id: string; version: number } }
+  | {
+      kind: 'add-record-scope' | 'remove-record-scope';
+      mutation: { id: string; version: number; scopeIds: KnowledgeScopeIds };
+    };
 
 export interface KnowledgeProposal {
   id: string;

@@ -11,4 +11,4 @@
 '@mastra/pg': patch
 ---
 
-Added scope-based Knowledge proposal workflows with conflict re-review.
+Added scope-based Knowledge proposals for node creation, editing, movement, merging, deletion, restoration, scope lifecycle, promotion, and record-scope changes with per-target conflict re-review.
