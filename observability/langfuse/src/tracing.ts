@@ -18,7 +18,16 @@ import { SpanConverter } from '@mastra/otel-exporter';
 const LOG_PREFIX = '[LangfuseExporter]';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
 /** Metadata keys mapped to dedicated Langfuse fields; never forwarded as trace metadata. */
-const DEDICATED_METADATA_KEYS = new Set(['userId', 'sessionId', 'threadId', 'traceName', 'version', 'langfuse']);
+const OM_CALLER_THREAD_ID = '__mastraObservationalMemoryCallerThreadId';
+const DEDICATED_METADATA_KEYS = new Set([
+  'userId',
+  'sessionId',
+  'threadId',
+  'traceName',
+  'version',
+  'langfuse',
+  OM_CALLER_THREAD_ID,
+]);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -340,8 +349,15 @@ function mapMastraToLangfuseAttributes(
     delete attributes['mastra.metadata.userId'];
   }
 
-  // Session ID: mastra.metadata.sessionId or threadId → session.id
-  const sessionId = attributes['mastra.metadata.sessionId'] ?? attributes['mastra.metadata.threadId'];
+  // OM keeps caller identity separate from its isolated execution thread. Read
+  // the raw hint: conversion serializes malformed objects/arrays into strings.
+  const omCallerThreadId = span.metadata?.[OM_CALLER_THREAD_ID];
+  const sessionId =
+    attributes['mastra.metadata.sessionId'] ??
+    (typeof omCallerThreadId === 'string' && omCallerThreadId
+      ? omCallerThreadId
+      : attributes['mastra.metadata.threadId']);
+  delete attributes[`${MASTRA_METADATA_PREFIX}${OM_CALLER_THREAD_ID}`];
   if (sessionId) {
     attributes['session.id'] = sessionId;
     delete attributes['mastra.metadata.sessionId'];

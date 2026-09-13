@@ -13,6 +13,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { createObservabilityContext } from '@mastra/core/observability';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -20,6 +21,7 @@ import { BufferingCoordinator } from '../buffering-coordinator';
 import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
+import { ObserverRunner } from '../observer-runner';
 import type { ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
@@ -4237,6 +4239,35 @@ describe('config-level hooks', () => {
       }),
     );
     expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+  });
+
+  it('forwards the caller observability context through triggerAsyncBuffering to the observer', async () => {
+    const observabilityContext = createObservabilityContext({});
+    const observerCall = vi.spyOn(ObserverRunner.prototype, 'call');
+    try {
+      const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+      const messages = createBulkMessages(5, threadId);
+      await storage.saveMessages({ messages });
+      const status = await om.getStatus({ threadId, messages });
+
+      expect(
+        await om.triggerAsyncBuffering({
+          threadId,
+          record: status.record,
+          pendingTokens: status.pendingTokens,
+          unbufferedPendingTokens: status.pendingTokens,
+          unobservedMessages: messages,
+          threshold: status.threshold,
+          observabilityContext,
+        }),
+      ).toBe(true);
+      await om.waitForBuffering(threadId, undefined, 5000);
+
+      expect(observerCall).toHaveBeenCalledOnce();
+      expect(observerCall.mock.calls[0]?.[3]?.observabilityContext).toBe(observabilityContext);
+    } finally {
+      observerCall.mockRestore();
+    }
   });
 
   it('fires config-level hooks on the fire-and-forget triggerAsyncBuffering lane', async () => {
