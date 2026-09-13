@@ -27,7 +27,22 @@ function hasVisibleParts(msg: MastraDBMessage): boolean {
   if (typeof msg.content === 'string') return (msg.content as string).length > 0;
   const parts = getMessageParts(msg);
   if (parts.length === 0) return Boolean(msg.content?.content);
-  return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
+  return parts.some((p: { type?: string; text?: unknown; metadata?: unknown }) => {
+    if (p.type?.startsWith('data-')) return false;
+    if (p.type === 'text' && p.text === '') {
+      const metadata = p.metadata;
+      const mastra =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+          ? (metadata as { mastra?: unknown }).mastra
+          : undefined;
+      const sealedAt =
+        mastra && typeof mastra === 'object' && !Array.isArray(mastra)
+          ? (mastra as { sealedAt?: unknown }).sealedAt
+          : undefined;
+      if (typeof sealedAt === 'number') return false;
+    }
+    return true;
+  });
 }
 
 function getConfiguredToolCallFilter(memory: RecallMemory): MessageHistoryToolCallFilterOptions | undefined {

@@ -198,6 +198,31 @@ describe('om-tools', () => {
         secretToolMessage('hidden-before-1', '01'),
         secretToolMessage('hidden-before-2', '02'),
         secretToolMessage('tool-only-cursor', '03'),
+        {
+          id: 'sealed-marker-only',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mastra: { sealed: true } },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'sealed-marker-call',
+                  toolName: 'secret_tool',
+                  args: { secret: 'RAW_SEALED_ARGS' },
+                  result: { secret: 'RAW_SEALED_RESULT' },
+                },
+                metadata: { mastra: { sealedAt: 17_044 } },
+              },
+              { type: 'data-om-observation-end', data: { cycleId: 'sealed-marker-cycle' } },
+            ],
+          },
+          createdAt: new Date('2024-01-01T10:03:30Z'),
+        },
         secretToolMessage('hidden-after-1', '04'),
         secretToolMessage('hidden-after-2', '05'),
         {
