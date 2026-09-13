@@ -1952,6 +1952,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async listProposals(input: ListKnowledgeProposalsInput): Promise<ListKnowledgeProposalsOutput> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const hasApprovalScopeIds = Object.values(input.approvalScopeIds ?? {}).some(
+      authorizedScopeIds => authorizedScopeIds && authorizedScopeIds.length > 0,
+    );
+    if (scopeIds.length === 0 && !hasApprovalScopeIds) return { proposals: [] };
     if (
       input.cursor &&
       !(await this.getVisibleProposal({ id: input.cursor, scopeIds, approvalScopeIds: input.approvalScopeIds }))
@@ -1961,30 +1965,302 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     if (input.status) constraints.push({ status: input.status });
     if (input.cursor) {
       const cursor = await (await this.#collection(TABLE_KNOWLEDGE_PROPOSALS)).findOne({ id: input.cursor });
-      if (!cursor) return { proposals: [] };
+      if (!cursor || (input.status && cursor.status !== input.status)) return { proposals: [] };
       constraints.push({
         $or: [{ createdAt: { $lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { $lt: input.cursor } }],
       });
     }
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_PROPOSALS)
     )
-      .find(constraints.length ? { $and: constraints } : {})
-      .sort({ createdAt: -1, id: -1 })
+      .aggregate([
+        { $match: constraints.length ? { $and: constraints } : {} },
+        ...this.#proposalVisibilityPipeline(scopeIds, input.approvalScopeIds),
+        { $sort: { createdAt: -1, id: -1 } },
+        { $limit: limit + 1 },
+      ])
       .toArray();
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
-    const proposals: KnowledgeProposal[] = [];
-    for (const row of rows) {
-      const proposal = proposalFromDocument(row);
-      if (await this.#isProposalVisible(proposal, { scopeIds, approvalScopeIds: input.approvalScopeIds })) {
-        proposals.push(proposal);
-      }
-      if (proposals.length > limit) break;
-    }
+    const proposals = rows.map(proposalFromDocument);
     return {
       proposals: proposals.slice(0, limit),
       nextCursor: proposals.length > limit ? proposals[limit - 1]?.id : undefined,
     };
+  }
+
+  #proposalVisibilityPipeline(
+    scopeIds: string[],
+    approvalScopeIds: KnowledgeProposalApprovalScopeIds | undefined,
+  ): Document[] {
+    const liveLookup = (
+      from: string,
+      localField: string,
+      foreignField: string,
+      as: string,
+      includeDeleted = false,
+    ): Document => ({
+      $lookup: {
+        from,
+        localField,
+        foreignField,
+        ...(includeDeleted
+          ? {}
+          : { pipeline: [{ $match: { $expr: { $eq: [{ $ifNull: ['$deletedAt', null] }, null] } } }] }),
+        as,
+      },
+    });
+    const targets = { $ifNull: ['$targets', []] };
+    const targetEntity = (collection: string) => ({
+      $arrayElemAt: [
+        {
+          $filter: {
+            input: collection,
+            as: 'entity',
+            cond: { $eq: ['$$entity.id', '$$target.id'] },
+          },
+        },
+        0,
+      ],
+    });
+    const membershipsVisible = (membershipCollection: string, entityId: string, ids: string[]) => ({
+      $gt: [
+        {
+          $size: {
+            $filter: {
+              input: membershipCollection,
+              as: 'membership',
+              cond: {
+                $and: [{ $eq: ['$$membership.nodeId', entityId] }, { $in: ['$$membership.scopeNodeId', ids] }],
+              },
+            },
+          },
+        },
+        0,
+      ],
+    });
+    const recordScopesVisible = (recordId: string, ids: string[]) => ({
+      $gt: [
+        {
+          $size: {
+            $filter: {
+              input: '$__recordScopes',
+              as: 'recordScope',
+              cond: {
+                $and: [{ $eq: ['$$recordScope.recordId', recordId] }, { $in: ['$$recordScope.scopeNodeId', ids] }],
+              },
+            },
+          },
+        },
+        0,
+      ],
+    });
+    const nodeVisible = (node: string, ids: string[]) => ({
+      $and: [
+        { $ne: [{ $ifNull: [node, null] }, null] },
+        {
+          $cond: [
+            `${node}.isScope`,
+            { $in: [`${node}.id`, ids] },
+            membershipsVisible('$__nodeScopes', `${node}.id`, ids),
+          ],
+        },
+      ],
+    });
+    const targetStateMatches = (entity: string) => ({
+      $eq: [
+        { $ne: [{ $ifNull: [`${entity}.deletedAt`, null] }, null] },
+        { $eq: [{ $ifNull: ['$$target.expectedDeleted', false] }, true] },
+      ],
+    });
+    const targetVisible = (ids: string[], includeMentionClosure: boolean) => ({
+      $let: {
+        vars: { node: targetEntity('$__targetNodes'), record: targetEntity('$__targetRecords') },
+        in: {
+          $cond: [
+            { $eq: ['$$target.type', 'node'] },
+            { $and: [targetStateMatches('$$node'), nodeVisible('$$node', ids)] },
+            {
+              $let: {
+                vars: {
+                  owner: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$__ownerNodes',
+                          as: 'owner',
+                          cond: { $eq: ['$$owner.id', '$$record.nodeId'] },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+                in: {
+                  $and: [
+                    { $ne: [{ $ifNull: ['$$record', null] }, null] },
+                    targetStateMatches('$$record'),
+                    recordScopesVisible('$$record.id', ids),
+                    nodeVisible('$$owner', ids),
+                    ...(includeMentionClosure
+                      ? [
+                          {
+                            $allElementsTrue: [
+                              {
+                                $map: {
+                                  input: {
+                                    $filter: {
+                                      input: '$__mentions',
+                                      as: 'mention',
+                                      cond: { $eq: ['$$mention.recordId', '$$record.id'] },
+                                    },
+                                  },
+                                  as: 'mention',
+                                  in: {
+                                    $let: {
+                                      vars: {
+                                        mentionedNode: {
+                                          $arrayElemAt: [
+                                            {
+                                              $filter: {
+                                                input: '$__mentionNodes',
+                                                as: 'mentionedNode',
+                                                cond: { $eq: ['$$mentionedNode.id', '$$mention.targetNodeId'] },
+                                              },
+                                            },
+                                            0,
+                                          ],
+                                        },
+                                      },
+                                      in: nodeVisible('$$mentionedNode', ids),
+                                    },
+                                  },
+                                },
+                              },
+                            ],
+                          },
+                        ]
+                      : []),
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+    const targetWritable = (ids: string[]) => ({
+      $let: {
+        vars: { node: targetEntity('$__targetNodes'), record: targetEntity('$__targetRecords') },
+        in: {
+          $cond: [
+            { $eq: ['$$target.type', 'node'] },
+            {
+              $and: [
+                { $ne: [{ $ifNull: ['$$node', null] }, null] },
+                targetStateMatches('$$node'),
+                {
+                  $cond: [
+                    {
+                      $and: ['$$node.isScope', { $eq: [{ $ifNull: ['$$target.expectedDeleted', false] }, false] }],
+                    },
+                    { $in: ['$$node.id', ids] },
+                    membershipsVisible('$__nodeScopes', '$$node.id', ids),
+                  ],
+                },
+              ],
+            },
+            {
+              $and: [
+                { $ne: [{ $ifNull: ['$$record', null] }, null] },
+                targetStateMatches('$$record'),
+                recordScopesVisible('$$record.id', ids),
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const capabilityBranches = Object.entries(approvalScopeIds ?? {})
+      .filter(([, ids]) => ids && ids.length > 0)
+      .map(([capability, ids]) => ({
+        case: { $eq: ['$$target.approvalCapability', capability] },
+        then: targetWritable(ids!),
+      }));
+    const everyTarget = (expression: Document) => ({
+      $allElementsTrue: [{ $map: { input: targets, as: 'target', in: expression } }],
+    });
+    const readBranch =
+      scopeIds.length === 0
+        ? false
+        : {
+            $and: [
+              {
+                $or: [
+                  { $in: ['$proposerContextScopeId', scopeIds] },
+                  membershipsVisible('$__nodeScopes', '$proposerContextScopeId', scopeIds),
+                ],
+              },
+              everyTarget(targetVisible(scopeIds, true)),
+            ],
+          };
+    const writeBranch =
+      capabilityBranches.length === 0
+        ? false
+        : everyTarget({ $switch: { branches: capabilityBranches, default: false } });
+    return [
+      liveLookup(TABLE_KNOWLEDGE_NODES, 'targets.id', 'id', '__targetNodes', true),
+      liveLookup(TABLE_KNOWLEDGE_RECORDS, 'targets.id', 'id', '__targetRecords', true),
+      liveLookup(TABLE_KNOWLEDGE_NODES, '__targetRecords.nodeId', 'id', '__ownerNodes'),
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_RECORD_SCOPES,
+          localField: '__targetRecords.id',
+          foreignField: 'recordId',
+          as: '__recordScopes',
+        },
+      },
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_MENTIONS,
+          localField: '__targetRecords.id',
+          foreignField: 'recordId',
+          as: '__mentions',
+        },
+      },
+      liveLookup(TABLE_KNOWLEDGE_NODES, '__mentions.targetNodeId', 'id', '__mentionNodes'),
+      {
+        $lookup: {
+          from: TABLE_KNOWLEDGE_NODE_SCOPES,
+          let: {
+            nodeIds: {
+              $concatArrays: [
+                '$__targetNodes.id',
+                '$__ownerNodes.id',
+                '$__mentionNodes.id',
+                ['$proposerContextScopeId'],
+              ],
+            },
+          },
+          pipeline: [
+            { $match: { $expr: { $in: ['$nodeId', '$$nodeIds'] } } },
+            { $project: { _id: 0, nodeId: 1, scopeNodeId: 1 } },
+          ],
+          as: '__nodeScopes',
+        },
+      },
+      { $match: { $expr: { $and: [{ $gt: [{ $size: targets }, 0] }, { $or: [readBranch, writeBranch] }] } } },
+      {
+        $unset: [
+          '__targetNodes',
+          '__targetRecords',
+          '__ownerNodes',
+          '__nodeScopes',
+          '__recordScopes',
+          '__mentions',
+          '__mentionNodes',
+        ],
+      },
+    ];
   }
 
   async reviewProposal(input: ReviewKnowledgeProposalInput): Promise<KnowledgeProposal> {
