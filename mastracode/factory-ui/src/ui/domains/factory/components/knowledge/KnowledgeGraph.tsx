@@ -268,7 +268,6 @@ export interface KnowledgeGraphProps {
 function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   const parts: string[] = [];
   if (payload.truncated) parts.push(`showing the newest ${payload.nodes.length} nodes`);
-  if (payload.outOfWindow.length > 0) parts.push(`${payload.outOfWindow.length} linked nodes outside the window`);
   if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (

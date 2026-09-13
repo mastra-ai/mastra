@@ -265,6 +265,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText('Select a scope to explore its knowledge.')).toBeVisible();
   await page.getByRole('button', { name: new RegExp(`${projectId} project`) }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
+  await expect(page.getByTestId('knowledge-scope-flyout')).toContainText(`project:${projectId}`);
+  await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText(`resource:${projectId}`);
 
   // The graph pane must actually have height — a broken flex chain renders
   // nodes at zero height while visibility checks on their text still pass.
@@ -276,6 +278,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(boundaryNode).toContainText('↗ Project');
   await expect(boundaryNode.locator(':scope > div').first()).toHaveCSS('border-style', 'dashed');
   await expect(page.locator('.react-flow__edge[data-id="record:record-3"]')).toBeVisible();
+  await expect(page.getByTestId('knowledge-truncation-banner')).toHaveCount(0);
   const lensUrl = page.url();
   await boundaryNode.dispatchEvent('click');
   await expect.poll(() => page.url()).toBe(lensUrl);
