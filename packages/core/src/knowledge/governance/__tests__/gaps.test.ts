@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Knowledge } from '../..';
 import { InMemoryStore } from '../../../storage';
-import type { KnowledgeProposalMutation } from '../../../storage/domains/knowledge';
 
 async function createFixture() {
   const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'gap-governance' }) });
@@ -23,19 +22,12 @@ async function createFixture() {
   });
   const ids = structure.scopes;
   const node = await storage.createNode({ name: 'Current claim', scopeIds: [ids['scope:feature']!] });
-  const apply = async (mutation: KnowledgeProposalMutation) => {
-    if (mutation.kind !== 'update-node') throw new Error(`Unexpected test mutation: ${mutation.kind}`);
-    await knowledge.updateNode({
-      ...mutation.mutation,
-      vouchedScopeIds: [ids['principal:owner']!],
-    });
-  };
-  return { knowledge, storage, ids, node, apply };
+  return { knowledge, storage, ids, node };
 }
 
 describe('Knowledge gap flags', () => {
   it('re-verifies one pending flag without passing proposer evidence and applies under worker authority', async () => {
-    const { knowledge, storage, ids, node, apply } = await createFixture();
+    const { knowledge, storage, ids, node } = await createFixture();
     const flag = await knowledge.fileGapFlag({
       claim: 'The title is stale',
       evidence: ['proposer supplied evidence must not be trusted'],
@@ -55,7 +47,6 @@ describe('Knowledge gap flags', () => {
       vouchedScopeIds: [ids['principal:owner']!],
       reviewerContextScopeId: ids['principal:owner']!,
       verify,
-      apply,
     });
 
     await expect(Promise.all([worker.runOnce(), worker.runOnce()])).resolves.toEqual([
@@ -76,7 +67,7 @@ describe('Knowledge gap flags', () => {
   });
 
   it('always escalates protected scopes and notifies without invoking the verifier', async () => {
-    const { knowledge, ids, node, apply } = await createFixture();
+    const { knowledge, ids, node } = await createFixture();
     await knowledge.fileGapFlag({
       claim: 'Protected feature may be wrong',
       evidence: [],
@@ -91,7 +82,6 @@ describe('Knowledge gap flags', () => {
       reviewerContextScopeId: ids['principal:owner']!,
       protectedScopeIds: [ids['scope:feature']!],
       verify,
-      apply,
       notifyEscalation,
     });
 
@@ -102,7 +92,7 @@ describe('Knowledge gap flags', () => {
   });
 
   it('rejects invalid claims with fresh contradicting evidence', async () => {
-    const { knowledge, ids, node, apply } = await createFixture();
+    const { knowledge, ids, node } = await createFixture();
     await knowledge.fileGapFlag({
       claim: 'The source disappeared',
       evidence: ['untrusted citation'],
@@ -114,12 +104,48 @@ describe('Knowledge gap flags', () => {
       vouchedScopeIds: [ids['principal:owner']!],
       reviewerContextScopeId: ids['principal:owner']!,
       verify: async () => ({ outcome: 'rejected', evidence: ['fresh-source:still-present'] }),
-      apply,
     });
 
     await expect(worker.runOnce()).resolves.toMatchObject({
       status: 'rejected',
       reviewReason: expect.stringContaining('fresh-source:still-present'),
     });
+  });
+
+  it('pages past newer ordinary proposals instead of starving an older gap flag', async () => {
+    const { knowledge, storage, ids, node } = await createFixture();
+    const flag = await knowledge.fileGapFlag({
+      claim: 'An older gap still needs verification',
+      evidence: [],
+      targets: [{ type: 'node', id: node.id }],
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+    const target = {
+      type: 'node' as const,
+      id: node.id,
+      expectedVersion: node.version,
+      scopeIds: [ids['scope:feature']!],
+      approvalCapability: 'edit' as const,
+    };
+    for (let index = 0; index < 101; index++) {
+      await storage.createProposal({
+        targets: [target],
+        operation: 'update-node',
+        payload: { kind: 'update-node', mutation: { id: node.id, version: node.version, name: `Pending ${index}` } },
+        proposerContextScopeId: ids['principal:suggest']!,
+        expectedAccessEpoch: await storage.getAccessEpoch(),
+      });
+    }
+    const worker = await knowledge.createGapQueueWorker({
+      vouchedScopeIds: [ids['principal:owner']!],
+      reviewerContextScopeId: ids['principal:owner']!,
+      verify: async () => ({
+        outcome: 'rejected',
+        evidence: ['fresh-source:contradiction'],
+      }),
+    });
+
+    await expect(worker.runOnce()).resolves.toMatchObject({ id: flag.id, status: 'rejected' });
   });
 });
