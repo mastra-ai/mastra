@@ -63,6 +63,8 @@ export const queryKeys = {
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>
+    ['factory', 'knowledge-search', factoryProjectId ?? null, query, threadId ?? null] as const,
   knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
   knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>

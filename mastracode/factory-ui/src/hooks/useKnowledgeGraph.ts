@@ -7,7 +7,7 @@
  * mutating one entry.
  */
 
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -16,6 +16,7 @@ import {
   fetchKnowledgeNode,
   fetchKnowledgeGraph,
   fetchKnowledgeScopes,
+  fetchKnowledgeSearch,
 } from '../ui/domains/factory/services/knowledge';
 import type { KnowledgeRung, KnowledgeSelection } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
@@ -45,6 +46,28 @@ export function useKnowledgeScopes(factoryProjectId: string | undefined, threadI
       ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, signal)
       : skipToken,
     retry: (failureCount, error) => !(error instanceof RequestError && error.status === 404) && failureCount < 2,
+  });
+}
+
+export function useKnowledgeSearch(factoryProjectId: string | undefined, query: string, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  const normalizedQuery = query.trim();
+  return useQuery({
+    queryKey: queryKeys.knowledgeSearch(factoryProjectId, normalizedQuery, threadId),
+    queryFn:
+      factoryProjectId && normalizedQuery.length >= 2
+        ? ({ signal }) => fetchKnowledgeSearch(baseUrl, factoryProjectId, normalizedQuery, threadId, signal)
+        : skipToken,
+  });
+}
+
+export function useKnowledgeScopePage(factoryProjectId: string | undefined, threadId?: string) {
+  const { baseUrl } = useApiConfig();
+  return useMutation({
+    mutationFn: (page: { parentId?: string; cursor?: string }) => {
+      if (!factoryProjectId) throw new Error('Factory project is required.');
+      return fetchKnowledgeScopes(baseUrl, factoryProjectId, threadId, undefined, page);
+    },
   });
 }
 
