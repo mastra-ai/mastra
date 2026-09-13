@@ -105,6 +105,48 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
+    name: 'toolCallFilter',
+    type: 'MessageHistoryToolCallFilterOptions',
+    description:
+      'Optional policy for removing raw tool-call arguments and results from native Observational Memory history. The policy applies when OM writes, loads, or recalls message history, including existing rows. Messages changed by the policy also drop message-level provider metadata. Omit this option to preserve the existing native behavior.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'MessageHistoryToolCallFilterOptions',
+        parameters: [
+          {
+            name: 'exclude',
+            type: 'string[]',
+            description: 'Tool names to remove. If omitted, removes all tool calls and results.',
+            isOptional: true,
+          },
+          {
+            name: 'preserveModelOutput',
+            type: 'boolean',
+            description:
+              'Preserves compact model-facing output from completed filtered tool results while removing raw payloads.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'preserveModelOutputFor',
+            type: 'string[]',
+            description:
+              'Preserves compact output only for the listed filtered tools. An explicit empty list preserves none and takes precedence over preserveModelOutput.',
+            isOptional: true,
+          },
+          {
+            name: 'maxModelOutputBytes',
+            type: 'number',
+            description: 'Maximum UTF-8 bytes retained from each preserved model output.',
+            isOptional: true,
+            defaultValue: '16384',
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'hooks',
     type: 'ObserveHooks',
     description:

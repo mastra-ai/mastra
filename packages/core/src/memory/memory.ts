@@ -1242,6 +1242,22 @@ https://mastra.ai/en/docs/memory/overview`,
       shareTokenBudget: om.shareTokenBudget,
       temporalMarkers: om.temporalMarkers,
       retrieval: om.retrieval,
+      ...(om.toolCallFilter
+        ? {
+            toolCallFilter: {
+              ...(om.toolCallFilter.exclude === undefined ? {} : { exclude: [...om.toolCallFilter.exclude] }),
+              ...(om.toolCallFilter.preserveModelOutput === undefined
+                ? {}
+                : { preserveModelOutput: om.toolCallFilter.preserveModelOutput }),
+              ...(om.toolCallFilter.preserveModelOutputFor === undefined
+                ? {}
+                : { preserveModelOutputFor: [...om.toolCallFilter.preserveModelOutputFor] }),
+              ...(om.toolCallFilter.maxModelOutputBytes === undefined
+                ? {}
+                : { maxModelOutputBytes: om.toolCallFilter.maxModelOutputBytes }),
+            },
+          }
+        : {}),
     };
 
     // Extract model ID string from the top-level model

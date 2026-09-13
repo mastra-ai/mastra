@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
+import { DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES, filterToolCallMessages } from '@mastra/core/processors';
+import type { MessageHistoryToolCallFilterOptions } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
@@ -46,6 +48,9 @@ type RecallSearchResult = {
 };
 
 type RecallMemory = {
+  getConfig?: () => {
+    observationalMemory?: boolean | { toolCallFilter?: MessageHistoryToolCallFilterOptions };
+  };
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
   }>;
@@ -88,6 +93,23 @@ type RecallMemory = {
   }) => Promise<{ results: RecallSearchResult[] }>;
   getThreadById?: (args: { threadId: string }) => Promise<RecallThread | null>;
 };
+
+function filterCursorMessages(memory: RecallMemory, messages: MastraDBMessage[]): MastraDBMessage[] {
+  const observationalMemory = memory.getConfig?.().observationalMemory;
+  const toolCallFilter =
+    observationalMemory && typeof observationalMemory === 'object' ? observationalMemory.toolCallFilter : undefined;
+  if (toolCallFilter === undefined) return messages;
+
+  return filterToolCallMessages(
+    messages,
+    {
+      ...toolCallFilter,
+      maxModelOutputBytes: toolCallFilter.maxModelOutputBytes ?? DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES,
+    },
+    new Set(),
+    { stripMessageProviderMetadata: true },
+  );
+}
 
 function parseRangeFormat(cursor: string): { startId: string; endId: string } | null {
   // Comma-separated merged ranges: "id1:id2,id3:id4"
@@ -138,7 +160,8 @@ async function resolveCursorMessage(
 
   const memoryStore = await memory.getMemoryStore();
   const result = await memoryStore.listMessagesById({ messageIds: [normalized] });
-  let message = result.messages.find(message => message.id === normalized) ?? null;
+  const messages = filterCursorMessages(memory, result.messages);
+  let message = messages.find(message => message.id === normalized) ?? null;
 
   if (!message) {
     message = await resolveCursorMessageByRecall(memory, normalized, access);

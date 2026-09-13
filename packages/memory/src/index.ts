@@ -24,9 +24,11 @@ import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/co
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
+  MessageHistoryToolCallFilterOptions,
   OutputProcessor,
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
+import { DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES, filterToolCallMessages } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   StorageListThreadsInput,
@@ -119,6 +121,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
+  toolCallFilter?: MessageHistoryToolCallFilterOptions;
   /** @experimental This API may change without notice. */
   experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
@@ -929,8 +932,21 @@ export class Memory extends MastraMemory {
       });
       // Reverse to restore chronological order if we queried DESC to get newest messages
       const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+      const toolCallFilter = normalizeObservationalMemoryConfig(config.observationalMemory)?.toolCallFilter;
+      const filteredMessages =
+        toolCallFilter === undefined
+          ? rawMessages
+          : filterToolCallMessages(
+              rawMessages,
+              {
+                ...toolCallFilter,
+                maxModelOutputBytes: toolCallFilter.maxModelOutputBytes ?? DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES,
+              },
+              new Set(),
+              { stripMessageProviderMetadata: true },
+            );
 
-      const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(filteredMessages, 'memory');
 
       // Always return mastra-db format (V2)
       const messages = filterSystemReminderMessages(list.get.all.db(), includeSystemReminders, hideSignals);
@@ -2702,6 +2718,10 @@ ${workingMemory}`;
       }
     }
 
+    if (omEngine?.toolCallFilter !== undefined) {
+      messages = omEngine.filterMessagesForHistory(messages);
+    }
+
     return {
       systemMessage: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
       messages,
@@ -2789,6 +2809,7 @@ ${workingMemory}`;
           : undefined,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
+      toolCallFilter: omConfig.toolCallFilter,
       activateAfterIdle: omConfig.activateAfterIdle,
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,

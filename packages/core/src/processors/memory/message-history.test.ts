@@ -1333,6 +1333,83 @@ describe('MessageHistory', () => {
       expect(savedMessages[0]!.content.toolInvocations).toBeUndefined();
     });
 
+    it('keeps a sealed re-add boundary when the filtered tool part was last', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({ storage, toolCallFilter: {} });
+      const message = createToolResultMessage();
+      const sealedAt = 17_042;
+      message.content.metadata = { mastra: { sealed: true } };
+      const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+      if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('expected tool invocation');
+      toolPart.metadata = { mastra: { sealedAt } };
+
+      await processor.persistMessages({ messages: [message], threadId: 'thread-1' });
+
+      const saved = (storage.saveMessages as any).mock.calls[0][0].messages[0] as MastraDBMessage;
+      const lastPart = saved.content.parts.at(-1);
+      expect(lastPart?.type).toBe('text');
+      expect((lastPart as any)?.metadata?.mastra?.sealedAt).toBe(sealedAt);
+
+      const messageList = new MessageList({ threadId: 'thread-1' });
+      messageList.add(saved, 'memory');
+      messageList.add(
+        {
+          ...saved,
+          content: {
+            ...saved.content,
+            parts: [{ type: 'text', text: 'new content after reload' }],
+          },
+        },
+        'response',
+      );
+
+      const readded = messageList.get.all.db().filter(messageItem => messageItem.role === 'assistant');
+      expect(readded).toHaveLength(2);
+      expect(readded[1]?.id).not.toBe(saved.id);
+      expect(readded[1]?.content.parts).toMatchObject([{ type: 'text', text: 'new content after reload' }]);
+    });
+
+    it('keeps appended parts after the original sealed boundary', async () => {
+      const storage = createPersistenceStorage();
+      const processor = new MessageHistory({ storage, toolCallFilter: {} });
+      const message = createToolResultMessage();
+      const sealedAt = 17_043;
+      message.content.metadata = { mastra: { sealed: true } };
+      const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+      if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('expected tool invocation');
+      toolPart.metadata = { mastra: { sealedAt } };
+      message.content.parts.push({ type: 'data-om-observation-end', data: { cycleId: 'cycle-after-seal' } });
+
+      await processor.persistMessages({ messages: [message], threadId: 'thread-1' });
+
+      const saved = (storage.saveMessages as any).mock.calls[0][0].messages[0] as MastraDBMessage;
+      const savedText = saved.content.parts.find(part => part.type === 'text');
+      const savedMarker = saved.content.parts.find(part => part.type === 'data-om-observation-end');
+      expect((savedText as any)?.metadata?.mastra?.sealedAt).toBe(sealedAt);
+      expect((savedMarker as any)?.metadata?.mastra?.sealedAt).toBeUndefined();
+
+      const messageList = new MessageList({ threadId: 'thread-1' });
+      messageList.add(saved, 'memory');
+      messageList.add(
+        {
+          ...saved,
+          content: {
+            ...saved.content,
+            parts: [...saved.content.parts, { type: 'text', text: 'new content after appended marker' }],
+          },
+        },
+        'response',
+      );
+
+      const readded = messageList.get.all.db().filter(messageItem => messageItem.role === 'assistant');
+      expect(readded).toHaveLength(2);
+      expect(readded[1]?.id).not.toBe(saved.id);
+      expect(readded[1]?.content.parts).toMatchObject([
+        { type: 'data-om-observation-end', data: { cycleId: 'cycle-after-seal' } },
+        { type: 'text', text: 'new content after appended marker' },
+      ]);
+    });
+
     it('applies the same policy through processOutputResult', async () => {
       const storage = createPersistenceStorage();
       const processor = new MessageHistory({

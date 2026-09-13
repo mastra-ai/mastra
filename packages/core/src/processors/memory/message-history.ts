@@ -11,12 +11,14 @@ import type { MemoryStorage } from '../../storage';
 import type { TerminalToolResult } from '../../tools';
 import {
   filterToolCallMessages,
+  getSealedMessageBoundary,
   getPreservedModelOutputParts,
   normalizeToolCallFilterExclude,
+  preserveSealedMessageBoundary,
 } from '../tool-call-filter-utils';
 import type { ToolCallFilteringOptions } from '../tool-call-filter-utils';
 
-const DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES = 16 * 1024;
+export const DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES = 16 * 1024;
 const MAX_PERSISTED_TERMINAL_TOOL_RESULT_ID_BYTES = 1024;
 
 type PersistedTerminalToolResultPart = {
@@ -289,28 +291,35 @@ export class MessageHistory implements Processor {
         }
 
         if (Array.isArray(newMessage.content?.parts)) {
-          newMessage.content.parts = newMessage.content.parts
-            .map(p => {
-              if (p.type === `tool-invocation`) {
-                const shouldRemove =
-                  p.toolInvocation.state === `partial-call` || p.toolInvocation.toolName === `updateWorkingMemory`;
-                if (shouldRemove) {
-                  removedToolInvocationCoveredByPolicy ||= policyFiltersTool(p.toolInvocation.toolName);
-                  return null;
-                }
+          const sealedBoundaryPart = getSealedMessageBoundary(m)?.part;
+          let retainedBoundaryPart: typeof sealedBoundaryPart;
+          const persistedParts: typeof newMessage.content.parts = [];
+          for (const part of newMessage.content.parts) {
+            if (part.type === `tool-invocation`) {
+              const shouldRemove =
+                part.toolInvocation.state === `partial-call` || part.toolInvocation.toolName === `updateWorkingMemory`;
+              if (shouldRemove) {
+                removedToolInvocationCoveredByPolicy ||= policyFiltersTool(part.toolInvocation.toolName);
+                if (part === sealedBoundaryPart) retainedBoundaryPart = persistedParts.at(-1);
+                continue;
               }
-              // Strip working memory tags from text parts
-              if (p.type === `text`) {
-                const text = typeof p.text === 'string' ? p.text : '';
-                const cleaned = removeWorkingMemoryTags(text);
-                return {
-                  ...p,
-                  text: cleaned !== text ? cleaned.trim() : text,
-                };
-              }
-              return p;
-            })
-            .filter((p): p is NonNullable<typeof p> => Boolean(p));
+            }
+
+            // Strip working memory tags from text parts
+            let persistedPart = part;
+            if (part.type === `text`) {
+              const text = typeof part.text === 'string' ? part.text : '';
+              const cleaned = removeWorkingMemoryTags(text);
+              persistedPart = { ...part, text: cleaned !== text ? cleaned.trim() : text };
+            }
+            persistedParts.push(persistedPart);
+            if (part === sealedBoundaryPart) retainedBoundaryPart = persistedPart;
+          }
+          newMessage.content.parts = persistedParts;
+
+          if (this.toolCallFilter !== undefined) {
+            newMessage.content.parts = preserveSealedMessageBoundary(m, newMessage.content.parts, retainedBoundaryPart);
+          }
 
           if (removedToolInvocationCoveredByPolicy) {
             delete newMessage.content.providerMetadata;

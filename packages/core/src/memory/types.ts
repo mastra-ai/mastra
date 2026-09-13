@@ -6,6 +6,7 @@ export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
+import type { MessageHistoryToolCallFilterOptions } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
@@ -905,6 +906,12 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+
+  /**
+   * Optional tool-call payload filtering for native Observational Memory
+   * history persistence and retrieval. Omit to preserve the existing behavior.
+   */
+  toolCallFilter?: MessageHistoryToolCallFilterOptions;
 }
 
 /**
@@ -1346,6 +1353,9 @@ export type SerializedObservationalMemoryConfig = {
    * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+
+  /** Tool-call payload filtering applied to native Observational Memory history. */
+  toolCallFilter?: MessageHistoryToolCallFilterOptions;
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

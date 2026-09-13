@@ -75,6 +75,36 @@ describe('MastraMemory config serialization', () => {
     });
   });
 
+  it('should serialize observational memory tool-call filtering options', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          toolCallFilter: {
+            exclude: ['search', 'browser'],
+            preserveModelOutput: false,
+            preserveModelOutputFor: [],
+            maxModelOutputBytes: 2048,
+          },
+        },
+      },
+    });
+
+    expect(memory.getConfig().observationalMemory).toEqual({
+      activateAfterIdle: undefined,
+      activateOnProviderChange: undefined,
+      shareTokenBudget: undefined,
+      temporalMarkers: undefined,
+      retrieval: undefined,
+      toolCallFilter: {
+        exclude: ['search', 'browser'],
+        preserveModelOutput: false,
+        preserveModelOutputFor: [],
+        maxModelOutputBytes: 2048,
+      },
+    });
+  });
+
   it('should serialize retrieval config for resource scope without changing the requested config', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),

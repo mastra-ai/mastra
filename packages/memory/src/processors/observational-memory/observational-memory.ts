@@ -7,8 +7,14 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
-import { MessageHistory } from '@mastra/core/processors';
+import {
+  DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES,
+  filterToolCallMessages,
+  MessageHistory,
+  type MessageHistoryToolCallFilterOptions,
+  type ProcessorContext,
+  type ProcessorStreamWriter,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import { assertObservationalMemoryClearExpectation } from '@mastra/core/storage';
@@ -333,6 +339,8 @@ export class ObservationalMemory {
   readonly retrieval: boolean;
   /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
   readonly retrievalScope: 'thread' | 'resource';
+  /** Optional policy for removing raw tool-call payloads from native OM history. */
+  readonly toolCallFilter?: MessageHistoryToolCallFilterOptions;
   /** Application-provided guidance appended after the native retrieval instructions. */
   private retrievalInstructions?: string;
   private retrievalSearch: boolean;
@@ -500,6 +508,7 @@ export class ObservationalMemory {
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
     this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
+    this.toolCallFilter = config.toolCallFilter;
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
@@ -682,7 +691,7 @@ export class ObservationalMemory {
     // Create internal MessageHistory for message persistence
     // OM handles message saving itself (in processOutputStep) instead of relying on
     // the Memory class's MessageHistory processor
-    this.messageHistory = new MessageHistory({ storage: this.storage });
+    this.messageHistory = new MessageHistory({ storage: this.storage, toolCallFilter: this.toolCallFilter });
 
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
@@ -739,6 +748,7 @@ export class ObservationalMemory {
   get config(): {
     scope: 'resource' | 'thread';
     retrieval: boolean;
+    toolCallFilter?: MessageHistoryToolCallFilterOptions;
     observation: {
       messageTokens: number | ThresholdRange;
       previousObserverTokens: number | false | undefined;
@@ -750,6 +760,7 @@ export class ObservationalMemory {
     return {
       scope: this.scope,
       retrieval: this.retrieval,
+      ...(this.toolCallFilter === undefined ? {} : { toolCallFilter: { ...this.toolCallFilter } }),
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         previousObserverTokens: this.observationConfig.previousObserverTokens,
@@ -1925,6 +1936,41 @@ export class ObservationalMemory {
   }
 
   /**
+   * Persist a sealed buffer candidate through the same filtered MessageHistory
+   * path as normal OM writes. The live MessageList keeps the original message
+   * objects so sealing and subsequent re-add behavior remain unchanged.
+   * @internal Used by ObservationStep before asynchronous buffering starts.
+   */
+  async persistMessagesForBuffering(
+    messagesToSave: MastraDBMessage[],
+    threadId: string,
+    resourceId: string | undefined,
+  ): Promise<void> {
+    if (messagesToSave.length === 0) return;
+
+    await this.messageHistory.persistMessages({
+      messages: messagesToSave,
+      threadId,
+      resourceId,
+    });
+  }
+
+  /** @internal Apply the configured tool-call policy to native OM history reads. */
+  filterMessagesForHistory(messages: MastraDBMessage[]): MastraDBMessage[] {
+    if (this.toolCallFilter === undefined) return messages;
+
+    return filterToolCallMessages(
+      messages,
+      {
+        ...this.toolCallFilter,
+        maxModelOutputBytes: this.toolCallFilter.maxModelOutputBytes ?? DEFAULT_PERSISTED_MODEL_OUTPUT_BYTES,
+      },
+      new Set(),
+      { stripMessageProviderMetadata: true },
+    );
+  }
+
+  /**
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.
    *
@@ -1975,7 +2021,8 @@ export class ObservationalMemory {
     // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    const messages = result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return this.filterMessagesForHistory(messages);
   }
 
   /**
@@ -2790,8 +2837,10 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(
-        message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+      const filtered = this.filterMessagesForHistory(
+        result.messages.filter(
+          message => !this.observedMessageIds.has(message.id) && !isWorkingMemoryStateSignal(message),
+        ),
       );
 
       if (filtered.length > 0) {

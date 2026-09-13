@@ -179,7 +179,12 @@ export class ObservationStep {
         }
 
         if (this.turn.memory) {
-          await this.turn.memory.persistMessages(candidates);
+          if (om.toolCallFilter === undefined) {
+            // Preserve the pre-filter OM buffering path when no policy is configured.
+            await this.turn.memory.persistMessages(candidates);
+          } else {
+            await om.persistMessagesForBuffering(candidates, threadId, resourceId);
+          }
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer

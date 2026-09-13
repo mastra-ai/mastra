@@ -105,7 +105,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const messages = result.messages.filter(msg => msg.role !== 'system');
+      const messages = this.filterMessagesForHistory(result.messages.filter(msg => msg.role !== 'system'));
       if (messages.length > 0) {
         this.messagesByThread.set(thread.id, messages);
       }
