@@ -315,6 +315,8 @@ describe('WorkingMemory', () => {
       const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
       expect(resultMessages[0].content).toContain('If your memory has not changed');
       expect(resultMessages[0].content).toContain('Information not being relevant to the current conversation');
+      expect(resultMessages[0].content).toContain('<working_memory_data>\nSome data\n</working_memory_data>');
+      expect(resultMessages[0].content).not.toContain('No working memory data available.');
     });
 
     it('should return original messages when no threadId or resourceId', async () => {

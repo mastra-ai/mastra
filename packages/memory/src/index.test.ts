@@ -260,6 +260,29 @@ describe('Memory', () => {
       expect(systemMessage).toContain('<working_memory_data>\n# User\n- Location: Sooke\n</working_memory_data>');
       expect(systemMessage).not.toContain('No working memory data available.');
     });
+
+    it('renders stored working memory verbatim on the vNext instruction path', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+      const threadId = 'populated-working-memory-vnext-thread';
+      const resourceId = 'populated-working-memory-vnext-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({
+        threadId,
+        resourceId,
+        memoryConfig: {
+          workingMemory: { enabled: true, template: '# User Profile\n- **Name**:', version: 'vnext' },
+        },
+      });
+
+      expect(systemMessage).toContain('If your memory has not changed');
+      expect(systemMessage).toContain('<working_memory_data>\n# User\n- Location: Sooke\n</working_memory_data>');
+      expect(systemMessage).not.toContain('No working memory data available.');
+    });
   });
 
   describe('updateMessageToHideWorkingMemoryV2', () => {
