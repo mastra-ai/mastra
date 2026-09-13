@@ -355,6 +355,40 @@ describe('Knowledge proposal lifecycle', () => {
     expect(await storage.getNodeScopeIds(node.id)).toEqual([ids['scope:destination']]);
   });
 
+  it('requires retained owner authority to restore a deleted record', async () => {
+    const { knowledge, storage, lifecycle, node, ids } = await createFixture();
+    const record = await storage.createRecord({
+      node: node.id,
+      text: 'Deleted record',
+      scopeIds: [ids['scope:source']!],
+    });
+    const deleted = await storage.deleteRecord({
+      id: record.id,
+      version: record.version,
+      deletedBy: ids['principal:owner']!,
+    });
+    const proposal = await knowledge.propose({
+      mutation: { kind: 'restore-record', mutation: { id: record.id, version: deleted.version } },
+      proposerContextScopeId: ids['principal:suggest']!,
+      vouchedScopeIds: [ids['principal:suggest']!],
+    });
+
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:edit']!,
+        vouchedScopeIds: [ids['principal:edit']!],
+      }),
+    ).rejects.toThrow(KnowledgeNotFoundError);
+    await expect(
+      lifecycle.approve({
+        id: proposal.id,
+        reviewerContextScopeId: ids['principal:owner']!,
+        vouchedScopeIds: [ids['principal:owner']!],
+      }),
+    ).resolves.toMatchObject({ status: 'approved' });
+  });
+
   it('applies every governed mutation family with per-target version checks', async () => {
     const { knowledge, storage, lifecycle, node, ids } = await createFixture();
     const proposerContextScopeId = ids['principal:suggest']!;
@@ -457,9 +491,15 @@ describe('Knowledge proposal lifecycle', () => {
     });
 
     const mergeSource = await storage.getNode(createdId);
+    const mergeTarget = await storage.getNode(node.id);
     await proposeAndApprove({
       kind: 'merge-nodes',
-      mutation: { sourceId: createdId, targetId: node.id, sourceVersion: mergeSource!.version },
+      mutation: {
+        sourceId: createdId,
+        targetId: node.id,
+        sourceVersion: mergeSource!.version,
+        targetVersion: mergeTarget!.version,
+      },
     });
     expect(await storage.getNode(createdId)).toBeNull();
   });
