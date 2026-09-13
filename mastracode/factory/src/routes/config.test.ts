@@ -1460,10 +1460,18 @@ describe('thinking defaults routes', () => {
     });
   });
 
-  it('reports the defaults as read-only when authentication is enabled', async () => {
-    const res = await buildApp(userA).request('/web/config/thinking');
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ editable: false });
+  it('reports editable on GET based on tenant admin status', async () => {
+    const local = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
+    expect((await local.json()).editable).toBe(true);
+
+    const signedOut = await buildApp(null).request('/web/config/thinking');
+    expect((await signedOut.json()).editable).toBe(false);
+
+    const nonAdmin = await buildApp(userA, { isOrganizationAdmin: async () => false }).request('/web/config/thinking');
+    expect((await nonAdmin.json()).editable).toBe(false);
+
+    const admin = await buildApp(userA, { isOrganizationAdmin: async () => true }).request('/web/config/thinking');
+    expect((await admin.json()).editable).toBe(true);
   });
 
   it('round-trips global and per-mode defaults through the settings file', async () => {
@@ -1495,14 +1503,14 @@ describe('thinking defaults routes', () => {
     expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
   });
 
-  it('rejects deployment-scoped writes in tenant mode', async () => {
+  it('rejects deployment-scoped writes for non-admins in tenant mode', async () => {
     const nonAdmin = buildApp(userA, { isOrganizationAdmin: async () => false });
     expect((await putThinking(nonAdmin, { globalDefault: 'high' })).status).toBe(403);
 
     const signedOut = buildApp(null);
-    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(403);
+    expect((await putThinking(signedOut, { globalDefault: 'high' })).status).toBe(401);
 
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
-    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(403);
+    expect((await putThinking(admin, { globalDefault: 'high' })).status).toBe(200);
   });
 });
