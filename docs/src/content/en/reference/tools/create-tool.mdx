@@ -77,6 +77,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: true,
   },
   {
+    name: 'outputValidation',
+    type: "'strict' | 'warn'",
+    description:
+      "How a result that fails `outputSchema` validation is handled. `'strict'` (default) replaces the result with a validation error object. `'warn'` logs the failure and returns the tool's actual result, for tools whose side effects have already happened.",
+    isOptional: true,
+  },
+  {
     name: 'toModelOutput',
     type: '(output: TSchemaOut) => unknown',
     description:

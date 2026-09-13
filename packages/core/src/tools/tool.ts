@@ -276,6 +276,12 @@ export class Tool<
   strict?: boolean;
 
   /**
+   * How a result that fails `outputSchema` validation is handled: replaced with a
+   * validation error (`'strict'`, the default) or logged and returned as-is (`'warn'`).
+   */
+  outputValidation?: 'strict' | 'warn';
+
+  /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
    * @example
@@ -407,6 +413,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.strict = opts.strict;
+    this.outputValidation = opts.outputValidation;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.transform = opts.transform;
@@ -594,6 +601,12 @@ export class Tool<
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
 
         if (outputValidation.error) {
+          if (this.outputValidation === 'warn') {
+            // The tool already ran, so keep its real result and only report the mismatch.
+            const logger = organizedContext?.mastra?.getLogger?.() ?? this.mastra?.getLogger?.();
+            logger?.warn(outputValidation.error.message, { toolId: this.id });
+            return output;
+          }
           return outputValidation.error as any;
         }
 

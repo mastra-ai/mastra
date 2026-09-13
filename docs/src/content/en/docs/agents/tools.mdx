@@ -155,6 +155,23 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
   </TabItem>
 </Tabs>
 
+### Handle output validation failures
+
+When a result does not match `outputSchema`, the tool call returns a validation error object instead of the result, so the model sees the call as failed. For tools whose side effects have already happened by the time the result is produced, set `outputValidation: 'warn'` to log the mismatch and return the real result unchanged, so the model does not retry an order that was already placed.
+
+```typescript title="src/mastra/tools/place-order-tool.ts"
+export const placeOrderTool = createTool({
+  id: 'place-order',
+  description: 'Places an order and returns its id and total',
+  inputSchema: z.object({ sku: z.string(), quantity: z.number().int().positive() }),
+  outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+  outputValidation: 'warn',
+  execute: async ({ sku, quantity }) => {
+    return await orders.create({ sku, quantity })
+  },
+})
+```
+
 ## Multiple tools
 
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message and the agent's instructions, plus the tool descriptions and schemas.

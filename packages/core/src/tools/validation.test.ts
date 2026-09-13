@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { createTool } from './tool';
@@ -861,6 +861,43 @@ describe('Tool Output Validation Tests', () => {
     } else {
       throw new Error('Result is not a validation error');
     }
+  });
+
+  it("should return the tool's real result and log when outputValidation is 'warn'", async () => {
+    const tool = createTool({
+      id: 'created-order',
+      description: 'Creates an order; the side effect has happened by the time the result is returned',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+      outputValidation: 'warn',
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' }),
+    });
+    const warn = vi.fn();
+    const mastra = { getLogger: () => ({ warn }) };
+
+    const result = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
+
+    expect(result).toEqual({ orderId: 'ord_1', total: '12.50' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Tool output validation failed for created-order'), {
+      toolId: 'created-order',
+    });
+  });
+
+  it("should still return the validated result when outputValidation is 'warn' and the output is valid", async () => {
+    const tool = createTool({
+      id: 'created-order-valid',
+      description: 'Creates an order',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.coerce.number() }),
+      outputValidation: 'warn',
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' as unknown as number }),
+    });
+
+    const result = await tool.execute({ sku: 'sku_1' });
+
+    // Transforms still apply when validation succeeds
+    expect(result).toEqual({ orderId: 'ord_1', total: 12.5 });
   });
 
   it('should validate output types correctly', async () => {
