@@ -154,6 +154,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       );
   }
 
+  override async upsertScopeGrant(grant: KnowledgeScopeGrant): Promise<{ changed: boolean; accessEpoch: number }> {
+    const scopeNode = this.#db.knowledgeNodes.get(grant.scopeNodeId);
+    const scopeRef = this.#db.knowledgeNodes.get(grant.scopeRefId);
+    if (!scopeNode || scopeNode.deletedAt || !scopeNode.isScope)
+      throw new KnowledgeNotFoundError('scope', grant.scopeNodeId);
+    if (!scopeRef || scopeRef.deletedAt || !scopeRef.isScope)
+      throw new KnowledgeNotFoundError('scope', grant.scopeRefId);
+    const key = JSON.stringify([grant.scopeNodeId, grant.scopeRefId]);
+    const existing = this.#db.knowledgeScopeGrants.get(key);
+    if (existing?.role === grant.role && existing.canSuggest === grant.canSuggest) {
+      return { changed: false, accessEpoch: this.#db.knowledgeAccessEpoch };
+    }
+    this.#db.knowledgeScopeGrants.set(key, { ...grant });
+    this.#db.knowledgeAccessEpoch += 1;
+    return { changed: true, accessEpoch: this.#db.knowledgeAccessEpoch };
+  }
+
   override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
     return this.#runAtomicMutation(() => {
       const scopes: Record<string, string> = {};
@@ -271,6 +288,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #createNode(input: CreateKnowledgeNodeInput): KnowledgeNode {
+    this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
     this.#assertImportRunExists(input.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     this.#assertScopeNodes(scopeIds);
@@ -333,25 +351,30 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       .map(entry => ({ ...entry }));
   }
 
-  async setNodeAddress(input: KnowledgeNodeAddress): Promise<KnowledgeNodeAddress> {
-    const node = this.#db.knowledgeNodes.get(input.nodeId);
-    if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.nodeId);
-    const key = JSON.stringify([input.source, input.address]);
-    const existing = this.#db.knowledgeNodeAddresses.get(key);
-    if (existing && existing.nodeId !== input.nodeId) {
-      throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.address}`);
-    }
-    const entry = { ...input };
-    this.#db.knowledgeNodeAddresses.set(key, entry);
-    return { ...entry };
+  async setNodeAddress(input: KnowledgeNodeAddress & { expectedAccessEpoch?: number }): Promise<KnowledgeNodeAddress> {
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      const node = this.#db.knowledgeNodes.get(input.nodeId);
+      if (!node || node.deletedAt) throw new KnowledgeNotFoundError('node', input.nodeId);
+      const key = JSON.stringify([input.source, input.address]);
+      const existing = this.#db.knowledgeNodeAddresses.get(key);
+      if (existing && existing.nodeId !== input.nodeId) {
+        throw new KnowledgeConflictError(`Knowledge node address already belongs to another node: ${input.address}`);
+      }
+      const entry = { source: input.source, address: input.address, nodeId: input.nodeId };
+      this.#db.knowledgeNodeAddresses.set(key, entry);
+      return { ...entry };
+    });
   }
 
   async createNodeWithAddress(input: {
     source: string;
     address: string;
     node: CreateKnowledgeNodeInput;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
     return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       const key = JSON.stringify([input.source, input.address]);
       const existing = this.#db.knowledgeNodeAddresses.get(key);
       if (existing) {
@@ -365,10 +388,18 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
-  async removeNodeAddress(input: { source: string; address: string; nodeId: string }): Promise<void> {
-    const key = JSON.stringify([input.source, input.address]);
-    const existing = this.#db.knowledgeNodeAddresses.get(key);
-    if (existing?.nodeId === input.nodeId) this.#db.knowledgeNodeAddresses.delete(key);
+  async removeNodeAddress(input: {
+    source: string;
+    address: string;
+    nodeId: string;
+    expectedAccessEpoch?: number;
+  }): Promise<void> {
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      const key = JSON.stringify([input.source, input.address]);
+      const existing = this.#db.knowledgeNodeAddresses.get(key);
+      if (existing?.nodeId === input.nodeId) this.#db.knowledgeNodeAddresses.delete(key);
+    });
   }
 
   async rebindNodeAddress(input: {
@@ -377,9 +408,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     newAddress: string;
     nodeId: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNodeAddress> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       const oldKey = JSON.stringify([input.source, input.address]);
       const newKey = JSON.stringify([input.source, input.newAddress]);
       const node = this.#db.knowledgeNodes.get(input.nodeId);
@@ -409,9 +442,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     address: string;
     scopeId: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       const key = JSON.stringify([input.source, input.address]);
       const binding = this.#db.knowledgeNodeAddresses.get(key);
       if (!binding) throw new KnowledgeNotFoundError('node address', input.address);
@@ -460,12 +495,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async deleteRecordBySource(input: {
     id: string;
+    version: number;
     source: string;
     version: number;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       const record = this.#db.knowledgeRecords.get(input.id);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
       if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -546,7 +584,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
     this.#assertImportRunExists(input.importRunId);
-    return this.#runAtomicMutation(() => this.#updateNode(input));
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      return this.#updateNode(input);
+    });
   }
 
   #updateNode(input: UpdateKnowledgeNodeInput): KnowledgeNode {
@@ -605,9 +646,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     targetId: string;
     sourceVersion: number;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
       if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
       const source = this.#db.knowledgeNodes.get(input.sourceId);
       if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
@@ -673,6 +716,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           if (this.#isRecordVisible(record, scopeIds))
             this.#deleteRecord({
               id: record.id,
+              version: record.version,
               deletedBy: input.record.source,
               importRunId: input.record.importRunId,
             });
@@ -685,7 +729,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
-    return this.#runAtomicMutation(() => this.#createRecord(input));
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(input.expectedAccessEpoch);
+      return this.#createRecord(input);
+    });
   }
 
   #createRecord(input: CreateKnowledgeRecordInput): KnowledgeRecord {
@@ -693,6 +740,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const parent = this.#db.knowledgeNodes.get(nodeId);
     if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     this.#assertScopeNodes(scopeIds);
     this.#assertScopeNodes(input.resolutionScopeIds ?? scopeIds);
     const now = new Date();
@@ -781,22 +829,34 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     };
   }
 
-  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecord(input: {
+    id: string;
+    version: number;
+    deletedBy: string;
+    importRunId?: string;
+    expectedAccessEpoch?: number;
+  }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(input.importRunId);
     return this.#runAtomicMutation(() => this.#deleteRecord(input));
   }
 
   #deleteRecord({
     id,
+    version,
     deletedBy,
     importRunId,
+    expectedAccessEpoch,
   }: {
     id: string;
+    version: number;
     deletedBy: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): KnowledgeRecord {
+    this.#assertExpectedAccessEpoch(expectedAccessEpoch);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
+    if (record.version !== version) throw new KnowledgeConflictError(id);
     if (record.deletedAt) return cloneRecord(record);
     const updated = {
       ...record,
@@ -811,22 +871,36 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return cloneRecord(updated);
   }
 
-  async restoreRecord({ id, importRunId }: { id: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async restoreRecord({
+    id,
+    version,
+    importRunId,
+    expectedAccessEpoch,
+  }: {
+    id: string;
+    version: number;
+    importRunId?: string;
+    expectedAccessEpoch?: number;
+  }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(importRunId);
-    const record = this.#db.knowledgeRecords.get(id);
-    if (!record) throw new KnowledgeNotFoundError('record', id);
-    if (!record.deletedAt) return cloneRecord(record);
-    const updated = {
-      ...record,
-      version: record.version + 1,
-      updatedAt: new Date(),
-      deletedAt: undefined,
-      deletedBy: undefined,
-    };
-    this.#db.knowledgeRecords.set(id, updated);
-    this.#recordActivity('restore', 'record', id, this.#recordScopeIds(record.id)[0], importRunId);
-    this.#enqueue('record', id, 'upsert', updated.version, this.#recordScopeIds(record.id));
-    return cloneRecord(updated);
+    return this.#runAtomicMutation(() => {
+      this.#assertExpectedAccessEpoch(expectedAccessEpoch);
+      const record = this.#db.knowledgeRecords.get(id);
+      if (!record) throw new KnowledgeNotFoundError('record', id);
+      if (record.version !== version) throw new KnowledgeConflictError(id);
+      if (!record.deletedAt) return cloneRecord(record);
+      const updated = {
+        ...record,
+        version: record.version + 1,
+        updatedAt: new Date(),
+        deletedAt: undefined,
+        deletedBy: undefined,
+      };
+      this.#db.knowledgeRecords.set(id, updated);
+      this.#recordActivity('restore', 'record', id, this.#recordScopeIds(record.id)[0], importRunId);
+      this.#enqueue('record', id, 'upsert', updated.version, this.#recordScopeIds(record.id));
+      return cloneRecord(updated);
+    });
   }
 
   async setRecordScopes({
@@ -835,18 +909,22 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     scopeIds,
     importRunId,
     contextScopeId,
+    expectedAccessEpoch,
   }: {
     id: string;
     version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
     this.#assertImportRunExists(importRunId);
+    this.#assertExpectedAccessEpoch(expectedAccessEpoch);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (record.version !== version) throw new KnowledgeConflictError(id);
     const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
+    if (canonical.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     this.#assertScopeNodes(canonical);
     const oldScopeIds = this.#recordScopeIds(record.id);
     const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
@@ -1307,6 +1385,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       startedAt: run.startedAt ? new Date(run.startedAt) : undefined,
       completedAt: run.completedAt ? new Date(run.completedAt) : undefined,
     };
+  }
+
+  #assertExpectedAccessEpoch(expectedAccessEpoch?: number): void {
+    if (expectedAccessEpoch === undefined || expectedAccessEpoch === this.#db.knowledgeAccessEpoch) return;
+    throw new KnowledgeConflictError('Knowledge access changed during mutation authorization');
   }
 
   #assertImportRunTransition(from: KnowledgeImportRun['status'], to: UpdateKnowledgeImportRunInput['status']): void {

@@ -663,6 +663,42 @@ export class KnowledgePG extends KnowledgeStorage {
     }));
   }
 
+  override async upsertScopeGrant(grant: KnowledgeScopeGrant): Promise<{ changed: boolean; accessEpoch: number }> {
+    return this.#transaction(async tx => {
+      await tx.execute({
+        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        args: [`mastra-knowledge-reconcile:${this.#schemaName}`],
+      });
+      const scopes = await tx.execute({
+        sql: `SELECT id FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id IN (?,?) AND "isScope"=TRUE AND "deletedAt" IS NULL`,
+        args: [grant.scopeNodeId, grant.scopeRefId],
+      });
+      if (new Set(scopes.rows.map(row => String(row.id))).size !== 2) {
+        throw new KnowledgeNotFoundError('scope', grant.scopeNodeId);
+      }
+      const existing = await tx.execute({
+        sql: `SELECT role,"canSuggest" FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeNodeId"=? AND "scopeRefId"=?`,
+        args: [grant.scopeNodeId, grant.scopeRefId],
+      });
+      const row = existing.rows[0];
+      if (
+        row &&
+        String(row.role) === grant.role &&
+        (row.canSuggest === null ? undefined : Boolean(row.canSuggest)) === grant.canSuggest
+      ) {
+        const epoch = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+        return { changed: false, accessEpoch: Number(epoch.rows[0]?.epoch ?? 0) };
+      }
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?) ON CONFLICT ("scopeNodeId","scopeRefId") DO UPDATE SET role=EXCLUDED.role,"canSuggest"=EXCLUDED."canSuggest"`,
+        args: [grant.scopeNodeId, grant.scopeRefId, grant.role, grant.canSuggest ?? null],
+      });
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+      const epoch = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+      return { changed: true, accessEpoch: Number(epoch.rows[0]?.epoch ?? 0) };
+    });
+  }
+
   override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
     return this.#transaction(async tx => {
       await tx.execute({
@@ -789,7 +825,10 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(tx => this.#createNode(tx, input));
+    return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+      return this.#createNode(tx, input);
+    });
   }
 
   async getNode(id: string): Promise<KnowledgeNode | null> {
@@ -851,6 +890,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async #updateNode(tx: Executor, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     const existing = await this.#getNode(tx, input.id);
     if (!existing) throw new KnowledgeNotFoundError('node', input.id);
     const existingScopeIds = await this.#getNodeScopeIds(tx, input.id);
@@ -923,9 +963,11 @@ export class KnowledgePG extends KnowledgeStorage {
     sourceVersion: number;
     importRunId?: string;
     contextScopeId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
     if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const source = await this.#getNode(tx, input.sourceId);
       if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
       const target = await this.#getNode(tx, input.targetId);
@@ -1010,6 +1052,7 @@ export class KnowledgePG extends KnowledgeStorage {
           if (await this.#isRecordVisible(tx, record, scopeIds)) {
             await this.#deleteRecord(tx, {
               id: record.id,
+              version: record.version,
               deletedBy: input.record.source,
               importRunId: input.record.importRunId,
             });
@@ -1027,6 +1070,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async #createRecord(tx: Executor, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     const nodeId = nodeReferenceId(input.node);
     const parent = await this.#getNode(tx, nodeId);
     if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
@@ -1123,38 +1167,55 @@ export class KnowledgePG extends KnowledgeStorage {
     };
   }
 
-  async deleteRecord(input: { id: string; deletedBy: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async deleteRecord(input: {
+    id: string;
+    version: number;
+    deletedBy: string;
+    importRunId?: string;
+    expectedAccessEpoch?: number;
+  }): Promise<KnowledgeRecord> {
     return this.#transaction(tx => this.#deleteRecord(tx, input));
   }
 
   async #deleteRecord(
     tx: Executor,
-    input: { id: string; deletedBy: string; importRunId?: string },
+    input: { id: string; version: number; deletedBy: string; importRunId?: string; expectedAccessEpoch?: number },
   ): Promise<KnowledgeRecord> {
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
     const record = await this.#getRecord(tx, input.id, true);
     if (!record) throw new KnowledgeNotFoundError('record', input.id);
+    if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
     if (record.deletedAt) return record;
     const now = new Date();
-    await tx.execute({
-      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=?,version=version+1,updatedAt=? WHERE id=?`,
-      args: [now.toISOString(), input.deletedBy, now.toISOString(), input.id],
+    const updated = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=?,version=version+1,updatedAt=? WHERE id=? AND version=?`,
+      args: [now.toISOString(), input.deletedBy, now.toISOString(), input.id, input.version],
     });
+    if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
     const scopeIds = await this.#getRecordScopeIds(tx, input.id);
     await this.#activity(tx, 'delete', 'record', input.id, undefined, input.importRunId);
     await this.#outbox(tx, 'record', input.id, 'delete', record.version + 1, scopeIds);
     return { ...record, version: record.version + 1, updatedAt: now, deletedAt: now, deletedBy: input.deletedBy };
   }
 
-  async restoreRecord(input: { id: string; importRunId?: string }): Promise<KnowledgeRecord> {
+  async restoreRecord(input: {
+    id: string;
+    version: number;
+    importRunId?: string;
+    expectedAccessEpoch?: number;
+  }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       if (!record.deletedAt) return record;
       const now = new Date();
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=?`,
-        args: [now.toISOString(), input.id],
+      const updated = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=? AND version=?`,
+        args: [now.toISOString(), input.id, input.version],
       });
+      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
       const scopeIds = await this.#getRecordScopeIds(tx, input.id);
       await this.#activity(tx, 'restore', 'record', input.id, undefined, input.importRunId);
       await this.#outbox(tx, 'record', input.id, 'upsert', record.version + 1, scopeIds);
@@ -1168,19 +1229,22 @@ export class KnowledgePG extends KnowledgeStorage {
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
       const now = new Date();
-      const result = await tx.execute({
+      const updated = await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
         args: [now.toISOString(), input.id, input.version],
       });
-      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
       await this.#replaceRecordScopes(tx, input.id, scopeIds, now);
       await this.#activity(tx, 'move', 'record', input.id, input.contextScopeId, input.importRunId);
       const version = record.version + 1;
@@ -1297,8 +1361,9 @@ export class KnowledgePG extends KnowledgeStorage {
     }));
   }
 
-  async setNodeAddress(input: KnowledgeNodeAddress): Promise<KnowledgeNodeAddress> {
+  async setNodeAddress(input: KnowledgeNodeAddress & { expectedAccessEpoch?: number }): Promise<KnowledgeNodeAddress> {
     await this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       if (!(await this.#getNode(tx, input.nodeId))) throw new KnowledgeNotFoundError('node', input.nodeId);
       const existing = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
@@ -1315,15 +1380,17 @@ export class KnowledgePG extends KnowledgeStorage {
         });
       }
     });
-    return { ...input };
+    return { source: input.source, address: input.address, nodeId: input.nodeId };
   }
 
   async createNodeWithAddress(input: {
     source: string;
     address: string;
     node: CreateKnowledgeNodeInput;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch ?? input.node.expectedAccessEpoch);
       const binding = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
         args: [input.source, input.address],
@@ -1342,8 +1409,14 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async removeNodeAddress(input: { source: string; address: string; nodeId: string }): Promise<void> {
+  async removeNodeAddress(input: {
+    source: string;
+    address: string;
+    nodeId: string;
+    expectedAccessEpoch?: number;
+  }): Promise<void> {
     await this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=? AND nodeId=?`,
         args: [input.source, input.address, input.nodeId],
@@ -1357,8 +1430,10 @@ export class KnowledgePG extends KnowledgeStorage {
     newAddress: string;
     nodeId: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeNodeAddress> {
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const existing = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
         args: [input.source, input.address],
@@ -1402,8 +1477,10 @@ export class KnowledgePG extends KnowledgeStorage {
     address: string;
     scopeId: string;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const binding = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
         args: [input.source, input.address],
@@ -1444,13 +1521,17 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async deleteRecordBySource(input: {
     id: string;
+    version: number;
     source: string;
     version: number;
     importRunId?: string;
+    expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
+      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const record = await this.#getRecord(tx, input.id, true);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
       await this.#deleteRecordPermanently(tx, record.id, input.importRunId, input.version);
       return record;
     });
@@ -1486,11 +1567,11 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#outbox(tx, 'record', id, 'delete', record.version + 1, mentions.rows[0] ? [] : scopeIds);
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=?`, args: [id] });
     await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`, args: [id] });
-    const result = await tx.execute({
+    const deleted = await tx.execute({
       sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${expectedVersion === undefined ? '' : ' AND version=?'}`,
       args: expectedVersion === undefined ? [id] : [id, expectedVersion],
     });
-    if (expectedVersion !== undefined && result.rowsAffected === 0) throw new KnowledgeConflictError(id);
+    if (expectedVersion !== undefined && deleted.rowsAffected !== 1) throw new KnowledgeConflictError(id);
   }
 
   async getImportState(input: {
@@ -2440,6 +2521,16 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (recordId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
         args: [recordId, scopeNodeId, addedAt.toISOString()],
       });
+    }
+  }
+
+  async #assertExpectedAccessEpoch(executor: Executor, expectedAccessEpoch?: number): Promise<void> {
+    if (expectedAccessEpoch === undefined) return;
+    const result = await executor.execute(
+      `SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global' FOR SHARE`,
+    );
+    if (Number(result.rows[0]?.epoch ?? 0) !== expectedAccessEpoch) {
+      throw new KnowledgeConflictError('Knowledge access changed during mutation authorization');
     }
   }
 

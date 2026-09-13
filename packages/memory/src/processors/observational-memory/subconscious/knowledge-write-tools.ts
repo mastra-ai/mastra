@@ -64,7 +64,7 @@ export function createKnowledgeWriteTools(
     const store = await getStore(memory);
     const node = await store.getNode(id);
     if (!node) throw new Error(`Knowledge node not found: ${id}`);
-    await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+    await requireVisible(store, 'node', node.id, options);
     return node;
   }
 
@@ -91,8 +91,8 @@ export function createKnowledgeWriteTools(
           name: string;
           kind: string;
           text: string;
-          nodeScope?: SubconsciousScopeSelection;
-          scope?: SubconsciousScopeSelection;
+          nodeScope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
           when?: string;
         };
         const store = await getStore(memory);
@@ -164,7 +164,7 @@ export function createKnowledgeWriteTools(
         const record = await store.getRecord({ id, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${id}`);
         await requireVisible(store, 'record', record.id, options);
-        return store.deleteRecord({ id: record.id, deletedBy: CURATOR_IDENTITY });
+        return store.deleteRecord({ id: record.id, version: record.version, deletedBy: CURATOR_IDENTITY });
       },
     }),
     // Single-field edits use dedicated tools rather than one tool with an optional pair, because
@@ -283,11 +283,15 @@ export function createKnowledgeWriteTools(
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; expectedVersion: number; scope: Exclude<SubconsciousScopeSelection, 'org'> };
+        const value = input as {
+          recordId: string;
+          expectedVersion: number;
+          scope: Exclude<SubconsciousScopeSelection, 'org'>;
+        };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
+        await requireVisible(store, 'record', record.id, options);
         if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
         return store.setRecordScopes({
           id: record.id,
@@ -376,7 +380,7 @@ export function createKnowledgeWriteTools(
           });
           return created.record;
         }
-        await requireVisible(store, 'node', node.id, options, 'Knowledge node');
+        await requireVisible(store, 'node', node.id, options);
         if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
         return store.replaceNodeRecords({
           node: { id: node.id, version: value.expectedVersion, kind: value.kind },
