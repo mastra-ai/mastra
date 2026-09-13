@@ -207,6 +207,59 @@ describe('Memory', () => {
       expect(systemMessage).toContain('calling the updateWorkingMemory tool');
       expect(systemMessage).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
     });
+
+    it('renders a no-data marker instead of null when no working memory is stored', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+      const threadId = 'empty-working-memory-thread';
+      const resourceId = 'empty-working-memory-resource';
+      await memory.createThread({ threadId, resourceId });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('No working memory data available.');
+      expect(systemMessage).not.toMatch(/<working_memory_data>\s*null\s*<\/working_memory_data>/);
+    });
+
+    it('renders a no-data marker instead of null on the vNext instruction path', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+      const threadId = 'empty-working-memory-vnext-thread';
+      const resourceId = 'empty-working-memory-vnext-resource';
+      await memory.createThread({ threadId, resourceId });
+
+      const systemMessage = await memory.getSystemMessage({
+        threadId,
+        resourceId,
+        memoryConfig: {
+          workingMemory: { enabled: true, template: '# User Profile\n- **Name**:', version: 'vnext' },
+        },
+      });
+
+      expect(systemMessage).toContain('If your memory has not changed');
+      expect(systemMessage).toContain('No working memory data available.');
+      expect(systemMessage).not.toMatch(/<working_memory_data>\s*null\s*<\/working_memory_data>/);
+    });
+
+    it('renders stored working memory verbatim without the no-data marker', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+      const threadId = 'populated-working-memory-thread';
+      const resourceId = 'populated-working-memory-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('<working_memory_data>\n# User\n- Location: Sooke\n</working_memory_data>');
+      expect(systemMessage).not.toContain('No working memory data available.');
+    });
   });
 
   describe('updateMessageToHideWorkingMemoryV2', () => {

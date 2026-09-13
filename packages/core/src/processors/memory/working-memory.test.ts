@@ -621,6 +621,144 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].role).toBe('system');
       expect(resultMessages[0].content).toContain('<working_memory_data>');
       expect(resultMessages[0].content).toContain('</working_memory_data>');
+      expect(resultMessages[0].content).toContain('No working memory data available.');
+      expect(resultMessages[0].content).not.toMatch(/<working_memory_data>\s*null\s*<\/working_memory_data>/);
+    });
+
+    it('should render the no-data marker instead of null when useVNext is true', async () => {
+      const processor = new WorkingMemory({ storage: mockStorage, scope: 'thread', useVNext: true });
+      const threadId = 'thread-vnext-empty';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
+      vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+        id: threadId,
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: { workingMemory: null },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('If your memory has not changed');
+      expect(resultMessages[0].content).toContain('No working memory data available.');
+      expect(resultMessages[0].content).not.toMatch(/<working_memory_data>\s*null\s*<\/working_memory_data>/);
+    });
+
+    it('should render the no-data marker for a JSON template with no stored data', async () => {
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        scope: 'thread',
+        template: {
+          format: 'json',
+          content: JSON.stringify({ type: 'object', properties: { name: { type: 'string' } }, required: ['name'] }),
+        },
+      });
+      const threadId = 'thread-json-empty';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
+      vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+        id: threadId,
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: { workingMemory: null },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain('represents the template');
+      expect(resultMessages[0].content).toContain('"name":""');
+      expect(resultMessages[0].content).toContain('No working memory data available.');
+      expect(resultMessages[0].content).not.toMatch(/<working_memory_data>\s*null\s*<\/working_memory_data>/);
+    });
+
+    it('should render stored working memory verbatim without the no-data marker', async () => {
+      const processor = new WorkingMemory({ storage: mockStorage, scope: 'thread' });
+      const threadId = 'thread-populated';
+      const workingMemoryData = '# User Info\n- Name: John';
+
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
+      vi.mocked(mockStorage.getThreadById).mockResolvedValue({
+        id: threadId,
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: { workingMemory: workingMemoryData },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      const result = await processor.processInput({
+        messages,
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+
+      const resultMessages = result instanceof MessageList ? result.get.all.aiV5.prompt() : result;
+      expect(resultMessages[0].content).toContain(
+        `<working_memory_data>\n${workingMemoryData}\n</working_memory_data>`,
+      );
+      expect(resultMessages[0].content).not.toContain('No working memory data available.');
     });
 
     it('should use read-only instruction format when readOnly option is true', async () => {
