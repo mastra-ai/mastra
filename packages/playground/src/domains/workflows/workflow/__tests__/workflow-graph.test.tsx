@@ -111,13 +111,13 @@ function Harness({
 
 const twoNodes = [
   {
-    id: 'step-a',
+    id: 'node-step-a',
     data: { stepId: 'step-a', label: 'step-a' },
     measured: { width: 300, height: 120 },
     position: { x: 40, y: 80 },
   },
   {
-    id: 'step-b',
+    id: 'node-step-b',
     data: { stepId: 'step-b', label: 'step-b' },
     measured: { width: 300, height: 120 },
     position: { x: 440, y: 80 },
@@ -128,7 +128,7 @@ describe('WorkflowGraph', () => {
   it('focuses and zooms the graph viewport when a workflow step is selected', async () => {
     reactFlowViewport.getNodes.mockReturnValue([
       {
-        id: 'step-a',
+        id: 'node-step-a',
         data: { label: 'step-a' },
         measured: { width: 300, height: 120 },
         position: { x: 40, y: 80 },
@@ -271,7 +271,7 @@ describe('WorkflowGraph', () => {
     // waiting node, and the node-state change must re-trigger the focus effect.
     nodesLaidOut = true;
     act(() => {
-      reactFlowControl.onNodesChange?.([{ id: 'step-a', type: 'position', position: { x: 1, y: 0 } }]);
+      reactFlowControl.onNodesChange?.([{ id: 'node-step-a', type: 'position', position: { x: 1, y: 0 } }]);
     });
 
     // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.

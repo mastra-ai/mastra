@@ -1,12 +1,35 @@
-import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { SerializedStepFlowEntry, WorkflowStepStatus } from '@mastra/core/workflows';
 import type { ReactNode } from 'react';
 
-import type { ForeachProgress, Step } from '../../context/use-current-run';
-import type { Condition } from '../utils';
+export type WorkflowCardDisplayStatus =
+  | Extract<WorkflowStepStatus, 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped'>
+  | 'tripwire'
+  | undefined;
 
-export type WorkflowCardDisplayStatus = Step['status'] | 'tripwire' | undefined;
+export type WorkflowConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
-export type WorkflowCardCondition = Condition;
+export type WorkflowCardCondition =
+  | {
+      type: WorkflowConditionType;
+      ref: {
+        step:
+          | {
+              id: string;
+            }
+          | 'trigger';
+        path: string;
+      };
+      query: Record<string, unknown>;
+      conj?: 'and' | 'or' | 'not';
+      fnString?: never;
+    }
+  | {
+      type: WorkflowConditionType;
+      fnString: string;
+      ref?: never;
+      query?: never;
+      conj?: never;
+    };
 
 export type WorkflowConditionCodeCondition = Extract<WorkflowCardCondition, { fnString: string }>;
 
@@ -24,7 +47,11 @@ export interface WorkflowStepCardViewProps {
   duration?: number;
   date?: Date;
   isForEach?: boolean;
-  foreachProgress?: ForeachProgress;
+  foreachProgress?: {
+    completedCount: number;
+    totalCount: number;
+    iterationStatus: 'success' | 'failed' | 'suspended';
+  };
   mapConfig?: string;
   canSuspend?: boolean;
   isParallel?: boolean;
@@ -38,8 +65,6 @@ export interface WorkflowConditionCardViewProps {
   type?: WorkflowCardCondition['type'];
   conditions: WorkflowCardCondition[];
   previousDisplayStatus?: WorkflowCardDisplayStatus;
-  hasPreviousStep?: boolean;
-  hasNextStep?: boolean;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   openDialog: boolean;

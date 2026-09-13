@@ -1,10 +1,10 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 
-import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType } from './workflow-step-node-utils';
+import type { WorkflowBoundaryNodeModel } from './types';
+import { Txt } from '@/ds/components/Txt';
 
-export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeType>) => {
+export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeModel>) => {
   const isStart = data.boundaryRole === 'start';
 
   return (
@@ -13,7 +13,7 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeTyp
       <div
         data-workflow-boundary-node
         data-testid={`workflow-boundary-${data.boundaryRole}`}
-        className="border-border1 bg-surface3 text-neutral5 flex h-14 w-14 items-center justify-center rounded-full border"
+        className="border-border1 bg-surface3 text-neutral5 flex size-14 items-center justify-center rounded-full border"
       >
         <Txt variant="ui-xs" className="font-medium">
           {data.label}

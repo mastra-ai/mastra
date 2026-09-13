@@ -1,10 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { WorkflowCardCondition as Condition } from '@mastra/playground-ui/components/Workflow';
 import type { ResolvedWorkflowStep } from '@mastra/react';
 import type { Node } from '@xyflow/react';
-import type { Condition } from './utils';
 
 export const WORKFLOW_STEP_NODE_TYPE = 'workflow-step-node';
-export const WORKFLOW_BOUNDARY_NODE_TYPE = 'workflow-boundary-node';
+export { WORKFLOW_BOUNDARY_NODE_TYPE } from '@mastra/playground-ui/components/Workflow';
+export type { WorkflowBoundaryNodeModel as WorkflowBoundaryNode } from '@mastra/playground-ui/components/Workflow';
 
 export type WorkflowStepNodeData = {
   label: string;
@@ -29,13 +30,6 @@ export type WorkflowStepNodeData = {
 };
 
 export type WorkflowStepNode = Node<WorkflowStepNodeData, typeof WORKFLOW_STEP_NODE_TYPE>;
-
-export type WorkflowBoundaryNodeData = {
-  label: 'Start' | 'End';
-  boundaryRole: 'start' | 'end';
-};
-
-export type WorkflowBoundaryNode = Node<WorkflowBoundaryNodeData, typeof WORKFLOW_BOUNDARY_NODE_TYPE>;
 
 type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
 export type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &

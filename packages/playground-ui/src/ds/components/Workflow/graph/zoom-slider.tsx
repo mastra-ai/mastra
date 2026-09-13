@@ -1,10 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Slider } from '@mastra/playground-ui/components/Slider';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { forwardRef } from 'react';
+import { Button } from '@/ds/components/Button';
+import { Slider } from '@/ds/components/Slider';
+import { cn } from '@/utils/cn';
 
 export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }, ref) => {
   const { zoom } = useViewport();
@@ -23,13 +23,14 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
         <Minus />
       </Button>
       <Slider
-        className="w-[140px]"
+        style={{ width: 140 }}
         value={[zoom]}
         min={0.01}
         max={1}
         step={0.01}
         onValueChange={values => {
-          void zoomTo(values[0]);
+          const [nextZoom] = values;
+          if (nextZoom !== undefined) void zoomTo(nextZoom);
         }}
       />
       <Button size="icon-sm" tooltip="Zoom in" onClick={() => zoomIn({ duration: 300 })}>

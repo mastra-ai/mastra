@@ -1,7 +1,7 @@
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CircleCheck, CircleDashed, CircleX, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 
-import type { WorkflowCardDisplayStatus } from './types';
+import type { WorkflowCardDisplayStatus } from '../types';
+import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowCardStatusIconProps {
   displayStatus?: WorkflowCardDisplayStatus;
@@ -12,7 +12,7 @@ export const WorkflowCardStatusIcon = ({ displayStatus, hasStep }: WorkflowCardS
   const strokeWidth = 2;
 
   return (
-    <Icon size="sm" className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+    <Icon size="sm" className="inline-flex size-5 shrink-0 items-center justify-center">
       {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" strokeWidth={strokeWidth} />}
       {displayStatus === 'failed' && <CircleX className="text-accent2" strokeWidth={strokeWidth} />}
       {displayStatus === 'success' && <CircleCheck className="text-accent1" strokeWidth={strokeWidth} />}

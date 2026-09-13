@@ -1,11 +1,10 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-
-import { Clock } from '../workflow-clock';
-import type { WorkflowStepCardViewProps } from './types';
+import type { WorkflowStepCardViewProps } from '../types';
 import { getNodeIndicators, getWorkflowCardAccentColor } from './workflow-card-badge-utils';
 import { WorkflowCardBadges } from './workflow-card-badges';
 import { WorkflowCardStatusIcon } from './workflow-card-status-icon';
+import { WorkflowClock } from './workflow-clock';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewProps, 'foreachProgress'>) => {
   if (!foreachProgress) {
@@ -89,7 +88,7 @@ export const WorkflowStepCardView = ({
       onMouseLeave={() => onHoverChange?.(false)}
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
       className={cn(
-        'bg-surface3 rounded-lg w-[274px] border border-border1 transition-colors hover:border-neutral6',
+        'w-[274px] rounded-lg border border-border1 bg-surface3 transition-colors hover:border-neutral6',
         accentColor && 'border-l-4',
         isHovered && !isSelected && 'border-neutral6',
         isWaiting && !isSelected && 'border-accent3',
@@ -105,7 +104,7 @@ export const WorkflowStepCardView = ({
           </Txt>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {startedAt && <Clock startedAt={startedAt} endedAt={endedAt} />}
+          {startedAt && <WorkflowClock startedAt={startedAt} endedAt={endedAt} />}
           {actionBar}
         </div>
       </div>

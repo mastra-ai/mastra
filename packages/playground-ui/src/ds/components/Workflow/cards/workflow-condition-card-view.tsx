@@ -1,14 +1,14 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { Fragment } from 'react';
 
-import type { WorkflowConditionCardViewProps, WorkflowConditionCodeCondition } from './types';
+import type { WorkflowConditionCardViewProps, WorkflowConditionCodeCondition } from '../types';
 import { getConditionIndicator, getWorkflowCardAccentColor } from './workflow-card-badge-utils';
 import { WorkflowCardBadges } from './workflow-card-badges';
 import { WorkflowConditionCode, WorkflowConditionDialog } from './workflow-condition-code';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
 
 const isCodeCondition = (
   condition: WorkflowConditionCardViewProps['conditions'][number],
@@ -37,7 +37,7 @@ export const WorkflowConditionCardView = ({
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
       data-testid="workflow-condition-node"
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
-      className={cn('bg-surface3 rounded-lg w-dropdown-max-height border border-border1', accentColor && 'border-l-4')}
+      className={cn('w-dropdown-max-height rounded-lg border border-border1 bg-surface3', accentColor && 'border-l-4')}
     >
       <Collapsible
         open={!isCollapsible ? true : isOpen}
@@ -51,7 +51,7 @@ export const WorkflowConditionCardView = ({
           {isCollapsible && (
             <CollapsibleTrigger
               aria-label={isOpen ? 'Collapse condition' : 'Expand condition'}
-              className="text-neutral3 hover:text-neutral5 focus-visible:ring-accent1 inline-flex h-5 w-5 items-center justify-center rounded-full focus-visible:ring-1 focus-visible:outline-hidden"
+              className="text-neutral3 hover:text-neutral5 focus-visible:ring-accent1 inline-flex size-5 items-center justify-center rounded-full focus-visible:ring-1 focus-visible:outline-hidden"
             >
               <Icon>
                 <ChevronDown

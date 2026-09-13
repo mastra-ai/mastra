@@ -1,13 +1,13 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { toSigFigs } from '@mastra/playground-ui/utils/number';
 import { useEffect, useState } from 'react';
+import { Txt } from '@/ds/components/Txt';
+import { toSigFigs } from '@/utils/number';
 
-interface ClockProps {
+interface WorkflowClockProps {
   startedAt: number;
   endedAt?: number;
 }
 
-export const Clock = ({ startedAt, endedAt }: ClockProps) => {
+export const WorkflowClock = ({ startedAt, endedAt }: WorkflowClockProps) => {
   const [time, setTime] = useState(startedAt);
 
   useEffect(() => {

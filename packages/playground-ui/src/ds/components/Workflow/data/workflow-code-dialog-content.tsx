@@ -1,15 +1,15 @@
 import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import CodeMirror from '@uiw/react-codemirror';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
 
-export const CodeDialogContent = ({
+export const WorkflowCodeContent = ({
   data,
   language = 'auto',
 }: {
-  data: any;
+  data: unknown;
   language?: 'json' | 'javascript' | 'auto';
 }) => {
   const theme = useCodemirrorTheme();
@@ -21,12 +21,11 @@ export const CodeDialogContent = ({
     if (language === 'json') {
       return [jsonLanguage, EditorView.lineWrapping];
     }
-    // Auto-detect: try JSON first, fall back to JavaScript for code-like content
+
     try {
       JSON.parse(content);
       return [jsonLanguage, EditorView.lineWrapping];
     } catch {
-      // Check if it looks like JavaScript/TypeScript code
       if (
         content.includes('=>') ||
         content.includes('function') ||
@@ -42,7 +41,7 @@ export const CodeDialogContent = ({
   if (typeof data !== 'string') {
     const content = JSON.stringify(data, null, 2);
     return (
-      <div className="relative max-h-[500px] overflow-auto">
+      <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
         <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
           <CopyButton content={content} />
         </div>
@@ -55,17 +54,14 @@ export const CodeDialogContent = ({
 
   const extensions = getExtensions(data);
 
-  // Try to format JSON if it's valid JSON
   let displayContent = data;
   try {
     const json = JSON.parse(data);
     displayContent = JSON.stringify(json, null, 2);
-  } catch {
-    // Keep original content
-  }
+  } catch {}
 
   return (
-    <div className="relative max-h-[500px] overflow-auto">
+    <div className="relative overflow-auto" style={{ maxHeight: 500 }}>
       <div className="bg-surface4 absolute top-2 right-2 z-10 rounded-full">
         <CopyButton content={data} />
       </div>
