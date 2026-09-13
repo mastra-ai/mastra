@@ -141,6 +141,11 @@ export type FullOutput<OUTPUT = undefined> = {
   totalUsage: PromiseResults<OUTPUT>['totalUsage'];
   /** The structured object output (when using structured output) */
   object: OUTPUT;
+  /**
+   * True when `object` is the configured `fallbackValue`, substituted because the
+   * model output failed schema validation under `errorStrategy: 'fallback'`.
+   */
+  usedFallbackValue: boolean;
   /** Error if the stream failed */
   error: Error | undefined;
   /** Tripwire data if content was blocked */
@@ -241,6 +246,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
   #bufferedObject: OUTPUT | undefined;
+  #usedFallbackValue = false;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
   #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
@@ -583,6 +589,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             case 'object-result':
               self.#bufferedObject = chunk.object;
+              self.#usedFallbackValue = chunk.metadata?.fallback === true;
               // An output processor can still reject this attempt and ask for a retry,
               // which would make this object stale. A settled promise cannot be
               // un-settled, so when processors are in play the object is only buffered
@@ -860,6 +867,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // the object promise now that the attempt has been accepted.
               if (stepTripwire?.retry) {
                 self.#bufferedObject = undefined;
+                self.#usedFallbackValue = false;
               } else if (self.#bufferedObject !== undefined && self.#delayedPromises.object.status.type === 'pending') {
                 self.#delayedPromises.object.resolve(self.#bufferedObject);
               }
@@ -1718,6 +1726,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       response: await this.response,
       totalUsage: await this.totalUsage,
       object: await this.object,
+      usedFallbackValue: this.#usedFallbackValue,
       error: this.error,
       tripwire: this.#tripwire,
       ...(scoringData ? { scoringData } : {}),
@@ -1874,6 +1883,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   /** @internal */
   _getImmediateObject() {
     return this.#bufferedObject;
+  }
+
+  /**
+   * Whether the structured object is the configured `fallbackValue`, substituted
+   * because the model output failed schema validation under `errorStrategy: 'fallback'`.
+   */
+  get usedFallbackValue(): boolean {
+    return this.#usedFallbackValue;
   }
   /** @internal */
   _getImmediateUsage() {
