@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import {
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
@@ -285,11 +283,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #initializeSchema(tx: Executor): Promise<void> {
     const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
     const inspection = await this.#inspectSchema(tx);
-    if (inspection.status === 'incompatible-reset-required') {
-      if (!(await this.#replaceRecognizedLegacySchema(tx))) assertKnowledgeSchemaCompatible(inspection);
-    } else {
-      assertKnowledgeSchemaCompatible(inspection);
-    }
+    assertKnowledgeSchemaCompatible(inspection);
 
     const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
       this.#db.createTable({ ...input, executor: tx });
@@ -358,26 +352,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?)`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
-  }
-
-  async #replaceRecognizedLegacySchema(tx: Executor): Promise<boolean> {
-    const objects = await tx.execute(
-      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE tbl_name GLOB 'mastra_knowledge_*' ORDER BY type, name",
-    );
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify(objects.rows.map(row => [row.type, row.name, row.tbl_name, row.sql])))
-      .digest('hex');
-    if (fingerprint !== 'ac26ffa8e479750bdc7094cc20a3f05718590907880e7d685e2f6527bd2aef34') return false;
-
-    const tables = new Set(objects.rows.filter(row => row.type === 'table').map(row => String(row.tbl_name)));
-    const otherObjects = await tx.execute(
-      "SELECT sql FROM sqlite_master WHERE tbl_name NOT GLOB 'mastra_knowledge_*' AND sql IS NOT NULL",
-    );
-    if (otherObjects.rows.some(row => [...tables].some(table => String(row.sql).toLowerCase().includes(table)))) {
-      return false;
-    }
-    for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
-    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
