@@ -135,6 +135,7 @@ function stubKnowledgeRoute(
               parentIds: ['22222222-2222-4222-8222-222222222222'],
               memberCount: 0,
               memberCountTruncated: false,
+              contentNodeCount: 0,
               childScopeCount: 0,
             },
           ],
@@ -180,6 +181,7 @@ function stubKnowledgeRoute(
             parentIds: [],
             memberCount: 2,
             memberCountTruncated: false,
+            contentNodeCount: 0,
             childScopeCount: 2,
           },
           {
@@ -189,6 +191,7 @@ function stubKnowledgeRoute(
             parentIds: ['11111111-1111-4111-8111-111111111111'],
             memberCount: threadId ? 3 : 2,
             memberCountTruncated: false,
+            contentNodeCount: 2,
             childScopeCount: threadId ? 1 : 0,
           },
           ...(threadId
@@ -200,6 +203,7 @@ function stubKnowledgeRoute(
                   parentIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
                   memberCount: 1,
                   memberCountTruncated: false,
+                  contentNodeCount: 1,
                   childScopeCount: 0,
                 },
               ]
@@ -212,6 +216,7 @@ function stubKnowledgeRoute(
             parentIds: ['11111111-1111-4111-8111-111111111111'],
             memberCount: 1,
             memberCountTruncated: false,
+            contentNodeCount: 0,
             childScopeCount: 1,
           },
         ],
@@ -399,6 +404,10 @@ describe('KnowledgePage', () => {
               isScope: true,
               pinned: false,
               recordCount: 0,
+              memberCount: 2,
+              memberCountTruncated: false,
+              contentNodeCount: 1,
+              childScopeCount: 1,
               createdAt: '2026-08-13T00:00:00.000Z',
               updatedAt: '2026-08-13T01:00:00.000Z',
             },
@@ -411,6 +420,10 @@ describe('KnowledgePage', () => {
               isScope: true,
               pinned: false,
               recordCount: 0,
+              memberCount: 0,
+              memberCountTruncated: false,
+              contentNodeCount: 0,
+              childScopeCount: 0,
               createdAt: '2026-08-13T00:00:00.000Z',
               updatedAt: '2026-08-13T01:00:00.000Z',
             },
@@ -463,13 +476,14 @@ describe('KnowledgePage', () => {
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     expect(within(scopes).queryByText('Your access')).not.toBeInTheDocument();
     expect(within(scopes).queryByText('Knowledge structure')).not.toBeInTheDocument();
-    expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
-    expect(within(scopes).queryByText(/your org|your project/)).not.toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /features feature 1 inside/ })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /mastra org 2/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /fp-1 project 2/ })).toBeInTheDocument();
+    expect(within(scopes).queryByText(/your org|your project|inside/)).not.toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /features feature 1/ })).toBeInTheDocument();
     expect(within(scopes).queryByRole('button', { name: /memory feature/ })).not.toBeInTheDocument();
     await user.click(within(scopes).getByRole('button', { name: 'Expand features' }));
-    expect(await within(scopes).findByRole('button', { name: /memory feature 0 inside/ })).toBeInTheDocument();
+    const emptyMemoryScope = await within(scopes).findByRole('button', { name: /memory feature/ });
+    expect(emptyMemoryScope).not.toHaveTextContent('0');
 
     // Selecting a structural scope fetches the bounded member subgraph by id
     // and opens the selected scope's detail in the same action.
@@ -485,6 +499,14 @@ describe('KnowledgePage', () => {
     );
     if (!rootNode) throw new Error('Expected the selected scope root node');
     expect(within(rootNode).getByText('features')).toBeVisible();
+    expect(within(rootNode).getByLabelText('2 direct members')).toHaveTextContent('2');
+    fireEvent.mouseEnter(rootNode, { clientX: 120, clientY: 80 });
+    const scopeHover = await screen.findByTestId('knowledge-hover-card');
+    expect(scopeHover).toHaveTextContent('Content nodes1');
+    expect(scopeHover).toHaveTextContent('Child scopes1');
+    expect(scopeHover).toHaveTextContent('Direct members2');
+    expect(scopeHover).not.toHaveTextContent('Connections');
+    fireEvent.mouseLeave(rootNode);
     await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
 
     // Selected scopes get a filled active pill matching aria-pressed.
