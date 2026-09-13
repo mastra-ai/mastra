@@ -20,6 +20,28 @@ export interface KnowledgeScopeNode {
   kind?: string;
   description?: string;
   parentIds: string[];
+  /** Viewer-visible direct members, capped by the server's node window. */
+  memberCount: number;
+  /** True when more direct members may exist beyond `memberCount`. */
+  memberCountTruncated: boolean;
+  /** Direct child scopes available for lazy expansion. */
+  childScopeCount: number;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: KnowledgeRung | null;
+  threadId?: string;
+  address?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
 }
 
 export interface KnowledgeScopeTreePayload {
@@ -39,6 +61,10 @@ export interface KnowledgeScopeTreePayload {
   defaultLevel: 'resource';
   /** Reconciled structural scope tree (omitted when the adapter lacks it). */
   scopeNodes?: KnowledgeScopeNode[];
+  /** Cursor for the next sibling page (roots when parentId is omitted). */
+  nextCursor?: string;
+  /** Initial child-page cursors keyed by parent scope id. */
+  childCursors?: Record<string, string>;
 }
 
 /**
@@ -141,7 +167,14 @@ export interface KnowledgeActivityEvent {
   id: string;
   action: string;
   recordType: string;
+  recordId?: string;
   scope: string[];
+  node: {
+    id: string;
+    name: string;
+    rung: KnowledgeRung;
+    threadId?: string;
+  };
   createdAt: string;
 }
 
@@ -155,6 +188,7 @@ export interface KnowledgeNodePayload {
     name: string;
     kind: string;
     content: string;
+    description?: string;
     scope: string[];
     rung: KnowledgeRung;
     createdAt: string;
@@ -182,11 +216,30 @@ export async function fetchKnowledgeScopes(
   factoryProjectId: string,
   threadId?: string,
   signal?: AbortSignal,
+  page?: { parentId?: string; cursor?: string },
 ): Promise<KnowledgeScopeTreePayload> {
+  const query = new URLSearchParams(knowledgeQuery(threadId).slice(1));
+  if (page?.parentId) query.set('parentId', page.parentId);
+  if (page?.cursor) query.set('cursor', page.cursor);
+  const search = query.toString();
   return requestJson<KnowledgeScopeTreePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery(threadId)}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${search ? `?${search}` : ''}`,
     { signal },
   );
+}
+
+export async function fetchKnowledgeSearch(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: string,
+  threadId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeSearchPayload> {
+  const search = new URLSearchParams(knowledgeQuery(threadId).slice(1));
+  search.set('q', query);
+  return requestJson<KnowledgeSearchPayload>(`${knowledgeBase(baseUrl, factoryProjectId)}/search?${search}`, {
+    signal,
+  });
 }
 
 export async function fetchKnowledgeGraph(
