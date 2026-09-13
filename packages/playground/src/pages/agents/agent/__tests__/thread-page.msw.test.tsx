@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import 'fake-indexeddb/auto';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -9,8 +11,17 @@ import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-r
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentThread from '../thread';
+import {
+  draftFeedback,
+  draftMcpServers,
+  draftMemoryConfig,
+  draftStream,
+  draftUser,
+  draftWorkingMemory,
+} from './fixtures/drafts';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import {
   emptyThreadTracesList,
   threadTracesList,
@@ -168,11 +179,12 @@ const renderAt = (
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   }),
+  baseUrl = BASE_URL,
 ) => {
   const router = buildRouter(initialEntry);
 
   render(
-    <MastraReactProvider baseUrl={BASE_URL}>
+    <MastraReactProvider baseUrl={baseUrl}>
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={Link} navigate={to => void router.navigate(to)} paths={paths}>
           <RouterProvider router={router} />
@@ -218,17 +230,27 @@ const threadsResponse = {
 
 const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 
-function installHandlers() {
+function installHandlers(baseUrl = BASE_URL) {
   const emptyTraces = ({ request }: { request: Request }) => {
     onTracesRequest(new URL(request.url).searchParams.get('threadId'));
     return HttpResponse.json(emptyThreadTracesList);
   };
   server.use(
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
-    http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agentResponse)),
-    http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: true, memoryType: 'local' })),
-    http.get(`${BASE_URL}/api/memory/threads`, () => HttpResponse.json(threadsResponse)),
-    http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () =>
+    http.get(`${baseUrl}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+    http.get(`${baseUrl}/api/mcp/v0/servers`, () => HttpResponse.json(draftMcpServers)),
+    http.get(`${baseUrl}/api/observability/feedback`, () => HttpResponse.json(draftFeedback)),
+    http.get(`${baseUrl}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+    http.get(`${baseUrl}/api/memory/config`, () => HttpResponse.json(draftMemoryConfig)),
+    http.get(`${baseUrl}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(draftWorkingMemory)),
+    http.get(`${baseUrl}/api/memory/threads/:threadId`, ({ params }) => {
+      const thread = threadsResponse.threads.find(thread => thread.id === params.threadId);
+      return thread ? HttpResponse.json(thread) : new HttpResponse(undefined, { status: 404 });
+    }),
+    http.post(`${baseUrl}/api/agents/:agentId/threads/subscribe`, () => new HttpResponse(undefined, { status: 404 })),
+    http.get(`${baseUrl}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agentResponse)),
+    http.get(`${baseUrl}/api/memory/status`, () => HttpResponse.json({ result: true, memoryType: 'local' })),
+    http.get(`${baseUrl}/api/memory/threads`, () => HttpResponse.json(threadsResponse)),
+    http.get(`${baseUrl}/api/memory/threads/:threadId/messages`, () =>
       HttpResponse.json({
         messages: [
           {
@@ -241,29 +263,39 @@ function installHandlers() {
         ],
       }),
     ),
-    http.get(`${BASE_URL}/api/observability/traces/light`, emptyTraces),
-    http.get(`${BASE_URL}/api/observability/traces`, emptyTraces),
-    http.get(`${BASE_URL}/api/agents/providers`, () =>
+    http.get(`${baseUrl}/api/observability/traces/light`, emptyTraces),
+    http.get(`${baseUrl}/api/observability/traces`, emptyTraces),
+    http.get(`${baseUrl}/api/agents/providers`, () =>
       HttpResponse.json({
         providers: [
           { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-5-mini'] },
         ],
       }),
     ),
-    http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+    http.get(`${baseUrl}/api/editor/builder/settings`, () =>
       HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
     ),
-    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
-    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({})),
+    http.get(`${baseUrl}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    http.get(`${baseUrl}/api/system/packages`, () => HttpResponse.json({})),
   );
 }
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
+  await readThreadDraft('__drain__');
+  await deleteDB('mastra-composer-drafts');
   onTracesRequest.mockClear();
   window.localStorage.clear();
   window.sessionStorage.clear();
 });
+
+async function composerInput(placeholder = 'Enter your message...') {
+  await act(async () => {
+    await screen.findByPlaceholderText(placeholder);
+  });
+  await waitFor(() => expect(screen.queryByText('Restoring draft…')).toBeNull());
+  return screen.getByPlaceholderText<HTMLTextAreaElement>(placeholder);
+}
 
 describe('Standalone thread page', () => {
   describe('when a history response arrives after live output', () => {
@@ -404,7 +436,7 @@ describe('Standalone thread page', () => {
   });
 
   describe('when a first signal message is accepted', () => {
-    it.each(['stay', 'navigate', 'reload'] as const)(
+    it.each(['stay', 'navigate', 'reload', 'new-chat'] as const)(
       'preserves thread identity and navigation when the user chooses to %s',
       async action => {
         installHandlers();
@@ -416,6 +448,7 @@ describe('Standalone thread page', () => {
         const acknowledged = vi.fn();
         const refreshedAfterAck = vi.fn();
         const ids: string[] = [];
+        let reloading = false;
         const closes: Array<() => void> = [];
         server.use(
           http.get(`${BASE_URL}/api/memory/threads`, () => {
@@ -440,14 +473,23 @@ describe('Standalone thread page', () => {
             const body: unknown = await request.json();
             if (body && typeof body === 'object' && 'threadId' in body && typeof body.threadId === 'string')
               ids.push(body.threadId);
+            let closed = false;
             return new HttpResponse(
               new ReadableStream<Uint8Array>({
                 start(controller) {
-                  closes.push(() => controller.close());
-                  if (action === 'reload' && ids.length > 1) {
+                  closes.push(() => {
+                    if (!closed) {
+                      closed = true;
+                      controller.close();
+                    }
+                  });
+                  if (reloading) {
                     for (const chunk of liveChunks)
                       controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
                   }
+                },
+                cancel() {
+                  closed = true;
                 },
               }),
               { headers: { 'Content-Type': 'text/event-stream' } },
@@ -457,27 +499,46 @@ describe('Standalone thread page', () => {
         const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
         try {
           await waitFor(() => expect(ids.length).toBeGreaterThan(0));
-          const input = await screen.findByRole('textbox');
+          const input = await composerInput();
+          // Model-default hydration may remount an unused chat before the composer is ready.
+          const subscriptionCount = ids.length;
+          const sentThreadId = ids[subscriptionCount - 1];
           fireEvent.change(input, { target: { value: 'Keep this conversation' } });
           fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
           await waitFor(() => expect(sent).toHaveBeenCalledOnce());
-          if (action === 'navigate') await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+          if (action === 'navigate' || action === 'new-chat') {
+            await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+          }
+          if (action === 'new-chat') {
+            await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
+            fireEvent.change(await composerInput(), { target: { value: 'Draft for new chat B' } });
+          }
           await act(async () => release());
           await waitFor(() => expect(refreshedAfterAck).toHaveBeenCalled());
           if (action === 'navigate') {
             expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+          } else if (action === 'new-chat') {
+            expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/new`);
+            expect((await composerInput()).value).toBe('Draft for new chat B');
+            cleanup();
+            renderAt(`/agents/${AGENT_ID}/threads/new`);
+            expect((await composerInput()).value).toBe('Draft for new chat B');
           } else {
-            await waitFor(() => expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${ids[0]}`));
+            await waitFor(() =>
+              expect(router.state.location.pathname).toBe(`/agents/${AGENT_ID}/threads/${sentThreadId}`),
+            );
             expect(router.state.historyAction).toBe('REPLACE');
             expect(document.body.textContent).toContain('Keep this conversation');
             if (action === 'reload') {
               const savedPath = router.state.location.pathname;
+              const subscriptionsBeforeReload = ids.length;
+              reloading = true;
               cleanup();
               renderAt(savedPath);
-              await waitFor(() => expect(ids).toHaveLength(2));
+              await waitFor(() => expect(ids.length).toBeGreaterThan(subscriptionsBeforeReload));
               await waitFor(() => expect(document.body.textContent).toContain('Live response survives'), SSE_TIMEOUT);
             }
-            expect(new Set(ids).size).toBe(1);
+            expect(new Set(ids.slice(subscriptionCount - 1)).size).toBe(1);
           }
         } finally {
           release();
@@ -486,6 +547,314 @@ describe('Standalone thread page', () => {
       },
     );
   });
+  describe('when a saved draft cannot be decoded', () => {
+    it('requires confirmation to discard it and resumes saving current edits', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'Original' } });
+      await waitFor(() => expect(screen.queryByText('Saving draft…')).toBeNull());
+      cleanup();
+      const db = await openDB('mastra-composer-drafts');
+      const [key] = await db.getAllKeys('drafts');
+      await db.put('drafts', { key, text: 42 });
+      db.close();
+      renderAt(path);
+      const discard = await screen.findByRole('button', { name: 'Discard unreadable saved draft' });
+      fireEvent.change(await composerInput(), { target: { value: 'Keep my current edits' } });
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      try {
+        fireEvent.click(discard);
+        expect(screen.getByRole('alert').textContent).toContain('could not be restored');
+        confirm.mockReturnValue(true);
+        fireEvent.click(discard);
+        await waitFor(() =>
+          expect(screen.queryByRole('button', { name: 'Discard unreadable saved draft' })).toBeNull(),
+        );
+        cleanup();
+        renderAt(path);
+        expect((await composerInput()).value).toBe('Keep my current edits');
+      } finally {
+        confirm.mockRestore();
+      }
+    });
+  });
+
+  describe('when an unsent draft is entered', () => {
+    it('keeps a newer New Chat draft when an earlier legacy stream finishes', async () => {
+      installHandlers();
+      const response = draftStream();
+      const sent = vi.fn();
+      const refreshed = vi.fn();
+      let finished = false;
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse(response.stream, { headers: { 'content-type': 'text/event-stream' } });
+        }),
+        http.get(`${BASE_URL}/api/memory/threads`, () => {
+          if (finished) refreshed();
+          return HttpResponse.json(threadsResponse);
+        }),
+      );
+      const path = `/agents/${AGENT_ID}/threads/new`;
+      const router = renderAt(path);
+      const input = await composerInput();
+      fireEvent.change(input, { target: { value: 'Send from A' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+      await composerInput();
+      await act(() => router.navigate(path));
+      fireEvent.change(await composerInput(), { target: { value: 'Draft for new chat B' } });
+      finished = true;
+      await act(async () => response.finish());
+      await waitFor(() => expect(refreshed).toHaveBeenCalled());
+      expect(router.state.location.pathname).toBe(path);
+      expect((await composerInput()).value).toBe('Draft for new chat B');
+      cleanup();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Draft for new chat B');
+    });
+    it.each([false, true])(
+      'restores and sends the complete attachment while preserving newer edits: %s',
+      async editWhilePreparing => {
+        // jsdom Blobs lack native structured-clone support. Native Blob cloning is covered by the storage tests.
+        const clone = globalThis.structuredClone;
+        const cloneDom = (value: unknown): unknown => {
+          if (value instanceof Blob) return value;
+          if (Array.isArray(value)) return value.map(cloneDom);
+          if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+            return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneDom(item)]));
+          }
+          return clone(value);
+        };
+        vi.stubGlobal('structuredClone', cloneDom);
+        const BrowserFile = File;
+        vi.stubGlobal(
+          'File',
+          class extends BrowserFile {
+            text() {
+              return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(this);
+              });
+            }
+          },
+        );
+        try {
+          installHandlers();
+          const sent = vi.fn();
+          const response = draftStream();
+          server.use(
+            http.post(`${BASE_URL}/api/agents/:agentId/stream`, async ({ request }) => {
+              sent(await request.json());
+              return new HttpResponse(response.stream, { headers: { 'Content-Type': 'text/event-stream' } });
+            }),
+          );
+          const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+          renderAt(path);
+          fireEvent.change(await composerInput(), { target: { value: 'Read my attachment' } });
+          fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+          const picker = document.querySelector('input[type=file]');
+          if (!(picker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+          const contents = 'name,note\r\nZoë,"hello\nworld"\r\n';
+          fireEvent.change(picker, { target: { files: [new File([contents], 'leads.csv', { type: 'text/csv' })] } });
+          await screen.findByRole('button', { name: 'Preview leads.csv' });
+          await waitFor(() => expect(screen.queryByText('Saving draft…')).toBeNull());
+          cleanup();
+          renderAt(path);
+          const input = await composerInput();
+          expect(input.value).toBe('Read my attachment');
+          await screen.findByRole('button', { name: 'Preview leads.csv' });
+          const originalRead = FileReader.prototype.readAsText;
+          let finishReading = () => {};
+          const reader = vi
+            .spyOn(FileReader.prototype, 'readAsText')
+            .mockImplementationOnce(function (this: FileReader, file, encoding) {
+              finishReading = () => originalRead.call(this, file, encoding);
+            });
+          fireEvent.keyDown(input, { key: 'Enter' });
+          if (editWhilePreparing) {
+            fireEvent.change(input, { target: { value: 'Keep the next question' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
+            const nextPicker = document.querySelector('input[type=file]');
+            if (!(nextPicker instanceof HTMLInputElement)) throw new Error('File picker did not open');
+            fireEvent.change(nextPicker, {
+              target: { files: [new File(['Next file'], 'next.txt', { type: 'text/plain' })] },
+            });
+            await screen.findByRole('button', { name: 'Preview next.txt' });
+          }
+          finishReading();
+          reader.mockRestore();
+          await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+          expect(JSON.stringify(sent.mock.calls[0][0])).toContain(JSON.stringify(contents).slice(1, -1));
+          await act(async () => response.finish());
+          await waitFor(() =>
+            expect(screen.queryAllByRole('button', { name: 'Remove file' })).toHaveLength(editWhilePreparing ? 1 : 0),
+          );
+          cleanup();
+          renderAt(path);
+          expect((await composerInput()).value).toBe(editWhilePreparing ? 'Keep the next question' : '');
+          expect(screen.queryAllByRole('button', { name: 'Remove file' })).toHaveLength(editWhilePreparing ? 1 : 0);
+          if (editWhilePreparing) await screen.findByRole('button', { name: 'Preview next.txt' });
+        } finally {
+          cleanup();
+          await readThreadDraft('__drain__');
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+    it('restores separate drafts after navigating between threads', async () => {
+      installHandlers();
+      const router = renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+      const input = await composerInput();
+      fireEvent.change(input, { target: { value: 'Pasta draft' } });
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
+      expect((await composerInput()).value).toBe('');
+      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Sushi draft' } });
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+      expect((await composerInput()).value).toBe('Pasta draft');
+    });
+
+    it.each([THREAD_ID, 'new'])('restores the %s draft after a fresh page mount', async threadId => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${threadId}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), {
+        target: { value: 'Unsent question about dinner' },
+      });
+      cleanup();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Unsent question about dinner');
+    });
+
+    it('keeps a New Chat draft separate from existing threads', async () => {
+      installHandlers();
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.change(await composerInput(), {
+        target: { value: 'A new dinner idea' },
+      });
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
+      expect((await composerInput()).value).toBe('');
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
+      expect((await composerInput()).value).toBe('A new dinner idea');
+    });
+
+    it('does not expose anonymous drafts when authentication becomes required', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/new`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'Anonymous draft' } });
+      cleanup();
+      server.use(
+        http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
+      );
+      renderAt(path);
+      const input = await composerInput();
+      expect(input.value).toBe('');
+      fireEvent.change(input, { target: { value: 'Not authenticated' } });
+      cleanup();
+      installHandlers();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Anonymous draft');
+    });
+
+    it('isolates drafts belonging to different signed-in users', async () => {
+      installHandlers();
+      server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(draftUser)));
+      const path = `/agents/${AGENT_ID}/threads/new`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'Private draft' } });
+      cleanup();
+      server.use(
+        http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+          HttpResponse.json({ ...draftUser, user: { id: 'draft-user-2' } }),
+        ),
+      );
+      renderAt(path);
+      expect((await composerInput()).value).toBe('');
+      cleanup();
+      server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(draftUser)));
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Private draft');
+    });
+
+    it('isolates drafts belonging to different backends', async () => {
+      const otherBackend = 'http://localhost:4222';
+      installHandlers();
+      installHandlers(otherBackend);
+      const path = `/agents/${AGENT_ID}/threads/new`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'Server one' } });
+      cleanup();
+      renderAt(path, undefined, otherBackend);
+      expect((await composerInput()).value).toBe('');
+      cleanup();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('Server one');
+    });
+
+    it('isolates New Chat drafts belonging to different agents', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/other-agent`, () =>
+          HttpResponse.json({ ...agentResponse, id: 'other-agent' }),
+        ),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      fireEvent.change(await composerInput(), { target: { value: 'Chef draft' } });
+      await act(() => router.navigate('/agents/other-agent/threads/new'));
+      expect((await composerInput()).value).toBe('');
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
+      expect((await composerInput()).value).toBe('Chef draft');
+    });
+
+    it('moves follow-up typing to the real thread without resurrecting the sent draft', async () => {
+      installHandlers();
+      const response = draftStream();
+      const sent = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream`, async ({ request }) => {
+          sent(await request.json());
+          return new HttpResponse(response.stream, { headers: { 'content-type': 'text/event-stream' } });
+        }),
+      );
+      const router = renderAt(`/agents/${AGENT_ID}/threads/new`);
+      const input = await composerInput();
+      fireEvent.change(input, { target: { value: 'Send this question' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(sent).toHaveBeenCalledOnce());
+      expect(input.value).toBe('');
+      fireEvent.change(input, { target: { value: 'Keep this follow-up' } });
+      await act(async () => response.finish());
+      await waitFor(() => expect(router.state.location.pathname).not.toContain('/threads/new'));
+      const createdPath = router.state.location.pathname;
+      expect((await composerInput()).value).toBe('Keep this follow-up');
+      await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));
+      expect((await composerInput()).value).toBe('');
+      cleanup();
+      renderAt(createdPath);
+      expect((await composerInput()).value).toBe('Keep this follow-up');
+    });
+
+    it('does not restore a draft that was erased', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      const input = await composerInput();
+      fireEvent.change(input, { target: { value: 'Discard this draft' } });
+      fireEvent.change(input, { target: { value: '' } });
+      cleanup();
+      renderAt(path);
+      expect((await composerInput()).value).toBe('');
+    });
+  });
+
   it('shows the thread conversation at /agents/:agentId/threads/:threadId', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
