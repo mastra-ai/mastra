@@ -69,8 +69,7 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
         let scope: KnowledgeScope | undefined;
         try {
           scope = resolveCuratorScope(context);
-          store = await context.memory.storage.getStore('knowledge');
-          if (!store) throw new Error('Subconscious curate requires a configured knowledge storage domain.');
+          store = await context.memory.getKnowledgeStore();
 
           const agent = await createCuratorAgent(
             context.memory,
@@ -149,6 +148,23 @@ async function reportCuratorError(
   }
 }
 
+function createKnowledgeDescriptionInstructions(memory: Memory, scope: KnowledgeScope): string | undefined {
+  const context = memory.getKnowledgeInstance()?.__getDescriptionContext(scope);
+  if (!context || (!context.description && context.scopes.length === 0)) return undefined;
+
+  const sections = [
+    context.description ? `Knowledge instance: ${context.description}` : undefined,
+    context.scopes.length > 0
+      ? `Visible configured scopes (identity rungs and structural addresses):\n${context.scopes
+          .map(item => `- ${item.address} (${item.name}): ${item.description}`)
+          .join('\n')}`
+      : undefined,
+  ];
+  return `Host-configured Knowledge placement context. Use these descriptions to choose the appropriate allowed scope for each durable fact. To place a node into a structural scope, pass its address as the knowledge_create nodeScope argument.\n${sections
+    .filter(Boolean)
+    .join('\n')}`;
+}
+
 export async function createCuratorAgent(
   memory: Memory,
   curatorMemory: Memory,
@@ -170,6 +186,7 @@ export async function createCuratorAgent(
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
+      createKnowledgeDescriptionInstructions(memory, scope),
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]

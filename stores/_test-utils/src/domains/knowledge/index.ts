@@ -1,4 +1,4 @@
-import type { KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeStorage, KnowledgeStructurePlan } from '@mastra/core/storage';
 import {
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
@@ -37,6 +37,17 @@ export function createKnowledgeSchemaResetTests(createFixture: () => Promise<Kno
 const resource = ['org:acme', 'resource:mastra'];
 const thread = [...resource, 'thread:t1'];
 
+const STRUCTURE_PLAN: KnowledgeStructurePlan = {
+  scopes: [
+    { address: 'org:acme', name: 'acme' },
+    { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+  ],
+};
+
+function isUnsupportedStructure(error: unknown): boolean {
+  return error instanceof Error && error.name === 'KnowledgeUnsupportedCapabilityError';
+}
+
 export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
   describe('knowledge storage contract', () => {
     let store: KnowledgeStorage;
@@ -64,6 +75,43 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.listNodes({ scope: thread, hasContent: true })).toEqual([
         expect.objectContaining({ id: node.id }),
       ]);
+    });
+
+    it('places created nodes into structural scopes by address', async () => {
+      let scopeIds: Record<string, string>;
+      try {
+        const result = await store.reconcileStructure(STRUCTURE_PLAN);
+        scopeIds = result.scopes;
+      } catch (error) {
+        if (isUnsupportedStructure(error)) {
+          // Adapters without structural scope support must still reject placement
+          // outright — never silently create an unplaced node.
+          await expect(
+            store.createNode({ name: 'Placed', kind: 'doc', scope: resource, scopeAddresses: ['features'] }),
+          ).rejects.toThrow(/does not expose structural scope/);
+          return;
+        }
+        throw error;
+      }
+
+      const node = await store.createNode({
+        name: 'Placed',
+        kind: 'doc',
+        scope: resource,
+        scopeAddresses: ['features'],
+      });
+      // Placement is additive membership: the identity scope is unchanged.
+      expect(node.scope).toEqual(resource);
+      expect(node.isScope).toBeUndefined();
+      expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+
+      // Unknown or deleted addresses fail the whole create without mutation.
+      await expect(
+        store.createNode({ name: 'Lost', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+      ).rejects.toThrow(/scope/i);
+      expect(await store.getNodeByName({ name: 'Lost', scope: resource })).toBeNull();
     });
 
     it('treats scope identifiers literally when checking visibility', async () => {
@@ -112,7 +160,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
-      await store.appendKnowledge({
+      const record = await store.appendKnowledge({
         node,
         text: 'organization-visible knowledge',
         scope: ['org:acme'],
@@ -123,8 +171,45 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
       expect((await store.listKnowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
-        expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
+        expect.objectContaining({
+          type: 'record',
+          recordId: record.id,
+          name: '(private node)',
+          scope: ['org:acme'],
+        }),
       ]);
+    });
+
+    it('queries arbitrary companion scope memberships as visible scope subsets', async () => {
+      const resourceCompanion = 'resource:r1:uncurated';
+      const threadCompanion = 'thread:t1:uncurated';
+      const queryScope = [...thread, resourceCompanion, threadCompanion];
+      const target = await store.createNode({ name: 'Companion Target', kind: 'person', scope: resource });
+      const node = await store.createNode({
+        name: 'Companion Draft',
+        kind: 'note',
+        scope: [resourceCompanion, threadCompanion],
+      });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Draft mentions [[Companion Target]].',
+        scope: [threadCompanion],
+        sourceThreadId: 't1',
+        resolutionScope: queryScope,
+        defaultScope: node.scope,
+      });
+
+      expect((await store.listNodes({ scope: queryScope })).map(result => result.id)).toContain(node.id);
+      await expect(store.resolveNode({ name: node.name, scope: queryScope })).resolves.toMatchObject({ id: node.id });
+      expect(await store.search({ query: 'Draft mentions', scope: queryScope })).toEqual([
+        expect.objectContaining({ id: record.id, recordId: node.id }),
+      ]);
+      expect((await store.listKnowledgeAbout({ node, scope: queryScope })).records.map(result => result.id)).toEqual([
+        record.id,
+      ]);
+      expect(
+        (await store.listKnowledgeRelatedTo({ node: target, scope: queryScope })).records.map(result => result.id),
+      ).toEqual([record.id]);
     });
 
     it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {

@@ -11,7 +11,13 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['org', 'resource', 'thread'] };
+const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
+const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
+const nodePlacementSchema: JSONSchema7 = {
+  type: 'string',
+  description:
+    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+};
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
   format: 'date-time',
@@ -20,7 +26,15 @@ const dateTimeSchema: JSONSchema7 = {
 };
 
 type KnowledgeWriteToolsMemory = {
-  storage: {
+  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  getKnowledgeInstance?: () =>
+    | {
+        __getVisibleStructureScopes(
+          scope: KnowledgeScope,
+        ): Array<{ address: string; name: string; description?: string }>;
+      }
+    | undefined;
+  storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
   };
 };
@@ -33,7 +47,8 @@ export interface KnowledgeWriteToolsOptions {
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
-  const store = await memory.storage.getStore('knowledge');
+  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
+  const store = await memory.storage?.getStore('knowledge');
   if (!store) throw new Error('Knowledge write tools require a configured knowledge storage domain.');
   return store;
 }
@@ -48,6 +63,33 @@ function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptio
   if (!isKnowledgeScopeVisible(scope, options.scope)) {
     throw new Error(`${label} is outside the curator's visible scope.`);
   }
+}
+
+/**
+ * Resolve the node placement argument: a rung keeps the identity-scope path, anything
+ * else is treated as a structural scope address and must be inside the host-configured
+ * frontier visible to the curator's held scope.
+ */
+function resolveNodePlacement(
+  memory: KnowledgeWriteToolsMemory,
+  options: KnowledgeWriteToolsOptions,
+  placement: string | undefined,
+): { nodeScope: KnowledgeScope; scopeAddresses?: string[] } {
+  if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
+    const nodeScope = expandKnowledgeScope(
+      options.scope,
+      (placement as KnowledgeScopeLevel | undefined) ?? options.defaultScope,
+    );
+    assertKnowledgeScopeWithinCeiling(nodeScope, options.maxScope);
+    return { nodeScope };
+  }
+  const visible = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope) ?? [];
+  if (!visible.some(visibleScope => visibleScope.address === placement)) {
+    throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
+  }
+  const nodeScope = expandKnowledgeScope(options.scope, options.defaultScope);
+  assertKnowledgeScopeWithinCeiling(nodeScope, options.maxScope);
+  return { nodeScope, scopeAddresses: [placement] };
 }
 
 export function createKnowledgeWriteTools(
@@ -73,7 +115,7 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           text: { type: 'string', minLength: 1 },
-          nodeScope: scopeLevelSchema,
+          nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
         },
@@ -85,16 +127,21 @@ export function createKnowledgeWriteTools(
           name: string;
           kind: string;
           text: string;
-          nodeScope?: KnowledgeScopeLevel;
+          nodeScope?: string;
           scope?: KnowledgeScopeLevel;
           when?: string;
         };
         const store = await getStore(memory);
-        const nodeScope = resolveWriteScope(options, value.nodeScope);
+        const { nodeScope, scopeAddresses } = resolveNodePlacement(memory, options, value.nodeScope);
         const recordScope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        const node = await store.createNode({ name: value.name, kind: value.kind, scope: nodeScope });
+        const node = await store.createNode({
+          name: value.name,
+          kind: value.kind,
+          scope: nodeScope,
+          ...(scopeAddresses ? { scopeAddresses } : {}),
+        });
         const record = await store.appendKnowledge({
           node: node.id,
           text: value.text,
