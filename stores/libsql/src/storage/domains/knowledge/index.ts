@@ -2035,6 +2035,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         input.details,
       ),
     );
+  }
+
   async createProposal(input: CreateKnowledgeProposalInput): Promise<KnowledgeProposal> {
     return this.#transaction(async tx => {
       await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
@@ -2333,6 +2335,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    const { assertKnowledgeProposalMutationSemantics } = await loadKnowledgeCore();
     return this.#transaction(async tx => {
       await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
       const existing = await tx.execute({
@@ -2361,6 +2364,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
+      if (!input.verifiedMutation && proposal.operation !== mutation.kind)
+        throw new KnowledgeConflictError('Proposal operation does not match its payload');
+      assertKnowledgeProposalMutationSemantics(mutation, targets);
       try {
         await this.#applyProposalMutation(tx, mutation, input.reviewerContextScopeId, input.expectedAccessEpoch);
       } catch (error) {

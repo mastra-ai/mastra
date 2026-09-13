@@ -91,6 +91,7 @@ describe('Knowledge core compatibility', () => {
     expect(core.KnowledgeSchemaError).toBe(coreStorage.KnowledgeSchemaError);
     expect(core.KnowledgeUnsupportedError).toBe(coreStorage.KnowledgeUnsupportedError);
     expect(core.sanitizeKnowledgeImportError).toBe(coreStorage.sanitizeKnowledgeImportError);
+    expect(core.assertKnowledgeProposalMutationSemantics).toBe(coreStorage.assertKnowledgeProposalMutationSemantics);
   });
 
   it('rejects a core without the Knowledge feature before loading its storage module', async () => {
