@@ -1633,14 +1633,15 @@ export function createKnowledgeStorageTests(
       });
 
       await expect(
-        store.applyProposal({
+        store.resolveGapProposal({
           id: proposal.id,
           reviewerContextScopeId: PROJECT_SCOPE_ID,
           reviewReason: 'Verified from fresh sources',
-          verifiedMutation: {
+          mutation: {
             kind: 'update-node',
             mutation: { id: node.id, version: node.version, name: 'Verified gap repair' },
           },
+          targets: proposal.targets,
           expectedAccessEpoch: accessEpoch,
         }),
       ).resolves.toMatchObject({
