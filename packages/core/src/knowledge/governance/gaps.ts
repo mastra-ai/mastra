@@ -1,6 +1,7 @@
 import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  assertKnowledgeProposalMutationSemantics,
   type KnowledgeProposal,
   type KnowledgeProposalApprovalScopeIds,
   type KnowledgeProposalMutation,
@@ -241,20 +242,23 @@ export class KnowledgeGapQueueWorker {
       if (!record || record.deletedAt || record.version !== version) throw new KnowledgeConflictError(id);
       assertScopes(await this.storage.getRecordScopeIds(id), 'edit');
     };
-    const assertCreatedInBoundScopes = (scopeIds: KnowledgeScopeIds, capability: 'append' | 'createChildren') => {
-      const boundScopeIds = new Set(proposal.targets.flatMap(target => target.scopeIds));
-      if (scopeIds.some(scopeId => !boundScopeIds.has(scopeId))) {
-        throw new KnowledgeConflictError('Verified mutation introduced a scope outside the gap flag targets');
-      }
-      assertScopes(scopeIds, capability);
+    const assertScopeTarget = async (scopeId: string, capability: 'append' | 'createChildren' | 'manageAccess') => {
+      const scope = await this.storage.getNodeIncludingDeleted(scopeId);
+      if (!scope || scope.deletedAt || !scope.isScope) throw new KnowledgeConflictError(scopeId);
+      proposedTarget('node', scope.id, scope.version);
+      assertScopes([scope.id], capability);
+    };
+    const assertCreatedInBoundScopes = async (scopeIds: KnowledgeScopeIds, capability: 'append' | 'createChildren') => {
+      for (const scopeId of scopeIds) await assertScopeTarget(scopeId, capability);
     };
 
+    assertKnowledgeProposalMutationSemantics(mutation, proposal.targets);
     switch (mutation.kind) {
       case 'create-node':
-        assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'append');
+        await assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'append');
         return [...targets.values()];
       case 'create-scope':
-        assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'createChildren');
+        await assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'createChildren');
         return [...targets.values()];
       case 'update-node':
       case 'promote-node':
@@ -266,7 +270,9 @@ export class KnowledgeGapQueueWorker {
         return [...targets.values()];
       case 'move-node': {
         const retainedScopeIds = await assertNode(mutation.mutation.id, mutation.mutation.version, 'manageAccess');
-        assertScopes([...retainedScopeIds, ...mutation.mutation.scopeIds], 'manageAccess');
+        for (const scopeId of [...retainedScopeIds, ...mutation.mutation.scopeIds]) {
+          await assertScopeTarget(scopeId, 'manageAccess');
+        }
         return [...targets.values()];
       }
       case 'merge-nodes':
@@ -277,17 +283,33 @@ export class KnowledgeGapQueueWorker {
       case 'delete-scope':
         await assertNode(mutation.mutation.id, mutation.mutation.version, 'manageAccess');
         return [...targets.values()];
-      case 'curate-node':
+      case 'curate-node': {
+        const node = await this.storage.getNodeIncludingDeleted(mutation.mutation.id);
         await assertNode(mutation.mutation.id, mutation.mutation.version, 'manageAccess');
-        assertScopes([mutation.mutation.sourceScopeId, mutation.mutation.destinationScopeId], 'manageAccess');
+        if (!node || node.deletedAt) throw new KnowledgeConflictError(mutation.mutation.id);
+        await assertScopeTarget(mutation.mutation.sourceScopeId, 'manageAccess');
+        await assertScopeTarget(mutation.mutation.destinationScopeId, 'manageAccess');
+        let cursor: string | undefined;
+        do {
+          const page = await this.storage.listRecords({
+            node,
+            scopeIds: getKnowledgeReadableScopeIds(frontier),
+            membershipScopeIds: [mutation.mutation.sourceScopeId],
+            after: cursor,
+            limit: 100,
+          });
+          for (const record of page.records) await assertRecord(record.id, record.version);
+          cursor = page.nextCursor;
+        } while (cursor);
         return [...targets.values()];
+      }
       case 'restore-node':
       case 'restore-scope':
       case 'restore-record':
         throw new KnowledgeConflictError('Verified gap mutations cannot restore deleted targets');
       case 'add-record-scope':
         await assertRecord(mutation.mutation.id, mutation.mutation.version);
-        assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'append');
+        await assertCreatedInBoundScopes(mutation.mutation.scopeIds, 'append');
         return [...targets.values()];
       case 'remove-record-scope':
         await assertRecord(mutation.mutation.id, mutation.mutation.version);
