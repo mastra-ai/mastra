@@ -329,7 +329,7 @@ export async function getAgentCardByIdHandler({
   };
   pushNotifications?: boolean;
 }): Promise<AgentCard> {
-  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+  const agent = await getAgentFromSystem({ mastra, agentId: agentId });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -338,7 +338,7 @@ export async function getAgentCardByIdHandler({
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || (agentId as string),
+    name: agent.id || agentId,
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -388,7 +388,7 @@ function validateMessageSendParams(params: MessageSendParams) {
     messageSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw MastraA2AError.invalidParams((error as z.ZodError).issues[0]!.message);
+      throw MastraA2AError.invalidParams(error.issues[0]!.message);
     }
 
     throw error;
@@ -2353,7 +2353,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ctx => {
     const executionUrl = getA2AExecutionUrl({
-      agentId: ctx.agentId as string,
+      agentId: ctx.agentId,
       request: (ctx as typeof ctx & { request?: Request }).request,
       routePrefix: ctx.routePrefix,
     });
@@ -2393,7 +2393,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
     const result = await getAgentExecutionHandler({
       requestId,
       mastra,
-      agentId: agentId as string,
+      agentId: agentId,
       requestContext,
       method,
       params,
