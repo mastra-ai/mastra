@@ -76,6 +76,7 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeProposal,
   KnowledgeProposalApprovalCapability,
+  KnowledgeProposalMutation,
   KnowledgeProposalApprovalScopeIds,
   KnowledgeRecord,
   KnowledgeScopeAddress,
@@ -810,90 +811,94 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async deleteNode(input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const existing = await this.#getNode(tx, input.id);
-      if (!existing) throw new KnowledgeNotFoundError('node', input.id);
-      if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
-      if (existing.isScope) await this.#assertScopeIsEmpty(tx, existing.id);
-      const scopeIds = await this.#getNodeScopeIds(tx, existing.id);
-      const now = new Date();
-      const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=?,deletedAt=?,deletedBy=? WHERE id=? AND version=? AND deletedAt IS NULL`,
-        args: [now.toISOString(), now.toISOString(), input.deletedBy, input.id, input.version],
-      });
-      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
-      if (existing.isScope) {
-        await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
-      }
-      await this.#activity(tx, 'delete', 'node', input.id, scopeIds[0], undefined, {
-        [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
-      });
-      await this.#outbox(tx, 'node', input.id, 'delete', existing.version + 1, scopeIds);
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
-        args: [now.toISOString(), input.id],
-      });
-      const records = await tx.execute({
-        sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
-        args: [input.id],
-      });
-      for (const record of records.rows) {
-        const recordId = String(record.id);
-        await this.#outbox(
-          tx,
-          'record',
-          recordId,
-          'delete',
-          Number(record.version),
-          await this.#getRecordScopeIds(tx, recordId),
-        );
-      }
-      return { ...existing, version: existing.version + 1, updatedAt: now, deletedAt: now, deletedBy: input.deletedBy };
+    return this.#transaction(tx => this.#deleteNode(tx, input));
+  }
+
+  async #deleteNode(tx: Transaction, input: DeleteKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+    const existing = await this.#getNode(tx, input.id);
+    if (!existing) throw new KnowledgeNotFoundError('node', input.id);
+    if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
+    if (existing.isScope) await this.#assertScopeIsEmpty(tx, existing.id);
+    const scopeIds = await this.#getNodeScopeIds(tx, existing.id);
+    const now = new Date();
+    const result = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=?,deletedAt=?,deletedBy=? WHERE id=? AND version=? AND deletedAt IS NULL`,
+      args: [now.toISOString(), now.toISOString(), input.deletedBy, input.id, input.version],
     });
+    if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+    if (existing.isScope) {
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+    }
+    await this.#activity(tx, 'delete', 'node', input.id, scopeIds[0], undefined, {
+      [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
+    });
+    await this.#outbox(tx, 'node', input.id, 'delete', existing.version + 1, scopeIds);
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
+      args: [now.toISOString(), input.id],
+    });
+    const records = await tx.execute({
+      sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
+      args: [input.id],
+    });
+    for (const record of records.rows) {
+      const recordId = String(record.id);
+      await this.#outbox(
+        tx,
+        'record',
+        recordId,
+        'delete',
+        Number(record.version),
+        await this.#getRecordScopeIds(tx, recordId),
+      );
+    }
+    return { ...existing, version: existing.version + 1, updatedAt: now, deletedAt: now, deletedBy: input.deletedBy };
   }
 
   async restoreNode(input: RestoreKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const existing = await this.#getNodeIncludingDeleted(tx, input.id);
-      if (!existing?.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
-      if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
-      const scopeIds = await this.#assertScopeNodes(tx, await this.#getNodeScopeIds(tx, existing.id));
-      const now = new Date();
-      const result = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=?,deletedAt=NULL,deletedBy=NULL WHERE id=? AND version=? AND deletedAt IS NOT NULL`,
-        args: [now.toISOString(), input.id, input.version],
-      });
-      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
-      if (existing.isScope) {
-        await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
-      }
-      await this.#activity(tx, 'restore', 'node', input.id, scopeIds[0], undefined, {
-        [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
-      });
-      await this.#outbox(tx, 'node', input.id, 'upsert', existing.version + 1, scopeIds);
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
-        args: [now.toISOString(), input.id],
-      });
-      const records = await tx.execute({
-        sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
-        args: [input.id],
-      });
-      for (const record of records.rows) {
-        const recordId = String(record.id);
-        await this.#outbox(
-          tx,
-          'record',
-          recordId,
-          'upsert',
-          Number(record.version),
-          await this.#getRecordScopeIds(tx, recordId),
-        );
-      }
-      return { ...existing, version: existing.version + 1, updatedAt: now, deletedAt: undefined, deletedBy: undefined };
+    return this.#transaction(tx => this.#restoreNode(tx, input));
+  }
+
+  async #restoreNode(tx: Transaction, input: RestoreKnowledgeNodeInput): Promise<KnowledgeNode> {
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+    const existing = await this.#getNodeIncludingDeleted(tx, input.id);
+    if (!existing?.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+    if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
+    const scopeIds = await this.#assertScopeNodes(tx, await this.#getNodeScopeIds(tx, existing.id));
+    const now = new Date();
+    const result = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=?,deletedAt=NULL,deletedBy=NULL WHERE id=? AND version=? AND deletedAt IS NOT NULL`,
+      args: [now.toISOString(), input.id, input.version],
     });
+    if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+    if (existing.isScope) {
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+    }
+    await this.#activity(tx, 'restore', 'node', input.id, scopeIds[0], undefined, {
+      [ACTIVITY_VISIBILITY_SCOPE_IDS]: scopeIds,
+    });
+    await this.#outbox(tx, 'node', input.id, 'upsert', existing.version + 1, scopeIds);
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE nodeId=? AND deletedAt IS NULL`,
+      args: [now.toISOString(), input.id],
+    });
+    const records = await tx.execute({
+      sql: `SELECT id,version FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? AND deletedAt IS NULL`,
+      args: [input.id],
+    });
+    for (const record of records.rows) {
+      const recordId = String(record.id);
+      await this.#outbox(
+        tx,
+        'record',
+        recordId,
+        'upsert',
+        Number(record.version),
+        await this.#getRecordScopeIds(tx, recordId),
+      );
+    }
+    return { ...existing, version: existing.version + 1, updatedAt: now, deletedAt: undefined, deletedBy: undefined };
   }
 
   async mergeNodes(input: {
@@ -904,56 +909,61 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     contextScopeId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
+    return this.#transaction(tx => this.#mergeNodes(tx, input));
+  }
+
+  async #mergeNodes(
+    tx: Transaction,
+    input: {
+      sourceId: string;
+      targetId: string;
+      sourceVersion: number;
+      importRunId?: string;
+      contextScopeId?: string;
+      expectedAccessEpoch?: number;
+    },
+  ): Promise<KnowledgeNode> {
     if (input.sourceId === input.targetId) throw new Error('Cannot merge a knowledge node into itself');
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const source = await this.#getNode(tx, input.sourceId);
-      if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
-      const target = await this.#getNode(tx, input.targetId);
-      if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
-      const sourceScopeIds = await this.#getNodeScopeIds(tx, source.id);
-      const now = new Date();
-      const updated = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET deletedAt=?,deletedBy='merge',version=version+1,updatedAt=? WHERE id=? AND version=? AND deletedAt IS NULL`,
-        args: [now.toISOString(), now.toISOString(), source.id, input.sourceVersion],
-      });
-      if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
-      const affectedRows = await tx.execute({
-        sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=?`,
-        args: [source.id],
-      });
-      const affectedRecords = await Promise.all(
-        affectedRows.rows.map(async row => {
-          const record = parseKnowledge(row);
-          return { record, scopeIds: await this.#getRecordScopeIds(tx, record.id) };
-        }),
-      );
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET nodeId=?,version=version+1,updatedAt=? WHERE nodeId=?`,
-        args: [target.id, now.toISOString(), source.id],
-      });
-      for (const { record, scopeIds } of affectedRecords) {
-        await this.#outbox(
-          tx,
-          'record',
-          record.id,
-          record.deletedAt ? 'delete' : 'upsert',
-          record.version + 1,
-          scopeIds,
-        );
-      }
-      await tx.execute({
-        sql: `UPDATE OR IGNORE "${TABLE_KNOWLEDGE_MENTIONS}" SET targetNodeId=? WHERE targetNodeId=?`,
-        args: [target.id, source.id],
-      });
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
-      await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
-        targetId: target.id,
-      });
-      await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, sourceScopeIds);
-      await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [source.id] });
-      return target;
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+    const source = await this.#getNode(tx, input.sourceId);
+    if (!source) throw new KnowledgeNotFoundError('node', input.sourceId);
+    const target = await this.#getNode(tx, input.targetId);
+    if (!target) throw new KnowledgeNotFoundError('node', input.targetId);
+    const sourceScopeIds = await this.#getNodeScopeIds(tx, source.id);
+    const now = new Date();
+    const updated = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET deletedAt=?,deletedBy='merge',version=version+1,updatedAt=? WHERE id=? AND version=? AND deletedAt IS NULL`,
+      args: [now.toISOString(), now.toISOString(), source.id, input.sourceVersion],
     });
+    if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
+    const affectedRows = await tx.execute({
+      sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=?`,
+      args: [source.id],
+    });
+    const affectedRecords = await Promise.all(
+      affectedRows.rows.map(async row => {
+        const record = parseKnowledge(row);
+        return { record, scopeIds: await this.#getRecordScopeIds(tx, record.id) };
+      }),
+    );
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET nodeId=?,version=version+1,updatedAt=? WHERE nodeId=?`,
+      args: [target.id, now.toISOString(), source.id],
+    });
+    for (const { record, scopeIds } of affectedRecords) {
+      await this.#outbox(tx, 'record', record.id, record.deletedAt ? 'delete' : 'upsert', record.version + 1, scopeIds);
+    }
+    await tx.execute({
+      sql: `UPDATE OR IGNORE "${TABLE_KNOWLEDGE_MENTIONS}" SET targetNodeId=? WHERE targetNodeId=?`,
+      args: [target.id, source.id],
+    });
+    await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE targetNodeId=?`, args: [source.id] });
+    await this.#activity(tx, 'merge', 'node', source.id, input.contextScopeId, input.importRunId, {
+      targetId: target.id,
+    });
+    await this.#outbox(tx, 'node', source.id, 'delete', input.sourceVersion + 1, sourceScopeIds);
+    await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [source.id] });
+    return target;
   }
 
   override async createNodeWithRecord(input: {
@@ -1139,23 +1149,28 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const record = await this.#getRecord(tx, input.id, true);
-      if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
-      if (!record.deletedAt) return record;
-      const now = new Date();
-      const updated = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=? AND version=?`,
-        args: [now.toISOString(), input.id, input.version],
-      });
-      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
-      const scopeIds = await this.#getRecordScopeIds(tx, input.id);
-      await this.#activity(tx, 'restore', 'record', input.id, undefined, input.importRunId);
-      await this.#outbox(tx, 'record', input.id, 'upsert', record.version + 1, scopeIds);
-      return { ...record, version: record.version + 1, updatedAt: now, deletedAt: undefined, deletedBy: undefined };
+    return this.#transaction(tx => this.#restoreRecord(tx, input));
+  }
+
+  async #restoreRecord(
+    tx: Transaction,
+    input: { id: string; version: number; importRunId?: string; expectedAccessEpoch?: number },
+  ): Promise<KnowledgeRecord> {
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+    const record = await this.#getRecord(tx, input.id, true);
+    if (!record) throw new KnowledgeNotFoundError('record', input.id);
+    if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+    if (!record.deletedAt) return record;
+    const now = new Date();
+    const updated = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=? AND version=?`,
+      args: [now.toISOString(), input.id, input.version],
     });
+    if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
+    const scopeIds = await this.#getRecordScopeIds(tx, input.id);
+    await this.#activity(tx, 'restore', 'record', input.id, undefined, input.importRunId);
+    await this.#outbox(tx, 'record', input.id, 'upsert', record.version + 1, scopeIds);
+    return { ...record, version: record.version + 1, updatedAt: now, deletedAt: undefined, deletedBy: undefined };
   }
 
   async setRecordScopes(input: {
@@ -1166,27 +1181,39 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     contextScopeId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
+    return this.#transaction(tx => this.#setRecordScopes(tx, input));
+  }
+
+  async #setRecordScopes(
+    tx: Transaction,
+    input: {
+      id: string;
+      version: number;
+      scopeIds: KnowledgeScopeIds;
+      importRunId?: string;
+      contextScopeId?: string;
+      expectedAccessEpoch?: number;
+    },
+  ): Promise<KnowledgeRecord> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
-    return this.#transaction(async tx => {
-      await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
-      const record = await this.#getRecord(tx, input.id, true);
-      if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
-      const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
-      const now = new Date();
-      const updated = await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
-        args: [now.toISOString(), input.id, input.version],
-      });
-      if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
-      await this.#replaceRecordScopes(tx, input.id, scopeIds, now);
-      await this.#activity(tx, 'move', 'record', input.id, input.contextScopeId, input.importRunId);
-      const version = record.version + 1;
-      await this.#outbox(tx, 'record', input.id, 'delete', version, oldScopeIds);
-      if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', version, scopeIds);
-      return { ...record, version: record.version + 1, updatedAt: now };
+    await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
+    const record = await this.#getRecord(tx, input.id, true);
+    if (!record) throw new KnowledgeNotFoundError('record', input.id);
+    if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+    const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
+    const now = new Date();
+    const updated = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
+      args: [now.toISOString(), input.id, input.version],
     });
+    if (updated.rowsAffected !== 1) throw new KnowledgeConflictError(input.id);
+    await this.#replaceRecordScopes(tx, input.id, scopeIds, now);
+    await this.#activity(tx, 'move', 'record', input.id, input.contextScopeId, input.importRunId);
+    const version = record.version + 1;
+    await this.#outbox(tx, 'record', input.id, 'delete', version, oldScopeIds);
+    if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', version, scopeIds);
+    return { ...record, version: record.version + 1, updatedAt: now };
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
@@ -2103,6 +2130,51 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     });
   }
 
+  async #applyProposalMutation(
+    tx: Transaction,
+    mutation: KnowledgeProposalMutation,
+    contextScopeId: string,
+    expectedAccessEpoch?: number,
+  ): Promise<void> {
+    const fence = { expectedAccessEpoch, contextScopeId, importRunId: undefined };
+    switch (mutation.kind) {
+      case 'create-node':
+        await this.#createNode(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'create-scope': {
+        const node = await this.#createNode(tx, { ...mutation.mutation, ...fence });
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" (address,scopeNodeId) VALUES (?,?)`,
+          args: [mutation.address, node.id],
+        });
+        return;
+      }
+      case 'update-node':
+      case 'move-node':
+      case 'promote-node':
+        await this.#updateNode(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'merge-nodes':
+        await this.#mergeNodes(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'delete-node':
+      case 'delete-scope':
+        await this.#deleteNode(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'restore-node':
+      case 'restore-scope':
+        await this.#restoreNode(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'restore-record':
+        await this.#restoreRecord(tx, { ...mutation.mutation, ...fence });
+        return;
+      case 'add-record-scope':
+      case 'remove-record-scope':
+        await this.#setRecordScopes(tx, { ...mutation.mutation, ...fence });
+        return;
+    }
+  }
+
   async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
     return this.#transaction(async tx => {
       await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
@@ -2116,7 +2188,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       for (const target of proposal.targets) {
         const table = target.type === 'node' ? TABLE_KNOWLEDGE_NODES : TABLE_KNOWLEDGE_RECORDS;
         const locked = await tx.execute({
-          sql: `UPDATE "${table}" SET version=version WHERE id=? AND version=? AND deletedAt IS NULL`,
+          sql: `UPDATE "${table}" SET version=version WHERE id=? AND version=? AND deletedAt IS ${target.expectedDeleted ? 'NOT NULL' : 'NULL'}`,
           args: [target.id, target.expectedVersion],
         });
         if (locked.rowsAffected !== 1) {
@@ -2128,17 +2200,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           );
         }
       }
-      const payload = proposal.payload as { kind?: unknown; mutation?: unknown };
-      if (payload.kind !== 'update-node' || !payload.mutation || typeof payload.mutation !== 'object') {
+      const mutation = proposal.payload as KnowledgeProposalMutation;
+      if (!mutation.kind || !mutation.mutation || typeof mutation.mutation !== 'object') {
         throw new Error(`Unsupported immutable payload for knowledge proposal ${proposal.id}`);
       }
       try {
-        await this.#updateNode(tx, {
-          ...(structuredClone(payload.mutation) as UpdateKnowledgeNodeInput),
-          contextScopeId: input.reviewerContextScopeId,
-          importRunId: undefined,
-          expectedAccessEpoch: input.expectedAccessEpoch,
-        });
+        await this.#applyProposalMutation(tx, mutation, input.reviewerContextScopeId, input.expectedAccessEpoch);
       } catch (error) {
         if (error instanceof KnowledgeConflictError) {
           return this.#markProposalConflicted(
