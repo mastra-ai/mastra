@@ -98,7 +98,10 @@ export type KnowledgeProposalMutation =
   | { kind: 'create-node'; mutation: CreateKnowledgeNodeInput & { id: string; isScope?: false } }
   | { kind: 'update-node'; mutation: UpdateKnowledgeNodeInput }
   | { kind: 'move-node'; mutation: UpdateKnowledgeNodeInput & { scopeIds: KnowledgeScopeIds } }
-  | { kind: 'merge-nodes'; mutation: { sourceId: string; targetId: string; sourceVersion: number } }
+  | {
+      kind: 'merge-nodes';
+      mutation: { sourceId: string; targetId: string; sourceVersion: number; targetVersion: number };
+    }
   | { kind: 'create-scope'; address: string; mutation: CreateKnowledgeNodeInput & { id: string; isScope: true } }
   | { kind: 'delete-node'; mutation: DeleteKnowledgeNodeInput }
   | { kind: 'delete-scope'; mutation: DeleteKnowledgeNodeInput }
@@ -163,6 +166,8 @@ export interface ApplyKnowledgeProposalInput {
   id: string;
   reviewerContextScopeId: string;
   expectedAccessEpoch: number;
+  verifiedMutation?: KnowledgeProposalMutation;
+  reviewReason?: string;
 }
 
 export interface KnowledgeNode {
@@ -851,7 +856,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async deleteRecordBySource(_input: {
     id: string;
     source: string;
-    version: number;
     importRunId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeRecord> {
@@ -893,6 +897,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     targetId: string;
     sourceVersion: number;
     importRunId?: string;
+    contextScopeId?: string;
     expectedAccessEpoch?: number;
   }): Promise<KnowledgeNode> {
     throw new KnowledgeUnsupportedError();
