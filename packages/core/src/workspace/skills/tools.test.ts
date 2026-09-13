@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
+import { SkillNotFoundError } from '../errors';
 import { LocalSkillSource } from './local-skill-source';
 import { createSkillTools } from './tools';
 import type { Skill, SkillMetadata, SkillSearchResult, WorkspaceSkills } from './types';
@@ -253,30 +254,66 @@ describe('skill tool', () => {
     expect(result).not.toContain('## Assets');
   });
 
-  it('returns error with available skills list when skill is not found', async () => {
+  it('throws with available skills list when skill is not found', async () => {
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => null),
       list: vi.fn(async () => [makeMetadata({ name: 'alpha' }), makeMetadata({ name: 'beta' })]),
     });
     const { skill: tool } = createSkillTools(skills);
 
-    const result = await exec(tool, { name: 'nonexistent' });
-
-    expect(result).toBe(
+    await expect(exec(tool, { name: 'nonexistent' })).rejects.toThrow(
       'Skill "nonexistent" not found. Available skills: alpha (/skills/test-skill), beta (/skills/test-skill)',
     );
   });
 
-  it('returns error with empty list when no skills exist', async () => {
+  it('throws SkillNotFoundError carrying the identifier and available skills', async () => {
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => null),
+      list: vi.fn(async () => [makeMetadata({ name: 'alpha' })]),
+    });
+    const { skill: tool } = createSkillTools(skills);
+
+    const error = await exec(tool, { name: 'nonexistent' }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(SkillNotFoundError);
+    expect(error).toMatchObject({
+      name: 'SkillNotFoundError',
+      code: 'SKILL_NOT_FOUND',
+      identifier: 'nonexistent',
+      availableSkills: ['alpha (/skills/test-skill)'],
+    });
+  });
+
+  it('throws with an explicit message when no skills exist', async () => {
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => null),
       list: vi.fn(async () => []),
     });
     const { skill: tool } = createSkillTools(skills);
 
-    const result = await exec(tool, { name: 'nonexistent' });
+    await expect(exec(tool, { name: 'nonexistent' })).rejects.toThrow(
+      'Skill "nonexistent" not found. No skills are available in this workspace.',
+    );
+  });
 
-    expect(result).toBe('Skill "nonexistent" not found. Available skills: ');
+  it('records the not-found failure on the tracing span as an error', async () => {
+    const skills = createMockWorkspaceSkills({
+      get: vi.fn(async () => null),
+      list: vi.fn(async () => []),
+    });
+    const { skill: tool } = createSkillTools(skills);
+    const childSpan = { end: vi.fn(), error: vi.fn() };
+    const context = { tracingContext: { currentSpan: { createChildSpan: vi.fn(() => childSpan) } } };
+
+    await expect(exec(tool, { name: 'nonexistent' }, context)).rejects.toThrow(SkillNotFoundError);
+
+    expect(childSpan.end).not.toHaveBeenCalled();
+    expect(childSpan.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.any(SkillNotFoundError),
+        attributes: expect.objectContaining({ success: false }),
+      }),
+    );
   });
 
   it('resolves skill by exact path (escape hatch)', async () => {
@@ -305,9 +342,10 @@ describe('skill tool', () => {
     expect(result).toBe('Found by name.');
   });
 
-  it('returns not-found when get() returns null (disambiguation handled by WorkspaceSkills)', async () => {
-    // When get() returns null, the tool shows available skills
-    // Disambiguation (tie-breaking) is handled internally by WorkspaceSkills.get()
+  it('throws not-found when get() returns null (disambiguation handled by WorkspaceSkills)', async () => {
+    // When get() returns null, the tool lists the available skills so the model
+    // can retry with a path. Disambiguation (tie-breaking) is handled
+    // internally by WorkspaceSkills.get()
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => null),
       list: vi.fn(async () => [
@@ -317,10 +355,9 @@ describe('skill tool', () => {
     });
     const { skill: tool } = createSkillTools(skills);
 
-    const result = await exec(tool, { name: 'plan' });
-
-    expect(result).toContain('Skill "plan" not found.');
-    expect(result).toContain('Available skills: plan (.mastra/skills/plan), plan (user-skills/plan)');
+    await expect(exec(tool, { name: 'plan' })).rejects.toThrow(
+      'Skill "plan" not found. Available skills: plan (.mastra/skills/plan), plan (user-skills/plan)',
+    );
   });
 });
 
@@ -480,16 +517,16 @@ describe('skill_search tool', () => {
 // =============================================================================
 
 describe('skill_read tool', () => {
-  it('returns error when skill does not exist', async () => {
+  it('throws when skill does not exist', async () => {
     const skills = createMockWorkspaceSkills({
       get: vi.fn(async () => null),
       list: vi.fn(async () => []),
     });
     const { skill_read: tool } = createSkillTools(skills);
 
-    const result = await exec(tool, { skillName: 'nonexistent', path: 'references/file.md' });
-
-    expect(result).toContain('Skill "nonexistent" not found.');
+    await expect(exec(tool, { skillName: 'nonexistent', path: 'references/file.md' })).rejects.toThrow(
+      SkillNotFoundError,
+    );
   });
 
   it('reads a reference file (resolved by name)', async () => {

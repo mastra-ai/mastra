@@ -13,6 +13,7 @@
 import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
+import { SkillNotFoundError } from '../errors';
 import { extractLines } from '../line-utils';
 import { startSkillSpan } from '../tools/tracing';
 import type { Skill, SkillsContext, WorkspaceSkills } from './types';
@@ -68,7 +69,11 @@ async function getScopedSkills(skills: WorkspaceSkills, requestContext?: object)
 }
 
 /**
- * Resolve a skill identifier (name or path) to a Skill.
+ * Resolve a skill identifier (name or path) to a Skill, throwing
+ * `SkillNotFoundError` when nothing matches. The error carries the available
+ * skills so the model can retry with a valid name, and surfaces the failure as
+ * a tool error instead of a result string that reads like a success.
+ *
  * The `skills.get()` method handles both name-based lookup (with tie-breaking)
  * and path-based lookup (escape hatch for disambiguation).
  *
@@ -78,18 +83,17 @@ async function getScopedSkills(skills: WorkspaceSkills, requestContext?: object)
  * than a full re-walk. File-level reloads (SKILL.md content edits) only
  * trigger when the workspace is configured with `checkSkillFileMtime: true`.
  */
-async function resolveSkill(
-  skills: WorkspaceSkills,
-  identifier: string,
-): Promise<{ skill: Skill } | { notFound: string }> {
+async function resolveSkill(skills: WorkspaceSkills, identifier: string): Promise<Skill> {
   await skills.maybeRefresh();
 
   const skill = await skills.get(identifier);
-  if (skill) return { skill };
+  if (skill) return skill;
 
   const allSkills = await skills.list();
-  const skillEntries = allSkills.map(s => `${s.name} (${s.path})`);
-  return { notFound: `Skill "${identifier}" not found. Available skills: ${skillEntries.join(', ')}` };
+  throw new SkillNotFoundError(
+    identifier,
+    allSkills.map(s => `${s.name} (${s.path})`),
+  );
 }
 
 function createSkillTool(skills: WorkspaceSkills) {
@@ -111,14 +115,7 @@ function createSkillTool(skills: WorkspaceSkills) {
 
       try {
         const scopedSkills = await getScopedSkills(skills, context?.requestContext);
-        const result = await resolveSkill(scopedSkills, name);
-
-        if ('notFound' in result) {
-          span.end({ success: false });
-          return result.notFound;
-        }
-
-        const { skill } = result;
+        const skill = await resolveSkill(scopedSkills, name);
         const output = formatSkillActivation(skill);
 
         span.end({ success: true });
@@ -210,11 +207,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         const scopedSkills = await getScopedSkills(skills, context?.requestContext);
         // Resolve skill by name or path (get() handles both with tie-breaking)
         const resolved = await resolveSkill(scopedSkills, skillName);
-        if ('notFound' in resolved) {
-          span.end({ success: false });
-          return resolved.notFound;
-        }
-        const resolvedPath = resolved.skill.path;
+        const resolvedPath = resolved.path;
 
         // Try each reader using the resolved path to target the exact skill candidate
         let content: string | Buffer | null = null;
@@ -235,7 +228,7 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
         const textContent = typeof content === 'string' ? content : content.toString('utf-8');
         if (textContent.slice(0, 1000).includes('\0')) {
-          const fullPath = `${resolved.skill.path}/${path}`;
+          const fullPath = `${resolvedPath}/${path}`;
           const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
           span.end({ success: true }, { bytesTransferred: size });
           return `Binary file: ${fullPath} (${size} bytes)`;
