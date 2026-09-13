@@ -4,7 +4,8 @@
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

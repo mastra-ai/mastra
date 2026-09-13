@@ -121,6 +121,7 @@ class AsyncStringQueue implements AsyncIterable<string> {
 }
 
 interface ToolInputParserState {
+  text: string;
   queue: AsyncStringQueue;
   iterator: AsyncIterableIterator<unknown>;
   latestArgs?: JsonObject;
@@ -155,6 +156,7 @@ function getRenderableTasks(value: unknown): TaskItemInput[] {
 function createToolInputParser(toolCallId: string): ToolInputParserState {
   const queue = new AsyncStringQueue();
   const state: ToolInputParserState = {
+    text: '',
     queue,
     iterator: parseJsonRiver(queue) as AsyncIterableIterator<unknown>,
     closed: false,
@@ -744,6 +746,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
     void processToolInputParser(ctx, toolCallId, parser);
   }
 
+  parser.text += argsTextDelta;
   parser.queue.push(argsTextDelta);
 }
 
@@ -751,11 +754,22 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
  * Clean up the input buffer when tool input streaming ends.
  */
 export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (parser) {
+    // The final event can arrive before the progressive parser's next microtask.
+    try {
+      const args: unknown = JSON.parse(parser.text);
+      if (isJsonObject(args)) parser.latestArgs = args;
+    } catch {
+      // Interrupted input keeps the last valid progressive object.
+    }
+  }
   flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+  handleToolInputEnd(ctx, toolCallId);
   flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent

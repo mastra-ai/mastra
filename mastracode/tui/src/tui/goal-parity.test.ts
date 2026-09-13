@@ -154,6 +154,7 @@ describe('headless goal parity', () => {
           ui: { showOverlay: vi.fn(), hideOverlay: vi.fn() },
         },
         authStorage: {},
+        addUserMessage: vi.fn(),
         updateStatusLine: vi.fn(),
         showInfo: vi.fn(),
         showError: vi.fn(),
