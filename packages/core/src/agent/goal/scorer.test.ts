@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
@@ -166,6 +167,27 @@ describe('createGoalScorer tool support', () => {
     const scorer = createGoalScorer({ judgeModel, prompt: customPrompt, tools: { view: viewTool } });
     const instructions = scorer.config.judge?.instructions ?? '';
     expect(instructions).toBe(customPrompt);
+  });
+});
+
+describe('createGoalScorer provider history compatibility', () => {
+  it('gives the judge agent ProviderHistoryCompat by default (input + error lanes)', () => {
+    const scorer = createGoalScorer({ judgeModel });
+    const input = scorer.config.judge?.inputProcessors ?? [];
+    const error = scorer.config.judge?.errorProcessors ?? [];
+    expect(input.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
+    expect(error.some(p => p instanceof ProviderHistoryCompat)).toBe(true);
+  });
+
+  it('lets a caller override the judge processor lanes', () => {
+    const custom = new ProviderHistoryCompat();
+    const scorer = createGoalScorer({
+      judgeModel,
+      inputProcessors: [custom],
+      errorProcessors: [],
+    });
+    expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
+    expect(scorer.config.judge?.errorProcessors).toEqual([]);
   });
 });
 

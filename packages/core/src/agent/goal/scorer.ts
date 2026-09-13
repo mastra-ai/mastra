@@ -7,6 +7,7 @@ import type { MastraModelConfig } from '../../llm';
 import type { StreamCompletionContext } from '../../loop/network/validation';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import type { RequestContext } from '../../request-context';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
@@ -127,6 +128,8 @@ export function createGoalScorer({
   maxSteps,
   mastra,
   requestContext,
+  inputProcessors,
+  errorProcessors,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
@@ -137,6 +140,8 @@ export function createGoalScorer({
   maxSteps?: number;
   mastra?: Mastra;
   requestContext?: RequestContext<any>;
+  inputProcessors?: ScorerJudgeConfig['inputProcessors'];
+  errorProcessors?: ScorerJudgeConfig['errorProcessors'];
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
@@ -148,6 +153,14 @@ export function createGoalScorer({
     judge: {
       model: judgeModel,
       instructions,
+      // The judge agent talks to the same providers as the main agent, so a prompt
+      // assembled from history written by a different provider can carry history
+      // that provider will reject (e.g. a foreign provider's signed thinking
+      // blocks). Run the same provider-history compat processor Mastra Code puts
+      // on its own agents so the judge cannot be bricked by an incompatible
+      // prompt. Callers may override either list.
+      inputProcessors: inputProcessors ?? [new ProviderHistoryCompat()],
+      errorProcessors: errorProcessors ?? [new ProviderHistoryCompat()],
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),

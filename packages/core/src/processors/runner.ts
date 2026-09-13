@@ -1774,6 +1774,7 @@ export class ProcessorRunner {
   async runProcessLLMRequest(args: {
     prompt: LanguageModelV2Prompt;
     model: unknown;
+    messageList?: MessageList;
     stepNumber: number;
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
@@ -1828,6 +1829,7 @@ export class ProcessorRunner {
           // the runner accepts the looser `unknown` to match other call paths
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
+          messageList: args.messageList,
           stepNumber: args.stepNumber,
           steps: args.steps,
           state: processorState.customState,
