@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryDB } from '../../inmemory-db';
-import { createKnowledgeUlid, KnowledgeConflictError } from '../base';
+import {
+  assertKnowledgeSchemaCompatible,
+  createKnowledgeUlid,
+  inspectKnowledgeSchema,
+  KnowledgeConflictError,
+  KnowledgeSchemaResetRequiredError,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+} from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
 const org = ['org:acme'];
@@ -19,6 +27,84 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {
+    const store = createStore();
+    const node = await store.createNode({ name: 'Keep me', kind: 'topic', scope: resource });
+
+    expect(store.getCapabilities()).toEqual({
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    });
+    expect(await store.inspectSchema()).toEqual({
+      status: 'compatible',
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+    });
+    expect(await store.getNode(node.id)).toEqual(node);
+  });
+
+  it('classifies incompatible schema snapshots without mutating probe results', () => {
+    const tableNames = Object.freeze(['mastra_knowledge_nodes', 'mastra_knowledge_records']);
+    const snapshot = Object.freeze({
+      available: true,
+      tableNames,
+      schemaVersion: 1,
+      reason: 'experimental v1 columns detected',
+    });
+
+    const inspection = inspectKnowledgeSchema(snapshot);
+
+    expect(inspection).toEqual({
+      status: 'incompatible-reset-required',
+      schemaVersion: 1,
+      reason: 'experimental v1 columns detected',
+    });
+    expect(snapshot.tableNames).toBe(tableNames);
+    expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(KnowledgeSchemaResetRequiredError);
+    expect(() => assertKnowledgeSchemaCompatible(inspection)).toThrow(
+      'Knowledge schema reset required: experimental v1 columns detected',
+    );
+    expect(inspectKnowledgeSchema({ available: true, tableNames: [] })).toEqual({
+      status: 'uninitialized',
+      schemaVersion: null,
+    });
+    expect(
+      inspectKnowledgeSchema({
+        available: true,
+        tableNames: ['mastra_knowledge_nodes'],
+        schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      }),
+    ).toEqual({ status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION });
+    expect(inspectKnowledgeSchema({ available: false, tableNames: [], reason: 'adapter offline' })).toEqual({
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: 'adapter offline',
+    });
+    expect(() => assertKnowledgeSchemaCompatible({ status: 'uninitialized', schemaVersion: null })).not.toThrow();
+  });
+
+  it('resets only Knowledge-owned state', async () => {
+    const db = new InMemoryDB();
+    const store = new InMemoryKnowledgeStorage({ db });
+    const now = new Date();
+    db.threads.set('thread-1', { id: 'thread-1', resourceId: 'resource-1', createdAt: now, updatedAt: now });
+    const node = await store.createNode({ name: 'Reset me', kind: 'topic', scope: resource });
+
+    await store.dangerouslyReset();
+
+    expect(await store.getNode(node.id)).toBeNull();
+    expect(db.knowledgeNodeKeys.size).toBe(0);
+    expect(db.knowledgeRecords.size).toBe(0);
+    expect(db.knowledgeMentions.size).toBe(0);
+    expect(db.knowledgeCursors.size).toBe(0);
+    expect(db.knowledgeActivity).toHaveLength(0);
+    expect(db.knowledgeSemanticOutbox.size).toBe(0);
+    expect(db.knowledgeSemanticIdempotency.size).toBe(0);
+    expect(db.threads.has('thread-1')).toBe(true);
   });
 
   it('stores identity and optional content on one node type', async () => {
