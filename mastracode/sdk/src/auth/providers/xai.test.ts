@@ -229,3 +229,46 @@ describe('xaiOAuthProvider', () => {
     expect(xaiOAuthProvider.getApiKey({ access: 'at', refresh: 'rt', expires: 0 })).toBe('at');
   });
 });
+
+describe('xaiOAuthProvider.getAccountLabel', () => {
+  function idTokenWithEmail(email: string): string {
+    const b64url = (input: string) => Buffer.from(input, 'utf8').toString('base64url');
+    return `${b64url(JSON.stringify({ alg: 'none' }))}.${b64url(JSON.stringify({ email }))}.${b64url('{}')}`;
+  }
+
+  it('resolves the email claim from the persisted id_token', async () => {
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({
+        access: 'at',
+        refresh: 'rt',
+        expires: 0,
+        idToken: idTokenWithEmail('dev@x.ai'),
+      }),
+    ).resolves.toBe('dev@x.ai');
+  });
+
+  it('returns undefined without an id_token or email claim', async () => {
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({ access: 'at', refresh: 'rt', expires: 0 }),
+    ).resolves.toBeUndefined();
+    await expect(
+      xaiOAuthProvider.getAccountLabel?.({ access: 'at', refresh: 'rt', expires: 0, idToken: idTokenWithEmail('') }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('carries the id_token through a refresh that does not re-issue one', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ access_token: 'new-at', refresh_token: 'new-rt', expires_in: 3600 }),
+    );
+
+    const creds = await xaiOAuthProvider.refreshToken({
+      access: 'old-at',
+      refresh: 'old-rt',
+      expires: 0,
+      idToken: idTokenWithEmail('dev@x.ai'),
+    });
+
+    expect(creds.idToken).toBe(idTokenWithEmail('dev@x.ai'));
+    await expect(xaiOAuthProvider.getAccountLabel?.(creds)).resolves.toBe('dev@x.ai');
+  });
+});

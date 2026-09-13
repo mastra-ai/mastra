@@ -63,6 +63,10 @@ export const loginSeedsOmDefaultScenario = {
     await runtime.waitForScreenText(/How do you want to sign in to ChatGPT Plus\/Pro/i, terminal, 8_000);
     terminal.write('\r');
 
+    // Post-login account-name prompt: keep the default label.
+    await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
+    terminal.write('\r');
+
     await runtime.waitForScreenText(/Successfully logged in to ChatGPT Plus\/Pro/i, terminal, 8_000);
     terminal.submit('/memory');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
