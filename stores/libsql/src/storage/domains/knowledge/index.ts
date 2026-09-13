@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import {
@@ -360,7 +360,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#transaction(tx => this.#initializeSchema(tx));
   }
 
-  async #initializeSchema(tx: Pick<Transaction, 'execute'>): Promise<void> {
+  async #initializeSchema(tx: Pick<Executor, 'execute'>): Promise<void> {
     const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
       this.#db.createTable({ ...input, executor: tx });
     const existingTables = await tx.execute(
@@ -368,8 +368,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     );
     const existingNames = new Set(existingTables.rows.map(row => String(row.name)));
     if (existingNames.size > 0 && !existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
-      await this.#replaceEmptyLegacySchema(tx, existingNames);
-      existingNames.clear();
+      throw new KnowledgeSchemaError('The existing Knowledge schema requires an explicit Knowledge-only reset.');
     }
     if (existingNames.size > 0) {
       const missing = KNOWLEDGE_TABLE_NAMES.filter(table => !existingNames.has(table));
@@ -501,34 +500,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id, version) VALUES ('canonical', ?)`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
-  }
-
-  async #replaceEmptyLegacySchema(tx: Pick<Transaction, 'execute'>, tables: Set<string>): Promise<void> {
-    const objects = await tx.execute(
-      "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE tbl_name GLOB 'mastra_knowledge_*' ORDER BY type, name",
-    );
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify(objects.rows.map(row => [row.type, row.name, row.tbl_name, row.sql])))
-      .digest('hex');
-    // Exact DDL emitted by published @mastra/libsql@1.21.1, including its indexes.
-    // Unknown layouts (including partial initialization and extra triggers) are never dropped.
-    if (fingerprint !== 'ac26ffa8e479750bdc7094cc20a3f05718590907880e7d685e2f6527bd2aef34') {
-      throw new KnowledgeSchemaError('The existing Knowledge schema has no recognized completion marker.');
-    }
-    const otherObjects = await tx.execute(
-      "SELECT sql FROM sqlite_master WHERE tbl_name NOT GLOB 'mastra_knowledge_*' AND sql IS NOT NULL",
-    );
-    if (otherObjects.rows.some(row => [...tables].some(table => String(row.sql).toLowerCase().includes(table)))) {
-      throw new KnowledgeSchemaError('The existing Knowledge schema has external dependencies.');
-    }
-    for (const table of tables) {
-      const rows = await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
-      if (rows.rows.length > 0) {
-        throw new KnowledgeSchemaError('The existing experimental Knowledge schema contains data.');
-      }
-    }
-    // Inspection, emptiness checks, replacement and the canonical marker share one write transaction.
-    for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
   }
 
   async dangerouslyClearAll(): Promise<void> {

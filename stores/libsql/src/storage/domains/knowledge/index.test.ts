@@ -206,16 +206,17 @@ describe('KnowledgeLibSQL recognized empty experimental schema', () => {
     );
   };
 
-  it('replaces only the empty published layout and leaves vector state untouched', async () => {
+  it('rejects the empty published layout without mutating Knowledge or vector state', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seed(client);
       await client.execute('CREATE TABLE knowledge_documents_dimension_3 (id TEXT PRIMARY KEY)');
       await client.execute("INSERT INTO knowledge_documents_dimension_3 VALUES ('untouched')");
-      await Promise.all([new KnowledgeLibSQL({ client }).init(), new KnowledgeLibSQL({ client }).init()]);
-      const columns = await client.execute('PRAGMA table_info(mastra_knowledge_nodes)');
-      expect(columns.rows.map(row => row.name)).toContain('isScope');
-      expect(columns.rows.map(row => row.name)).not.toContain('type');
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY type, name');
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY type, name')).rows).toEqual(before.rows);
       expect((await client.execute('SELECT * FROM knowledge_documents_dimension_3')).rows).toEqual([
         { id: 'untouched' },
       ]);
@@ -259,34 +260,6 @@ describe('KnowledgeLibSQL recognized empty experimental schema', () => {
       const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
       await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
       expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
-    } finally {
-      client.close();
-    }
-  });
-
-  it('rolls back the empty legacy layout if canonical creation fails and permits a retry', async () => {
-    const client = createClient({ url: ':memory:' });
-    try {
-      await seed(client);
-      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
-      const transaction = client.transaction.bind(client);
-      const spy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
-        const tx = await transaction(mode);
-        const execute = tx.execute.bind(tx);
-        vi.spyOn(tx, 'execute').mockImplementation(async statement => {
-          const sql = typeof statement === 'string' ? statement : statement.sql;
-          if (sql.startsWith('CREATE TABLE') && sql.includes('mastra_knowledge_schema')) {
-            throw new Error('injected schema creation failure');
-          }
-          return execute(statement);
-        });
-        return tx;
-      });
-      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow();
-      spy.mockRestore();
-      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
-      await new KnowledgeLibSQL({ client }).init();
-      expect((await client.execute(`SELECT * FROM ${TABLE_KNOWLEDGE_SCHEMA}`)).rows).toHaveLength(1);
     } finally {
       client.close();
     }
