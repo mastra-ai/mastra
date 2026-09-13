@@ -280,6 +280,24 @@ export interface MCPToolExecutionContext {
 }
 
 /**
+ * Identifies a tool invocation received by a Mastra MCP server.
+ *
+ * This is intentionally separate from {@link MCPToolExecutionContext}: the latter
+ * may be forwarded to tools nested inside an MCP-exposed agent or workflow so they
+ * can use elicitation, logging, and progress. This marker applies only to the
+ * top-level tool that handles the MCP request and is used for tracing provenance.
+ *
+ * @internal
+ */
+export interface MCPServerToolInvocation {
+  role: 'server';
+  method: 'tools/call';
+  serverName: string;
+  serverVersion?: string;
+  protocolVersion?: string;
+}
+
+/**
  * Extended version of ToolInvocationOptions that includes Mastra-specific properties
  * for suspend/resume functionality, stream writing, and tracing context.
  *
@@ -301,6 +319,13 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * This is populated by the MCP server and passed through to the tool's execution context.
      */
     mcp?: MCPToolExecutionContext;
+    /**
+     * Server-side MCP request metadata used to annotate the top-level tool span.
+     * Unlike `mcp`, this is not forwarded to nested agent or workflow tools.
+     *
+     * @internal
+     */
+    mcpServerToolInvocation?: MCPServerToolInvocation;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection

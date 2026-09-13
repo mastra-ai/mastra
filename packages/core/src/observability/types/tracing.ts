@@ -404,6 +404,16 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolType?: string;
   toolDescription?: string;
   toolCallId?: string;
+  /** Present when this local tool was invoked through a Mastra MCP server. */
+  mcpRole?: 'server';
+  /** MCP request method that caused this tool execution. */
+  mcpMethod?: 'tools/call';
+  /** MCP server handling the incoming request. */
+  mcpServer?: string;
+  /** MCP server version. */
+  serverVersion?: string;
+  /** Negotiated MCP protocol version, when available. */
+  mcpProtocolVersion?: string;
   success?: boolean;
 }
 

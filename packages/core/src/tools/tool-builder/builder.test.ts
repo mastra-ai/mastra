@@ -309,6 +309,71 @@ describe('MCP Tool Tracing', () => {
     );
   });
 
+  it('should preserve TOOL_CALL and annotate tools invoked through an MCP server', async () => {
+    const testTool = createTool({
+      id: 'server-tool',
+      description: 'A tool exposed by an MCP server',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async inputData => ({ result: inputData.value }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+    const mockParentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'server-tool',
+        logger: noopLogger,
+        description: 'A tool exposed by an MCP server',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockParentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!(
+      { value: 'test' },
+      {
+        toolCallId: 'test-call-id',
+        messages: [],
+        mcpServerToolInvocation: {
+          role: 'server',
+          method: 'tools/call',
+          serverName: 'public-mcp-server',
+          serverVersion: '1.2.3',
+          protocolVersion: '2025-11-25',
+        },
+      },
+    );
+
+    expect(mockParentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'server-tool'",
+        input: { value: 'test' },
+        attributes: {
+          toolDescription: 'A tool exposed by an MCP server',
+          toolType: 'tool',
+          toolCallId: 'test-call-id',
+          mcpRole: 'server',
+          mcpMethod: 'tools/call',
+          mcpServer: 'public-mcp-server',
+          serverVersion: '1.2.3',
+          mcpProtocolVersion: '2025-11-25',
+        },
+      }),
+    );
+
+    const spanOptions = vi.mocked(mockParentSpan.createChildSpan).mock.calls[0]?.[0];
+    expect(spanOptions?.attributes).not.toHaveProperty('mcpSessionId');
+  });
+
   it('should handle mcpMetadata with missing serverVersion', async () => {
     const testTool = createTool({
       id: 'mcp_read-resource',
