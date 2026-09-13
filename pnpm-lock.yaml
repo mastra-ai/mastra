@@ -5888,6 +5888,12 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
+      mdast-util-gfm:
+        specifier: ^3.1.0
+        version: 3.1.0(supports-color@10.2.2)
+      mdast-util-to-markdown:
+        specifier: ^2.1.2
+        version: 2.1.2
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
@@ -5973,6 +5979,9 @@ importers:
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

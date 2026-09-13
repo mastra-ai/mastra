@@ -138,6 +138,7 @@ DropdownMenuSubContent.displayName = 'DropdownMenuSubContent';
 type DropdownMenuContentProps = MenuPopupProps &
   DropdownMenuContentPositionerProps & {
     container?: HTMLElement;
+    size?: 'default' | 'sm';
   };
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
@@ -145,6 +146,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     {
       className,
       container,
+      size = 'default',
       align = 'start',
       alignOffset = 0,
       side = 'bottom',
@@ -185,7 +187,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"
-            className={cn(popupClass, className)}
+            className={cn(popupClass, size === 'sm' && 'rounded-md p-0.5', className)}
             {...props}
           />
         </MenuPrimitive.Positioner>
@@ -198,12 +200,13 @@ DropdownMenuContent.displayName = 'DropdownMenuContent';
 type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
   inset?: boolean;
   variant?: 'default' | 'destructive';
+  size?: 'default' | 'sm';
   /** Alias for `onClick`, kept for compatibility with the previous Radix API. */
   onSelect?: MenuPrimitive.Item.Props['onClick'];
 };
 
 const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>(
-  ({ className, inset, variant = 'default', onSelect, onClick, ...props }, ref) => (
+  ({ className, inset, variant = 'default', size = 'default', onSelect, onClick, ...props }, ref) => (
     <MenuPrimitive.Item
       ref={ref}
       data-inset={inset ? '' : undefined}
@@ -214,6 +217,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
       }}
       className={cn(
         itemClass,
+        size === 'sm' && 'h-form-xs gap-2 rounded-sm py-1 text-ui-xs leading-none',
         inset && 'pl-8',
         'data-[variant=destructive]:text-accent2 data-[variant=destructive]:hover:bg-accent2/10 data-[variant=destructive]:hover:text-accent2 data-[variant=destructive]:data-[highlighted]:bg-accent2/10 data-[variant=destructive]:data-[highlighted]:text-accent2',
         className,

@@ -9,6 +9,27 @@ afterEach(() => {
 });
 
 describe('DropdownMenu', () => {
+  describe('when a compact menu action is selected', () => {
+    it('runs the action and keeps sizing props off the DOM', () => {
+      const onSelect = vi.fn();
+      render(
+        <DropdownMenu defaultOpen>
+          <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+          <DropdownMenu.Content size="sm">
+            <DropdownMenu.Item size="sm" onSelect={onSelect}>
+              Download CSV
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>,
+      );
+      const item = screen.getByRole('menuitem', { name: 'Download CSV' });
+      expect(screen.getByRole('menu').hasAttribute('size')).toBe(false);
+      expect(item.hasAttribute('size')).toBe(false);
+      fireEvent.click(item);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('renders Label standalone without throwing (no Group ancestor required)', () => {
     expect(() => render(<DropdownMenu.Label>Heading</DropdownMenu.Label>)).not.toThrow();
   });
