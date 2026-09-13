@@ -144,6 +144,93 @@ describe('om-tools', () => {
       expect(result.messages).toContain('Message 5');
     });
 
+    it('should keep a payload-free cursor anchor for tool-only messages', async () => {
+      const filteredMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            toolCallFilter: { exclude: ['secret_tool'], preserveModelOutputFor: [] },
+          },
+        },
+      });
+      await filteredMemory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'OM tool filter cursor test thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:02:00Z'),
+        },
+      });
+
+      await filteredMemory.persistMessages([
+        {
+          id: 'cursor-before',
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'tool-only-cursor',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'secret-call',
+                  toolName: 'secret_tool',
+                  args: { secret: 'RAW_CURSOR_ARGS' },
+                  result: { secret: 'RAW_CURSOR_RESULT' },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+        },
+        {
+          id: 'cursor-after',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'After cursor' }] },
+          createdAt: new Date('2024-01-01T10:02:00Z'),
+        },
+      ]);
+
+      const forward = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'tool-only-cursor',
+        page: 1,
+        limit: 1,
+      });
+      const backward = await recallMessages({
+        memory: filteredMemory as any,
+        threadId,
+        resourceId,
+        cursor: 'tool-only-cursor',
+        page: -1,
+        limit: 1,
+      });
+
+      expect(forward.count).toBe(1);
+      expect(forward.messages).toContain('After cursor');
+      expect(backward.count).toBe(1);
+      expect(backward.messages).toContain('Before cursor');
+      expect(forward.messages).not.toContain('RAW_CURSOR_ARGS');
+      expect(forward.messages).not.toContain('RAW_CURSOR_RESULT');
+      expect(backward.messages).not.toContain('RAW_CURSOR_ARGS');
+      expect(backward.messages).not.toContain('RAW_CURSOR_RESULT');
+    });
+
     it('should browse the cursor thread in resource scope when the cursor belongs to another thread', async () => {
       await memory.saveThread({
         thread: {

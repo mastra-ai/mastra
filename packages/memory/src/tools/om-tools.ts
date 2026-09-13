@@ -100,7 +100,7 @@ function filterCursorMessages(memory: RecallMemory, messages: MastraDBMessage[])
     observationalMemory && typeof observationalMemory === 'object' ? observationalMemory.toolCallFilter : undefined;
   if (toolCallFilter === undefined) return messages;
 
-  return filterToolCallMessages(
+  const filteredMessages = filterToolCallMessages(
     messages,
     {
       ...toolCallFilter,
@@ -109,6 +109,20 @@ function filterCursorMessages(memory: RecallMemory, messages: MastraDBMessage[])
     new Set(),
     { stripMessageProviderMetadata: true },
   );
+
+  const retainedIds = new Set(filteredMessages.map(message => message.id));
+  const filteredAnchors = messages
+    .filter(message => !retainedIds.has(message.id))
+    .map(message => ({
+      id: message.id,
+      role: message.role,
+      createdAt: message.createdAt,
+      ...(message.threadId === undefined ? {} : { threadId: message.threadId }),
+      ...(message.resourceId === undefined ? {} : { resourceId: message.resourceId }),
+      content: { format: 2 as const, parts: [] },
+    })) as MastraDBMessage[];
+
+  return [...filteredMessages, ...filteredAnchors];
 }
 
 function parseRangeFormat(cursor: string): { startId: string; endId: string } | null {
