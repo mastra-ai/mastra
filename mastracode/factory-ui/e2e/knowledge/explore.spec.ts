@@ -39,9 +39,17 @@ const graph = {
   records: [
     { id: 'record-1', nodeIds: ['payments', 'runbook'], pinned: true, text: 'Payments uses the runbook.' },
     { id: 'record-2', nodeIds: ['runbook', 'payments'], pinned: false, text: 'Runbook covers payments.' },
+    { id: 'record-3', nodeIds: ['payments'], pinned: false, text: 'See [[Observational memory]].' },
   ],
   truncated: false,
-  outOfWindow: [],
+  outOfWindow: [
+    {
+      id: 'observational-memory',
+      name: 'Observational memory',
+      scope: ['org:proof', `resource:${projectId}`],
+      rung: 'resource',
+    },
+  ],
   unresolvedCapped: { count: 0, names: [] },
   pinCensus: { resource: 1, thread: null },
   version: 'proof-version',
@@ -90,7 +98,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           roots: [
             // The org rung's address is owned by a reconciled scope node —
             // server attaches the structural match so the UI renders one
-            // merged entry instead of two labels for the same scope.
+            // name + kind entry instead of two labels for the same scope.
             {
               level: 'org',
               id: 'proof',
@@ -184,6 +192,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 createdAt: '2026-08-28T10:00:00.000Z',
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
+              graph.nodes[0],
             ],
             // Containment edges: the selected scope contains every member, so
             // the lens is a connected tree instead of bare dots.
@@ -198,6 +207,12 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 id: 'contains:features:subconscious',
                 source: '22222222-2222-4222-8222-222222222222',
                 target: 'subconscious-scope',
+                type: 'contains',
+              },
+              {
+                id: 'contains:features:payments',
+                source: '22222222-2222-4222-8222-222222222222',
+                target: 'payments',
                 type: 'contains',
               },
             ],
@@ -248,13 +263,22 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByRole('heading', { name: 'Knowledge' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Knowledge scopes' })).toBeVisible();
   await expect(page.getByText('Select a scope to explore its knowledge.')).toBeVisible();
-  await page.getByRole('button', { name: new RegExp(`${projectId} · your project`) }).click();
+  await page.getByRole('button', { name: new RegExp(`${projectId} project`) }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
   // The graph pane must actually have height — a broken flex chain renders
   // nodes at zero height while visibility checks on their text still pass.
   const container = page.locator('[data-testid="knowledge-graph-container"]');
   await expect.poll(async () => (await container.boundingBox())?.height ?? 0).toBeGreaterThan(100);
+
+  const boundaryNode = page.locator('[data-node-id="observational-memory"][data-node-type="boundary"]');
+  await expect(boundaryNode).toContainText('Observational memory');
+  await expect(boundaryNode).toContainText('↗ Project');
+  await expect(boundaryNode.locator(':scope > div').first()).toHaveCSS('border-style', 'dashed');
+  await expect(page.locator('.react-flow__edge[data-id="record:record-3"]')).toBeVisible();
+  const lensUrl = page.url();
+  await boundaryNode.dispatchEvent('click');
+  await expect.poll(() => page.url()).toBe(lensUrl);
 
   await page.locator('.react-flow__node[data-id="payments"]').dispatchEvent('click');
   await expect(page.getByText(/Payments uses/)).toBeVisible();
@@ -263,31 +287,45 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText('knowledge-appended')).toBeVisible();
 
   // The sidebar is ONE unified tree built from the scope nodes that exist:
-  // merged identity entries (structural name + marker) with declared structure
-  // nested via membership edges — no "Your access" / "Knowledge structure" split.
+  // identity scopes and declared structure use one name + kind-chip treatment.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
   await expect(scopeTree.getByText('Your access')).toBeHidden();
   await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
-  await expect(scopeTree.getByRole('button', { name: /mastra · your org/ })).toBeVisible();
-  await expect(scopeTree.getByRole('button', { name: new RegExp(`${projectId} · your project`) })).toBeVisible();
-  await expect(scopeTree.getByRole('button', { name: /Organization/ })).toBeHidden();
-  await expect(scopeTree.getByRole('button', { name: 'mastra', exact: true })).toBeHidden();
+  await expect(scopeTree.getByRole('button', { name: /mastra org/ })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: new RegExp(`${projectId} project`) })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: /features feature/ })).toBeVisible();
+  await expect(scopeTree.getByText(/your org|your project/)).toBeHidden();
 
-  // The merged entry opens the structural lens for the matched scope node.
-  await scopeTree.getByRole('button', { name: /mastra · your org/ }).click();
-  await expect(page).toHaveURL(/scope=11111111-1111-4111-8111-111111111111/);
-
-  // Declared structure nests under the merged org entry via membership edges.
-  await scopeTree.getByRole('button', { name: 'features' }).click();
+  // A tree selection changes the structural lens and opens its detail.
+  await scopeTree.getByRole('button', { name: /features feature/ }).click();
   await expect(page).toHaveURL(/scope=22222222-2222-4222-8222-222222222222/);
+  await expect(page).toHaveURL(/node=22222222-2222-4222-8222-222222222222/);
+  await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
   await expect(page.getByText('subconscious')).toBeVisible();
-  // The clicked scope node renders as its own graph root inside the lens.
-  await expect(page.locator('[data-testid="knowledge-graph-container"]').getByText('features')).toBeVisible();
 
-  // Clicking a member scope drills down into it instead of opening a flyout.
-  await page.locator('.react-flow__node[data-id="subconscious-scope"]').dispatchEvent('click');
-  await expect(page).toHaveURL(/scope=subconscious-scope/);
+  // Scope nodes have a distinct border and background from content nodes.
+  const scopeInner = page.locator('[data-testid="knowledge-node"][data-node-type="scope"] > div').first();
+  const contentInner = page.locator('[data-testid="knowledge-node"][data-node-type="content"] > div').first();
+  await expect(scopeInner).toBeVisible();
+  await expect(contentInner).toBeVisible();
+  const [scopeStyle, contentStyle] = await Promise.all([
+    scopeInner.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { borderColor: style.borderColor, backgroundImage: style.backgroundImage };
+    }),
+    contentInner.evaluate(element => {
+      const style = getComputedStyle(element);
+      return { borderColor: style.borderColor, backgroundImage: style.backgroundImage };
+    }),
+  ]);
+  expect(scopeStyle.borderColor).not.toBe(contentStyle.borderColor);
+  expect(scopeStyle.backgroundImage).not.toBe(contentStyle.backgroundImage);
+
+  // Clicking that same scope on the canvas applies the same selection model.
+  await page.getByRole('button', { name: 'Close scope details' }).click();
+  await page.locator('.react-flow__node[data-id="22222222-2222-4222-8222-222222222222"]').dispatchEvent('click');
+  await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
 
   if (output) {
     fs.mkdirSync(output, { recursive: true });

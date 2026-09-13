@@ -273,7 +273,7 @@ describe('KnowledgePage', () => {
 
     expect(await screen.findByText('Select a scope to explore its knowledge.')).toBeVisible();
     expect(subgraphReads).toBe(0);
-    await user.click(screen.getByRole('button', { name: /fp-1 · your project/ }));
+    await user.click(screen.getByRole('button', { name: /fp-1 project/ }));
     expect(await screen.findByText('Payments Service')).toBeVisible();
     expect(subgraphReads).toBe(1);
   });
@@ -345,8 +345,8 @@ describe('KnowledgePage', () => {
               updatedAt: '2026-08-13T01:00:00.000Z',
             },
             {
-              id: '44444444-4444-4444-8444-444444444444',
-              name: 'observational',
+              id: '33333333-3333-4333-8333-333333333333',
+              name: 'memory',
               kind: 'feature',
               scope: null,
               rung: null,
@@ -374,9 +374,9 @@ describe('KnowledgePage', () => {
           // wikilink edge derived from member records.
           edges: [
             {
-              id: 'contains:2:4',
+              id: 'contains:2:3',
               source: '22222222-2222-4222-8222-222222222222',
-              target: '44444444-4444-4444-8444-444444444444',
+              target: '33333333-3333-4333-8333-333333333333',
               type: 'contains' as const,
             },
             {
@@ -400,50 +400,58 @@ describe('KnowledgePage', () => {
     const user = userEvent.setup();
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
-    // ONE unified tree built from the scope nodes that exist: the identity
-    // chain renders as merged entries (structural name + identity marker) and
-    // declared structure nests beneath via membership edges — no section split.
+    // ONE unified tree built from the scope nodes that exist: identity scopes
+    // and declared structure share the same name + kind-chip treatment.
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     expect(within(scopes).queryByText('Your access')).not.toBeInTheDocument();
     expect(within(scopes).queryByText('Knowledge structure')).not.toBeInTheDocument();
-    expect(await within(scopes).findByRole('button', { name: /mastra · your org/ })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /fp-1 · your project/ })).toBeInTheDocument();
-    expect(within(scopes).queryByRole('button', { name: /Organization/ })).not.toBeInTheDocument();
-    expect(within(scopes).queryByRole('button', { name: /Project fp-1/ })).not.toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: 'features' })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: 'memory' })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
+    expect(within(scopes).queryByText(/your org|your project/)).not.toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /features feature/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /memory feature/ })).toBeInTheDocument();
 
-    // Selecting a structural scope fetches the bounded member subgraph by id.
-    await user.click(within(scopes).getByRole('button', { name: 'features' }));
+    // Selecting a structural scope fetches the bounded member subgraph by id
+    // and opens the selected scope's detail in the same action.
+    await user.click(within(scopes).getByRole('button', { name: /features feature/ }));
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
-    expect(await screen.findByText('observational')).toBeVisible();
+    expect(router.state.location.search).toContain('node=22222222-2222-4222-8222-222222222222');
+    expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('features');
     // The clicked scope node renders as its own graph root inside the lens.
     const graphContainer = screen.getByTestId('knowledge-graph-container');
-    expect(await within(graphContainer).findByText('features')).toBeVisible();
+    const rootNode = (await within(graphContainer).findAllByTestId('knowledge-node')).find(
+      node => node.getAttribute('data-node-id') === '22222222-2222-4222-8222-222222222222',
+    );
+    if (!rootNode) throw new Error('Expected the selected scope root node');
+    expect(within(rootNode).getByText('features')).toBeVisible();
     await waitFor(() => expect(subgraphParams).toContain('22222222-2222-4222-8222-222222222222'));
-    expect(subgraphParams.every(id => id !== '33333333-3333-4333-8333-333333333333')).toBe(true);
 
     // Selected scopes get a filled active pill matching aria-pressed.
-    const features = within(scopes).getByRole('button', { name: 'features' });
+    const features = within(scopes).getByRole('button', { name: /features feature/ });
     expect(features).toHaveAttribute('aria-pressed', 'true');
     expect(features).toHaveClass('bg-surface4');
     expect(features).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: /mastra · your org/ })).not.toHaveClass('bg-surface4');
-
-    // Clicking a member scope node inside the structural lens drills down —
-    // no record flyout opens for structural members.
-    fireEvent.click(await screen.findByText('observational'));
-    await waitFor(() => expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444'));
-    expect(screen.queryByText(/Handles charging flows/)).not.toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
 
     // Content placed into the structural scope renders alongside child scopes
     // and opens the record flyout (scoped by the node's own rung) on click.
-    fireEvent.click(await screen.findByText('Memory Extraction'));
-    expect(router.state.location.search).toContain('scope=44444444-4444-4444-8444-444444444444');
+    fireEvent.click(await within(graphContainer).findByText('Memory Extraction'));
+    expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Close details' }));
+
+    // Clicking a member scope node inside the structural lens applies the same
+    // selection model: switch its lens and open its scope detail.
+    const memoryNode = (await within(graphContainer).findAllByTestId('knowledge-node')).find(
+      node => node.getAttribute('data-node-id') === '33333333-3333-4333-8333-333333333333',
+    );
+    if (!memoryNode) throw new Error('Expected the child scope node');
+    fireEvent.click(memoryNode);
+    await waitFor(() => expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333'));
+    expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
   });
 
-  it('merged identity entries open the structural lens and read content at its own rung', async () => {
+  it('identity scope entries open the structural lens and read content at its own rung', async () => {
     stubKnowledgeRoute();
     const subgraphParams: string[] = [];
     const nodeScopeLevels: string[] = [];
@@ -462,26 +470,26 @@ describe('KnowledgePage', () => {
     const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    // One entry per scope: structural name with identity marker, never two
+    // One entry per scope: structural name with identity kind, never two
     // labels for the same scope.
-    const merged = await within(scopes).findByRole('button', { name: /mastra · your org/ });
-    expect(within(scopes).queryByRole('button', { name: 'mastra' })).not.toBeInTheDocument();
+    const orgScope = await within(scopes).findByRole('button', { name: /mastra org/ });
+    expect(within(scopes).queryByRole('button', { name: /^mastra$/ })).not.toBeInTheDocument();
 
-    // The merged entry opens the structural lens for the matched scope node.
-    await user.click(merged);
+    // The identity scope entry opens its structural lens.
+    await user.click(orgScope);
     expect(router.state.location.search).toContain('scope=11111111-1111-4111-8111-111111111111');
     await waitFor(() => expect(subgraphParams).toContain('11111111-1111-4111-8111-111111111111'));
-    expect(merged).toHaveAttribute('aria-pressed', 'true');
-    expect(merged).toHaveClass('bg-surface4');
+    expect(orgScope).toHaveAttribute('aria-pressed', 'true');
+    expect(orgScope).toHaveClass('bg-surface4');
 
-    // A project-scoped content node reached through the merged org lens must
+    // A project-scoped content node reached through the org lens must
     // load detail at the node's own rung, not the lens marker's org rung.
     fireEvent.click(await screen.findByText('Payments Service'));
     await waitFor(() => expect(nodeScopeLevels).toContain('resource'));
     expect(nodeScopeLevels).not.toContain('org');
 
-    // The merged project entry behaves the same way.
-    const project = within(scopes).getByRole('button', { name: /fp-1 · your project/ });
+    // The project scope entry behaves the same way.
+    const project = within(scopes).getByRole('button', { name: /fp-1 project/ });
     await user.click(project);
     await waitFor(() => expect(subgraphParams).toContain('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
     expect(project).toHaveAttribute('aria-pressed', 'true');
@@ -545,12 +553,10 @@ describe('KnowledgePage', () => {
     const { router } = renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    fireEvent.click(await within(scopes).findByRole('button', { name: /fp-1 · your project/ }));
-    const root = (await screen.findAllByTestId('knowledge-node')).find(node => node.textContent?.includes(FACTORY_ID));
-    if (!root) throw new Error('Expected the selected structural scope root');
-    fireEvent.click(root);
+    fireEvent.click(await within(scopes).findByRole('button', { name: /fp-1 project/ }));
 
-    const flyout = await screen.findByTestId('knowledge-scope-flyout');
+    // Tree selection changes the lens and opens its scope detail together.
+    let flyout = await screen.findByTestId('knowledge-scope-flyout');
     expect(flyout).toHaveTextContent(`resource:${FACTORY_ID}`);
     expect(flyout).toHaveTextContent('Content nodes1');
     expect(flyout).toHaveTextContent('Child scopes1');
@@ -558,6 +564,15 @@ describe('KnowledgePage', () => {
     expect(activityScopeIds).toContain(scopeRootId);
     expect(router.state.location.search).toContain(`node=${scopeRootId}`);
     expect(router.state.location.search).toContain(`scope=${scopeRootId}`);
+
+    // Clicking the same scope in the graph applies the identical selection.
+    fireEvent.click(within(flyout).getByRole('button', { name: 'Close scope details' }));
+    expect(screen.queryByTestId('knowledge-scope-flyout')).not.toBeInTheDocument();
+    const root = (await screen.findAllByTestId('knowledge-node')).find(node => node.textContent?.includes(FACTORY_ID));
+    if (!root) throw new Error('Expected the selected structural scope root');
+    fireEvent.click(root);
+    flyout = await screen.findByTestId('knowledge-scope-flyout');
+    expect(flyout).toHaveTextContent(`resource:${FACTORY_ID}`);
   });
 
   it('falls back to plain identity rung entries when the adapter exposes no scope nodes', async () => {
@@ -582,8 +597,8 @@ describe('KnowledgePage', () => {
     renderRoute(`/factories/${FACTORY_ID}/knowledge`);
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    const org = await within(scopes).findByRole('button', { name: /Organization org-1/ });
-    expect(within(scopes).getByRole('button', { name: /Project fp-1/ })).toBeInTheDocument();
+    const org = await within(scopes).findByRole('button', { name: /org-1 org/ });
+    expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
     await user.click(org);
     expect(org).toHaveAttribute('aria-pressed', 'true');
     await waitFor(() => expect(subgraphParams).toContain('org'));
@@ -643,16 +658,16 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
-    expect(await within(scopes).findByRole('button', { name: /mastra · your org/ })).toBeInTheDocument();
-    expect(within(scopes).getByRole('button', { name: /fp-1 · your project/ })).toBeInTheDocument();
+    expect(await within(scopes).findByRole('button', { name: /mastra org/ })).toBeInTheDocument();
+    expect(within(scopes).getByRole('button', { name: /fp-1 project/ })).toBeInTheDocument();
 
     // Merged entries get a filled active pill matching aria-pressed.
-    const project = within(scopes).getByRole('button', { name: /fp-1 · your project/ });
+    const project = within(scopes).getByRole('button', { name: /fp-1 project/ });
     await user.click(project);
     expect(project).toHaveAttribute('aria-pressed', 'true');
     expect(project).toHaveClass('bg-surface4');
     expect(project).toHaveClass('font-medium');
-    expect(within(scopes).getByRole('button', { name: /mastra · your org/ })).not.toHaveClass('bg-surface4');
+    expect(within(scopes).getByRole('button', { name: /mastra org/ })).not.toHaveClass('bg-surface4');
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('knowledge-appended')).toBeInTheDocument();
@@ -671,6 +686,10 @@ describe('KnowledgePage', () => {
             scope: ['org:org-1', `resource:${FACTORY_ID}`],
             rung: 'resource',
           },
+        ],
+        records: [
+          ...graphFixture.records,
+          { id: 'record-boundary', nodeIds: ['ent-1'], pinned: false, text: 'See [[Elsewhere]].' },
         ],
         unresolvedCapped: { count: 3, names: ['Ghost'] },
       },
@@ -698,6 +717,16 @@ describe('KnowledgePage', () => {
     expect(banner).toHaveTextContent(/newest 2 nodes/);
     expect(banner).toHaveTextContent(/1 linked nodes outside the window/);
     expect(banner).toHaveTextContent(/3 links unresolved/);
+
+    const boundaryNode = await waitFor(() => {
+      const element = document.querySelector<HTMLElement>('[data-node-id="ent-x"][data-node-type="boundary"]');
+      if (!element) throw new Error('Expected the authorized out-of-window endpoint');
+      return element;
+    });
+    expect(within(boundaryNode).getByText('Elsewhere')).toBeInTheDocument();
+    expect(within(boundaryNode).getByText('↗ Project')).toBeInTheDocument();
+    fireEvent.click(boundaryNode);
+    expect(router.state.location.search).not.toContain('node=ent-x');
 
     fireEvent.click(screen.getByText('Payments Service'));
     fireEvent.click(await screen.findByRole('button', { name: 'Elsewhere' }));
