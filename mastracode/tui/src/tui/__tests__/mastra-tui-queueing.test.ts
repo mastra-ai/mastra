@@ -995,6 +995,77 @@ describe('syncInitialThreadState', () => {
   });
 });
 
+describe('background completion queue', () => {
+  beforeEach(() => {
+    mocks.showError.mockReset();
+  });
+
+  it('continues processing completions after a render failure', async () => {
+    const refreshBackgroundActivity = vi.fn().mockImplementationOnce(() => {
+      throw new Error('render failed');
+    });
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = { backgroundActivities: new Map() };
+    tui.backgroundNoticeQueue = Promise.resolve();
+    tui.refreshBackgroundActivity = refreshBackgroundActivity;
+
+    tui.handleBackgroundCompletion({
+      taskId: 'task-1',
+      originToolCallId: 'call-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'view',
+      status: 'completed',
+    });
+    tui.handleBackgroundCompletion({
+      taskId: 'task-2',
+      originToolCallId: 'call-2',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'search_content',
+      status: 'completed',
+    });
+    await tui.backgroundNoticeQueue;
+
+    expect(refreshBackgroundActivity).toHaveBeenCalledTimes(2);
+    expect(tui.state.backgroundActivities.get('task-2')?.status).toBe('completed');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'render failed');
+  });
+});
+
+describe('background activity cancellation', () => {
+  it('reports cancellation failures and closes the activity overlay', async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'));
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => ({ backgroundTaskManager: { cancel } }) },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(cancel).toHaveBeenCalledWith('task-1');
+    expect(mocks.showError).toHaveBeenCalledWith(tui.state, 'cancel failed');
+    expect(hideOverlay).toHaveBeenCalledOnce();
+  });
+
+  it('closes the activity overlay when no background task manager exists', async () => {
+    mocks.showError.mockClear();
+    const hideOverlay = vi.fn();
+    const tui = Object.create(MastraTUI.prototype) as any;
+    tui.state = {
+      controller: { getMastra: () => undefined },
+      ui: { hideOverlay },
+    };
+
+    await tui.abortBackgroundActivity({ taskId: 'task-1' });
+
+    expect(mocks.showError).not.toHaveBeenCalled();
+    expect(hideOverlay).toHaveBeenCalledOnce();
+  });
+});
+
 describe('consumePendingImages', () => {
   it('supports image-only submissions', () => {
     expect(consumePendingImages('[image] ', [{ data: 'img', mimeType: 'image/png' }])).toEqual({

@@ -383,6 +383,8 @@ async function startMastraCodeApp(
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
     githubSignals: result.githubSignals,
+    backgroundToolsEnabled: result.backgroundToolsEnabled,
+    backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
     terminal,

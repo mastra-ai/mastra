@@ -21,6 +21,7 @@ export type ScenarioName =
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'automated-chat-unix-pubsub'
+  | 'background-subagents'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'

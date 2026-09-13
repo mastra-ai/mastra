@@ -5,6 +5,10 @@ const { requestUIRender } = vi.hoisted(() => ({ requestUIRender: vi.fn() }));
 vi.mock('@earendil-works/pi-tui', () => {
   class MockContainer {
     children: unknown[] = [];
+
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
   }
 
   class MockProcessTerminal {
