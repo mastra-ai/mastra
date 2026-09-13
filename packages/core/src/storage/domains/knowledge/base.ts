@@ -120,27 +120,34 @@ export function assertKnowledgeProposalMutationSemantics(
   mutation: KnowledgeProposalMutation,
   targets: readonly KnowledgeProposalTarget[],
 ): void {
+  const runtimeIsScope = (mutation.mutation as { isScope?: boolean }).isScope;
+  if (mutation.kind === 'create-node' && runtimeIsScope === true) {
+    throw new KnowledgeConflictError('Node creation cannot create a scope');
+  }
+  if (mutation.kind === 'create-scope' && runtimeIsScope !== true) {
+    throw new KnowledgeConflictError('Scope creation must create a scope node');
+  }
   if (mutation.kind === 'update-node') {
     const target = targets.find(candidate => candidate.type === 'node' && candidate.id === mutation.mutation.id);
     const currentScopeIds = canonicalizeKnowledgeScopeIds(target?.scopeIds ?? []);
     const nextScopeIds = canonicalizeKnowledgeScopeIds(mutation.mutation.scopeIds ?? currentScopeIds);
     if (
-      mutation.mutation.isScope === true ||
+      runtimeIsScope !== undefined ||
       currentScopeIds.length !== nextScopeIds.length ||
       currentScopeIds.some((scopeId, index) => scopeId !== nextScopeIds[index])
     ) {
       throw new KnowledgeConflictError('Node updates cannot change scope membership or promote a node');
     }
   }
-  if (mutation.kind === 'move-node' && mutation.mutation.isScope === true) {
-    throw new KnowledgeConflictError('Node moves cannot promote a node');
+  if (mutation.kind === 'move-node' && runtimeIsScope !== undefined) {
+    throw new KnowledgeConflictError('Node moves cannot change whether a node is a scope');
   }
   if (mutation.kind === 'promote-node') {
     const target = targets.find(candidate => candidate.type === 'node' && candidate.id === mutation.mutation.id);
     const currentScopeIds = canonicalizeKnowledgeScopeIds(target?.scopeIds ?? []);
     const nextScopeIds = canonicalizeKnowledgeScopeIds(mutation.mutation.scopeIds ?? currentScopeIds);
     if (
-      mutation.mutation.isScope !== true ||
+      runtimeIsScope !== true ||
       currentScopeIds.length !== nextScopeIds.length ||
       currentScopeIds.some((scopeId, index) => scopeId !== nextScopeIds[index])
     ) {
