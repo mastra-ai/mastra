@@ -1239,6 +1239,7 @@ Want to work on challenging problems"}`;
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual(fallbackValue);
+      expect(objectResultChunk?.metadata).toEqual({ fallback: true });
     });
   });
 

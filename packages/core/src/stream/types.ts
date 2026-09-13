@@ -20,6 +20,7 @@ import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
+import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -1180,6 +1181,12 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  /**
+   * Logger for the stream and its output processors. Defaults to a console
+   * logger that only prints errors, so pass the agent's logger to surface
+   * e.g. `structuredOutput.errorStrategy: 'warn'` warnings.
+   */
+  logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;

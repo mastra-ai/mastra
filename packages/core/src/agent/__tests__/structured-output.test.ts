@@ -4,7 +4,7 @@ import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraModelGateway } from '../../llm/model/gateways/base';
 import type { ProviderConfig } from '../../llm/model/gateways/base';
@@ -881,3 +881,94 @@ function structuredOutputTests({ version }: { version: 'v1' | 'v2' | 'v3' }) {
 structuredOutputTests({ version: 'v1' });
 structuredOutputTests({ version: 'v2' });
 structuredOutputTests({ version: 'v3' });
+
+function textModel(text: string) {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: text },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+      ]),
+    }),
+  });
+}
+
+describe('structured output with a separate structuring model that returns invalid output', () => {
+  const schema = z.object({ summary: z.string(), filesFound: z.number() });
+  const fallbackValue = { summary: 'unknown', filesFound: 0 };
+  let logger: { debug: any; info: any; warn: any; error: any };
+  let consoleError: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  function createAgent() {
+    const agent = new Agent({
+      id: 'structured-output-invalid-structurer',
+      name: 'Structured Output Invalid Structurer',
+      instructions: 'You are a helpful assistant.',
+      model: textModel('There are 3 files in the directory.'),
+    });
+    agent.__registerPrimitives({ logger: logger as any });
+    return agent;
+  }
+
+  it("honours errorStrategy 'warn' without logging at error level", async () => {
+    const result = await createAgent().generate('Summarize the directory.', {
+      structuredOutput: { schema, model: textModel('[1, 2, 3]'), errorStrategy: 'warn' },
+    });
+
+    expect(result.object).toBeUndefined();
+    expect(result.tripwire).toBeUndefined();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Structured output validation failed'));
+  });
+
+  it("honours errorStrategy 'fallback' and marks the substituted object", async () => {
+    const stream = await createAgent().stream('Summarize the directory.', {
+      structuredOutput: { schema, model: textModel('[1, 2, 3]'), errorStrategy: 'fallback', fallbackValue },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    expect(await stream.object).toEqual(fallbackValue);
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+    const objectResult = chunks.find(chunk => chunk.type === 'object-result');
+    expect(objectResult?.metadata).toEqual({ from: 'structured-output', fallback: true });
+  });
+
+  it('logs structurer failures through the agent logger instead of the console', async () => {
+    const result = await createAgent().generate('Summarize the directory.', {
+      structuredOutput: { schema, model: textModel('[1, 2, 3]') },
+    });
+
+    expect(result.object).toBeUndefined();
+    expect(result.tripwire?.reason).toContain('Structured output validation failed');
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
+  });
+});

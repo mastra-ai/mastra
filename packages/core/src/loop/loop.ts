@@ -169,6 +169,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,
+      logger: loggerToUse,
       transportRef: internalToUse.transportRef,
       experimentalTransform,
       hideSignals,

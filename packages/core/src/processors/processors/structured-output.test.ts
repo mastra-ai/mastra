@@ -275,6 +275,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -364,6 +365,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -460,6 +462,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -580,6 +583,7 @@ describe('StructuredOutputProcessor', () => {
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
+            errorStrategy: 'strict',
           },
           memory: {
             thread: 'thread-123',
@@ -768,6 +772,107 @@ describe('StructuredOutputProcessor', () => {
         upstreamError,
       );
       expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('should route structuring agent logs through the configured logger', () => {
+      const mockLogger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+      const loggedProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        logger: mockLogger as any,
+      });
+
+      expect((loggedProcessor['structuringAgent'] as any).logger).toBe(mockLogger);
+    });
+
+    it('should forward the error strategy to the structuring run', async () => {
+      const fallbackProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'fallback',
+        fallbackValue: { color: 'default', intensity: 'medium' },
+      });
+
+      const { controller } = createMockController();
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+      const streamSpy = vi
+        .spyOn(fallbackProcessor['structuringAgent'], 'stream')
+        .mockResolvedValue({ fullStream: convertArrayToReadableStream([]) } as any);
+
+      await fallbackProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort: createMockAbort(),
+        retryCount: 0,
+      });
+
+      expect(streamSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          structuredOutput: expect.objectContaining({
+            errorStrategy: 'fallback',
+            fallbackValue: { color: 'default', intensity: 'medium' },
+          }),
+        }),
+      );
+    });
+
+    it('should keep fallback metadata emitted by the structuring run', async () => {
+      const mockLogger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+      const fallbackProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'fallback',
+        fallbackValue: { color: 'default', intensity: 'medium' },
+        logger: mockLogger as any,
+      });
+
+      const { controller, enqueuedChunks } = createMockController();
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+      vi.spyOn(fallbackProcessor['structuringAgent'], 'stream').mockResolvedValue({
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'default', intensity: 'medium' },
+            metadata: { fallback: true },
+          },
+        ]),
+      } as any);
+
+      await fallbackProcessor.processOutputStream({
+        part: finishChunk,
+        streamParts: [],
+        state: { controller },
+        abort: createMockAbort(),
+        retryCount: 0,
+      });
+
+      expect(enqueuedChunks).toHaveLength(1);
+      expect(enqueuedChunks[0].metadata).toEqual({ from: 'structured-output', fallback: true });
+      expect(mockLogger.info).toHaveBeenCalledWith('[StructuredOutputProcessor] Structuring failed (using fallback)');
     });
 
     it('should only process once even if called multiple times', async () => {

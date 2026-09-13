@@ -86,6 +86,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         tracingPolicy: { internal: InternalSpans.ALL },
       },
     });
+    // The structurer is an implementation detail of this processor: route its
+    // logs (and those of the LLM run it starts) through the caller's logger
+    // instead of a default ConsoleLogger.
+    if (this.logger) {
+      this.structuringAgent.__registerPrimitives({ logger: this.logger });
+    }
   }
 
   __registerMastra(mastra: Mastra) {
@@ -155,6 +161,9 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
           continue;
         }
+        if (chunk.type === 'object-result' && chunk.metadata?.fallback) {
+          this.logger?.info('[StructuredOutputProcessor] Structuring failed (using fallback)');
+        }
         if (chunk.type === 'error') {
           this.handleError('Structuring failed', chunk.payload.error, abort);
 
@@ -181,6 +190,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         const newChunk = {
           ...chunk,
           metadata: {
+            ...chunk.metadata,
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
@@ -243,10 +253,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         model: this.structuringModel,
         requestContext: structuringRequestContext,
         toolChoice: 'none',
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput: this.getStructuringOutputOptions(),
         memory: {
           thread: threadId,
           ...(resourceId ? { resource: resourceId } : {}),
@@ -261,14 +268,28 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     return this.structuringAgent.stream(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput: this.getStructuringOutputOptions(),
         providerOptions: this.providerOptions,
         ...observabilityContext,
       },
     );
+  }
+
+  /**
+   * Structured output options for the structuring run. The error strategy is
+   * forwarded so a schema validation failure inside the structurer is handled
+   * the way the caller asked for (warn / fallback) instead of ending that run
+   * with an error and logging it at error level before this processor sees it.
+   */
+  private getStructuringOutputOptions(): StructuredOutputOptions<OUTPUT> {
+    const base = {
+      schema: this.schema,
+      jsonPromptInjection: this.jsonPromptInjection,
+    };
+    if (this.errorStrategy === 'fallback') {
+      return { ...base, errorStrategy: 'fallback', fallbackValue: this.fallbackValue as OUTPUT };
+    }
+    return { ...base, errorStrategy: this.errorStrategy };
   }
 
   /**
