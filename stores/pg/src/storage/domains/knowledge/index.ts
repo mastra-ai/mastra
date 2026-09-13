@@ -86,7 +86,9 @@ import type {
   KnowledgeProposal,
   KnowledgeProposalApprovalCapability,
   KnowledgeProposalMutation,
+  KnowledgeProposalTarget,
   KnowledgeProposalApprovalScopeIds,
+  ResolveKnowledgeGapProposalInput,
   KnowledgeRecord,
   KnowledgeScopeAddress,
   KnowledgeScopeGrant,
@@ -2790,6 +2792,27 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async applyProposal(input: ApplyKnowledgeProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal(input);
+  }
+
+  async resolveGapProposal(input: ResolveKnowledgeGapProposalInput): Promise<KnowledgeProposal> {
+    return this.#applyProposal({
+      id: input.id,
+      reviewerContextScopeId: input.reviewerContextScopeId,
+      expectedAccessEpoch: input.expectedAccessEpoch,
+      verifiedMutation: input.mutation,
+      verifiedTargets: input.targets,
+      reviewReason: input.reviewReason,
+    });
+  }
+
+  async #applyProposal(
+    input: ApplyKnowledgeProposalInput & {
+      verifiedMutation?: KnowledgeProposalMutation;
+      verifiedTargets?: KnowledgeProposalTarget[];
+      reviewReason?: string;
+    },
+  ): Promise<KnowledgeProposal> {
     const { assertKnowledgeProposalMutationSemantics } = await loadKnowledgeCore();
     return this.#transaction(async tx => {
       await this.#assertExpectedAccessEpoch(tx, input.expectedAccessEpoch);
@@ -2800,7 +2823,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (!existing.rows[0]) throw new KnowledgeNotFoundError('proposal', input.id);
       const proposal = parseProposal(existing.rows[0]);
       if (proposal.status !== 'pending') throw new KnowledgeConflictError('Knowledge proposal was already reviewed');
-      for (const target of proposal.targets) {
+      const targets = input.verifiedTargets ?? proposal.targets;
+      for (const target of targets) {
         const table = target.type === 'node' ? TABLE_KNOWLEDGE_NODES : TABLE_KNOWLEDGE_RECORDS;
         const locked = await tx.execute({
           sql: `UPDATE "${table}" SET version=version WHERE id=? AND version=? AND "deletedAt" IS ${target.expectedDeleted ? 'NOT NULL' : 'NULL'}`,
