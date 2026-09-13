@@ -55,6 +55,27 @@ const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[], 
   return pendingToolApprovalIds;
 };
 
+const isWaitingQueuedMessage = (message: MastraDBMessage): boolean =>
+  message.content.metadata?.deliveryState === 'queueing' || message.content.metadata?.deliveryState === 'queued';
+
+const placeQueuedTurnBeforeResponse = (
+  messages: MastraDBMessage[],
+  clientMessageId: string,
+  runId: string,
+): MastraDBMessage[] => {
+  const messageIndex = messages.findIndex(
+    message => message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId,
+  );
+  const responseIndex = messages.findIndex(
+    message => message.role === 'assistant' && message.content.metadata?.deliveryRunId === runId,
+  );
+  if (responseIndex < 0 || messageIndex <= responseIndex) return messages;
+  const reordered = [...messages];
+  const [message] = reordered.splice(messageIndex, 1);
+  if (message) reordered.splice(responseIndex, 0, message);
+  return reordered;
+};
+
 const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallId: string): boolean =>
   parts.some(part => {
     if (part.type !== 'tool-invocation') return false;
@@ -224,6 +245,8 @@ export type GenerateArgs = SharedArgs & {
 };
 
 export type StreamArgs = SharedArgs & {
+  /** Queue a separate turn, or explicitly steer the active run. Defaults to send (deliver). */
+  delivery?: 'send' | 'queue' | 'steer';
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
   signalId?: string;
@@ -337,6 +360,8 @@ export const useChat = ({
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
+  const observedRuns = useRef(new Map<string, 'sent' | 'failed'>());
+  const finishedRuns = useRef(new Set<string>());
   const lastHydration = useRef<
     | {
         agentId: string;
@@ -364,9 +389,21 @@ export const useChat = ({
         const live = current.filter(message => previousById.get(message.id) !== message);
         const liveById = new Map(live.map(message => [message.id, message]));
         const historyIds = new Set(formattedMessages.map(message => message.id));
-        return [
+        const historyClientIds = new Set(
+          (initialMessages ?? [])
+            .map(message => message.content.metadata?.[CLIENT_MESSAGE_ID_KEY])
+            .filter(id => typeof id === 'string'),
+        );
+        const reconciled = [
           ...formattedMessages.map(message => liveById.get(message.id) ?? message),
-          ...live.filter(message => !historyIds.has(message.id)),
+          ...live.filter(message => {
+            const clientId = message.content.metadata?.[CLIENT_MESSAGE_ID_KEY];
+            return !historyIds.has(message.id) && !(typeof clientId === 'string' && historyClientIds.has(clientId));
+          }),
+        ];
+        return [
+          ...reconciled.filter(message => !isWaitingQueuedMessage(message)),
+          ...reconciled.filter(isWaitingQueuedMessage),
         ];
       });
       setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
@@ -376,6 +413,8 @@ export const useChat = ({
       if (liveRunFinished.current) return;
       if (!liveRunId.current && isRunning && historyRunId !== _currentRunId.current) return;
     } else {
+      observedRuns.current.clear();
+      finishedRuns.current.clear();
       liveTasks.current = undefined;
       liveApprovalIds.current.clear();
       liveRunId.current = undefined;
@@ -484,10 +523,92 @@ export const useChat = ({
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
-      // A delayed terminal event must not finish another run's message, clear
-      // its approvals, or trigger its completion callback.
-      if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
-      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+      const isOtherRunTerminal = isTerminal && liveRunId.current && chunk.runId !== liveRunId.current;
+      if (
+        chunk.type === 'start' &&
+        !(typeof chunk.payload.messageId === 'string' && chunk.payload.messageId.startsWith('persisted-signal:'))
+      ) {
+        observedRuns.current.set(chunk.runId, 'sent');
+      }
+      if ((chunk.type === 'error' || chunk.type === 'abort') && !observedRuns.current.has(chunk.runId)) {
+        observedRuns.current.set(chunk.runId, 'failed');
+      }
+      if (chunk.type === 'finish' || chunk.type === 'error' || chunk.type === 'abort') {
+        finishedRuns.current.add(chunk.runId);
+      }
+      const echoMetadata = chunk.type === 'data-user-message' && isDataChunk(chunk) ? chunk.data?.metadata : undefined;
+      const echoedClientId =
+        echoMetadata && typeof echoMetadata === 'object' && CLIENT_MESSAGE_ID_KEY in echoMetadata
+          ? echoMetadata[CLIENT_MESSAGE_ID_KEY]
+          : undefined;
+      setMessages(prev => {
+        const conversation = prev.map(message => {
+          const metadata = message.content.metadata;
+          if (
+            isWaitingQueuedMessage(message) &&
+            typeof echoedClientId === 'string' &&
+            metadata?.[CLIENT_MESSAGE_ID_KEY] === echoedClientId
+          ) {
+            return {
+              ...message,
+              content: {
+                ...message.content,
+                metadata: { ...metadata, deliveryState: 'sent', deliveryRunId: chunk.runId },
+              },
+            };
+          }
+          if (typeof metadata?.deliveryRunId !== 'string') return message;
+          let deliveryState: MastraDBMessageMetadata['deliveryState'];
+          if (metadata.deliveryState === 'queued') deliveryState = observedRuns.current.get(metadata.deliveryRunId);
+          if (metadata.deliveryState === 'steered' && finishedRuns.current.has(metadata.deliveryRunId))
+            deliveryState = 'sent';
+          if (!deliveryState) return message;
+          return {
+            ...message,
+            content: {
+              ...message.content,
+              metadata: {
+                ...metadata,
+                deliveryState,
+                status: deliveryState === 'failed' ? undefined : metadata.status,
+              },
+            },
+          };
+        });
+        const waiting = conversation.filter(isWaitingQueuedMessage);
+        const active = conversation.filter(message => !isWaitingQueuedMessage(message));
+        const promotesQueuedTurn = prev.some(
+          message =>
+            isWaitingQueuedMessage(message) && message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === echoedClientId,
+        );
+        const ordered =
+          promotesQueuedTurn && typeof echoedClientId === 'string'
+            ? placeQueuedTurnBeforeResponse(active, echoedClientId, chunk.runId)
+            : active;
+        const tail = ordered.at(-1);
+        // A startup echo confirms the user message; it must not discard the run's response ID.
+        const startupResponse =
+          chunk.type === 'data-user-message' &&
+          tail?.role === 'assistant' &&
+          tail.content.parts.length === 0 &&
+          tail.content.metadata?.deliveryRunId === chunk.runId
+            ? tail
+            : undefined;
+        return [
+          ...(isOtherRunTerminal
+            ? ordered
+            : accumulateChunk({
+                chunk,
+                conversation: startupResponse ? ordered.slice(0, -1) : ordered,
+                metadata: { mode: 'stream', deliveryRunId: chunk.runId },
+              })),
+          ...(startupResponse ? [startupResponse] : []),
+          ...waiting,
+        ];
+      });
+      // Other runs can settle delivery feedback, but must not finish the active
+      // response, clear its approvals, or trigger its completion callback.
+      if (isOtherRunTerminal) return;
 
       const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
       if (streamedTasks !== undefined) {
@@ -743,7 +864,9 @@ export const useChat = ({
     clientTools,
     signalId,
     clientMessageId,
+    delivery = 'send',
   }: StreamArgs) => {
+    const activeRunAtSend = isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined;
     const {
       frequencyPenalty,
       presencePenalty,
@@ -785,9 +908,10 @@ export const useChat = ({
     };
     setIsRunning(true);
 
-    _streamAbortRef.current?.abort();
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
+      _streamAbortRef.current?.abort();
+    }
     const internalAbort = new AbortController();
-    _streamAbortRef.current = internalAbort;
 
     if (signal) {
       if (signal.aborted) internalAbort.abort();
@@ -802,6 +926,7 @@ export const useChat = ({
     const agent = clientWithAbort.getAgent(agentId);
 
     const streamWithLegacyRoute = async () => {
+      _streamAbortRef.current = internalAbort;
       const runId = uuid();
       const response = await agent.stream(coreUserMessages, {
         model,
@@ -841,6 +966,7 @@ export const useChat = ({
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
+      if (delivery === 'queue') throw new Error('Queueing requires thread signal support. The message was not sent.');
       await streamWithLegacyRoute();
       return;
     }
@@ -850,6 +976,7 @@ export const useChat = ({
     await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
     if (_threadSignalsUnsupportedRef.current) {
+      if (delivery === 'queue') throw new Error('Queueing requires thread signal support. The message was not sent.');
       await streamWithLegacyRoute();
       return;
     }
@@ -880,7 +1007,7 @@ export const useChat = ({
     };
 
     try {
-      const result = await agent.sendMessage({
+      const result = await agent[delivery === 'queue' ? 'queueMessage' : 'sendMessage']({
         message: clientMessageId
           ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
           : messageContents,
@@ -894,6 +1021,36 @@ export const useChat = ({
           },
         },
       });
+      if (clientMessageId && delivery !== 'send') {
+        setMessages(prev => {
+          const updated = prev.map(message => {
+            if (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] !== clientMessageId) return message;
+            let deliveryState: MastraDBMessageMetadata['deliveryState'] = 'sent';
+            if (delivery === 'queue') deliveryState = observedRuns.current.get(result.runId) ?? 'queued';
+            else if (activeRunAtSend === result.runId && !finishedRuns.current.has(result.runId))
+              deliveryState = 'steered';
+            return {
+              ...message,
+              content: {
+                ...message.content,
+                metadata: {
+                  ...message.content.metadata,
+                  deliveryState,
+                  deliveryRunId: result.runId,
+                  status:
+                    deliveryState === 'failed' || finishedRuns.current.has(result.runId)
+                      ? undefined
+                      : message.content.metadata?.status,
+                },
+              },
+            };
+          });
+          if (delivery === 'queue' && observedRuns.current.has(result.runId)) {
+            return placeQueuedTurnBeforeResponse(updated, clientMessageId, result.runId);
+          }
+          return updated;
+        });
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -906,6 +1063,8 @@ export const useChat = ({
         setIsRunning(false);
       }
     } catch (error) {
+      // A requested queue must never silently fall back to steering the active run.
+      if (delivery === 'queue') throw error;
       if (isThreadSignalUnsupportedError(error)) {
         try {
           await agent.sendSignal({
@@ -1010,17 +1169,30 @@ export const useChat = ({
     void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
       console.error('[useChat] Failed to abort thread subscription', error);
     });
-    closeThreadSubscription();
-    setMessages(prev => finishStreamingAssistantMessage(prev));
+    // Stop execution, not observation: independently queued turns can still start.
+    const cancelledRunId = _currentRunId.current;
+    if (cancelledRunId) finishedRuns.current.add(cancelledRunId);
+    setMessages(prev =>
+      finishStreamingAssistantMessage(
+        prev.map(message => {
+          const metadata = message.content.metadata;
+          if (!cancelledRunId || metadata?.deliveryState !== 'steered' || metadata.deliveryRunId !== cancelledRunId)
+            return message;
+          return { ...message, content: { ...message.content, metadata: { ...metadata, deliveryState: 'sent' } } };
+        }),
+      ),
+    );
     liveRunFinished.current = true;
     pendingToolApprovalIdsRef.current.clear();
     setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
-    _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
-    _activeContinuation.current = {};
+    if (!threadSubscription) {
+      _onChunk.current = undefined;
+      _activeContinuation.current = {};
+    }
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
@@ -1293,6 +1465,9 @@ export const useChat = ({
         ...dbUserMessage.content.metadata,
         mode: 'stream',
         status: 'pending',
+        ...(mode === 'stream' && 'delivery' in args && args.delivery === 'queue'
+          ? { deliveryState: 'queueing' as const }
+          : {}),
         [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
       };
       const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
@@ -1312,7 +1487,23 @@ export const useChat = ({
     } catch (error) {
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
-      setIsRunning(false);
+      if (!isRunning) setIsRunning(false);
+      // An aborted acceptance request has an unknown outcome; a later echo can still confirm it.
+      if (clientMessageId && !isAbortError(error)) {
+        setMessages(prev =>
+          prev.map(message =>
+            message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientMessageId
+              ? {
+                  ...message,
+                  content: {
+                    ...message.content,
+                    metadata: { ...message.content.metadata, status: undefined, deliveryState: 'failed' },
+                  },
+                }
+              : message,
+          ),
+        );
+      }
       throw error;
     }
   };

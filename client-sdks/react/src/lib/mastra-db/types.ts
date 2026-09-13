@@ -67,6 +67,10 @@ export type MastraDBMessageMetadata = {
   mode?: 'generate' | 'stream' | 'network';
   /** Client-generated correlation id (see {@link CLIENT_MESSAGE_ID_KEY}). */
   clientMessageId?: string;
+  /** Local delivery feedback; independent of waiting for the canonical message echo. */
+  deliveryState?: 'queueing' | 'queued' | 'steered' | 'sent' | 'failed';
+  /** Accepted run ID used to settle queued feedback when that run is observed. */
+  deliveryRunId?: string;
   /**
    * Streaming/abort/error/tripwire surface status. `'pending'` marks an
    * optimistically-appended user message that is awaiting its server signal

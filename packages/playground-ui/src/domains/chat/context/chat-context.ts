@@ -14,6 +14,7 @@ import { createContext, useContext } from 'react';
 export interface ChatSendArgs {
   /** Plain user text. */
   message: string;
+  delivery?: 'send' | 'queue' | 'steer';
   /** Attachments already converted to core user messages (images / files). */
   attachments?: CoreUserMessage[];
 }
