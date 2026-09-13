@@ -142,17 +142,15 @@ function ScopeLabel({
   memberCountTruncated?: boolean;
 }) {
   return (
-    <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate">{name}</span>
-        <Badge variant="neutral" emphasis="muted" size="xs">
-          {kind}
-        </Badge>
-      </span>
-      {memberCount !== undefined ? (
-        <span className="text-icon3">
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{name}</span>
+      <Badge variant="neutral" emphasis="muted" size="xs">
+        {kind}
+      </Badge>
+      {memberCount !== undefined && memberCount > 0 ? (
+        <span className="text-icon3 shrink-0">
           {memberCount}
-          {memberCountTruncated ? '+' : ''} inside
+          {memberCountTruncated ? '+' : ''}
         </span>
       ) : null}
     </span>
@@ -549,6 +547,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         parentIds: [],
         memberCount: 0,
         memberCountTruncated: false,
+        contentNodeCount: 0,
         childScopeCount: 0,
       });
     } else {
