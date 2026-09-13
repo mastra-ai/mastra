@@ -19,7 +19,6 @@ import {
   queryThreadsInputSchema,
   queryThreadsResultSchema,
   resolveTraceQueryTimeoutMs,
-  traceQueryGroupResponseSchema,
   traceQueryRequestSchema,
   traceQueryTraceResponseSchema,
   TraceQueryCursorError,
@@ -62,18 +61,14 @@ describe('traceQueryRequestSchema', () => {
   });
 
   it('rejects unknown and experimental request properties', () => {
-    for (const property of ['groupBy', 'select', 'result', 'source', 'authorization']) {
+    for (const property of ['group', 'groupBy', 'select', 'result', 'source', 'authorization']) {
       const result = traceQueryRequestSchema.safeParse({ ...baseRequest, [property]: {} });
       expect(result.success, property).toBe(false);
     }
   });
 
-  it('requires ISO timestamps and the exact group shape', () => {
+  it('requires ISO timestamps', () => {
     expect(traceQueryRequestSchema.safeParse({ timeRange: { from: 'yesterday', to: 'tomorrow' } }).success).toBe(false);
-    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, group: { by: ['environment'] } }).success).toBe(false);
-    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, group: { by: ['threadId'], where: {} } }).success).toBe(
-      false,
-    );
   });
 
   it('bounds membership sets and predicate string payloads by UTF-8 bytes', () => {
@@ -788,24 +783,6 @@ describe('planTraceQuery', () => {
     }
   });
 
-  it('rejects grouped orderBy and fixes grouped ordering', () => {
-    const error = validationError(() =>
-      planTraceQuery(
-        parsed({
-          ...baseRequest,
-          group: { by: ['threadId'] },
-          orderBy: [{ field: 'startedAt', direction: 'desc' }],
-        }),
-      ),
-    );
-    expect(error.issues[0]).toMatchObject({ code: 'group_order_not_supported', path: ['orderBy'] });
-
-    expect(planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }))).toMatchObject({
-      result: 'groups',
-      orderBy: { field: 'threadId', direction: 'asc' },
-    });
-  });
-
   it('rejects null predicate literals in favor of presence operators', () => {
     for (const op of ['eq', 'ne'] as const) {
       const error = validationError(() =>
@@ -1203,18 +1180,22 @@ describe('thread-query cursors', () => {
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
   });
 
-  it('does not exchange cursors with legacy grouped trace queries', () => {
-    const legacyPlan = planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }));
-    const legacyCursor = encodeTraceQueryCursor(legacyPlan, { result: 'groups', threadId: 'thread-1' });
-    expect(() => planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: legacyCursor } }))).toThrowError(
+  it('does not exchange cursors with trace queries', () => {
+    const tracePlan = planTraceQuery(parsed());
+    const traceCursor = encodeTraceQueryCursor(tracePlan, {
+      result: 'traces',
+      sortValue: '2026-08-03T00:00:00.000Z',
+      traceId: 'trace-3',
+    });
+    expect(() => planThreadQuery(parsedThreads({ ...baseThreadRequest, page: { after: traceCursor } }))).toThrowError(
       expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
     );
 
     const threadPlan = planThreadQuery(parsedThreads());
     const threadCursor = encodeTraceQueryCursor(threadPlan, { result: 'threads', threadId: 'thread-1' });
-    expect(() =>
-      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, page: { after: threadCursor } })),
-    ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: threadCursor } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+    );
   });
 });
 
@@ -1235,7 +1216,7 @@ describe('trace-query cursors', () => {
     expect(second.binding).toBe(first.binding);
   });
 
-  it('round-trips trace and group keyset values', () => {
+  it('round-trips trace keyset values', () => {
     const tracePlan = planTraceQuery(parsed());
     const traceCursor = encodeTraceQueryCursor(tracePlan, {
       result: 'traces',
@@ -1245,12 +1226,6 @@ describe('trace-query cursors', () => {
     expect(planTraceQuery(parsed({ ...baseRequest, page: { after: traceCursor } }))).toMatchObject({
       cursor: { sortValue: '2026-08-03T00:00:00.000Z', traceId: 'trace-3' },
     });
-
-    const groupPlan = planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] } }));
-    const groupCursor = encodeTraceQueryCursor(groupPlan, { result: 'groups', threadId: 'thread-2' });
-    expect(
-      planTraceQuery(parsed({ ...baseRequest, group: { by: ['threadId'] }, page: { after: groupCursor } })),
-    ).toMatchObject({ cursor: { threadId: 'thread-2' } });
   });
 
   it('distinguishes malformed cursors from binding conflicts', () => {
@@ -1303,7 +1278,7 @@ describe('trace-query execution timeout contract', () => {
 });
 
 describe('trace-query responses and storage capability', () => {
-  it('enforces fixed trace, legacy group, and thread projections', () => {
+  it('enforces fixed trace and thread projections', () => {
     const trace = {
       traceId: 'trace-1',
       rootSpanId: 'span-1',
@@ -1319,10 +1294,6 @@ describe('trace-query responses and storage capability', () => {
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
     expect(
       traceQueryTraceResponseSchema.safeParse({ traces: [{ ...trace, scores: [] }], page: { next: null } }).success,
-    ).toBe(false);
-    expect(
-      traceQueryGroupResponseSchema.safeParse({ groups: [{ threadId: 'thread-1', count: 1 }], page: { next: null } })
-        .success,
     ).toBe(false);
     expect(
       queryThreadsResultSchema.safeParse({ threads: [{ threadId: 'thread-1' }], page: { next: null } }).success,

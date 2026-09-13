@@ -341,22 +341,6 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     WHERE ${predicate}
   )`);
   const candidates = `WITH ${ctes.join(',\n')}`;
-
-  if (plan.result === 'groups') {
-    const pageCondition = plan.cursor ? `AND threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
-    const limit = parameters.add(plan.limit + 1, 'UInt64');
-    return {
-      query: `${candidates}
-SELECT threadId
-FROM candidates
-WHERE isNotNull(threadId) ${pageCondition}
-GROUP BY threadId
-ORDER BY threadId ASC
-LIMIT ${limit}`,
-      query_params: parameters.params,
-    };
-  }
-
   const orderField = resolveOrderField(plan.orderBy.field);
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   let pageCondition = '';
@@ -417,21 +401,6 @@ export async function queryTraces(
 ): Promise<TraceQueryResponse> {
   const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseTraceQuery(plan));
   const visibleRows = rows.slice(0, plan.limit);
-
-  if (plan.result === 'groups') {
-    const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
-    const last = groups.at(-1);
-    return coreStorage.traceQueryResponseSchema.parse({
-      groups,
-      page: {
-        next:
-          rows.length > plan.limit && last
-            ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
-            : null,
-      },
-    });
-  }
-
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),

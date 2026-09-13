@@ -551,17 +551,10 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
             ],
           },
         });
-        const groupedNodes = await explain({ group: { by: ['threadId'] } });
 
-        for (const nodes of [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes, groupedNodes]) {
+        for (const nodes of [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes]) {
           expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
         }
-        expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
-        expect(
-          groupedNodes
-            .filter(node => node.Alias?.startsWith('r'))
-            .reduce((sum, node) => sum + (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0), 0),
-        ).toBeLessThan(10);
         const relatedRows = [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes].map(nodes =>
           nodes
             .filter(node => node.Alias === 's')

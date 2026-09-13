@@ -160,10 +160,6 @@ const traceQueryRequestObjectSchema = z
   .object({
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
-    group: z
-      .object({ by: z.tuple([z.literal('threadId')]) })
-      .strict()
-      .optional(),
     orderBy: z
       .array(
         z
@@ -225,13 +221,7 @@ const responsePageSchema = z.object({ next: z.string().nullable() }).strict();
 export const traceQueryTraceResponseSchema = z
   .object({ traces: z.array(traceQueryTraceSchema), page: responsePageSchema })
   .strict();
-export const traceQueryGroupResponseSchema = z
-  .object({
-    groups: z.array(z.object({ threadId: z.string() }).strict()),
-    page: responsePageSchema,
-  })
-  .strict();
-export const traceQueryResponseSchema = z.union([traceQueryTraceResponseSchema, traceQueryGroupResponseSchema]);
+export const traceQueryResponseSchema = traceQueryTraceResponseSchema;
 
 export const threadIdentitySchema = z.object({ threadId: z.string() }).strict();
 export const queryThreadsResultSchema = z
@@ -279,7 +269,6 @@ export type TraceQueryRequest = z.input<typeof traceQueryRequestObjectSchema>;
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
-export type TraceQueryGroupResponse = z.infer<typeof traceQueryGroupResponseSchema>;
 export type TraceQueryResponse = z.infer<typeof traceQueryResponseSchema>;
 
 export type TraceQueryField =
@@ -362,13 +351,7 @@ export interface TrustedTraceQueryTracesPlan extends TrustedTraceQueryBasePlan {
   cursor?: { sortValue: string; traceId: string };
 }
 
-export interface TrustedTraceQueryGroupsPlan extends TrustedTraceQueryBasePlan {
-  result: 'groups';
-  orderBy: { field: 'threadId'; direction: 'asc' };
-  cursor?: { threadId: string };
-}
-
-export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan | TrustedTraceQueryGroupsPlan;
+export type TrustedTraceQueryPlan = TrustedTraceQueryTracesPlan;
 
 export interface TrustedThreadQueryPlan {
   result: 'threads';
@@ -386,7 +369,6 @@ export interface TrustedThreadQueryPlan {
 export type TraceQueryCursorPlan = TrustedTraceQueryPlan | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
   | { result: 'traces'; sortValue: string; traceId: string }
-  | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
 export type TraceQueryIssueCode =
@@ -398,8 +380,7 @@ export type TraceQueryIssueCode =
   | 'invalid_metadata_key'
   | 'operator_not_allowed'
   | 'invalid_operands'
-  | 'invalid_literal'
-  | 'group_order_not_supported';
+  | 'invalid_literal';
 
 export interface TraceQueryIssue {
   code: TraceQueryIssueCode;
@@ -633,37 +614,12 @@ export function planTraceQuery(
     });
   }
 
-  if (request.group && request.orderBy) {
-    issues.push({
-      code: 'group_order_not_supported',
-      path: ['orderBy'],
-      message: 'Grouped trace queries use fixed threadId ordering',
-    });
-  }
-
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
   const limit = request.page.limit;
-
-  if (request.group) {
-    const result = 'groups' as const;
-    const orderBy = { field: 'threadId', direction: 'asc' } as const;
-    const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
-    const cursor = request.page.after ? decodeTraceQueryCursor(request.page.after, result, binding) : undefined;
-    return {
-      result,
-      timeRange,
-      where,
-      orderBy,
-      limit,
-      binding,
-      cursor: cursor?.result === 'groups' ? { threadId: cursor.threadId } : undefined,
-    };
-  }
-
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
   const binding = digestBinding({ timeRange, where, result, orderBy, authorization: options.authorizationBinding });
@@ -770,7 +726,6 @@ const cursorEnvelopeSchema = z
           traceId: z.string().min(1),
         })
         .strict(),
-      z.object({ result: z.literal('groups'), threadId: z.string().min(1) }).strict(),
       z.object({ result: z.literal('threads'), threadId: z.string().min(1) }).strict(),
     ]),
   })

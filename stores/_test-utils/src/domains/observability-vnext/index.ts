@@ -321,7 +321,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
       });
 
-      it('paginates mixed-case and non-ASCII trace and thread IDs in ordinal order', async () => {
+      it('paginates mixed-case and non-ASCII trace IDs in ordinal order', async () => {
         for (const span of TRACE_QUERY_ORDINAL_FIXTURE_DATA.spans) {
           await storage.createSpan({
             span: {
@@ -351,11 +351,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
               parseTraceQueryRequest({ ...request, page: { limit: 1, ...(after ? { after } : {}) } }),
             );
             const response = await storage.queryTraces(plan);
-            if ('traces' in response) {
-              values.push(...response.traces.map(trace => trace.traceId));
-            } else {
-              values.push(...response.groups.map(group => group.threadId));
-            }
+            values.push(...response.traces.map(trace => trace.traceId));
             after = response.page.next ?? undefined;
           } while (after);
           return values;
@@ -366,7 +362,6 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await expect(collectPages({ timeRange, orderBy: [{ field: 'startedAt', direction: 'asc' }] })).resolves.toEqual(
           expected,
         );
-        await expect(collectPages({ timeRange, group: { by: ['threadId'] } })).resolves.toEqual(expected);
       });
     }
 
