@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+`PIIDetector` no longer emits PII in the clear when a match straddles a stream chunk boundary. The streaming path redacted the carryover-prefixed string and then sliced the result at the _raw_ offset `tail.length`; redaction changes the string's length, so the slice landed mid-placeholder and let the match through — with the default `mask` method a full SSN split across two chunks reached the consumer unredacted while the processor logged a successful redaction. Text that could still grow into a match is now withheld until the next chunk decides it, and released (redacted if needed) when the stream ends. Separately, `applyRedactionMethod` applied overlapping detections one at a time using indices computed against the original string, so a second, intersecting detection sliced at stale offsets and deleted the text after it (an email nested in a URL turned `Visit <url> now` into `Visit [URL]`); overlapping detections are now unioned and redacted once, matching `RegexFilterProcessor`.

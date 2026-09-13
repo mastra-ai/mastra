@@ -550,20 +550,43 @@ export class PIIDetector implements Processor<'pii-detector'> {
   }
 
   /**
-   * Apply redaction method to content
+   * Apply redaction method to content.
+   *
+   * Each detection type is matched independently, so two of them can claim
+   * intersecting ranges (an email nested inside a URL, or a bare 16-digit
+   * number matching both `phone` and `credit-card`). Replacing them one at a
+   * time applies later indices to an already-rewritten string, which deletes
+   * the text between the two matches, so overlapping detections are unioned
+   * and redacted once — the same approach `RegexFilterProcessor` takes in
+   * `buildRedactionRegions`.
    */
   private applyRedactionMethod(content: string, detections: PIIDetection[]): string {
-    let redacted = content;
+    // Longest match first at a shared start, so the widest detection owns the region.
+    const ordered = [...detections]
+      .filter(detection => detection.end > detection.start)
+      .sort((a, b) => a.start - b.start || b.end - a.end);
 
-    // Sort detections by start position in reverse order to maintain indices
-    const sortedDetections = [...detections].sort((a, b) => b.start - a.start);
-
-    for (const detection of sortedDetections) {
-      const redactedValue = this.redactValue(detection.value, detection.type);
-      redacted = redacted.slice(0, detection.start) + redactedValue + redacted.slice(detection.end);
+    const regions: PIIDetection[] = [];
+    for (const detection of ordered) {
+      const current = regions.at(-1);
+      if (current && detection.start < current.end) {
+        if (detection.end > current.end) {
+          current.end = detection.end;
+          current.value = content.slice(current.start, current.end);
+        }
+        continue;
+      }
+      regions.push({ ...detection });
     }
 
-    return redacted;
+    let redacted = '';
+    let cursor = 0;
+    for (const region of regions) {
+      redacted += content.slice(cursor, region.start) + this.redactValue(region.value, region.type);
+      cursor = region.end;
+    }
+
+    return redacted + content.slice(cursor);
   }
 
   /**
@@ -702,6 +725,76 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
    * Context-dependent types (name, address, date-of-birth) are skipped
    * here and handled by the LLM-based detectPII in processOutputResult.
    */
+  /**
+   * Index at which `content` stops being safe to emit because the text from
+   * there on could still grow into PII once the next chunk arrives, or `-1`
+   * when all of it is safe.
+   *
+   * A streamed match can straddle a chunk boundary, and text already handed to
+   * the consumer cannot be taken back, so the trailing fragment is withheld
+   * until enough of the next chunk arrives to decide. Only the last
+   * `REGEX_CARRYOVER_SIZE` characters are considered, which bounds how much can
+   * ever be withheld.
+   */
+  private findIncompleteMatchStart(content: string): number {
+    const windowStart = Math.max(content.length - PIIDetector.REGEX_CARRYOVER_SIZE, 0);
+
+    for (let start = windowStart; start < content.length; start++) {
+      // A candidate must begin at a token boundary, mirroring the `\b`-anchored
+      // patterns, so ordinary prose is not withheld a character at a time.
+      if (start > 0 && /[A-Za-z0-9]/.test(content[start - 1]!) && /[A-Za-z0-9]/.test(content[start]!)) {
+        continue;
+      }
+
+      const candidate = content.slice(start);
+      for (const type of this.detectionTypes) {
+        if (PIIDetector.LLM_ONLY_TYPES.has(type)) continue;
+        const pattern = PIIDetector.PII_PATTERNS[type];
+        if (!pattern) continue;
+
+        // A sticky, anchored copy tells us whether `candidate` is a viable
+        // prefix of this pattern: it fails only at the end of input.
+        const partial = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, '') + 'y');
+        if (partial.test(candidate)) continue; // already a complete match — not a partial
+        if (PIIDetector.couldExtend(pattern, candidate)) return start;
+      }
+    }
+
+    return -1;
+  }
+
+  /**
+   * Whether `candidate` could become a match for `pattern` given more text.
+   * Probed by appending filler that satisfies the pattern's alphabet; a match
+   * that consumes the whole candidate plus filler means the fragment is still
+   * live and must not be emitted yet.
+   */
+  private static couldExtend(pattern: RegExp, candidate: string): boolean {
+    if (!/[A-Za-z0-9@:/._+-]$/.test(candidate)) return false;
+
+    const flags = pattern.flags.replace(/[gy]/g, '') + 'y';
+    for (const filler of PIIDetector.PARTIAL_MATCH_FILLERS) {
+      if (new RegExp(pattern.source, flags).test(candidate + filler)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Filler strings used to probe whether a trailing fragment could still grow
+   * into a match. Each covers one shape the patterns accept: digits (SSN, card,
+   * phone, IP), a domain (email, URL), and hex (UUID, wallet). Several are
+   * probed at more than one length, and each is also probed with a trailing
+   * space, because a `\b`-anchored pattern only matches once the run of word
+   * characters ends.
+   */
+  private static readonly PARTIAL_MATCH_FILLERS = [
+    '0000',
+    '0000000000000000',
+    'example.com',
+    '0123456789abcdef0123456789abcdef0123456789',
+    'a0000000000000000000',
+  ].flatMap(filler => [filler, `${filler} `]);
+
   private detectPIILocal(content: string): PIIDetectionResult {
     const categories: PIICategoryScores = [];
     const detections: PIIDetection[] = [];
@@ -869,6 +962,39 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     try {
       // Handle non-text chunks: flush any pending LLM buffer first
       if (part.type !== 'text-delta') {
+        // Text withheld as a possible partial match has no following chunk to
+        // complete it, so redact what is there and release it before the
+        // stream moves on.
+        const heldBack: string = state._piiHeldBack || '';
+        if (heldBack && !this.hasLLMOnlyTypes) {
+          state._piiHeldBack = '';
+          const heldResult = this.detectPIILocal(heldBack);
+          const text =
+            this.strategy === 'redact' && this.isPIIFlagged(heldResult)
+              ? this.applyRedactionMethod(heldBack, heldResult.detections ?? [])
+              : heldBack;
+          if (this.isPIIFlagged(heldResult)) {
+            await this.emitDetection(heldBack, heldResult, true);
+          }
+          const flushedPart: ChunkType = {
+            type: 'text-delta',
+            runId: state._piiFirstRunId ?? (part as { runId?: string }).runId ?? '',
+            from: (part as { from?: ChunkFrom }).from ?? ChunkFrom.AGENT,
+            payload: { id: state._piiFirstPayloadId ?? '', text, providerMetadata: {} },
+          } as ChunkType;
+          if (writer) {
+            state[REPROCESS_PART_KEY] = part;
+            return flushedPart;
+          }
+          if (!state._piiPendingNonText) state._piiPendingNonText = [];
+          state._piiPendingNonText.push(part);
+          return flushedPart;
+        }
+        if (heldBack) {
+          state._piiHeldBack = '';
+          if (!state._piiBuffer) state._piiBuffer = '';
+          state._piiBuffer += heldBack;
+        }
         if (this.hasLLMOnlyTypes && state._piiBuffer) {
           const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           if (flushed) {
@@ -905,31 +1031,60 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         }
         return pending;
       }
-      const textContent = textPart.payload.text;
+      // Text held back from the previous chunk because it could be the start of
+      // a PII match that continues into this one. It has not been emitted yet,
+      // so it is redactable here; `tail` (already-emitted context) is not.
+      const heldBack: string = state._piiHeldBack || '';
+      const textContent = heldBack + textPart.payload.text;
       if (!textContent.trim()) {
-        return textPart;
+        return heldBack ? { ...textPart, payload: { ...textPart.payload, text: textContent } } : textPart;
       }
 
       // Step 1: Regex-based detection with carryover for split PII
       const tail: string = state._piiRegexTail || '';
       const combined = tail + textContent;
-      const regexResult = this.detectPIILocal(combined);
-      // Update tail for next chunk
-      state._piiRegexTail = combined.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
+
+      // A match can continue past this chunk's end, so withhold a trailing
+      // fragment that could still grow into PII and redact it once the rest
+      // arrives. Emitting it now and redacting later is not possible: the
+      // consumer already has it. Whatever is withheld is carried into the next
+      // chunk via `_piiHeldBack`.
+      //
+      // Only `redact` rewrites text in place; the other strategies act on the
+      // chunk as a whole (dropping, blocking or warning on it), so splitting it
+      // would let the leading part through before the decision is made.
+      const holdBackFrom = this.strategy === 'redact' ? this.findIncompleteMatchStart(combined) : -1;
+      const emitLimit = holdBackFrom === -1 ? combined.length : Math.max(holdBackFrom, tail.length);
+      state._piiHeldBack = combined.slice(emitLimit);
+      const emittable = combined.slice(0, emitLimit);
+      const emittableContent = emittable.slice(tail.length);
+
+      const regexResult = this.detectPIILocal(emittable);
+      state._piiRegexTail = emittable.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
 
       // Only flag if PII overlaps with the new chunk (not just the carryover tail)
       const hasNewPII =
         this.isPIIFlagged(regexResult) && (regexResult.detections?.some(d => d.end > tail.length) ?? false);
 
       if (hasNewPII) {
-        await this.emitDetection(combined, regexResult, true);
-        // Regex caught pattern-based PII — apply strategy to original chunk
-        // (redaction is applied to `combined` then we extract the new portion)
-        const combinedRedacted = regexResult.redacted_content;
+        await this.emitDetection(emittable, regexResult, true);
         let effectiveResult: ChunkType | null;
-        if (this.strategy === 'redact' && combinedRedacted) {
-          // Extract only the portion corresponding to the new chunk
-          const redactedNew = combinedRedacted.slice(tail.length);
+        if (this.strategy === 'redact' && regexResult.redacted_content) {
+          // Redaction rewrites the string, so an offset taken from `emittable`
+          // does not address the same place in the redacted copy — slicing that
+          // copy at `tail.length` cut mid-placeholder and let the raw match
+          // through. Redact this chunk's own text instead, with the detections
+          // that reach into it clipped to its coordinates.
+          const redactedNew = this.applyRedactionMethod(
+            emittableContent,
+            (regexResult.detections ?? [])
+              .filter(detection => detection.end > tail.length)
+              .map(detection => {
+                const start = Math.max(detection.start - tail.length, 0);
+                const end = detection.end - tail.length;
+                return { ...detection, start, end, value: emittableContent.slice(start, end) };
+              }),
+          );
           const redactedPart: ChunkType & { type: 'text-delta' } = {
             ...textPart,
             payload: { ...textPart.payload, text: redactedNew },
@@ -939,7 +1094,11 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           );
           effectiveResult = redactedPart;
         } else {
-          effectiveResult = this.applyStreamStrategy(textPart, regexResult, abort);
+          effectiveResult = this.applyStreamStrategy(
+            { ...textPart, payload: { ...textPart.payload, text: emittableContent } },
+            regexResult,
+            abort,
+          );
         }
         // If block/filter returned null or threw, no need to buffer
         if (!effectiveResult) return null;
@@ -954,7 +1113,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           state._piiBuffer +=
             effectiveResult.type === 'text-delta'
               ? (effectiveResult as ChunkType & { type: 'text-delta' }).payload.text
-              : textContent;
+              : emittableContent;
           // Check flush threshold
           if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
             return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
@@ -966,8 +1125,10 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
       // Step 2: No regex PII found
       if (!this.hasLLMOnlyTypes) {
-        // Pure regex mode — emit immediately
-        return textPart;
+        // Pure regex mode — emit immediately. Anything withheld as a possible
+        // partial match is emitted with a later chunk, or on stream end.
+        if (!emittableContent) return null;
+        return { ...textPart, payload: { ...textPart.payload, text: emittableContent } };
       }
 
       // Step 3: LLM-only types configured — buffer for periodic LLM check
@@ -976,7 +1137,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         state._piiFirstPayloadId = textPart.payload.id;
         state._piiFirstRunId = textPart.runId;
       }
-      state._piiBuffer += textContent;
+      state._piiBuffer += emittableContent;
 
       // Flush on sentence boundary or size threshold
       if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {

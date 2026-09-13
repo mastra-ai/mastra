@@ -2118,4 +2118,149 @@ describe('PIIDetector', () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe('streaming redaction across chunk boundaries', () => {
+    /**
+     * Drives chunks through the stream processor and returns the text the
+     * consumer actually receives, including anything released when the stream
+     * ends.
+     */
+    async function streamText(detector: PIIDetector, chunks: string[]): Promise<string> {
+      const state: Record<string, any> = {};
+      const emitted: string[] = [];
+
+      const push = async (part: ChunkType) => {
+        const result = await detector.processOutputStream({
+          part,
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+        if (result?.type === 'text-delta') {
+          emitted.push(result.payload.text);
+        }
+        return result;
+      };
+
+      for (const [index, text] of chunks.entries()) {
+        await push({
+          type: 'text-delta',
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+          payload: { id: `chunk-${index}`, text },
+        } as ChunkType);
+      }
+
+      await push({ type: 'finish', runId: 'test-run-id', from: ChunkFrom.AGENT, payload: {} } as ChunkType);
+      while (state._piiPendingNonText?.length) {
+        await push({
+          type: 'text-delta',
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'drain', text: '' },
+        } as ChunkType);
+      }
+
+      return emitted.join('');
+    }
+
+    // PII that straddles a chunk boundary must be redacted exactly as it is
+    // when it arrives whole -- previously the second half was emitted in the
+    // clear because the redacted string was sliced at a raw-text offset.
+    it('redacts an SSN split across two chunks', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: ['ssn'] });
+
+      const split = await streamText(detector, ['SSN 123-45-', '6789 ok']);
+
+      expect(split).not.toContain('123-45-6789');
+      expect(split).toBe('SSN ***-**-6789 ok');
+    });
+
+    it('redacts an SSN split across two chunks the same as one whole chunk', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const split = await streamText(new PIIDetector({ model, strategy: 'redact', detectionTypes: ['ssn'] }), [
+        'SSN 123-45-',
+        '6789 ok',
+      ]);
+      const whole = await streamText(new PIIDetector({ model, strategy: 'redact', detectionTypes: ['ssn'] }), [
+        'SSN 123-45-6789 ok',
+      ]);
+
+      expect(split).toBe(whole);
+    });
+
+    it('redacts an email split across two chunks without corrupting the text', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+
+      const split = await streamText(detector, ['Contact bob@', 'acme.com now']);
+
+      expect(split).not.toContain('bob@');
+      expect(split).toBe('Contact [EMAIL] now');
+    });
+
+    it('redacts a credit card split across two chunks', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: ['credit-card'] });
+
+      const split = await streamText(detector, ['Card 4111-1111-', '1111-1111 done']);
+
+      expect(split).not.toContain('4111-1111-1111-1111');
+    });
+
+    it('releases PII held at the end of the stream', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+
+      expect(await streamText(detector, ['mail me at bob@acme.com'])).toBe('mail me at [EMAIL]');
+    });
+
+    it('passes through text with no PII unchanged', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, strategy: 'redact', detectionTypes: ['ssn', 'email'] });
+
+      expect(await streamText(detector, ['The quick ', 'brown fox ', 'jumps.'])).toBe('The quick brown fox jumps.');
+    });
+  });
+
+  describe('overlapping detections', () => {
+    // An email nested inside a URL makes two detections claim intersecting
+    // ranges. Replacing them one at a time applied the second detection's
+    // original indices to an already-rewritten string, deleting the text after
+    // the match.
+    it('does not delete text following two overlapping detections', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({
+        model,
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email', 'url'],
+      });
+
+      const result = await detector.processOutputStream({
+        part: {
+          type: 'text-delta',
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'test-id', text: 'Visit https://x.com/u?e=bob@acme.com now' },
+        } as ChunkType,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect((result as ChunkType & { type: 'text-delta' }).payload.text).toBe('Visit [URL] now');
+    });
+  });
 });
