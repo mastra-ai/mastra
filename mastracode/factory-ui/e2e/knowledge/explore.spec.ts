@@ -127,6 +127,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               parentIds: [],
               memberCount: 2,
               memberCountTruncated: false,
+              contentNodeCount: 0,
               childScopeCount: 2,
             },
             {
@@ -136,6 +137,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               parentIds: ['11111111-1111-4111-8111-111111111111'],
               memberCount: 2,
               memberCountTruncated: false,
+              contentNodeCount: 2,
               childScopeCount: 0,
             },
             {
@@ -147,6 +149,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               parentIds: ['11111111-1111-4111-8111-111111111111'],
               memberCount: 3,
               memberCountTruncated: false,
+              contentNodeCount: 1,
               childScopeCount: 2,
             },
           ],
@@ -174,6 +177,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 isScope: true,
                 pinned: false,
                 recordCount: 0,
+                memberCount: 3,
+                memberCountTruncated: false,
+                contentNodeCount: 1,
+                childScopeCount: 2,
                 createdAt: '2026-08-28T10:00:00.000Z',
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
@@ -186,6 +193,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 isScope: true,
                 pinned: false,
                 recordCount: 0,
+                memberCount: 0,
+                memberCountTruncated: false,
+                contentNodeCount: 0,
+                childScopeCount: 0,
                 createdAt: '2026-08-28T10:00:00.000Z',
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
@@ -198,6 +209,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 isScope: true,
                 pinned: false,
                 recordCount: 0,
+                memberCount: 0,
+                memberCountTruncated: false,
+                contentNodeCount: 0,
+                childScopeCount: 0,
                 createdAt: '2026-08-28T10:00:00.000Z',
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
@@ -306,10 +321,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
   await expect(scopeTree.getByText('Your access')).toBeHidden();
   await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
-  await expect(scopeTree.getByRole('button', { name: /mastra org/ })).toBeVisible();
-  await expect(scopeTree.getByRole('button', { name: new RegExp(`${projectId} project`) })).toBeVisible();
-  await expect(scopeTree.getByRole('button', { name: /features feature/ })).toBeVisible();
-  await expect(scopeTree.getByText(/your org|your project/)).toBeHidden();
+  await expect(scopeTree.getByRole('button', { name: /mastra org 2/ })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: new RegExp(`${projectId} project 2`) })).toBeVisible();
+  await expect(scopeTree.getByRole('button', { name: /features feature 3/ })).toBeVisible();
+  await expect(scopeTree.getByText(/your org|your project|inside/)).toBeHidden();
 
   // A tree selection changes the structural lens and opens its detail.
   await scopeTree.getByRole('button', { name: /features feature/ }).click();
@@ -317,6 +332,21 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page).toHaveURL(/node=22222222-2222-4222-8222-222222222222/);
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
   await expect(page.getByText('subconscious')).toBeVisible();
+  const featureScopeNode = page.locator(
+    '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
+  );
+  await expect(featureScopeNode.getByLabel('3 direct members')).toBeVisible();
+  await featureScopeNode.hover();
+  const scopeHover = page.getByTestId('knowledge-hover-card');
+  await expect(scopeHover).toContainText('Content nodes1');
+  await expect(scopeHover).toContainText('Child scopes2');
+  await expect(scopeHover).toContainText('Direct members3');
+  await expect(scopeHover).not.toContainText('Connections');
+  await page.locator('.react-flow__edge[data-id="contains:features:memory"]').dispatchEvent('mouseover', {
+    clientX: 140,
+    clientY: 100,
+  });
+  await expect(page.getByTestId('knowledge-hover-card')).toContainText('Direct member of this scope');
 
   // Scope nodes have a distinct border and background from content nodes.
   const scopeInner = page.locator('[data-testid="knowledge-node"][data-node-type="scope"] > div').first();
