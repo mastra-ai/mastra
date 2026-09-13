@@ -24,14 +24,14 @@ export function showThreadLockPrompt(
       options: [
         { label: 'Switch thread', description: 'Pick a different thread' },
         { label: 'New thread', description: 'Start a fresh thread' },
-        ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
+        ...(lockedThreadId ? [{ label: 'Fork thread', description: 'Fork from this thread' }] : []),
         { label: 'Exit', description: 'Exit' },
       ],
     });
 
     if (answer === 'Switch thread') {
       await handleThreadsCommand(ctx);
-    } else if (answer === 'Clone thread' && lockedThreadId) {
+    } else if (answer === 'Fork thread' && lockedThreadId) {
       try {
         const customTitle = await askCloneName(ctx.state);
         const clonedThread = await ctx.state.session.thread.clone({
@@ -41,7 +41,7 @@ export function showThreadLockPrompt(
         ctx.state.pendingNewThread = false;
         await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
       } catch (error) {
-        ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+        ctx.showError(`Failed to fork thread: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else if (answer === 'New thread') {
       // pendingNewThread is already true from the caller
@@ -162,7 +162,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           state.pendingNewThread = false;
           await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
         } catch (error) {
-          ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+          ctx.showError(`Failed to fork thread: ${error instanceof Error ? error.message : String(error)}`);
         }
         resolve();
       },

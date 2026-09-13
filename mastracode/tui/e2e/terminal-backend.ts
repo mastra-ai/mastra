@@ -41,8 +41,9 @@ function resolveInitialStateFromEnv(): MastraCodeConfig['initialState'] {
   return Object.keys(initialState).length > 0 ? initialState : undefined;
 }
 
-class EmulatedTerminal implements Terminal {
+export class EmulatedTerminal implements Terminal {
   private readonly xterm: XtermTerminalType;
+  private inputEpoch = 0;
   private inputHandler?: (data: string) => void;
   private inputQueue = Promise.resolve();
   private outputQueue = Promise.resolve();
@@ -82,6 +83,7 @@ class EmulatedTerminal implements Terminal {
   }
 
   stop(): void {
+    this.inputEpoch += 1;
     this.writeToXterm('\x1b[?2004l');
     this.stdinBuffer?.destroy();
     this.stdinBuffer = undefined;
@@ -139,8 +141,10 @@ class EmulatedTerminal implements Terminal {
   setProgress(_active: boolean): void {}
 
   sendInput(data: string): void {
+    const inputEpoch = this.inputEpoch;
     this.inputQueue = this.inputQueue
       .then(async () => {
+        if (inputEpoch !== this.inputEpoch) return;
         this.stdinBuffer?.process(data);
         await sleep(25);
       })
@@ -475,6 +479,13 @@ export async function runTerminalScenario(
 
       runtime.stopApp = async () => {
         await stopApp?.();
+      };
+      runtime.restartApp = async options => {
+        await stopApp?.();
+        releaseAllThreadLocks();
+        terminal.clearScreen();
+        const app = await startMastraCodeApp(runConfig, terminal, options);
+        stopApp = app.stop;
       };
 
       await withTerminalProcessOutput(terminal, () =>

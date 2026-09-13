@@ -252,6 +252,18 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
+    expect(commandNames).toContain('fork');
+    expect(commandNames).toContain('resume');
+    expect(commandNames).toContain('rename');
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'name')?.description).toBe(
+      'Alias for /rename',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'clone')?.description).toBe(
+      'Alias for /fork',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'threads')?.description).toBe(
+      'Alias for /resume',
+    );
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as

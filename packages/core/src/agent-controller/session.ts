@@ -578,7 +578,15 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title, id }: { title?: string; id?: string } = {}): Promise<AgentControllerThread> {
+  async create({
+    title,
+    id,
+    metadata: initialMetadata,
+  }: {
+    title?: string;
+    id?: string;
+    metadata?: Record<string, unknown>;
+  } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
@@ -595,7 +603,9 @@ export class SessionThread {
     const currentMode = session.mode.resolve();
     const modelId = currentStateModel || currentMode.defaultModelId;
 
-    const metadata: Record<string, unknown> = {};
+    const metadata: Record<string, unknown> = Object.fromEntries(
+      Object.entries(initialMetadata ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key)),
+    );
     if (modelId) {
       metadata.currentModelId = modelId;
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
@@ -604,6 +614,7 @@ export class SessionThread {
     // Stamp the session's scope so thread selection can filter listings back to
     // it (e.g. a `projectPath` per git worktree).
     Object.assign(metadata, session.getThreadScope());
+    if (Object.keys(metadata).length > 0) thread.metadata = metadata;
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -639,7 +650,7 @@ export class SessionThread {
             title: thread.title!,
             createdAt: thread.createdAt,
             updatedAt: thread.updatedAt,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            metadata: thread.metadata,
           },
         });
       } catch (err) {

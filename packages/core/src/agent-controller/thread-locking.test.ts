@@ -330,6 +330,36 @@ describe('AgentController thread locking', () => {
       expect(metadata.projectPath).toBe('/repo/wt');
       expect(metadata.branch).toBe('feat/x');
     });
+
+    it('persists caller metadata atomically while keeping session scope authoritative', async () => {
+      const store = new InMemoryStore();
+      const controller = freshController(store);
+      await controller.init();
+      const session = await controller.createSession({
+        id: 'metadata',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/current' },
+      });
+
+      const created = await session.thread.create({
+        metadata: {
+          explicitNewThread: true,
+          projectPath: '/repo/wrong',
+          currentModeId: 'caller-mode',
+          tokenUsage: { total: 10_000 },
+          modeModelId_caller: 'caller-model',
+        },
+      });
+      const persisted = await session.thread.getById({ threadId: created.id });
+
+      expect(created.metadata?.explicitNewThread).toBe(true);
+      expect(persisted?.metadata?.explicitNewThread).toBe(true);
+      expect(persisted?.metadata?.projectPath).toBe('/repo/current');
+      expect(persisted?.metadata?.currentModeId).toBeUndefined();
+      expect(persisted?.metadata?.tokenUsage).toBeUndefined();
+      expect(persisted?.metadata?.modeModelId_caller).toBeUndefined();
+    });
   });
 
   describe('deleteThread', () => {
