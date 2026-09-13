@@ -6,15 +6,23 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useKnowledgeActivity, useKnowledgeGraph, useKnowledgeScopes } from '../../hooks/useKnowledgeGraph';
+import {
+  useKnowledgeActivity,
+  useKnowledgeGraph,
+  useKnowledgeScopePage,
+  useKnowledgeScopes,
+} from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
 import type {
+  KnowledgeActivityEvent,
   KnowledgeRung,
+  KnowledgeSearchResult,
   KnowledgeScopeNode,
   KnowledgeScopeTreePayload,
   KnowledgeSelection,
@@ -116,36 +124,64 @@ function Breadcrumb({
   );
 }
 
-function ScopeLabel({ name, kind }: { name: string; kind: string }) {
+function ScopeLabel({
+  name,
+  kind,
+  memberCount,
+  memberCountTruncated,
+}: {
+  name: string;
+  kind: string;
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+}) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate">{name}</span>
-      <Badge variant="neutral" emphasis="muted" size="xs">
-        {kind}
-      </Badge>
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">{name}</span>
+        <Badge variant="neutral" emphasis="muted" size="xs">
+          {kind}
+        </Badge>
+      </span>
+      {memberCount !== undefined ? (
+        <span className="text-icon3">
+          {memberCount}
+          {memberCountTruncated ? '+' : ''} inside
+        </span>
+      ) : null}
     </span>
   );
 }
 
 function ScopeTree({
+  factoryProjectId,
+  threadId,
   scopes,
   selection,
   onSelect,
+  onNodesLoaded,
 }: {
+  factoryProjectId: string | undefined;
+  threadId?: string;
   scopes: KnowledgeScopeTreePayload | undefined;
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
+  onNodesLoaded: (nodes: KnowledgeScopeNode[]) => void;
 }) {
-  // ONE tree built from the scope nodes that exist — never from the declared
-  // structure plan or the host's rung config. The server materializes the
-  // identity chain (org → project → session) as ordinary scope nodes linked
-  // by membership edges, so nesting here is pure `parentIds`. A rung whose
-  // node exists renders once (structural name + identity kind, structural
-  // lens); a rung whose node does NOT exist (adapter without structural scope
-  // nodes, or a failed vouch) falls back to a plain identity entry so the
-  // rung stays reachable. The multi-parent case renders under every parent.
+  const scopePage = useKnowledgeScopePage(factoryProjectId, threadId);
+  const [pages, setPages] = useState<KnowledgeScopeTreePayload[]>([]);
+  const [nextCursorByParent, setNextCursorByParent] = useState<Record<string, string | null>>({});
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [collapsedRootIds, setCollapsedRootIds] = useState<Set<string>>(new Set());
+
+  // ONE DAG built from lazily loaded scope-node pages. The host-vouched
+  // identity chain is represented by the same nodes and merged by exact
+  // canonical address on the server. A path-local visited set prevents cycles
+  // without suppressing legitimate multi-parent appearances.
   const roots = scopes?.roots ?? [];
-  const scopeNodes = scopes?.scopeNodes ?? [];
+  const scopeNodes = [...(scopes?.scopeNodes ?? []), ...pages.flatMap(page => page.scopeNodes ?? [])].filter(
+    (node, index, all) => all.findIndex(candidate => candidate.id === node.id) === index,
+  );
   const markerByNodeId = new Map(
     roots.flatMap(root => (root.scopeNodeId ? [[root.scopeNodeId, root.level] as const] : [])),
   );
@@ -164,39 +200,128 @@ function ScopeTree({
       else byParent.set(parentId, [node]);
     }
   }
+  const selectedAncestors = new Set<string>();
+  const addAncestors = (nodeId: string): void => {
+    const node = scopeNodes.find(candidate => candidate.id === nodeId);
+    for (const parentId of node?.parentIds ?? []) {
+      if (selectedAncestors.has(parentId)) continue;
+      selectedAncestors.add(parentId);
+      addAncestors(parentId);
+    }
+  };
+  if (selection?.scopeNodeId) addAncestors(selection.scopeNodeId);
+
+  const loadPage = async (parentId: string | undefined, cursor: string | undefined) => {
+    const page = await scopePage.mutateAsync({ ...(parentId ? { parentId } : {}), ...(cursor ? { cursor } : {}) });
+    setPages(current => [...current, page]);
+    setNextCursorByParent(current => ({ ...current, [parentId ?? 'roots']: page.nextCursor ?? null }));
+    onNodesLoaded(page.scopeNodes ?? []);
+  };
   const identityKind = (level: (typeof roots)[number]['level']) =>
     level === 'resource' ? 'project' : level === 'thread' ? 'session' : 'org';
-  const renderScopeNode = (node: KnowledgeScopeNode, depth: number) => {
+  const renderScopeNode = (node: KnowledgeScopeNode, depth: number, path: Set<string>): React.ReactNode => {
+    if (path.has(node.id)) return null;
+    const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
     const kind = marker ? identityKind(marker) : (node.kind ?? 'scope');
     const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
+    const children = byParent.get(node.id) ?? [];
+    const expanded =
+      (depth === 0 && !collapsedRootIds.has(node.id)) || expandedIds.has(node.id) || selectedAncestors.has(node.id);
+    const canExpand = node.childScopeCount > 0;
+    const hasCursorOverride = Object.hasOwn(nextCursorByParent, node.id);
+    const childCursor = hasCursorOverride ? nextCursorByParent[node.id] : scopes?.childCursors?.[node.id];
+    const canLoadMore = childCursor !== null && children.length < node.childScopeCount;
     return (
-      <div key={node.id}>
-        <button
-          type="button"
-          aria-pressed={pressed}
-          className={cn(
-            'hover:text-icon6 w-full rounded-md px-2 py-1 text-left',
-            pressed && 'bg-surface4 text-icon6 font-medium',
+      <div key={`${[...path].join(':')}:${node.id}`}>
+        <div className="flex items-center" style={{ paddingLeft: `${depth * 12}px` }}>
+          {canExpand ? (
+            <button
+              type="button"
+              aria-label={`${expanded ? 'Collapse' : 'Expand'} ${node.name}`}
+              aria-expanded={expanded}
+              className="hover:text-icon6 flex size-5 shrink-0 items-center justify-center"
+              onClick={() => {
+                if (expanded) {
+                  if (depth === 0) setCollapsedRootIds(current => new Set(current).add(node.id));
+                  else
+                    setExpandedIds(current => {
+                      const next = new Set(current);
+                      next.delete(node.id);
+                      return next;
+                    });
+                  return;
+                }
+                if (children.length === 0) void loadPage(node.id, undefined);
+                if (depth === 0)
+                  setCollapsedRootIds(current => {
+                    const next = new Set(current);
+                    next.delete(node.id);
+                    return next;
+                  });
+                else setExpandedIds(current => new Set(current).add(node.id));
+              }}
+            >
+              <ChevronRight className={cn('size-3 transition-transform', expanded && 'rotate-90')} />
+            </button>
+          ) : (
+            <span className="size-5 shrink-0" />
           )}
-          style={{ paddingLeft: `${8 + depth * 12}px` }}
-          title={node.description ?? node.name}
-          onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
-        >
-          <ScopeLabel name={node.name} kind={kind} />
-        </button>
-        {(byParent.get(node.id) ?? []).map(child => renderScopeNode(child, depth + 1))}
+          <button
+            type="button"
+            aria-pressed={pressed}
+            className={cn(
+              'hover:text-icon6 min-w-0 flex-1 rounded-md px-1 py-1 text-left',
+              pressed && 'bg-surface4 text-icon6 font-medium',
+            )}
+            title={node.description ?? node.name}
+            onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
+          >
+            <ScopeLabel
+              name={node.name}
+              kind={kind}
+              memberCount={node.memberCount}
+              memberCountTruncated={node.memberCountTruncated}
+            />
+          </button>
+        </div>
+        {expanded ? children.map(child => renderScopeNode(child, depth + 1, nextPath)) : null}
+        {expanded && canLoadMore ? (
+          <button
+            type="button"
+            className="text-icon3 hover:text-icon5 py-1 text-left"
+            style={{ paddingLeft: `${20 + (depth + 1) * 12}px` }}
+            disabled={scopePage.isPending}
+            onClick={() => void loadPage(node.id, childCursor ?? undefined)}
+          >
+            Load more
+          </button>
+        ) : null}
       </div>
     );
   };
   const fallbackRungs = roots.filter(root => !root.scopeNodeId);
+  const rootCursor = Object.hasOwn(nextCursorByParent, 'roots') ? nextCursorByParent.roots : scopes?.nextCursor;
   return (
-    <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
+    <aside
+      aria-label="Knowledge scopes"
+      className="border-surface5 bg-surface2 w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
+    >
       <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
         Scopes
       </Txt>
       <div className="text-icon4 flex flex-col gap-1 text-xs">
-        {treeRoots.map(node => renderScopeNode(node, 0))}
+        {treeRoots.map(node => renderScopeNode(node, 0, new Set()))}
+        {rootCursor ? (
+          <button
+            type="button"
+            className="text-icon3 hover:text-icon5 px-2 py-1 text-left"
+            disabled={scopePage.isPending}
+            onClick={() => void loadPage(undefined, rootCursor)}
+          >
+            Load more scopes
+          </button>
+        ) : null}
         {fallbackRungs.map(root => (
           <button
             key={root.level}
@@ -211,6 +336,7 @@ function ScopeTree({
             <ScopeLabel name={root.id.slice(0, 8)} kind={identityKind(root.level)} />
           </button>
         ))}
+        {scopePage.isError ? <span className="px-2 text-red-400">Unable to load more scopes.</span> : null}
       </div>
     </aside>
   );
@@ -220,10 +346,12 @@ function ActivityPanel({
   factoryProjectId,
   selection,
   threadId,
+  onSelect,
 }: {
   factoryProjectId?: string;
   selection: KnowledgeSelection | undefined;
   threadId?: string;
+  onSelect: (event: KnowledgeActivityEvent) => void;
 }) {
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   if (!selection) {
@@ -250,8 +378,15 @@ function ActivityPanel({
       {activity.data.events.map(event => (
         <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
           <div>
-            <span className="text-icon5 font-medium">{event.action}</span>
-            <span className="text-icon3 ml-2">{event.recordType}</span>
+            <span className="text-icon5">{event.action.replaceAll('-', ' ')}</span>
+            <span className="text-icon3"> · {event.recordType} · </span>
+            <button
+              type="button"
+              className="text-icon6 font-medium hover:text-purple-300 hover:underline"
+              onClick={() => onSelect(event)}
+            >
+              {event.node.name}
+            </button>
             <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
           </div>
           <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
@@ -278,6 +413,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           ? { scopeLevel: 'thread' }
           : undefined;
   const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
+  const scopePageKey = threadId ?? 'project';
+  const [loadedScopeNodesByView, setLoadedScopeNodesByView] = useState<Record<string, KnowledgeScopeNode[]>>({});
+  const [searchedScope, setSearchedScope] = useState<KnowledgeScopeNode>();
+  const loadedScopeNodes = loadedScopeNodesByView[scopePageKey] ?? [];
+  const allScopeNodes = [...(scopesQuery.data?.scopeNodes ?? []), ...loadedScopeNodes].filter(
+    (node, index, all) => all.findIndex(candidate => candidate.id === node.id) === index,
+  );
   // A merged entry's rung survives the `?scope=<uuid>` deep link through the
   // scopes payload: the root whose scopeNodeId matches supplies the rung for
   // activity/flyout context.
@@ -374,12 +516,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
   const selectScope = (next: KnowledgeSelection) => {
-    const nextScope = next.scopeNodeId
-      ? scopesQuery.data?.scopeNodes?.find(scopeNode => scopeNode.id === next.scopeNodeId)
-      : undefined;
+    const nextScope = next.scopeNodeId ? allScopeNodes.find(scopeNode => scopeNode.id === next.scopeNodeId) : undefined;
     const nextRung =
       next.scopeLevel ?? scopesQuery.data?.roots.find(root => root.scopeNodeId === next.scopeNodeId)?.level;
     const nextEntry = nextScope ? { nodeId: nextScope.id, name: nextScope.name, rung: nextRung } : null;
+    setSearchedScope(undefined);
     setTrail(nextEntry ? [nextEntry] : []);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -387,6 +528,53 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       // A scope-node selection changes the lens and opens the same node's
       // detail surface. The URL carries both states so the result is linkable.
       copy.set('scope', next.scopeNodeId ?? next.scopeLevel);
+      return copy;
+    });
+  };
+  const selectSearchResult = (result: KnowledgeSearchResult) => {
+    const entry: TrailEntry = { nodeId: result.id, name: result.name, rung: result.rung ?? undefined };
+    if (result.type === 'scope') {
+      setSearchedScope({
+        id: result.id,
+        address: result.address ?? result.name,
+        name: result.name,
+        kind: result.kind,
+        ...(result.description ? { description: result.description } : {}),
+        parentIds: [],
+        memberCount: 0,
+        memberCountTruncated: false,
+        childScopeCount: 0,
+      });
+    } else {
+      setSearchedScope(undefined);
+    }
+    setTrail([entry]);
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, entry);
+      if (result.threadId) copy.set('thread', result.threadId);
+      else copy.delete('thread');
+      copy.set('scope', result.type === 'scope' ? result.id : (result.rung ?? 'resource'));
+      return copy;
+    });
+  };
+
+  const selectActivityEvent = (event: KnowledgeActivityEvent) => {
+    const entry: TrailEntry = {
+      nodeId: event.node.id,
+      name: event.node.name,
+      rung: event.node.rung,
+      ...(event.recordId ? { recordId: event.recordId } : {}),
+    };
+    setSearchedScope(undefined);
+    setTrail([entry]);
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      writeNodeSelection(copy, entry);
+      copy.delete('view');
+      copy.set('scope', event.node.rung);
+      if (event.node.threadId) copy.set('thread', event.node.threadId);
+      else copy.delete('thread');
       return copy;
     });
   };
@@ -447,7 +635,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     const selectedNodeId = selected?.nodeId;
     const selectedScope =
       selectedNodeId && selectedNodeId === selection.scopeNodeId
-        ? scopesQuery.data?.scopeNodes?.find(scopeNode => scopeNode.id === selectedNodeId)
+        ? (allScopeNodes.find(scopeNode => scopeNode.id === selectedNodeId) ??
+          (searchedScope?.id === selectedNodeId ? searchedScope : undefined))
         : undefined;
     const selectedScopeMemberIds = new Set(
       selectedScope
@@ -581,21 +770,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
           Explore captured knowledge and review how it changes over time.
         </Txt>
-        <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
-          {(['explore', 'activity'] as const).map(view => (
-            <button
-              key={view}
-              type="button"
-              role="tab"
-              aria-selected={activeView === view}
-              className={`rounded-md px-3 py-1.5 text-sm capitalize ${
-                activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
-              }`}
-              onClick={() => setView(view)}
-            >
-              {view}
-            </button>
-          ))}
+        <div className="mt-3 flex items-start justify-between gap-3">
+          <div className="flex gap-1" role="tablist" aria-label="Knowledge views">
+            {(['explore', 'activity'] as const).map(view => (
+              <button
+                key={view}
+                type="button"
+                role="tab"
+                aria-selected={activeView === view}
+                className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                  activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+                }`}
+                onClick={() => setView(view)}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+          <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
         </div>
         <Breadcrumb
           threadId={threadId}
@@ -613,12 +805,30 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         />
       </header>
       <div className="flex min-h-0 flex-1 gap-4">
-        <ScopeTree scopes={scopesQuery.data} selection={selection} onSelect={selectScope} />
+        <ScopeTree
+          key={`${factoryProjectId}:${threadId ?? 'project'}`}
+          factoryProjectId={factoryProjectId}
+          threadId={threadId}
+          scopes={scopesQuery.data}
+          selection={selection}
+          onSelect={selectScope}
+          onNodesLoaded={nodes =>
+            setLoadedScopeNodesByView(current => ({
+              ...current,
+              [scopePageKey]: [...(current[scopePageKey] ?? []), ...nodes],
+            }))
+          }
+        />
         {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
             to a sized parent; as a block wrapper it collapses to zero height. */}
         <div className="flex min-w-0 flex-1 flex-col">
           {activeView === 'activity' ? (
-            <ActivityPanel factoryProjectId={factoryProjectId} selection={selection} threadId={threadId} />
+            <ActivityPanel
+              factoryProjectId={factoryProjectId}
+              selection={selection}
+              threadId={threadId}
+              onSelect={selectActivityEvent}
+            />
           ) : (
             body
           )}

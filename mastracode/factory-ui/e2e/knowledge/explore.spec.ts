@@ -126,12 +126,18 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               name: 'mastra',
               kind: 'org',
               parentIds: [],
+              memberCount: 2,
+              memberCountTruncated: false,
+              childScopeCount: 2,
             },
             {
               id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
               address: `resource:${projectId}`,
               name: projectId,
               parentIds: ['11111111-1111-4111-8111-111111111111'],
+              memberCount: 2,
+              memberCountTruncated: false,
+              childScopeCount: 0,
             },
             {
               id: '22222222-2222-4222-8222-222222222222',
@@ -140,6 +146,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               kind: 'feature',
               description: 'Shipped Mastra features',
               parentIds: ['11111111-1111-4111-8111-111111111111'],
+              memberCount: 3,
+              memberCountTruncated: false,
+              childScopeCount: 2,
             },
           ],
         },
@@ -231,7 +240,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               id: 'activity-1',
               action: 'knowledge-appended',
               recordType: 'record',
+              recordId: 'rec-1',
               scope: ['org:proof', `resource:${projectId}`],
+              node: { id: 'payments', name: 'Payments Service', rung: 'resource' },
               createdAt: '2026-08-28T10:00:00.000Z',
             },
           ],
@@ -288,7 +299,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'activity' }).click();
-  await expect(page.getByText('knowledge-appended')).toBeVisible();
+  await expect(page.getByText('knowledge appended')).toBeVisible();
 
   // The sidebar is ONE unified tree built from the scope nodes that exist:
   // identity scopes and declared structure use one name + kind-chip treatment.

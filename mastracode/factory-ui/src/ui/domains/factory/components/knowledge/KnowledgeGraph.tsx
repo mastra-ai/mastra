@@ -414,7 +414,8 @@ function KnowledgeGraphInner({
     // project view, so the cluster expands out of its current shape.
     const warmStart = (id: string) => centers.get(id) ?? lastCenters.current.get(id);
     const pairEdges = graphTraversalEdges(payload.edges, records);
-    let filtered = filterGraph(graphNodes, pairEdges, filters);
+    const effectiveFilters = labelAll ? { ...filters, rungs: NO_FILTERS.rungs } : filters;
+    let filtered = filterGraph(graphNodes, pairEdges, effectiveFilters);
     if (focusedId) {
       const focused = egoGraph(filtered.nodes, filtered.edges, focusedId, records);
       // A stale focus id (filtered away or gone from the payload) falls back
@@ -524,12 +525,13 @@ function KnowledgeGraphInner({
   }, []);
 
   const availableRungs = useMemo(() => {
+    if (labelAll) return [];
     const present = new Set<KnowledgeRung>();
     for (const node of payload.nodes) {
       if (node.rung) present.add(node.rung);
     }
     return (['org', 'resource', 'thread'] as const).filter(rung => present.has(rung));
-  }, [payload.nodes]);
+  }, [labelAll, payload.nodes]);
 
   return (
     <div
@@ -554,15 +556,16 @@ function KnowledgeGraphInner({
       `}</style>
       <TruncationBanner payload={payload} />
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        {availableRungs.map(rung => (
-          <FilterChip
-            key={rung}
-            label={RUNG_LABELS[rung]}
-            icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
-            active={filters.rungs.size === 0 || filters.rungs.has(rung)}
-            onClick={() => toggleRung(rung)}
-          />
-        ))}
+        {!labelAll &&
+          availableRungs.map(rung => (
+            <FilterChip
+              key={rung}
+              label={RUNG_LABELS[rung]}
+              icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
+              active={filters.rungs.size === 0 || filters.rungs.has(rung)}
+              onClick={() => toggleRung(rung)}
+            />
+          ))}
         <FilterChip
           label="Pinned"
           accent
