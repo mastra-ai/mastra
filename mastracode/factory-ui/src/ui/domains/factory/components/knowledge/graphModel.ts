@@ -7,18 +7,67 @@
 import type { Edge, Node } from '@xyflow/react';
 
 import type {
+  KnowledgeBoundaryNode,
   KnowledgeGraphEdge,
   KnowledgeGraphRecord,
   KnowledgeGraphNode,
   KnowledgeRung,
 } from '../../services/knowledge';
+import { parseRecordSegments } from './recordText';
 
 export const NODE_SIZE_MIN = 52;
 export const NODE_SIZE_MAX = 176;
 /** Unlabeled leaf nodes (no incoming records) render as small dots. */
 export const NODE_SIZE_DOT = 26;
+/** Boundary endpoints stay compact regardless of their incoming degree. */
+export const BOUNDARY_NODE_SIZE = 72;
 /** Being pointed AT is what importance means — incoming counts double. */
 const INCOMING_WEIGHT = 2;
+
+/** Add compact authorized endpoints that a windowed record actually links. */
+export function graphNodesWithBoundaries(
+  nodes: KnowledgeGraphNode[],
+  boundaries: KnowledgeBoundaryNode[],
+  records: KnowledgeGraphRecord[],
+): KnowledgeGraphNode[] {
+  const known = new Set(nodes.map(node => node.id));
+  const related = new Set(records.flatMap(record => record.nodeIds));
+  return [
+    ...nodes,
+    ...boundaries
+      .filter(boundary => !known.has(boundary.id) && related.has(boundary.id))
+      .map(
+        (boundary): KnowledgeGraphNode => ({
+          ...boundary,
+          kind: 'outside view',
+          isBoundary: true,
+          pinned: false,
+          recordCount: 0,
+        }),
+      ),
+  ];
+}
+
+/** Attach boundary endpoints to the same record elements as their in-window owners. */
+export function graphRecordsWithBoundaries(
+  records: KnowledgeGraphRecord[],
+  boundaries: KnowledgeBoundaryNode[],
+): KnowledgeGraphRecord[] {
+  const boundaryByName = new Map<string, KnowledgeBoundaryNode>();
+  for (const boundary of boundaries) {
+    const key = boundary.name.trim().toLocaleLowerCase();
+    if (!boundaryByName.has(key)) boundaryByName.set(key, boundary);
+  }
+  return records.map(record => {
+    const nodeIds = [...record.nodeIds];
+    for (const segment of parseRecordSegments(record.text)) {
+      if (segment.type !== 'wikilink') continue;
+      const boundary = boundaryByName.get(segment.value.trim().toLocaleLowerCase());
+      if (boundary && !nodeIds.includes(boundary.id)) nodeIds.push(boundary.id);
+    }
+    return nodeIds.length === record.nodeIds.length ? record : { ...record, nodeIds };
+  });
+}
 
 export interface NodeDegree {
   incoming: number;
@@ -332,7 +381,11 @@ export function toFlowGraph(
       // member keeps the lens readable as a directory instead of bare dots.
       const effectiveDegree = labelAll && degree.incoming === 0 ? { incoming: 1, outgoing: degree.outgoing } : degree;
       const focused = node.id === focusId;
-      const size = focused ? NODE_SIZE_MAX : nodeSize(effectiveDegree, maxWeighted);
+      const size = node.isBoundary
+        ? BOUNDARY_NODE_SIZE
+        : focused
+          ? NODE_SIZE_MAX
+          : nodeSize(effectiveDegree, maxWeighted);
       // The force layout positions circle CENTERS; React Flow positions the
       // node's TOP-LEFT corner — convert here or differently-sized nodes skew
       // into each other (the sim thinks they're apart, the render stacks them).
@@ -346,6 +399,9 @@ export function toFlowGraph(
         // the DOM measures it.
         width: size,
         height: size,
+        draggable: !node.isBoundary,
+        selectable: !node.isBoundary,
+        focusable: !node.isBoundary,
         data: { node, size, degree: effectiveDegree, focused },
       } satisfies NodeFlowNode;
     }),
