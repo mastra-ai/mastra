@@ -45,7 +45,6 @@ export interface KnowledgeGapQueueWorkerConfig {
     targets: readonly KnowledgeGapFlagTarget[];
     signal: AbortSignal;
   }) => Promise<KnowledgeGapVerificationResult>;
-  apply: (mutation: KnowledgeProposalMutation) => Promise<void>;
   notifyEscalation?: (proposal: KnowledgeProposal) => Promise<void> | void;
 }
 
@@ -155,12 +154,18 @@ export class KnowledgeGapQueueWorker {
     if (!frontier.scopes[this.config.reviewerContextScopeId]?.read) {
       throw new KnowledgeNotFoundError('scope', this.config.reviewerContextScopeId);
     }
-    const proposals = await this.storage.listProposals({
-      ...this.#visibility(frontier),
-      status: 'pending',
-      limit: 100,
-    });
-    const proposal = proposals.proposals.find(candidate => decodeGapFlag(candidate));
+    let cursor: string | undefined;
+    let proposal: KnowledgeProposal | undefined;
+    do {
+      const page = await this.storage.listProposals({
+        ...this.#visibility(frontier),
+        status: 'pending',
+        cursor,
+        limit: 100,
+      });
+      proposal = page.proposals.find(candidate => decodeGapFlag(candidate));
+      cursor = page.nextCursor;
+    } while (!proposal && cursor);
     if (!proposal) return null;
     const stale = await this.#authorizeAndFindStaleTarget(proposal, frontier);
     if (stale) {
@@ -194,12 +199,11 @@ export class KnowledgeGapQueueWorker {
       });
     }
 
-    await this.config.apply(result.mutation);
-    return this.storage.reviewProposal({
+    return this.storage.applyProposal({
       id: proposal.id,
-      status: 'approved',
       reviewerContextScopeId: this.config.reviewerContextScopeId,
       reviewReason: JSON.stringify({ verifiedEvidence: evidence, appliedMutation: result.mutation.kind }),
+      verifiedMutation: result.mutation,
       expectedAccessEpoch: frontier.accessEpoch,
     });
   }
