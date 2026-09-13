@@ -119,12 +119,18 @@ function ScopeTree({
               type="button"
               aria-current={tree.scope.id === selectedScopeId ? 'page' : undefined}
               className={cn(
-                'hover:text-icon6 w-full truncate rounded-md px-2 py-1 text-left',
+                'hover:text-icon6 flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 text-left',
                 tree.scope.id === selectedScopeId && 'bg-surface4 text-icon6 font-medium',
               )}
               onClick={() => onSelectScope(tree.scope.id)}
             >
-              {tree.scope.name}
+              <span className="truncate">{tree.scope.name}</span>
+              {tree.scope.memberCount > 0 ? (
+                <span className="text-icon3 shrink-0">
+                  {tree.scope.memberCount}
+                  {tree.scope.memberCountTruncated ? '+' : ''}
+                </span>
+              ) : null}
             </button>
             {tree.children.map(scope => (
               <button
@@ -132,12 +138,18 @@ function ScopeTree({
                 type="button"
                 aria-current={scope.id === selectedScopeId ? 'page' : undefined}
                 className={cn(
-                  'hover:text-icon6 w-full truncate rounded-md px-2 py-1 pl-5 text-left',
+                  'hover:text-icon6 flex w-full items-center justify-between gap-1 rounded-md px-2 py-1 pl-5 text-left',
                   scope.id === selectedScopeId && 'bg-surface4 text-icon6 font-medium',
                 )}
                 onClick={() => onSelectScope(scope.id)}
               >
-                {scope.name}
+                <span className="truncate">{scope.name}</span>
+                {scope.memberCount > 0 ? (
+                  <span className="text-icon3 shrink-0">
+                    {scope.memberCount}
+                    {scope.memberCountTruncated ? '+' : ''}
+                  </span>
+                ) : null}
               </button>
             ))}
           </>
@@ -474,7 +486,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             const node = graphQuery.data?.nodes.find(entry => entry.id === id);
             setTrail([{ nodeId: id, name: node?.name ?? id }]);
           }}
-          onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
+          onNodeClick={node =>
+            node.isScope ? selectScope(node.id) : setSelected({ nodeId: node.id, name: node.name })
+          }
           onEdgeClick={edge => {
             // Selecting an edge selects AND expands the supporting knowledge record (A7).
             const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);

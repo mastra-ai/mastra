@@ -36,15 +36,13 @@ export function graphNodesWithBoundaries(
     ...nodes,
     ...boundaries
       .filter(boundary => !known.has(boundary.id) && related.has(boundary.id))
-      .map(
-        (boundary): KnowledgeGraphNode => ({
-          ...boundary,
-          kind: 'outside view',
-          isBoundary: true,
-          pinned: false,
-          recordCount: 0,
-        }),
-      ),
+      .map((boundary): KnowledgeGraphNode => ({
+        ...boundary,
+        kind: 'outside view',
+        isBoundary: true,
+        pinned: false,
+        recordCount: 0,
+      })),
   ];
 }
 

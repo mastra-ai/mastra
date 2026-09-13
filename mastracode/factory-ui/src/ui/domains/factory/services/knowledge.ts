@@ -12,6 +12,7 @@ import { requestJson } from './request';
 /** Scope rung a node belongs to — org-wide, project (resource), or session (thread). */
 export type KnowledgeRung = 'org' | 'resource' | 'thread';
 
+
 export interface KnowledgeGraphNode {
   id: string;
   reference: string;
@@ -19,11 +20,17 @@ export interface KnowledgeGraphNode {
   kind: string;
   description?: string;
   /** Scope rung the node sits on (drives the ring color + rung filters). */
-  rung: KnowledgeRung;
+  rung: KnowledgeRung | null;
+  isScope?: boolean;
   /** A pinned record's wikilinks reference this node (the pin accent). */
   pinned: boolean;
   /** Knowledge records owned by this node inside the snapshot window (not a total). */
   recordCount: number;
+  /** Viewer-visible direct members. Present only for structural scope nodes. */
+  memberCount?: number;
+  memberCountTruncated?: boolean;
+  contentNodeCount?: number;
+  childScopeCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,9 +39,8 @@ export interface KnowledgeGraphEdge {
   id: string;
   source: string;
   target: string;
-  /** Always 'wikilink' — the record's owner node is the edge source. */
-  type: 'wikilink';
-  recordId: string;
+  type: 'wikilink' | 'contains';
+  recordId?: string;
   /** Derived from a PINNED record — the pin marks the relationship (A9). */
   pinned?: boolean;
 }
@@ -57,6 +63,25 @@ export interface KnowledgeScopeTreeNode {
   name: string;
   kind: string;
   description?: string;
+  memberCount: number;
+  memberCountTruncated: boolean;
+  contentNodeCount: number;
+  childScopeCount: number;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: KnowledgeRung | null;
+  threadId?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
 }
 
 export interface KnowledgeScopeTreePayload {
