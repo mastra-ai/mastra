@@ -195,6 +195,29 @@ describe('om-tools', () => {
           content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
           createdAt: new Date('2024-01-01T10:00:00Z'),
         },
+        {
+          id: 'top-level-visible',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Top-level visible answer',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'top-level-visible-call',
+                  toolName: 'secret_tool',
+                  args: { secret: 'RAW_TOP_LEVEL_ARGS' },
+                  result: { secret: 'RAW_TOP_LEVEL_RESULT' },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T09:59:00Z'),
+        },
         secretToolMessage('hidden-before-1', '01'),
         secretToolMessage('hidden-before-2', '02'),
         secretToolMessage('tool-only-cursor', '03'),
@@ -233,7 +256,25 @@ describe('om-tools', () => {
           content: { format: 2, parts: [{ type: 'text', text: 'After cursor' }] },
           createdAt: new Date('2024-01-01T10:06:00Z'),
         },
+        {
+          id: 'payload-free-anchor',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: { format: 2, parts: [] },
+          createdAt: new Date('2024-01-01T10:07:00Z'),
+        },
       ]);
+
+      const recalled = await filteredMemory.recall({
+        threadId,
+        resourceId,
+        page: 0,
+        perPage: false,
+      });
+      expect(recalled.messages.some(message => message.id === 'top-level-visible')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'sealed-marker-only')).toBe(true);
+      expect(recalled.messages.some(message => message.id === 'payload-free-anchor')).toBe(false);
 
       const forward = await recallMessages({
         memory: filteredMemory as any,

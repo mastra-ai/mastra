@@ -168,7 +168,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPayloadFreeHistoryAnchor(message: MastraDBMessage): boolean {
   const content = message.content;
-  return isRecord(content) && !Array.isArray(content) && Array.isArray(content.parts) && content.parts.length === 0;
+  return (
+    isRecord(content) &&
+    !Array.isArray(content) &&
+    Array.isArray(content.parts) &&
+    content.parts.length === 0 &&
+    !content.content
+  );
 }
 
 export function extractWorkingMemoryTags(text: string): string[] | null {
