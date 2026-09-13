@@ -34,7 +34,7 @@ The agent asks for approval before it changes files or runs commands. When it cr
 
 ## Workspace safety
 
-The local filesystem tools stay inside the project-level `workspace/` directory. Shell commands start in that directory, but `LocalSandbox` does not provide operating-system isolation by default. Review command approvals carefully, and do not expose this template through an unauthenticated public server.
+The local filesystem tools stay inside the project-level `workspace/` directory (next to `package.json`, not under `src/mastra/public`). Relative workspace paths are resolved from `MASTRA_PROJECT_ROOT` when `mastra dev` sets it, otherwise from the project root inferred from the process cwd. Set `WORKSPACE_PATH` to override the directory. Shell commands start in that directory, but `LocalSandbox` does not provide operating-system isolation by default. Review command approvals carefully, and do not expose this template through an unauthenticated public server.
 
 ## Storage
 

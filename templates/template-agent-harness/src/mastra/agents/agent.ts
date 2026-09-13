@@ -5,8 +5,9 @@ import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
+import { getWorkspacePath } from '../workspace-path';
 
-const workspacePath = 'workspace';
+const workspacePath = getWorkspacePath();
 
 const workspace = new Workspace({
   id: 'agent-workspace',
