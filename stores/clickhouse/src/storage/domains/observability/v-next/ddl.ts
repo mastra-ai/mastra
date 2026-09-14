@@ -1280,17 +1280,16 @@ const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
 
 export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
   const entries: RetentionEntry[] = [];
-  const deletionSignalRetentionDays: number[] = [];
+  const signalRetentionDays = new Map<keyof RetentionConfig, number>();
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
     if (!Number.isFinite(safeDays) || safeDays <= 0) continue;
 
-    const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
+    const retentionSignal = signal as keyof RetentionConfig;
+    const tables = SIGNAL_TO_TABLES[retentionSignal];
     if (!tables) continue;
-    if (signal === 'tracing' || signal === 'scores' || signal === 'feedback') {
-      deletionSignalRetentionDays.push(safeDays);
-    }
+    signalRetentionDays.set(retentionSignal, safeDays);
 
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
@@ -1304,6 +1303,14 @@ export function buildRetentionEntries(retention: RetentionConfig): RetentionEntr
       });
     }
   }
+
+  // A trace deletion request covers every signal row linked to the trace, so it
+  // must outlive the longest configured signal retention period.
+  const deletionSignalRetentionDays = signalRetentionDays.has('tracing')
+    ? [...signalRetentionDays.values()]
+    : [signalRetentionDays.get('scores'), signalRetentionDays.get('feedback')].filter(
+        (days): days is number => days !== undefined,
+      );
 
   if (deletionSignalRetentionDays.length > 0) {
     const days = Math.max(...deletionSignalRetentionDays) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;

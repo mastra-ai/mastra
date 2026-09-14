@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TABLE_DELETION_REQUESTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
+import { buildRetentionDDL, TABLE_DELETION_REQUESTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS } from './ddl';
 import { applyClickHouseRetention } from '.';
+
+describe('buildRetentionDDL', () => {
+  it('keeps trace deletion requests longer than every cascaded signal', () => {
+    expect(buildRetentionDDL({ tracing: 30, logs: 365 })).toContain(
+      'ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 395 DAY',
+    );
+  });
+
+  it('ignores unrelated signal retention for item deletion requests', () => {
+    expect(buildRetentionDDL({ scores: 30, logs: 365 })).toContain(
+      'ALTER TABLE mastra_deletion_requests MODIFY TTL requestedAt + INTERVAL 60 DAY',
+    );
+  });
+});
 
 describe('applyClickHouseRetention', () => {
   it('skips a clustered ALTER only when every host already has the requested TTL', async () => {
