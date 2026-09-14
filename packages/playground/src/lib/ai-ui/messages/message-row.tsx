@@ -335,6 +335,8 @@ export const MessageRow = memo(function MessageRow({
 
   if (displayRole === 'user') {
     const isPending = isPendingMessage(message);
+    const text = getTextFromParts(message);
+    const canCopy = text.trim().length > 0;
 
     return (
       <div
@@ -352,7 +354,16 @@ export const MessageRow = memo(function MessageRow({
         >
           <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
         </div>
-        {footerSlot}
+        {(canCopy || footerSlot) && (
+          <div className="mt-1 flex items-center gap-2">
+            {canCopy && (
+              <div className="group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0">
+                <CopyButton text={text} />
+              </div>
+            )}
+            {footerSlot}
+          </div>
+        )}
       </div>
     );
   }
@@ -365,7 +376,7 @@ export const MessageRow = memo(function MessageRow({
         <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
       </div>
       {(showActionBar || footerSlot) && (
-        <div className="flex h-6 items-center gap-2 pt-4">
+        <div className="mt-4 flex min-h-6 items-center gap-2">
           {showActionBar && (
             <AssistantActionBar
               text={getTextFromParts(message)}
