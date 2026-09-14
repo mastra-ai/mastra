@@ -29,18 +29,30 @@ function hasPendingToolCall(message: MastraDBMessage): boolean {
  *   arrives.
  * - Split tool exchange: a `toolCallId` appears on both sides of the cut, so
  *   the observer would see half of a tool exchange.
+ * - Ambiguous tail: several candidates share the newest timestamp and one of
+ *   them holds a pending call. `createdAt` alone cannot say which is really
+ *   last, so the pending call is treated as the tail and the attempt deferred.
  *
- * The result is always in chronological order. When the last candidate has no
- * pending call, every message is returned. An empty result means "defer this
- * buffering attempt" — callers must skip buffering entirely. Raw message
- * persistence is unaffected and happens elsewhere; the retained message becomes
- * eligible again once its tool call completes.
+ * The result is always in chronological order. When the tail has no pending
+ * call, every message is returned. An empty result means "defer this buffering
+ * attempt" — callers must skip buffering entirely. Raw message persistence is
+ * unaffected and happens elsewhere; the retained message becomes eligible again
+ * once its tool call completes.
  */
 export function selectSafeBufferPrefix(messages: MastraDBMessage[]): MastraDBMessage[] {
   const chronological = [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const last = chronological[chronological.length - 1];
-  if (!last || !hasPendingToolCall(last)) {
+  if (!last) {
     return chronological;
+  }
+
+  const newestTime = new Date(last.createdAt).getTime();
+  const newestGroup = chronological.filter(message => new Date(message.createdAt).getTime() === newestTime);
+  if (!newestGroup.some(hasPendingToolCall)) {
+    return chronological;
+  }
+  if (newestGroup.length > 1) {
+    return [];
   }
 
   const prefix = chronological.slice(0, -1);

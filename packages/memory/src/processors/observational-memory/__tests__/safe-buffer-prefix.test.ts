@@ -73,6 +73,18 @@ describe('selectSafeBufferPrefix', () => {
     expect(ids(adjacent)).toEqual(['a']);
   });
 
+  it.each([
+    { order: 'pending first', build: () => [message('p', 200, [{ id: 't', state: 'call' }]), message('q', 200)] },
+    { order: 'pending last', build: () => [message('q', 200), message('p', 200, [{ id: 't', state: 'call' }])] },
+  ])('defers when a pending call shares the newest timestamp ($order)', ({ build }) => {
+    expect(selectSafeBufferPrefix([message('a', 100), ...build()])).toEqual([]);
+  });
+
+  it('still buffers everything when a tied newest group has no pending call', () => {
+    const result = selectSafeBufferPrefix([message('b', 200), message('a', 100), message('c', 200)]);
+    expect(ids(result)).toEqual(['a', 'b', 'c']);
+  });
+
   it('defers when a tool call id spans the cut', () => {
     const result = selectSafeBufferPrefix([
       message('a', 100, [{ id: 'shared', state: 'result' }]),
