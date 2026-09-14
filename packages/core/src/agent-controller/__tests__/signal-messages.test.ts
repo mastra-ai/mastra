@@ -509,7 +509,7 @@ describe('AgentController signal messages', () => {
   });
   it('surfaces idle message submission failures instead of waiting forever for agent_end', async () => {
     const agent = createAgentMock(() => null);
-    agent.sendMessage.mockReturnValue({
+    agent.sendSignal.mockReturnValue({
       accepted: Promise.reject(new Error('message failed before stream started')),
       signal: { id: 'signal-1', type: 'user' },
     } as any);
@@ -525,7 +525,7 @@ describe('AgentController signal messages', () => {
     await expect(session.sendMessage({ content: 'hello' })).rejects.toThrow('message failed before stream started');
   });
 
-  it('delegates active messages to Agent.sendMessage without aborting the run', async () => {
+  it('delegates active messages through Agent.sendSignal without aborting the run', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
     const controller = new AgentController({
@@ -543,13 +543,13 @@ describe('AgentController signal messages', () => {
       subscription: createSubscription(() => activeRunId) as any,
       key: `agent-1:resource-1:${threadId}`,
     });
-    agent.sendMessage.mockClear();
+    agent.sendSignal.mockClear();
 
     await session.sendMessage({ content: 'continue with the fix' });
 
     expect(session.run.isAbortRequested()).toBe(false);
-    expect(agent.sendMessage).toHaveBeenCalledWith(
-      { contents: 'continue with the fix', attributes: { delivery: 'while-active' } },
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'continue with the fix', attributes: { delivery: 'while-active' } }),
       expect.objectContaining({ resourceId: 'resource-1', threadId }),
     );
   });
@@ -642,7 +642,7 @@ describe('AgentController signal messages', () => {
     const message = session.sendMessage({ content: 'start a fresh run' }).then(() => {
       settled = true;
     });
-    await vi.waitFor(() => expect(agent.sendMessage).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(agent.sendSignal).toHaveBeenCalledTimes(1));
     await Promise.resolve();
     expect(settled).toBe(false);
 
