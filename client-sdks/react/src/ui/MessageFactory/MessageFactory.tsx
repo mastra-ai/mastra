@@ -123,7 +123,7 @@ const renderPart = (
     case 'error':
       // Terminal errors are stored for history but have no built-in visual
       // treatment. Let consumers opt into rendering them through `fallback`.
-      return fallback?.(part) ?? null;
+      return renderers.Error?.(part) ?? fallback?.(part) ?? null;
     case 'tool-invocation':
       return renderers.ToolInvocation?.(part) ?? fallback?.(part) ?? null;
     case 'source':

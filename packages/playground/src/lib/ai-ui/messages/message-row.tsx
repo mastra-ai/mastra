@@ -1,8 +1,9 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { ToolCallGroup } from '@mastra/playground-ui/components/ai/tool-call';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useChatRunning } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { AssistantTextPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/data-part-renderer';
@@ -30,7 +31,6 @@ import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
-
 import { ToolCallEffects } from '../tools/tool-call-effects';
 import { ToolCard } from '../tools/tool-card';
 import type { DataMessagePart } from '../tools/tool-card';
@@ -299,6 +299,11 @@ export const MessageRow = memo(function MessageRow({
       ),
       ToolInvocation: renderTool,
       DynamicTool: renderTool,
+      Error: (part: MastraErrorPart) => (
+        <Notice variant="destructive" title={part.error.name ?? 'Error'}>
+          <Notice.Message>{part.error.message}</Notice.Message>
+        </Notice>
+      ),
     };
   }, [metadata, dataParts, readOnly, toolGroups, isRunning]);
 
