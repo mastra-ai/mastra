@@ -117,6 +117,12 @@
         "types": "./dist/new/settings.d.ts",
         "default": "./dist/new/settings.es.js"
       }
+    },
+    "./new/layout/tabbed-container": {
+      "import": {
+        "types": "./dist/new/layout/tabbed-container.d.ts",
+        "default": "./dist/new/layout/tabbed-container.es.js"
+      }
     }
   },
   "scripts": {

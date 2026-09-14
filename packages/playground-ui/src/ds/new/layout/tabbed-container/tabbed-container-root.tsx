@@ -1,11 +1,11 @@
 import { ListFilterIcon } from 'lucide-react';
 import { Children, isValidElement, useContext } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { DataList } from '../data-list';
-import type { DataListFit } from '../data-list-root';
 import './tabbed-container.css';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox/combobox';
+import { DataList } from '@/ds/components/DataList/data-list';
+import type { DataListFit } from '@/ds/components/DataList/data-list-root';
 import { ListSearch } from '@/ds/components/ListSearch/list-search';
 import type { ListSearchProps } from '@/ds/components/ListSearch/list-search';
 import { TabContent } from '@/ds/components/Tabs/tabs-content';
@@ -34,9 +34,7 @@ type TabbedContainerItemProps = Pick<
   tabClassName?: string;
 };
 
-export type TabbedContainerPanelProps = TabbedContainerItemProps & {
-  flush?: boolean;
-};
+export type TabbedContainerPanelProps = TabbedContainerItemProps;
 
 export type TabbedContainerDataListProps = TabbedContainerItemProps & {
   columns: string;
@@ -45,15 +43,15 @@ export type TabbedContainerDataListProps = TabbedContainerItemProps & {
   fit?: DataListFit;
 };
 
-export const TabbedContainerPanel = ({ value, flush, children, className }: TabbedContainerPanelProps) => (
-  <TabContent value={value} flush={flush} keepMounted className={cn('min-h-0 flex-1', className)}>
+export const TabbedContainerPanel = ({ value, children, className }: TabbedContainerPanelProps) => (
+  <TabContent value={value} keepMounted className={cn('min-h-0 flex-1', className)}>
     {children}
   </TabContent>
 );
 
 export const TabbedContainerDataList = ({ value, columns, fit, children, className }: TabbedContainerDataListProps) => (
-  <TabContent value={value} flush keepMounted className={className}>
-    <DataList columns={columns} fit={fit} className="min-h-0">
+  <TabContent value={value} keepMounted className={cn('tabbed-container-data-list min-h-0 flex-1', className)}>
+    <DataList columns={columns} fit={fit} variant="light" className="min-h-0 px-0 pb-0">
       {children}
     </DataList>
   </TabContent>
@@ -145,7 +143,7 @@ export function TabbedContainerRoot<T extends string>({
       onValueChange={onValueChange}
       appearance="contained"
       frame={frame}
-      className={cn('tabbed-container min-h-0', className)}
+      className={cn('tabbed-container min-h-0 flex-1', className)}
     >
       <div data-slot="tabbed-container-rail">
         <div data-slot="tabbed-container-tabs">
@@ -159,7 +157,7 @@ export function TabbedContainerRoot<T extends string>({
                 disabledTooltip={panel.props.disabledTooltip}
                 onClick={panel.props.onClick}
                 onClose={panel.props.onClose}
-                className={panel.props.tabClassName}
+                className={cn('font-medium', panel.props.tabClassName)}
               >
                 {panel.props.label}
               </Tab>

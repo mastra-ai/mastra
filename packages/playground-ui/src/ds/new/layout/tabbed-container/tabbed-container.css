@@ -69,6 +69,34 @@
   border-color: color-mix(in oklab, var(--neutral5) 50%, transparent);
 }
 
+[data-slot='tabs'].tabbed-container
+  > [data-slot='tabs-content'].tabbed-container-data-list
+  [data-slot='tabs-content-body'] {
+  padding-top: 14px;
+  padding-inline: 12px;
+}
+
+.tabbed-container-data-list [data-slot='data-list-grid'] {
+  background: var(--border1);
+}
+
+.tabbed-container-data-list [data-slot='data-list-grid'] .data-list-row,
+.tabbed-container-data-list [data-slot='data-list-grid'] .data-list-sticky-start {
+  border-radius: 0;
+}
+
+.tabbed-container-data-list .data-list-top {
+  background: var(--surface2);
+}
+
+.tabbed-container-data-list .text-neutral2 {
+  color: var(--neutral3);
+}
+
+.tabbed-container-data-list .data-list-top .text-neutral2 {
+  color: var(--neutral5);
+}
+
 [data-slot='tabbed-container-search'] {
   min-width: 0;
   flex: 1;
