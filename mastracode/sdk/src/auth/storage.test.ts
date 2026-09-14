@@ -7,6 +7,7 @@
  * mastracode-gateway.test.ts.
  */
 
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -87,6 +88,52 @@ describe('AuthStorage multi-account registry', () => {
     const registryKeys = Object.keys(onDisk).filter(k => k.startsWith(`accounts:${PROVIDER}:`));
     expect(registryKeys).toHaveLength(1);
     expect(onDisk[PROVIDER]).toEqual({ type: 'oauth', refresh: 'r1', access: 'a1', expires: FUTURE });
+  });
+
+  it('never exposes a partial auth.json to a concurrently running legacy reader', async () => {
+    const entry = accountRecord('r1', 'a1', { active: true, label: 'Work' });
+    const padding = Object.fromEntries(
+      Array.from({ length: 100 }, (_, index) => [`padding:${index}`, { type: 'api_key', key: 'x'.repeat(1024) }]),
+    );
+    const { storage, authPath, dir } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${entry.id}`]: entry,
+      ...padding,
+    });
+    const donePath = join(dir, 'done');
+    const resultPath = join(dir, 'legacy-reader-result.json');
+    const reader = spawn(
+      process.execPath,
+      [
+        '-e',
+        `const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+         let parseFailures = 0;
+         let missingSlots = 0;
+         process.stdout.write('ready\\n');
+         while (!existsSync(${JSON.stringify(donePath)})) {
+           let data = {};
+           try { data = JSON.parse(readFileSync(${JSON.stringify(authPath)}, 'utf8')); }
+           catch { parseFailures++; }
+           if (data.anthropic?.type !== 'oauth') missingSlots++;
+         }
+         writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({ parseFailures, missingSlots }));`,
+      ],
+      { stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    await new Promise<void>((resolve, reject) => {
+      reader.stdout.once('data', () => resolve());
+      reader.once('error', reject);
+    });
+    const readerExit = new Promise<void>((resolve, reject) => {
+      reader.once('exit', code => (code === 0 ? resolve() : reject(new Error(`Legacy reader exited ${code}`))));
+      reader.once('error', reject);
+    });
+
+    for (let i = 0; i < 500; i++) storage.renameAccount(PROVIDER, entry.id, `Work ${i}`);
+    writeFileSync(donePath, 'done');
+    await readerExit;
+
+    expect(JSON.parse(readFileSync(resultPath, 'utf8'))).toEqual({ parseFailures: 0, missingSlots: 0 });
   });
 
   it('treats the slot as the winner when an external writer replaced its tokens (slot-wins migration)', () => {
@@ -248,6 +295,38 @@ describe('AuthStorage multi-account registry', () => {
     expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r2', access: 'a2-fresh' });
     // The active registry entry mirrors the fresh tokens.
     expect(storage.getActiveAccount(PROVIDER)).toMatchObject({ id: entry2.id, access: 'a2-fresh' });
+  });
+
+  it('does not overwrite a newly active account when another account finishes refreshing', async () => {
+    const entry1 = accountRecord('r1', 'a1', { active: true, expires: PAST });
+    const entry2 = accountRecord('r2', 'a2');
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1', PAST),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+
+    let resolveRefresh!: (creds: OAuthCredentials) => void;
+    vi.spyOn(anthropicOAuthProvider, 'refreshToken').mockImplementation(
+      () =>
+        new Promise<OAuthCredentials>(resolve => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    const pendingRefresh = storage.getApiKey(PROVIDER);
+    expect(storage.activateAccount(PROVIDER, entry2.id)?.id).toBe(entry2.id);
+    resolveRefresh({ refresh: 'r1-fresh', access: 'a1-fresh', expires: FUTURE });
+
+    expect(await pendingRefresh).toBe('a1-fresh');
+    storage.reload();
+    expect(storage.getActiveAccount(PROVIDER)).toMatchObject({ id: entry2.id, refresh: 'r2', access: 'a2' });
+    expect(storage.get(PROVIDER)).toMatchObject({ refresh: 'r2', access: 'a2' });
+    expect(storage.listAccounts(PROVIDER).find(account => account.id === entry1.id)).toMatchObject({
+      active: false,
+      refresh: 'r1-fresh',
+      access: 'a1-fresh',
+    });
   });
 
   it('dedupes concurrent refreshes per instance', async () => {
