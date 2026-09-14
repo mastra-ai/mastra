@@ -75,6 +75,8 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
+          # Changesets resolves the merge-base with main.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
