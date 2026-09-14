@@ -1,8 +1,11 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
+import { createWorkflow } from '../workflows';
 import { MCPServerBase, MCPServerBaseV2, isMCPServerV2 } from './index';
 import type { MCPToolExecutionContextV2 } from './index';
 
@@ -129,6 +132,37 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect('mcpVersion' in legacy).toBe(false);
     expect('startSSE' in modern).toBe(false);
     expect('startHonoSSE' in modern).toBe(false);
+  });
+
+  it('keeps the 1.x registry contract: slugified id, agent/workflow registration, Mastra tools only', () => {
+    const agent = new Agent({
+      id: 'helper',
+      name: 'helper',
+      instructions: 'help',
+      model: new MockLanguageModelV2({}),
+    });
+    const workflow = createWorkflow({ id: 'flow', inputSchema: z.object({}), outputSchema: z.object({}) }).commit();
+    const mastraTool = createTool({ id: 'business', description: 'Ordinary tool', execute: async () => 1 });
+    const vercelTool = { description: 'AI SDK shape', inputSchema: z.object({}), execute: async () => 'ok' };
+    const server = new NativeServer({
+      id: 'Returns Desk v2',
+      name: 'Returns',
+      version: '2.0.0',
+      tools: { mastraTool, vercelTool },
+      agents: { helper: agent },
+      workflows: { flow: workflow },
+    });
+    expect(server.id).toBe('returns-desk-v2');
+    server.setId('ignored');
+    expect(server.id).toBe('returns-desk-v2');
+
+    const mastra = new Mastra({ mcpServers: { server } });
+    expect(server.mastra).toBe(mastra);
+    expect(mastra.getAgentById('helper')).toBe(agent);
+    expect(mastra.getWorkflowById('flow')).toBe(workflow);
+    expect(mastra.getToolById('business')).toBe(mastraTool);
+    expect(mastra.listTools()).not.toHaveProperty('vercelTool');
+    expect(server.tools().vercelTool).toBe(vercelTool);
   });
 
   it('preserves duplicate-key behavior without registering the ignored server tools', () => {

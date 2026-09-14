@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added the MCP v2 server and registry contracts while preserving MCP 1.x contexts. `MCPServerRegistryEntry` accepts `MCPServerBase` and the new `MCPServerBaseV2`; existing 1.x servers need no new properties.
+Added the MCP v2 server and registry contracts while preserving MCP 1.x contexts. `MCPServerRegistryEntry` accepts `MCPServerBase` and the new `MCPServerBaseV2`; existing 1.x servers need no new properties. `MCPServerBaseV2` shares the 1.x `MCPServerConfig` and registry behavior (slugified ids, agent and workflow registration) and drops only the standalone SSE transport methods.
 
 Tools that need input mid-execution use the suspend/resume primitives `createTool` already has. On a 2026-07-28 server they receive `context.mcpv2` with per-request `log`, `progress`, `metadata`, `signal`, `suspend`, `resumeData`, and the new `suspendPayload`:
 
