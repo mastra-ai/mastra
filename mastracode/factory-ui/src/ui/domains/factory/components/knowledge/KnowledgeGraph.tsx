@@ -81,7 +81,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       data-testid="knowledge-node"
       data-node-id={node.id}
       data-node-type={node.isBoundary ? 'boundary' : node.isScope ? 'scope' : 'content'}
-      className="relative"
+      className={node.isBoundary ? 'relative' : 'relative cursor-pointer'}
       style={{ width: size, height: size }}
     >
       {/* A11: nodes never carry pin visuals — pins belong to their record
@@ -122,7 +122,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           <Badge
             variant="neutral"
             size="xs"
-            className="bg-neutral3"
+            className="bg-surface1 text-badge-neutral-fg"
             aria-label={`${node.memberCount}${node.memberCountTruncated ? '+' : ''} direct members`}
           >
             {node.memberCount}
@@ -223,7 +223,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-record-id={record.id}
       data-focused={focused || undefined}
       className={[
-        'flex items-center justify-center rounded-full border transition-shadow',
+        'flex cursor-pointer items-center justify-center rounded-full border transition-shadow',
         // White markers mimic the Mastra logo's nodes-and-edges M — records
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
