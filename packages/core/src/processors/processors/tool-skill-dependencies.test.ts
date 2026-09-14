@@ -70,6 +70,49 @@ export function fixture(autoLoad = false, storage: 'context' | 'in-memory' = 'co
 }
 
 describe('mandatory skill dependencies', () => {
+  it('does not initialize an unused catalog and stays blocked until loaded instructions reach the model', async () => {
+    const f = fixture();
+    f.skills.listNames.mockRejectedValue(new Error('Unused catalog must stay lazy'));
+    f.skills.list.mockRejectedValue(new Error('Unused catalog must stay lazy'));
+    let tools = await f.step();
+    expect(f.skills.listNames).not.toHaveBeenCalled();
+    expect(f.skills.list).not.toHaveBeenCalled();
+    expect(f.skills.get).not.toHaveBeenCalled();
+    expect(getSkillReadiness(f.context)).toBeUndefined();
+    expect(await tools.load_tool.execute({ toolName: 'generate_image' })).toMatchObject({
+      success: false,
+      dependencyErrors: [{ code: 'MISSING_REQUIRED_SKILL', missingSkills: ['image-generation'], retryable: true }],
+    });
+    expect(f.execute).not.toHaveBeenCalled();
+
+    f.skills.listNames.mockImplementation(async () => [...f.catalog.keys()]);
+    await f.loadSkill('image-generation');
+    expect(await tools.load_tool.execute({ toolName: 'generate_image' })).toMatchObject({ success: false });
+    tools = await f.step();
+    expect(f.skills.listNames).toHaveBeenCalledTimes(1);
+    expect(f.args.messageList.getSystemMessages('skill-search:loaded')).toEqual([
+      { role: 'system', content: '[Skill: image-generation]\n\nCheck the image brief before generating.' },
+    ]);
+    expect(await tools.load_tool.execute({ toolName: 'generate_image' })).toMatchObject({ success: true });
+    expect(await (await f.step()).generate_image.execute({})).toEqual({ created: true });
+    expect(f.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports unavailable skills after a native load checks an empty catalog', async () => {
+    const f = fixture();
+    f.catalog.clear();
+    await f.step();
+    expect(await f.policy({ toolName: 'generate_image', phase: 'execute', requestContext: f.context })).toMatchObject({
+      error: { code: 'MISSING_REQUIRED_SKILL', retryable: true },
+    });
+    expect(await f.loadSkill('image-generation')).toMatchObject({ success: false });
+    await f.step();
+    expect(await f.policy({ toolName: 'generate_image', phase: 'execute', requestContext: f.context })).toMatchObject({
+      error: { code: 'REQUIRED_SKILL_UNAVAILABLE', unavailableSkills: ['image-generation'], retryable: false },
+    });
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
   it.each(['context', 'in-memory'] as const)(
     'blocks loading, then recovers through native load_skill (%s)',
     async storage => {
@@ -158,7 +201,7 @@ describe('mandatory skill dependencies', () => {
     other.set(MASTRA_THREAD_ID_KEY, 'thread');
     other.set(MASTRA_RESOURCE_ID_KEY, 'user');
     await f.skillSearch.processInputStep({ ...f.args, requestContext: other });
-    expect(getSkillReadiness(other)?.readySkills).toEqual([]);
+    expect(getSkillReadiness(other)).toBeUndefined();
     f.context.set(MASTRA_RESOURCE_ID_KEY, 'other-user');
     expect(getSkillReadiness(f.context)).toBeUndefined();
     expect(
@@ -349,6 +392,7 @@ describe('mandatory skill dependencies', () => {
 
   it('does not allow callers to mutate readiness or dependency arrays', async () => {
     const f = fixture();
+    await f.loadSkill('image-generation');
     await f.step();
     const snapshot = getSkillReadiness(f.context)!;
     expect(Object.isFrozen(snapshot)).toBe(true);

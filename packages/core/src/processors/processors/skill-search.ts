@@ -41,6 +41,8 @@ import { setSkillReadiness } from './skill-readiness';
 interface ThreadState {
   /** Map of skillName → full instructions */
   skills: Map<string, string>;
+  /** A native load has checked the catalog, including an unavailable restored skill. */
+  catalogChecked: boolean;
   lastAccessed: number;
   threadId: string;
 }
@@ -216,6 +218,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
       this.threadLoadedSkills.set(stateKey, {
         threadId,
         skills: new Map(),
+        catalogChecked: false,
         lastAccessed: Date.now(),
       });
     }
@@ -362,6 +365,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
 
     // Load the skill
     const skill = await skills.get(skillName);
+    threadState.catalogChecked = true;
     if (!skill) {
       // Suggest similar names
       const allSkills = await skills.list();
@@ -520,8 +524,10 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
 
     const metaTools = this.createMetaTools(skills, threadState);
 
-    // Revalidate loaded names against the authorized catalog, once per model step.
-    const availableSkills = this.trackReadiness
+    // Keep unused catalogs lazy. A load attempt makes availability authoritative,
+    // including failed restoration of a skill removed while a run was paused.
+    const checkCatalog = this.trackReadiness && threadState.catalogChecked;
+    const availableSkills = checkCatalog
       ? skills.listNames
         ? await skills.listNames()
         : (await skills.list()).map(skill => skill.name)
@@ -538,7 +544,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
       readySkills.push(skillName);
     }
     const requestContext = args.requestContext;
-    if (this.trackReadiness && requestContext) {
+    if (checkCatalog && requestContext) {
       const scopeKey = this.getScopeKey(threadId, requestContext);
       const injected = messageList.getSystemMessages(instructionsTag);
       const snapshot = Object.freeze({
