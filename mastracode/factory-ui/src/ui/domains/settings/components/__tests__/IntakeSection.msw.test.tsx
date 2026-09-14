@@ -218,7 +218,9 @@ describe('IntakeSection', () => {
 
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
-      expect(await screen.findByRole('status', { name: 'Saving Linear projects and teams selection' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('status', { name: 'Saving Linear projects and teams selection' }),
+      ).toBeInTheDocument();
       // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
       expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
 
