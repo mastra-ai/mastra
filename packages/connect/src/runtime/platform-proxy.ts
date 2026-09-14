@@ -157,10 +157,9 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     patch: bind('PATCH'),
     delete: bind('DELETE'),
     ActionError: ToolActionError,
-    log: (...args: unknown[]) => {
-      // Templates use log for observability; forward to console.
-      console.log('[@mastra/connect]', ...args);
-    },
+    // Upstream template logs may contain request or provider data. Keep the
+    // compatibility method but discard arbitrary values at this trust boundary.
+    log: () => {},
     requestContext: context.requestContext,
     withRequestContext: requestContext => createPlatformProxy({ ...context, requestContext }),
   };

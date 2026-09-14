@@ -33,6 +33,15 @@ describe('createPlatformProxy request context binding', () => {
     expect(typeof bound.log).toBe('function');
     expect(bound.ActionError).toBeDefined();
   });
+
+  it('does not emit arbitrary template log values', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const proxy = createPlatformProxy({ connectionId: 'conn-1' });
+
+    proxy.log('request failed', { authorization: 'Bearer secret-token', apiKey: 'secret-key' });
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('callProxy retry policy', () => {
