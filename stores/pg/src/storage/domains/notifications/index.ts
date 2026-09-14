@@ -24,6 +24,14 @@ import type { DbClient, PgDomainConfig } from '../../db';
 import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
+// Kept inline so this adapter also builds against a core that predates the type export.
+type MarkNotificationDeliveredInput = {
+  id: string;
+  threadId: string;
+  deliveredSignalId: string;
+  lastDeliveryAttemptAt: Date;
+};
+
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
   if (status === 'seen') return { seenAt: now };
@@ -476,6 +484,26 @@ export class NotificationsPG extends NotificationsStorage {
       [...Object.values(assignments), input.threadId, ids],
     );
     return rows.map(rowToNotification);
+  }
+
+  async markNotificationDelivered(input: MarkNotificationDeliveredInput): Promise<NotificationRecord | null> {
+    const schemaName = getSchemaName(this.#schema);
+    const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
+    const now = new Date();
+    // Single conditional write: only a still-pending row is promoted to delivered,
+    // so a concurrent seen/dismissed/archived write is never downgraded.
+    const row = await this.#db.client.oneOrNone(
+      `UPDATE ${tableName}
+        SET "status" = CASE WHEN "status" = 'pending' THEN 'delivered' ELSE "status" END,
+            "deliveredAt" = CASE WHEN "status" = 'pending' THEN $1 ELSE "deliveredAt" END,
+            "deliveredSignalId" = $2,
+            "lastDeliveryAttemptAt" = $3,
+            "updatedAt" = $1
+        WHERE "threadId" = $4 AND "id" = $5
+        RETURNING *`,
+      [now, input.deliveredSignalId, input.lastDeliveryAttemptAt, input.threadId, input.id],
+    );
+    return row ? rowToNotification(row) : null;
   }
 
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {

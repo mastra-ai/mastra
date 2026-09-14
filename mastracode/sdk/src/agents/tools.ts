@@ -7,6 +7,7 @@ import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
   ListNotificationsInput,
+  MarkNotificationDeliveredInput,
   UpdateNotificationInput,
   UpdateNotificationsStatusInput,
 } from '@mastra/core/notifications';
@@ -65,6 +66,10 @@ export class LazyNotificationsStorage extends NotificationsStorage {
 
   override async updateNotificationsStatus(input: UpdateNotificationsStatusInput) {
     return (await this.getNotificationsStorage()).updateNotificationsStatus(input);
+  }
+
+  override async markNotificationDelivered(input: MarkNotificationDeliveredInput) {
+    return (await this.getNotificationsStorage()).markNotificationDelivered(input);
   }
 
   async dangerouslyClearAll() {
