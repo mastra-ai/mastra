@@ -42,7 +42,7 @@ export function ReviewColumnCards({
               role="group"
               aria-label={`Stack #${stack.number} · ${stack.title}`}
               data-review-stack={stack.id}
-              className="border-neutral3/30 rounded-card flex min-w-0 flex-col gap-2.5 border border-dashed p-2"
+              className="before:rounded-card before:border-neutral3/30 relative flex min-w-0 flex-col gap-2.5 before:pointer-events-none before:absolute before:-inset-1 before:border before:border-dashed"
             >
               <div className="text-icon3 flex min-w-0 items-center gap-2 p-1">
                 <GitPullRequestArrow size={14} className="shrink-0" aria-hidden />
