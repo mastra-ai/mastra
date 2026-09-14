@@ -1,6 +1,6 @@
 import { Background, BackgroundVariant, ReactFlow, useReactFlow } from '@xyflow/react';
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { ZoomSlider } from './zoom-slider';
 import '@xyflow/react/dist/style.css';
 
@@ -24,8 +24,10 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
 }: WorkflowGraphCanvasProps<NodeType, EdgeType>) {
   const graphRef = useRef<HTMLDivElement>(null);
   const { getNodes, setCenter } = useReactFlow<NodeType, EdgeType>();
-  const focusOnNode = useEffectEvent((nodeId: string) => {
-    const focusNode = getNodes().find(node => node.id === nodeId);
+
+  useEffect(() => {
+    if (!focusNodeId) return;
+    const focusNode = getNodes().find(node => node.id === focusNodeId);
     if (!focusNode) return;
     graphRef.current?.focus({ preventScroll: true });
     const width = focusNode.measured?.width ?? focusNode.width ?? 274;
@@ -34,11 +36,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
       duration: 300,
       zoom: 1,
     });
-  });
-
-  useEffect(() => {
-    if (focusNodeId) focusOnNode(focusNodeId);
-  }, [focusNodeId, nodes]);
+  }, [focusNodeId, nodes, getNodes, setCenter]);
 
   return (
     <div
