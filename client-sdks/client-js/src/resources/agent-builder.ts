@@ -1,5 +1,4 @@
 import type { RequestContext } from '@mastra/core/request-context';
-import type { WorkflowInfo } from '@mastra/core/workflows';
 import type { Body, QueryParams, RouteResponse } from '../route-types.generated.js';
 import type { ClientOptions, ListWorkflowRunsParams } from '../types';
 import { parseClientRequestContext } from '../utils';
@@ -340,9 +339,8 @@ export class AgentBuilder extends BaseResource {
    * Gets details about this agent builder action.
    * This calls `/agent-builder/:actionId`.
    */
-  async details(): Promise<WorkflowInfo> {
-    const result = await this.request<WorkflowInfo>(`/agent-builder/${this.actionId}`);
-    return result;
+  async details(): Promise<RouteResponse<'GET /agent-builder/:actionId'>> {
+    return this.request(`/agent-builder/${this.actionId}`);
   }
 
   /**
