@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPRequestContextV2, MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { InternalCoreTool } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolExecutionContext } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod';
 
@@ -19,11 +19,17 @@ const confirmation = createTool({
   suspendSchema: z.object({ phase: z.literal('confirm'), amount: z.number() }),
   resumeSchema: z.object({ confirmed: z.boolean() }),
   execute: async ({ amount }, context) => {
-    // @ts-expect-error the 1.x context is a different, unrelated shape
-    context.mcpv2?.extra;
-    // @ts-expect-error suspend/resume are top-level, not nested under the request context
-    context.mcpv2?.suspend;
-    assert.equal(context.mcpv2?.protocolVersion, '2026-07-28');
+    // Same `context.mcp` shape as 1.x; the 2026-07-28 server marks it and log/progress work as before.
+    assert.equal(context.mcp?.protocolVersion, '2026-07-28');
+    await context.mcp?.log?.('info', 'confirming', { amount });
+    await context.mcp?.progress?.({ progress: 1, total: 2 });
+    // Server-initiated requests no longer exist: the deprecated members throw instead of hanging.
+    await assert.rejects(
+      context.mcp!.elicitation.sendRequest({ message: 'x', requestedSchema: { type: 'object', properties: {} } }),
+      /elicitation\.sendRequest is not available on a 2026-07-28 server/,
+    );
+    // @ts-expect-error suspend/resume are top-level, not nested under mcp
+    context.mcp?.suspend;
     if (!context.resumeData) {
       await context.suspend?.({ phase: 'confirm', amount });
       return;
@@ -33,9 +39,41 @@ const confirmation = createTool({
   },
 });
 
+const unavailable = (feature: string) => async (): Promise<never> => {
+  throw new Error(`${feature} is not available on a 2026-07-28 server`);
+};
+
+/** The `context.mcp` a 2026-07-28 server builds: the 1.x shape, with server-initiated requests throwing. */
+const request = (): MCPToolExecutionContext => {
+  const signal = new AbortController().signal;
+  return {
+    protocolVersion: '2026-07-28',
+    extra: {
+      signal,
+      requestId: 'round',
+      sendNotification: unavailable('extra.sendNotification'),
+      sendRequest: unavailable('extra.sendRequest'),
+      mcpReq: {
+        id: 'round',
+        method: 'tools/call',
+        requestState: () => undefined,
+        signal,
+        send: unavailable('mcpReq.send'),
+        notify: unavailable('mcpReq.notify'),
+        log: unavailable('mcpReq.log'),
+        elicitInput: unavailable('mcpReq.elicitInput'),
+        requestSampling: unavailable('mcpReq.requestSampling'),
+      },
+    },
+    elicitation: { sendRequest: unavailable('elicitation.sendRequest') },
+    log: async () => {},
+    progress: async () => {},
+  };
+};
+
 class Fixture extends MCPServerBase {
   override readonly mcpVersion = 2 as const;
-  // Converts tools like the 1.x package does; the mcpv2 context flows through CoreToolBuilder.
+  // Converts tools like the 1.x package does; `context.mcp` flows through CoreToolBuilder.
   convertTools(tools: ToolsInput) {
     const converted: Record<string, InternalCoreTool> = {};
     for (const [name, tool] of Object.entries(tools)) {
@@ -56,20 +94,14 @@ class Fixture extends MCPServerBase {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
     let suspension: { payload: unknown } | undefined;
-    const round: MCPRequestContextV2 = executionContext.mcpv2 ?? {
-      protocolVersion: '2026-07-28',
-      requestId: 'rest',
-      signal: new AbortController().signal,
-      log: async () => {},
-      progress: async () => {},
-    };
+    const mcp = request();
     const output = await tool.execute(args, {
       // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
       toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
-      abortSignal: round.signal,
-      mcpv2: round,
+      abortSignal: mcp.extra.signal,
+      mcp,
       suspend: async (payload: unknown) => void (suspension = { payload }),
       resumeData: executionContext.resumeData,
       suspendPayload: executionContext.suspendPayload,
@@ -116,15 +148,8 @@ const server = new Fixture({ id: 'fixture', name: 'Fixture', version: '2.0.0', t
 const mastra = new Mastra({ mcpServers: { fixture: server }, tools: { confirmation } });
 assert.equal(mastra.getTool('confirmation'), confirmation);
 
-const request = (): MCPRequestContextV2 => ({
-  protocolVersion: '2026-07-28',
-  requestId: 'first',
-  signal: new AbortController().signal,
-  log: async () => {},
-  progress: async () => {},
-});
 const requestContext = new RequestContext();
-const first = await server.executeTool('confirmation', { amount: 990 }, { requestContext, mcpv2: request() });
+const first = await server.executeTool('confirmation', { amount: 990 }, { requestContext });
 assert.equal(first.status, 'suspended');
 assert.ok(first.status === 'suspended');
 assert.deepEqual(first.suspendPayload, { phase: 'confirm', amount: 990 });
@@ -135,7 +160,6 @@ const accepted = await server.executeTool(
   { amount: 990 },
   {
     requestContext,
-    mcpv2: { ...request(), requestId: 'second' },
     resumeData: { confirmed: true },
     suspendPayload: { phase: 'confirm', amount: 990 },
   },
