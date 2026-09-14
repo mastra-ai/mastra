@@ -174,6 +174,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'true',
           },
           {
+            name: 'onFailure',
+            type: "'abort' | 'continue'",
+            description:
+              "Controls Observer model and provider failures. `'abort'` keeps the existing retry schedule and aborts the agent turn if observation still fails. `'continue'` makes one Observer attempt, emits the existing failure diagnostic, keeps the failed input pending, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling.",
+            isOptional: true,
+            defaultValue: "'abort'",
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:

@@ -206,6 +206,26 @@ const memory = new Memory({
 
 `bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 
+### Observation failure policy
+
+Observer failures abort the agent turn by default. Set `observation.onFailure` to `'continue'` when the main agent should continue after an Observer model or provider failure:
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        onFailure: 'continue',
+      },
+    },
+  },
+})
+```
+
+In continue mode, Mastra makes one Observer model attempt, reports the failure through the existing OM diagnostics, and leaves the failed input pending for a later observation cycle. It does not advance observation boundaries or discard unobserved messages.
+
+This policy applies only to Observer model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It does not prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
 ## Benefits
