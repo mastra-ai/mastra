@@ -30,6 +30,7 @@ import {
   SUPPRESSED_STATE_SIGNAL_IDS,
   TimeGap,
 } from './TranscriptSignals';
+import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -129,6 +130,9 @@ export function MessageBubble({
   };
 
   const renderers = {
+    Error: (part: MastraErrorPart) => <Notice variant="destructive" title={part.error.name ?? 'Error'}>
+      <Notice.Message>{part.error.message}</Notice.Message>
+    </Notice>,
     Text: (part: TextPart) => {
       if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {
