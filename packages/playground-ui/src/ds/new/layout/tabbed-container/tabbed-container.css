@@ -76,12 +76,12 @@
   padding-inline: 12px;
 }
 
-.tabbed-container-data-list [data-slot='data-list-grid'] {
+.tabbed-container-data-list .grid.content-start {
   background: var(--border1);
 }
 
-.tabbed-container-data-list [data-slot='data-list-grid'] .data-list-row,
-.tabbed-container-data-list [data-slot='data-list-grid'] .data-list-sticky-start {
+.tabbed-container-data-list .grid.content-start .data-list-row,
+.tabbed-container-data-list .grid.content-start .data-list-sticky-start {
   border-radius: 0;
 }
 

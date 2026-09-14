@@ -114,7 +114,6 @@ export function DataListRoot({
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      data-slot="data-list-grid"
       className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit])}
       style={gridStyle}
     >
