@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import type { ComponentPropsWithRef } from 'react';
+import type { ComponentProps } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -9,7 +9,7 @@ export type TxtProps<TElement extends TxtElement = 'p'> = {
   as?: TElement;
   variant?: keyof typeof variants;
   font?: 'mono';
-} & ComponentPropsWithRef<TElement>;
+} & ComponentProps<TElement>;
 
 const variants = {
   'ui-xs': 'text-ui-xs leading-ui-xs',
