@@ -5,7 +5,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { ExperimentTargetFilter } from './use-experiments-for-dataset-filter';
 
-export const EXPERIMENTS_PER_PAGE = 20;
+export const EXPERIMENTS_PER_PAGE = 100;
 
 /**
  * Infinite-scroll experiments for the list page: the global list, or the dataset-scoped list when a
