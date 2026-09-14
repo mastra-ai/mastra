@@ -93,6 +93,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/decisions')) return route.fulfill({ json: { decisions: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
+    if (url.pathname.endsWith('/knowledge/search')) {
+      return route.fulfill({ json: { results: [], truncated: false } });
+    }
     if (url.pathname.endsWith('/knowledge/scopes')) {
       return route.fulfill({
         json: {
@@ -194,9 +197,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 isScope: true,
                 pinned: false,
                 recordCount: 0,
-                memberCount: 0,
+                memberCount: 1,
                 memberCountTruncated: false,
-                contentNodeCount: 0,
+                contentNodeCount: 1,
                 childScopeCount: 0,
                 createdAt: '2026-08-28T10:00:00.000Z',
                 updatedAt: '2026-08-28T10:00:00.000Z',
@@ -295,6 +298,20 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText(`project:${projectId}`);
   await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText(`resource:${projectId}`);
 
+  // Search results remain above the open details flyout after returning search
+  // to the page header.
+  const headerSearch = page.getByRole('textbox', { name: 'Search knowledge' });
+  await headerSearch.fill('zz');
+  const searchResults = page.getByRole('listbox', { name: 'Knowledge search results' });
+  await expect(searchResults).toBeVisible();
+  const resultsAreTopmost = await searchResults.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+    return topmost === element || (topmost !== null && element.contains(topmost));
+  });
+  expect(resultsAreTopmost).toBe(true);
+  await headerSearch.press('Escape');
+
   // The graph pane must actually have height — a broken flex chain renders
   // nodes at zero height while visibility checks on their text still pass.
   const container = page.locator('[data-testid="knowledge-graph-container"]');
@@ -321,7 +338,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   // identity scopes and declared structure use one name + kind-chip treatment.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
-  await expect(scopeTree.getByRole('textbox', { name: 'Search knowledge' })).toBeVisible();
+  const search = page.getByRole('textbox', { name: 'Search knowledge' });
+  await expect(search).toBeVisible();
+  await expect(search).toHaveAttribute('placeholder', 'Search');
+  await expect(scopeTree.getByRole('textbox', { name: 'Search knowledge' })).toHaveCount(0);
   await expect(scopeTree.getByText('Your access')).toBeHidden();
   await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
   await expect(scopeTree.getByRole('button', { name: /mastra org 2/ })).toBeVisible();
@@ -341,6 +361,22 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
   );
   await expect(featureScopeNode.getByLabel('3 direct members')).toHaveCount(0);
+  const memoryBadge = page
+    .locator('[data-testid="knowledge-node"][data-node-id="memory-scope"]')
+    .getByLabel('1 direct members');
+  await expect(memoryBadge).toBeVisible();
+  const badgeColors = await memoryBadge.evaluate(element => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--neutral3)';
+    document.body.append(probe);
+    const colors = {
+      actual: getComputedStyle(element).backgroundColor,
+      expected: getComputedStyle(probe).backgroundColor,
+    };
+    probe.remove();
+    return colors;
+  });
+  expect(badgeColors.actual).toBe(badgeColors.expected);
   await featureScopeNode.hover();
   const scopeHover = page.getByTestId('knowledge-hover-card');
   await expect(scopeHover).toContainText('Content nodes1');
