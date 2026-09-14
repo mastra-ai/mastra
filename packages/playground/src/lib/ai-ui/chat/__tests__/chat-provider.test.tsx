@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
@@ -10,7 +11,6 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -736,25 +736,33 @@ describe('ChatProvider', () => {
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => sseResponse()),
     );
 
-    await act(async () => {
-      render(
-        <Wrapper>
-          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
-            <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
-            <SendOnMount text="just finish" />
-          </ChatProvider>
-        </Wrapper>,
+    const SendAfterPanelLoads = () => {
+      const om = useObservationalMemory('agent-1', 'thread-1');
+      const messages = useMemoryThreadMessages('thread-1');
+      const send = useChatSend();
+      return (
+        <button disabled={!om.isSuccess || !messages.isSuccess} onClick={() => send({ message: 'just finish' })}>
+          Finish after panel loads
+        </button>
       );
-    });
+    };
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <SendAfterPanelLoads />
+        </ChatProvider>
+      </Wrapper>,
+    );
 
-    // Wait for mount fetches and the stream to finish + the finish-path refetch.
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 250));
+    // A synchronous finish during mount can share the still-pending initial query.
+    // Settle those reads before testing that completion starts a new fetch.
+    const sendButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Finish after panel loads' });
+    await waitFor(() => expect(sendButton.disabled).toBe(false));
+    fireEvent.click(sendButton);
+    await waitFor(() => {
+      expect(omRequests.length).toBeGreaterThan(1);
+      expect(messageRequests.length).toBeGreaterThan(1);
     });
-
-    // The finish-path refresh must have refetched the panel queries more than once.
-    expect(omRequests.length).toBeGreaterThan(1);
-    expect(messageRequests.length).toBeGreaterThan(1);
     expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
   });
 

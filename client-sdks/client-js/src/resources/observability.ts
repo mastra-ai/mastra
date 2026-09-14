@@ -27,6 +27,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -39,6 +41,8 @@ import type {
   ListFeedbackArgs,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
@@ -365,6 +369,18 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.request(`/observability/scores`, {
+      method: 'DELETE',
+      body: params,
+    });
+  }
+
+  /**
    * Returns an aggregated score value with optional period-over-period comparison.
    */
   getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
@@ -432,6 +448,18 @@ export class Observability extends BaseResource {
     return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
       method: 'PATCH',
       body: { reviewStatus: params.reviewStatus },
+    });
+  }
+
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Idempotent: deleting missing ids succeeds. Depending on the storage
+   * backend (e.g. ClickHouse), deletion may be eventually consistent.
+   */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.request(`/observability/feedback`, {
+      method: 'DELETE',
+      body: params,
     });
   }
 

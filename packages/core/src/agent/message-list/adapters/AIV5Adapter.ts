@@ -404,6 +404,7 @@ export class AIV5Adapter {
           // shapes so the media type survives (instead of the image/png default) and the
           // payload is read from `url` when v5-shaped. Mirrors #17366.
           const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+          const filename = (part as { filename?: string }).filename;
 
           // Skip file parts that came from experimental_attachments to avoid duplicates
           if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
@@ -422,6 +423,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: fileData,
               mediaType: categorized.mimeType || 'image/png',
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -459,6 +461,7 @@ export class AIV5Adapter {
               type: 'file' as const,
               url: dataUri,
               mediaType: finalMimeType,
+              ...(filename ? { filename } : {}),
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
@@ -492,6 +495,11 @@ export class AIV5Adapter {
               transformToolPayloads,
             ),
           });
+        } else if (part.type === 'error') {
+          // Mastra-only record of a terminal failure. Preserved for DB/UI history
+          // (see sanitizeV5UIMessages, which strips it from provider prompts).
+          parts.push(part as unknown as AIV5Type.UIMessage['parts'][number]);
+          hasNonToolReasoningParts = true;
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
           parts.push(part);
@@ -750,6 +758,14 @@ export class AIV5Adapter {
 
         if (p.type === 'step-start') {
           return p;
+        }
+
+        // Mastra-only record of a terminal failure. Round-trips through UI
+        // history unchanged; sanitizeV5UIMessages strips it from provider
+        // prompts. AIV6Adapter.fromUIMessage pairs its output with the incoming
+        // parts by index, so dropping it here would misalign every later part.
+        if ((p as { type: string }).type === 'error') {
+          return p as unknown as MastraMessagePart;
         }
 
         // Handle data-* parts (custom parts emitted by tools via writer.custom())

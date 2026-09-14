@@ -35,11 +35,11 @@ await dataset.purgeItem({ itemId: 'item-id' })
 
 ## Behavior
 
-Purging replaces the item's content fields in existing history rows and deletion tombstones with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked to this dataset item. Experiment-result writes submitted after the purge are stored with redacted content. Later `updateItem()` calls reject with the `DATASET_ITEM_PURGED` error.
+Purging replaces the item's content fields in existing history rows and deletion tombstones with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked to this dataset item. Experiment-result writes submitted after the purge are stored with redacted content.
 
-Don't run purge concurrently with dataset item updates or deletions. A write that read the item before purge started can commit a stale revision after the purge completes.
+Purge serializes or conflicts with concurrent dataset item writers without guaranteeing which operation completes first. If a mutating `updateItem()` call loses the race, it re-reads the purge marker and rejects with `DATASET_ITEM_PURGED`. `deleteItem()` remains idempotent, and any deletion tombstone created during the race stays redacted.
 
-The operation preserves dataset version history, item identity, experiment counters, and experiment review status. It doesn't create a new dataset version. Version-pinned reads can still return the item's row skeleton, but its purged content is no longer available.
+Normal item mutations use Slowly Changing Dimension Type 2 (SCD-2) versioning. Permanent purge intentionally overrides historical immutability for erasure while preserving item identity and the dataset version timeline. It doesn't create a new dataset version. Version-pinned reads can still return the item's row skeleton, but its purged content is no longer available. Experiment counters and review status are also preserved.
 
 MongoDB storage requires a replica set or sharded deployment with transaction support. If transactions aren't available, the operation fails before changing the item or its experiment results.
 

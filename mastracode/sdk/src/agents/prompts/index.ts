@@ -124,6 +124,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     date: ctx.currentDate,
     mode: ctx.modeId,
     modelId: ctx.modelId,
+    coAuthorName: ctx.coAuthorName,
+    coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
     hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
     toolGuidance,

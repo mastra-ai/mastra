@@ -1,4 +1,4 @@
-import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage, AIV5Type, MastraErrorPart } from '@mastra/core/agent/message-list';
 import type { IsTaskCompletePayload } from '@mastra/core/stream';
 import type { ReactNode } from 'react';
 import type { AccumulatorPart, MastraReasoningPart, MastraTextPart, TripwireMetadata } from '../../lib/mastra-db';
@@ -92,6 +92,7 @@ export type MessageRenderers = {
   Data?: (part: DataPart) => ReactNode;
   /** Covers runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts. */
   DynamicTool?: (part: DynamicToolPart) => ReactNode;
+  Error?: (part: MastraErrorPart) => ReactNode;
 };
 
 /**

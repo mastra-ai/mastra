@@ -7,7 +7,7 @@ description: "Browse Pioneer model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/pioneer.svg" alt="Pioneer logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Pioneer
 
-Access 103 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
+Access 112 Pioneer models through Mastra's model router. Authentication is handled automatically using the `PIONEER_API_KEY` environment variable.
 
 Learn more in the [Pioneer documentation](https://agent.pioneer.ai/llms.txt).
 
@@ -154,6 +154,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 25
   },
   {
+    "model": "pioneer/claude-opus-5-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "pioneer/claude-sonnet-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -248,6 +260,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.4,
     "outputCost": 2
+  },
+  {
+    "model": "pioneer/devstral-small-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.3
   },
   {
     "model": "pioneer/fastino/gliguard-LLMGuardrails-300M",
@@ -694,6 +718,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.12
   },
   {
+    "model": "pioneer/magistral-medium",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
     "model": "pioneer/meta-llama/Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -802,6 +838,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "pioneer/ministral-14b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "pioneer/ministral-3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
     "model": "pioneer/mistral-large-3",
     "imageInput": true,
     "audioInput": false,
@@ -812,6 +872,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.5,
     "outputCost": 1.5
+  },
+  {
+    "model": "pioneer/mistral-medium",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": 0.4,
+    "outputCost": 2
   },
   {
     "model": "pioneer/mistral-medium-3.5",
@@ -944,6 +1016,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "pioneer/moonshotai/Kimi-K3-Fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 4.5,
+    "outputCost": 22.5
   },
   {
     "model": "pioneer/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
@@ -1234,6 +1318,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 30
   },
   {
+    "model": "pioneer/thinkingmachines/inkling-small",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.5,
+    "outputCost": 1.2
+  },
+  {
     "model": "pioneer/XiaomiMiMo/MiMo-V2.5",
     "imageInput": true,
     "audioInput": true,
@@ -1280,6 +1376,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.4,
     "outputCost": 4.4
+  },
+  {
+    "model": "pioneer/zai-org/GLM-5.2-Fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2.1,
+    "outputCost": 6.6
   }
 ]}
 />
@@ -1314,7 +1422,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "pioneer/zai-org/GLM-5.2"
+      ? "pioneer/zai-org/GLM-5.2-Fast"
       : "pioneer/HuggingFaceTB/SmolLM3-3B-Base";
   }
 });

@@ -239,6 +239,8 @@ describe('Datasets Handlers', () => {
       comparisonId: 'comparison-1',
       variantId: 'variant-1',
       trialIndex: 0,
+      targetType: 'agent',
+      targetId: 'agent-1',
     };
 
     it('forwards grouping filters when listing all experiments', async () => {
@@ -663,6 +665,38 @@ describe('Datasets Handlers', () => {
   });
 
   describe('LIST_DATASETS_ROUTE', () => {
+    it('filters datasets by targetType and targetIds', async () => {
+      await mastra.datasets.create({ name: 'Agent A', targetType: 'agent', targetIds: ['agent-a'] });
+      await mastra.datasets.create({ name: 'Agent B', targetType: 'agent', targetIds: ['agent-b'] });
+      await mastra.datasets.create({ name: 'Workflow A', targetType: 'workflow', targetIds: ['agent-a'] });
+      await mastra.datasets.create({ name: 'Untyped' });
+
+      const byType = await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        targetType: 'agent',
+      } as any);
+      expect(byType.datasets.map((d: any) => d.name).sort()).toEqual(['Agent A', 'Agent B']);
+
+      const byTypeAndId = await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        targetType: 'agent',
+        targetIds: ['agent-a'],
+      } as any);
+      expect(byTypeAndId.datasets.map((d: any) => d.name)).toEqual(['Agent A']);
+    });
+
+    it('does not pass filters when no target params are given', async () => {
+      const list = vi.spyOn(mastra.datasets, 'list');
+
+      await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(list).toHaveBeenCalledWith({ page: 0, perPage: 10, filters: undefined });
+    });
+
     it('should respect explicit perPage parameter larger than the default', async () => {
       for (let i = 0; i < 15; i++) {
         await mastra.datasets.create({ name: `Dataset ${i + 1}` });

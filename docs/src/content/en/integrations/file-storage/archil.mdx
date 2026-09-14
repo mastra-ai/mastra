@@ -7,7 +7,7 @@ packages:
 
 # Archil
 
-Stores files on [Archil](https://docs.archil.com) elastic, serverless disks. Combines an S3-compatible object API for fast reads/writes with `exec()` for POSIX shell operations and `grep()` for parallel server-side search. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+Stores files on [Archil](https://docs.archil.com) elastic, serverless disks. Combines an S3-compatible object API for fast reads/writes with `exec()` for POSIX shell operations and `diskGrep()` for parallel server-side search. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 ## Installation
 
@@ -227,12 +227,12 @@ const result = await filesystem.exec('ls -la /data')
 // { exitCode: 0, stdout: '...', stderr: '' }
 ```
 
-#### `grep(options)`
+#### `diskGrep(options)`
 
 Run a parallel server-side search across files on the disk.
 
 ```typescript
-const results = await filesystem.grep({
+const results = await filesystem.diskGrep({
   directory: '/logs',
   pattern: 'ERROR',
   recursive: true,

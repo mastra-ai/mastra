@@ -369,6 +369,27 @@ Board definitions own lifecycle, transition-policy, phase-semantics, and tool-re
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
+### incident.io intake
+
+Use `IncidentioIntegration` with an incident.io API key to intake active incidents and outstanding follow-ups:
+
+```typescript
+import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
+
+const incidentio = new IncidentioIntegration(); // Reads INCIDENT_IO_API_KEY.
+const factory = new MastraFactory({ storage, integrations: [incidentio] });
+```
+
+For a Mastra Platform connection, use `PlatformIncidentioIntegration`. It proxies provider requests through `/v2/connections/{connectionId}/proxy` and reads `MASTRA_INCIDENT_IO_CONNECTION_ID` unless `connectionId` is passed to the constructor. `MastraFactory` installs it automatically when Platform credentials and that connection ID are present; an explicit integration with id `incidentio` takes precedence.
+
+```typescript
+import { PlatformIncidentioIntegration } from '@mastra/factory/integrations/platform/incidentio/integration';
+
+const incidentio = new PlatformIncidentioIntegration({ connectionId: 'connection-id' });
+```
+
+Both integrations expose incidents and incident follow-ups as separate Intake sources. Their provider-neutral Intake items can be imported onto any installed board, including custom boards. A reconciliation worker polls imported incidents and follow-ups every five minutes by default to refresh their provider state and metadata. Set `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` to disable it or `MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence. Follow-up state updates map Factory completion and cancellation to incident.io's `completed` and `not_doing` statuses. incident.io does not expose Intake comments through these adapters.
+
 ### Linear event rules
 
 Both `LinearIntegration` and `PlatformLinearIntegration` automatically install the built-in `issueObserved` and `issueClosed` handlers. No default-rule imports or configuration are needed, including for `new PlatformLinearIntegration()` or direct construction with credentials only.

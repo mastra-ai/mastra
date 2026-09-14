@@ -10,4 +10,13 @@ describe('package exports', () => {
       expect(packageJson.exports).not.toHaveProperty([barrel]);
     }
   });
+
+  it('publishes the tabbed container layout entrypoint', () => {
+    expect(packageJson.exports['./layout/tabbed-container']).toEqual({
+      import: {
+        types: './dist/layout/tabbed-container.d.ts',
+        default: './dist/layout/tabbed-container.es.js',
+      },
+    });
+  });
 });

@@ -153,6 +153,7 @@ export function createGoalScorer({
     judge: {
       model: judgeModel,
       instructions,
+      fallbackJsonPromptInjection: 'inline',
       // The judge agent talks to the same providers as the main agent, so a prompt
       // assembled from history written by a different provider can carry history
       // that provider will reject (e.g. a foreign provider's signed thinking

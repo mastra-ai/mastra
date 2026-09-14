@@ -1,7 +1,11 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { Agent } from '../agent/agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import { createTool } from '../tools';
 import { ProcessorRunner } from './runner';
 import { AgentsMDInjector } from './tool-result-reminder';
 import type { ProcessorStreamWriter } from './index';
@@ -227,7 +231,12 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       writer,
     });
 
-    expect(chunks).toEqual([]);
+    expect(chunks).toEqual([
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({ type: 'reactive', contents: AGENTS_MD_CONTENT }),
+      }),
+    ]);
   });
 
   it('does not duplicate AGENTS.md when a signal-based reminder already exists', async () => {
@@ -411,7 +420,80 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       expect.objectContaining({ attributes: { type: 'dynamic-agents-md', path: '/repo/packages/core/AGENTS.md' } }),
     );
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-    expect(writer.custom).not.toHaveBeenCalled();
+    expect(writer.custom).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({ type: 'reactive', contents: 'Core package instructions' }),
+      }),
+    );
+  });
+
+  it('loads directory instructions after a memory processor reclassifies completed tool responses', async () => {
+    const prompts: string[] = [];
+    const injector = new AgentsMDInjector({
+      pathExists: path => path === '/repo/packages/core/AGENTS.md' || path.replace(/\/$/, '') === '/repo/packages/core',
+      isDirectory: path => path.replace(/\/$/, '') === '/repo/packages/core',
+      readFile: () => AGENTS_MD_CONTENT,
+    });
+    const reclassified: MastraDBMessage[] = [];
+    const agent = new Agent({
+      id: 'instruction-memory-reclassification',
+      name: 'Instruction memory reclassification',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          prompts.push(prompt.map(extractPromptText).join('\n'));
+          return {
+            content:
+              prompts.length === 1
+                ? [
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'list-core',
+                      toolName: 'find_files',
+                      input: '{"path":"/repo/packages/core/"}',
+                    },
+                  ]
+                : [{ type: 'text', text: 'Done' }],
+            finishReason: prompts.length === 1 ? 'tool-calls' : 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            warnings: [],
+          };
+        },
+      }),
+      tools: {
+        find_files: createTool({
+          id: 'find_files',
+          description: 'List a directory',
+          inputSchema: z.object({ path: z.string() }),
+          execute: async () => 'AGENTS.md',
+        }),
+      },
+      inputProcessors: [
+        {
+          id: 'persist-and-reclassify',
+          processInputStep: ({ messageList, stepNumber }) => {
+            if (stepNumber > 0) {
+              // Observational memory drains saved responses into memory before later processors run.
+              const saved = messageList.clear.response.db();
+              reclassified.push(...saved);
+              messageList.add(saved, 'memory');
+              expect(messageList.get.response.db()).toEqual([]);
+            }
+            return messageList;
+          },
+        },
+        injector,
+      ],
+    });
+
+    await agent.generate('List the core directory', { maxSteps: 2 });
+
+    expect(reclassified.some(message => message.content.parts.some(part => part.type === 'tool-invocation'))).toBe(
+      true,
+    );
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).not.toContain(AGENTS_MD_CONTENT);
+    expect(prompts[1]).toContain(AGENTS_MD_CONTENT);
   });
 
   it('no injection when tool call path has no nearby AGENTS.md', async () => {

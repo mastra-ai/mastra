@@ -498,6 +498,80 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    const { result } = await withRetry(
+      async () => {
+        // Aurora DSQL uses optimistic concurrency control: it has no SELECT ... FOR UPDATE, but
+        // wrapping the thread read plus both updates in a single transaction means two concurrent
+        // transfers of the same thread conflict at commit. The loser is aborted and retried by
+        // withRetry against fresh state, so ownership can never end up split across resources.
+        return await this.#db.client.tx(async t => {
+          const thread = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+            `SELECT * FROM ${threadTableName} WHERE id = $1`,
+            [threadId],
+          );
+
+          if (!thread) {
+            throw new Error(`Thread "${threadId}" not found`);
+          }
+
+          const normalized: StorageThreadType = {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+            createdAt: thread.createdAtZ || thread.createdAt,
+            updatedAt: thread.updatedAtZ || thread.updatedAt,
+          };
+
+          if (thread.resourceId === resourceId) {
+            return normalized;
+          }
+
+          const now = new Date().toISOString();
+          await t.none(
+            `UPDATE ${threadTableName} SET "resourceId" = $1, "updatedAt" = $2::timestamp, "updatedAtZ" = $3::timestamptz WHERE id = $4`,
+            [resourceId, now, now, threadId],
+          );
+          await t.none(`UPDATE ${messagesTableName} SET "resourceId" = $1 WHERE thread_id = $2`, [
+            resourceId,
+            threadId,
+          ]);
+
+          return { ...normalized, resourceId, updatedAt: new Date(now) };
+        });
+      },
+      {
+        onRetry: (error, attempt, delay) => {
+          this.logger?.warn?.(
+            `updateThreadResourceId retry ${attempt} for ${threadId} after ${delay}ms: ${error.message}`,
+          );
+        },
+      },
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    });
+
+    return result;
+  }
+
   /**
    * Fetches the messages named by `include` together with their surrounding context.
    *

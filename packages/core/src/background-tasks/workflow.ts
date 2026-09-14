@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import { InternalSpans } from '../observability';
-import type { SuspendOptions } from '../workflows';
 import { createStep, createWorkflow } from '../workflows';
+import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
-import type { BackgroundTaskStatus } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
@@ -37,11 +36,11 @@ const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting']
  * Builds the per-task workflow that owns executor + retries.
  *
  * Uses the standard (default) execution engine so the workflow runs entirely
- * in-process on whatever host calls `run.start()`. This is critical for
- * distributed deployments where the background-task worker must
- * execute tools locally — routing through the evented pipeline would send
- * step execution to the orchestration worker / API, which don't have the
- * internal workflow or task contexts registered.
+ * in-process on whichever background-task worker calls `run.start()`. This is
+ * critical for distributed deployments: routing through the evented pipeline
+ * would introduce another competing-consumer hop that could move execution to
+ * an orchestration worker or API process without the internal workflow or
+ * invocation-bound task context registered.
  *
  * Shape: outer workflow runs an inner `[run-attempt, classify-outcome]`
  * workflow inside a `dountil` loop. `run-attempt` invokes the executor and
@@ -174,13 +173,26 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         });
 
         if (pendingSuspend) {
-          return suspend(pendingSuspend.data, pendingSuspend.suspendOptions as SuspendOptions);
+          // Agent-as-tool delegations carry the nested sub-agent's runId in
+          // `suspendOptions.runId` (with `isAgentSuspend: true`), never in the
+          // suspend payload. The resume path above restores it from the step's
+          // persisted `suspendData.suspendedToolRunId`, so bridge it into the
+          // engine suspend data here. Keep the user-facing `suspendPayload`
+          // stored above untouched — this only augments the internal snapshot.
+          const opts = pendingSuspend.suspendOptions;
+          const agentRunId = opts?.isAgentSuspend && typeof opts.runId === 'string' ? opts.runId : undefined;
+          const engineData = !agentRunId
+            ? pendingSuspend.data
+            : pendingSuspend.data && typeof pendingSuspend.data === 'object'
+              ? { ...(pendingSuspend.data as Record<string, unknown>), suspendedToolRunId: agentRunId }
+              : { suspendedToolRunId: agentRunId };
+          return suspend(engineData, opts as SuspendOptions);
         }
 
         return { taskId, outcome: 'success' as const, result };
       } catch (error: any) {
         const currentTask = await storage.getTask(taskId);
-        if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
+        if (!currentTask || currentTask.status === 'cancelled') {
           manager.deregisterTaskContext(taskId);
           return { taskId, outcome: 'cancelled' as const };
         }
@@ -260,7 +272,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       }
 
       if (outcome === 'success') {
-        if ((task.status as BackgroundTaskStatus) === 'cancelled') {
+        if (task.status === 'cancelled') {
           manager.deregisterTaskContext(taskId);
           return { taskId, done: true };
         }

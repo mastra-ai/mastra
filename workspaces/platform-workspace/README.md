@@ -8,23 +8,6 @@ Mastra Platform workspace provider. It gives agents environment-scoped sandbox e
 npm install @mastra/platform-workspace
 ```
 
-## Configuration
-
-All options can be passed to the constructor or read from environment variables:
-
-| Option            | Env var                                                        | Required                        |
-| ----------------- | -------------------------------------------------------------- | ------------------------------- |
-| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` | Yes                             |
-| `projectId`       | `MASTRA_PROJECT_ID`                                            | Yes                             |
-| `environmentId`   | `MASTRA_ENVIRONMENT_ID`                                        | Yes (sandbox)                   |
-| `actingUserId`    | —                                                              | No (sandbox)                    |
-| `sandboxProvider` | `SANDBOX_PROVIDER`                                             | No (sandbox, defaults to `e2b`) |
-| `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`                                  | Yes (filesystem)                |
-
-The proxy URL defaults to `https://workspaces.mastra.ai`. Set `MASTRA_PLATFORM_REGION` to `us` or `eu` (case-insensitive) to route to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` (useful for staging) overrides both.
-
-Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
-
 ## Usage
 
 ```typescript
@@ -60,6 +43,23 @@ The exported `Template()` builder creates reusable sandbox images from commands,
 Proxy failures throw `PlatformApiError`, which includes the HTTP status, parsed machine-readable error code, proxy message, and raw response body. Use these fields to distinguish missing resources, authentication failures, and provider errors.
 
 - [Mastra Platform workspaces](https://mastra.ai/docs/mastra-platform/workspaces)
+
+### Configuration
+
+All options can be passed to the constructor or read from environment variables:
+
+| Option            | Env var                                                        | Required                        |
+| ----------------- | -------------------------------------------------------------- | ------------------------------- |
+| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` | Yes                             |
+| `projectId`       | `MASTRA_PROJECT_ID`                                            | Yes                             |
+| `environmentId`   | `MASTRA_ENVIRONMENT_ID`                                        | Yes (sandbox)                   |
+| `actingUserId`    | —                                                              | No (sandbox)                    |
+| `sandboxProvider` | `SANDBOX_PROVIDER`                                             | No (sandbox, defaults to `e2b`) |
+| `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`                                  | Yes (filesystem)                |
+
+The proxy URL defaults to `https://workspaces.mastra.ai`. Set `MASTRA_PLATFORM_REGION` to `us` or `eu` (case-insensitive) to route to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` (useful for staging) overrides both.
+
+Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`. For sandbox requests authenticated with a project access token, set `actingUserId` to the stable opaque user subject from your authentication system. It is sent as `x-acting-user-id` for token partitioning and attribution; it is not an authorization claim.
 
 ## Changelog
 

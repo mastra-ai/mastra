@@ -13,6 +13,8 @@ import {
   listScoresResponseSchema as obsListScoresResponseSchema,
   createScoreBodySchema,
   createScoreResponseSchema,
+  deleteScoresArgsSchema,
+  deleteScoresResponseSchema,
   scoreRecordSchema,
   getScoreAggregateArgsSchema,
   getScoreAggregateResponseSchema,
@@ -29,6 +31,8 @@ import {
   feedbackReviewStatusSchema,
   createFeedbackBodySchema,
   createFeedbackResponseSchema,
+  deleteFeedbackArgsSchema,
+  deleteFeedbackResponseSchema,
   getFeedbackAggregateArgsSchema,
   getFeedbackAggregateResponseSchema,
   getFeedbackBreakdownArgsSchema,
@@ -361,6 +365,22 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   },
 });
 
+export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
+  bodySchema: deleteScoresArgsSchema,
+  responseSchema: deleteScoresResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Score deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteScoresArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteScores(args);
+    return { success: true };
+  },
+});
+
 export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
   pathParamSchema: z.object({ scoreId: z.string() }),
   responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
@@ -468,6 +488,22 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
         reviewStatus: feedback.reviewStatus ?? 'needs-review',
       },
     });
+    return { success: true };
+  },
+});
+
+export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
+  bodySchema: deleteFeedbackArgsSchema,
+  responseSchema: deleteFeedbackResponseSchema,
+  handler: async ({ mastra, ...params }) => {
+    if (!coreFeatures.has('observability-signal-deletion')) {
+      throw new HTTPException(501, {
+        message: 'Feedback deletion requires a newer @mastra/core with observability signal deletion support.',
+      });
+    }
+    const args = pickParams(deleteFeedbackArgsSchema, params);
+    const observabilityStore = await getObservabilityStore(mastra);
+    await observabilityStore.deleteFeedback(args);
     return { success: true };
   },
 });
@@ -682,6 +718,7 @@ export const NEW_ROUTES = {
   LIST_LOGS,
   LIST_SCORES,
   CREATE_SCORE,
+  DELETE_SCORES,
   GET_SCORE,
   GET_SCORE_AGGREGATE,
   GET_SCORE_BREAKDOWN,
@@ -689,6 +726,7 @@ export const NEW_ROUTES = {
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
   CREATE_FEEDBACK,
+  DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,

@@ -722,24 +722,6 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     this.#rejectToolMocks(args.toolMocks);
-    const existing = await this.getItemById({ id: args.id });
-    if (!existing) {
-      throw new MastraError({
-        id: 'MYSQL_UPDATE_ITEM_NOT_FOUND',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: args.id },
-      });
-    }
-    if (existing.datasetId !== args.datasetId) {
-      throw new MastraError({
-        id: 'MYSQL_UPDATE_ITEM_DATASET_MISMATCH',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
-      });
-    }
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -749,6 +731,39 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [args.datasetId]);
+      const [itemRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        [args.id],
+      );
+      const itemRow = (itemRows as any[])[0];
+      const existing = itemRow ? this.mapItem(itemRow) : null;
+      if (!existing) {
+        throw new MastraError({
+          id: 'MYSQL_UPDATE_ITEM_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: args.id },
+        });
+      }
+      if (existing.datasetId !== args.datasetId) {
+        throw new MastraError({
+          id: 'MYSQL_UPDATE_ITEM_DATASET_MISMATCH',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
+        });
+      }
+      if (existing.metadata?.__purged === true) {
+        throw new MastraError({
+          id: 'DATASET_ITEM_PURGED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: args.datasetId, itemId: args.id },
+          text: `Purged dataset item cannot be updated: ${args.id}`,
+        });
+      }
 
       const mergedInput = args.input ?? existing.input;
       const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
@@ -845,17 +860,6 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
-    const existing = await this.getItemById({ id });
-    if (!existing) return;
-    if (existing.datasetId !== datasetId) {
-      throw new MastraError({
-        id: 'MYSQL_DELETE_ITEM_DATASET_MISMATCH',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
-      });
-    }
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -865,6 +869,26 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [datasetId]);
+      const [itemRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        [id],
+      );
+      const itemRow = (itemRows as any[])[0];
+      const existing = itemRow ? this.mapItem(itemRow) : null;
+      if (!existing) {
+        await connection.commit();
+        return;
+      }
+      if (existing.datasetId !== datasetId) {
+        throw new MastraError({
+          id: 'MYSQL_DELETE_ITEM_DATASET_MISMATCH',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
+        });
+      }
 
       // Bump version
       await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
@@ -1347,17 +1371,6 @@ export class DatasetsMySQL extends DatasetsStorage {
       });
     }
 
-    // Fetch current items for tombstone data
-    const currentItems: DatasetItem[] = [];
-    for (const itemId of input.itemIds) {
-      const item = await this.getItemById({ id: itemId });
-      if (item && item.datasetId === input.datasetId) {
-        currentItems.push(item);
-      }
-    }
-
-    if (currentItems.length === 0) return;
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -1367,6 +1380,22 @@ export class DatasetsMySQL extends DatasetsStorage {
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [input.datasetId]);
+      const currentItems: DatasetItem[] = [];
+      for (const itemId of input.itemIds) {
+        const [itemRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT * FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+          [itemId],
+        );
+        const row = (itemRows as any[])[0];
+        const item = row ? this.mapItem(row) : null;
+        if (item && item.datasetId === input.datasetId) currentItems.push(item);
+      }
+      if (currentItems.length === 0) {
+        await connection.commit();
+        return;
+      }
 
       // Single version increment
       await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [

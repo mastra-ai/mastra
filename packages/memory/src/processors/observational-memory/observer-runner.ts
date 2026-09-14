@@ -10,6 +10,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
+import { formatOmError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -266,7 +267,19 @@ export class ObserverRunner {
     options?: ObserverCallOptions,
   ): Promise<ObserverCallResult> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
-    const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
+    const resolvedModel = (() => {
+      try {
+        return options?.model ? { model: options.model } : this.resolveModel(inputTokens);
+      } catch (error) {
+        this.mastra?.getLogger?.().error('OM observer model resolution failed', {
+          diagnostic: formatOmError(error),
+          inputTokens,
+          threadId: messagesToObserve[0]?.threadId,
+          hasRequestContext: Boolean(options?.requestContext),
+        });
+        throw error;
+      }
+    })();
     const activeExtractors = await resolveExtractors(
       filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
       {
@@ -324,15 +337,32 @@ export class ObserverRunner {
             },
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
-                const streamResult = await agent.stream(observerMessages, {
-                  modelSettings: { ...this.observationConfig.modelSettings },
-                  providerOptions: this.observationConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
-                  ...(abortSignal ? { abortSignal } : {}),
-                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
-                  ...childObservabilityContext,
-                });
-                return streamResult.getFullOutput();
+                try {
+                  const streamResult = await agent.stream(observerMessages, {
+                    modelSettings: { ...this.observationConfig.modelSettings },
+                    providerOptions: this.observationConfig.providerOptions as any,
+                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(abortSignal ? { abortSignal } : {}),
+                    ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
+                    ...childObservabilityContext,
+                  });
+                  return await streamResult.getFullOutput();
+                } catch (error) {
+                  this.mastra?.getLogger?.().error('OM observer provider call failed', {
+                    diagnostic: formatOmError(error),
+                    model:
+                      typeof resolvedModel.model === 'function'
+                        ? '(dynamic-model)'
+                        : this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    inputTokens,
+                    threadId: messagesToObserve[0]?.threadId,
+                    observedMessageCount: messagesToObserve.length,
+                    providerOptionProviders: Object.keys(this.observationConfig.providerOptions ?? {}),
+                    hasRequestContext: Boolean(internalRequestContext),
+                    aborted: abortSignal?.aborted ?? false,
+                  });
+                  throw error;
+                }
               }, abortSignal),
           }),
         { label: 'observer', abortSignal },
@@ -503,7 +533,22 @@ export class ObserverRunner {
       (total, messages) => total + this.tokenCounter.countMessages(messages),
       0,
     );
-    const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
+    const resolvedModel = (() => {
+      try {
+        return model ? { model } : this.resolveModel(inputTokens);
+      } catch (error) {
+        this.mastra?.getLogger?.().error('OM multi-thread observer model resolution failed', {
+          diagnostic: formatOmError(error),
+          inputTokens,
+          threadIds: {
+            sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
+            total: threadOrder.length,
+          },
+          hasRequestContext: Boolean(requestContext),
+        });
+        throw error;
+      }
+    })();
     const firstThreadMessages = messagesByThread.get(threadOrder[0] ?? '') ?? [];
     const activeExtractors = await resolveExtractors(this.observationConfig.extractors ?? [], {
       source: 'observer',
@@ -601,15 +646,34 @@ export class ObserverRunner {
             },
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
-                const streamResult = await agent.stream(observerMessages, {
-                  modelSettings: { ...this.observationConfig.modelSettings },
-                  providerOptions: this.observationConfig.providerOptions as any,
-                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
-                  ...(abortSignal ? { abortSignal } : {}),
-                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
-                  ...childObservabilityContext,
-                });
-                return streamResult.getFullOutput();
+                try {
+                  const streamResult = await agent.stream(observerMessages, {
+                    modelSettings: { ...this.observationConfig.modelSettings },
+                    providerOptions: this.observationConfig.providerOptions as any,
+                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(abortSignal ? { abortSignal } : {}),
+                    ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
+                    ...childObservabilityContext,
+                  });
+                  return await streamResult.getFullOutput();
+                } catch (error) {
+                  this.mastra?.getLogger?.().error('OM multi-thread observer provider call failed', {
+                    diagnostic: formatOmError(error),
+                    model:
+                      typeof resolvedModel.model === 'function'
+                        ? '(dynamic-model)'
+                        : this.extractModelRouterId(resolvedModel.model, internalRequestContext),
+                    inputTokens,
+                    threadIds: {
+                      sample: threadOrder.slice(0, 10).map(threadId => threadId.slice(0, 128)),
+                      total: threadOrder.length,
+                    },
+                    providerOptionProviders: Object.keys(this.observationConfig.providerOptions ?? {}),
+                    hasRequestContext: Boolean(internalRequestContext),
+                    aborted: abortSignal?.aborted ?? false,
+                  });
+                  throw error;
+                }
               }, abortSignal),
           }),
         { label: 'observer-multi-thread', abortSignal },

@@ -71,6 +71,8 @@ function resolveOutputProcessors(): Array<{ id?: string }> {
 }
 
 const controllerConstructorMock = vi.fn();
+const controllerOnSessionCreatedMock = vi.fn();
+const controllerOnSessionDeletedMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
@@ -141,7 +143,12 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
+    signals: {
+      unixSocketPubSub: false,
+      experimentalGithubSignals: false,
+      experimentalCrossAgentSignals: false,
+      githubPollIntervalMs: 300_000,
+    },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
@@ -164,6 +171,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
     async init() {}
     getMastra() {
       return mastraStub;
+    }
+    onSessionCreated(listener: unknown, options?: unknown) {
+      controllerOnSessionCreatedMock(listener, options);
+      return vi.fn();
+    }
+    onSessionDeleted(listener: unknown) {
+      controllerOnSessionDeletedMock(listener);
+      return vi.fn();
     }
     async createSession() {
       return {
@@ -232,8 +247,10 @@ vi.mock('@mastra/core/processors', () => ({
   },
 }));
 
+const getDynamicInstructionsMock = vi.fn();
+
 vi.mock('../agents/instructions.js', () => ({
-  getDynamicInstructions: vi.fn(),
+  getDynamicInstructions: getDynamicInstructionsMock,
 }));
 
 const getDynamicMemoryMock = vi.fn();
@@ -425,6 +442,7 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
     getDynamicMemoryMock.mockReturnValue(() => undefined);
+    getDynamicInstructionsMock.mockReset();
     controllerSubscribeMock.mockReset();
     controllerGetCurrentThreadIdMock.mockReset();
     controllerGetCurrentThreadIdMock.mockReturnValue(undefined);
@@ -455,6 +473,8 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     controllerConstructorMock.mockReset();
+    controllerOnSessionCreatedMock.mockReset();
+    controllerOnSessionDeletedMock.mockReset();
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -490,6 +510,33 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
+
+  it('passes configured co-author identity into the agent instruction callback', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ coAuthor: { name: 'mastracode' } });
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as { instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string> },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    const requestContext = {
+      get: (key: string) =>
+        key === 'controller'
+          ? {
+              getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+              session: { modeId: 'build' },
+            }
+          : undefined,
+    };
+    await agentConfig.instructions({ requestContext });
+
+    expect(getDynamicInstructionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requestContext, coAuthor: { name: 'mastracode' } }),
+    );
+  });
 
   it.each([{}, { subagents: undefined }])(
     'registers native defaults when subagents is omitted or undefined (%j)',
@@ -747,11 +794,12 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
   });
 
-  it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
+  it('registers the built-in state signal providers on the code agent', async () => {
     const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
     const { createMastraCode } = await import('../index.js');
 
-    await createMastraCode();
+    await createMastraCode({ crossAgentSignals: true });
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const codeAgentConfig = agentConstructorMock.mock.calls
@@ -760,6 +808,34 @@ describe('createMastraCode', () => {
 
     expect(codeAgentConfig).toBeDefined();
     expect(codeAgentConfig?.signals?.some(provider => provider instanceof TaskSignalProvider)).toBe(true);
+    const agentConnectionsProvider = codeAgentConfig?.signals?.find(
+      provider => provider instanceof AgentConnectionsSignalProvider,
+    ) as { getTools: () => Record<string, unknown> } | undefined;
+    expect(agentConnectionsProvider).toBeDefined();
+    expect(Object.keys(agentConnectionsProvider!.getTools())).toEqual([
+      'agent_connections_list',
+      'agent_connect',
+      'agent_disconnect',
+      'agent_signal_send',
+    ]);
+    expect(controllerOnSessionCreatedMock).toHaveBeenCalledWith(expect.any(Function), { blocking: true });
+    expect(controllerOnSessionDeletedMock).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {
+    const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({});
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+
+    expect(codeAgentConfig).toBeDefined();
+    expect(codeAgentConfig?.signals?.some(provider => provider instanceof AgentConnectionsSignalProvider)).toBe(false);
+    expect(controllerOnSessionCreatedMock).not.toHaveBeenCalledWith(expect.any(Function), { blocking: true });
   });
 
   it('uses the configured default mode when constructing AgentController', async () => {
@@ -1001,8 +1077,9 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls
-      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
+    expect(agentConfig?.maxProcessorRetries).toBe(10);
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',

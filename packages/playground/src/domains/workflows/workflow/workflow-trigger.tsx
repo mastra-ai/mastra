@@ -304,7 +304,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-xs">
+      <ScrollArea className="text-ui-sm h-[calc(100vh-126px)] px-4 pt-2 pb-4">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />

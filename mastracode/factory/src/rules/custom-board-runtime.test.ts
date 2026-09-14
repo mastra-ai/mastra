@@ -12,6 +12,7 @@ import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
+import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -239,7 +240,7 @@ describe('custom board public runtime', () => {
         const settingsResponse = await app.request(`/web/factory/projects/${project.id}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ autoRunEnabled: true }),
+          body: JSON.stringify({ autoRunEnabled: true, defaultModelId: 'openai/gpt-5.6-sol' }),
         });
         expect(settingsResponse.status).toBe(200);
         const sourceControl = github.sourceControlStorage;
@@ -361,6 +362,28 @@ describe('custom board public runtime', () => {
             ),
           ).toBe(true);
         }
+        await vi.waitFor(async () => {
+          const { events } = await storage.getDomain<AuditStorage>('audit').list({
+            orgId: 'release-org',
+            factoryProjectId: project.id,
+            actions: ['factory.run.started', 'factory.run.ended'],
+          });
+          expect(events).toHaveLength(4);
+          for (const action of ['factory.run.started', 'factory.run.ended']) {
+            expect(
+              events
+                .filter(event => event.action === action)
+                .map(event => event.metadata.role)
+                .sort(),
+            ).toEqual(['release-preparer', 'release-publisher']);
+          }
+          for (const started of events.filter(event => event.action === 'factory.run.started')) {
+            const ended = events.find(
+              event => event.action === 'factory.run.ended' && event.metadata.kickoffId === started.metadata.kickoffId,
+            );
+            expect(ended?.metadata.startedBy).toBe(started.actorId);
+          }
+        });
         const bindings = await workItems.listRunBindings('release-org', project.id, workItem.id);
         expect(bindings.map(binding => binding.role).sort()).toEqual(['release-preparer', 'release-publisher']);
         const publisher = bindings.find(binding => binding.role === 'release-publisher')!;

@@ -8,16 +8,18 @@ import { buildFullPromptSections, joinPromptSections } from './prompts/index.js'
 export async function getDynamicInstructions({
   requestContext,
   hostInstructions,
+  coAuthor,
   hasSubconscious,
   hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
+  coAuthor?: { name?: string; email?: string };
   hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
   hasSubagents?: boolean;
 }): Promise<string> {
   return joinPromptSections(
-    await getDynamicInstructionSections({ requestContext, hostInstructions, hasSubconscious, hasSubagents }),
+    await getDynamicInstructionSections({ requestContext, hostInstructions, coAuthor, hasSubconscious, hasSubagents }),
   );
 }
 
@@ -29,11 +31,13 @@ export async function getDynamicInstructions({
 export async function getDynamicInstructionSections({
   requestContext,
   hostInstructions,
+  coAuthor,
   hasSubconscious,
   hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
+  coAuthor?: { name?: string; email?: string };
   /**
    * The subconscious knowledge tools are registered on the agent. A function
    * is resolved against the session state, since Factory sessions can refuse
@@ -61,6 +65,8 @@ export async function getDynamicInstructionSections({
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
     modelId: agentControllerContext?.session?.modelId || undefined,
+    coAuthorName: coAuthor?.name,
+    coAuthorEmail: coAuthor?.email,
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,

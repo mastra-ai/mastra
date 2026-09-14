@@ -17,7 +17,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
@@ -67,7 +67,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-ui-md">Failed to parse request context schema</p>;
   }
 
   return (
@@ -103,7 +103,7 @@ function PipelineStep({
         </span>
         {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
       </div>
-      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-6')}>{children}</div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
   );
 }
@@ -127,7 +127,8 @@ export function ExperimentTriggerDialog({
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
   const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
+  // `null` means the user has not made an explicit choice yet, so the dataset defaults apply.
+  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
@@ -135,6 +136,9 @@ export function ExperimentTriggerDialog({
   const { data: dataset } = useDataset(datasetId);
   const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
+  const datasetDefaultScorers = dataset?.scorerIds ?? [];
+  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
@@ -149,6 +153,7 @@ export function ExperimentTriggerDialog({
   const handleDatasetChange = (nextDatasetId: string) => {
     setDatasetId(nextDatasetId);
     setVersion(null);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
   };
 
@@ -159,7 +164,7 @@ export function ExperimentTriggerDialog({
     setVersion(initialDatasetVersion ?? null);
     setTargetType(initialTargetType ?? '');
     setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? []);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
     setRequestContextRaw('');
   };
@@ -204,7 +209,7 @@ export function ExperimentTriggerDialog({
         description: description.trim() || undefined,
         targetType,
         targetId,
-        scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
+        scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
         version: version ?? undefined,
         requestContext,
       });
@@ -241,14 +246,14 @@ export function ExperimentTriggerDialog({
         className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="border-border1 border-b px-6 py-4">
+        <DialogHeader className="border-border1 border-b px-4 py-4">
           <DialogTitle>Run experiment</DialogTitle>
           <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
+        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="experiment-name">Name *</Label>
@@ -316,13 +321,17 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={3} done={selectedScorers.length > 0} isLast>
+            <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
-                selectedScorers={selectedScorers}
+                selectedScorers={effectiveScorers}
                 setSelectedScorers={setSelectedScorers}
                 disabled={isRunning}
                 container={contentRef}
-                helperText="Scores are computed after each item runs."
+                helperText={
+                  usesDatasetDefaults
+                    ? "Pre-filled from the dataset's default scorers."
+                    : 'Scores are computed after each item runs.'
+                }
               />
             </PipelineStep>
           </ol>
@@ -353,7 +362,7 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-6 py-4 sm:justify-between">
+        <DialogFooter className="border-border1 items-center border-t px-4 py-4 sm:justify-between">
           <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
             {missing.length === 0 ? (
               <>
@@ -361,7 +370,7 @@ export function ExperimentTriggerDialog({
                   Ready
                 </Badge>
                 <span className="text-ui-xs text-neutral3">
-                  {itemCount ?? 0} items · {targetType} · {selectedScorers.length} scorers
+                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
                 </span>
               </>
             ) : (
@@ -371,7 +380,7 @@ export function ExperimentTriggerDialog({
             )}
           </p>
           <div className="flex items-center gap-2">
-            <Button onClick={handleClose} disabled={isRunning}>
+            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
               Cancel
             </Button>
             <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>

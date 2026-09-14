@@ -25,7 +25,7 @@ export function TraceScoresTab({ traceId, spanId, isTopLevelSpan, entityType, on
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_auto_1fr] gap-6">
+    <div className="grid h-full min-h-0 grid-rows-[auto_auto_1fr] gap-4">
       <SpanScoring
         traceId={traceId}
         isTopLevelSpan={isTopLevelSpan}

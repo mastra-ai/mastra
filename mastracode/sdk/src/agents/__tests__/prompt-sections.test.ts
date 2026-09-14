@@ -53,6 +53,12 @@ describe('buildFullPromptSections', () => {
     expect(joinPromptSections(buildFullPromptSections(ctx))).toBe(buildFullPrompt(ctx));
   });
 
+  it('rejoins custom co-author output exactly', () => {
+    const ctx = makeCtx({ coAuthorName: 'mastracode', coAuthorEmail: 'custom@example.test' });
+
+    expect(joinPromptSections(buildFullPromptSections(ctx))).toBe(buildFullPrompt(ctx));
+  });
+
   it('rejoins into exactly buildFullPrompt output with agent instructions present', () => {
     writeFileSync(join(projectPath, 'AGENTS.md'), '# Project rules\n\nAlways run the tests.\n');
     const ctx = makeCtx();

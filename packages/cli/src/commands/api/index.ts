@@ -258,6 +258,20 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Get a trace span',
     examples: [{ description: 'Get a specific trace span', command: 'mastra api trace span trace_123 span_456' }],
   });
+  addAction(trace, 'query', 'POST /observability/traces/query', {
+    description: 'Query observability traces with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query traces in a time range',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'`,
+      },
+      {
+        description: 'Query traces containing failed tool calls',
+        command: `mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"spans":{"some":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"exists","path":"error"}]}}}}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -377,6 +391,28 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(score, 'get', 'GET /observability/scores/:scoreId', {
     description: 'Get score details',
     examples: [{ description: 'Get an observability score by ID', command: 'mastra api score get score_123' }],
+  });
+  addAction(score, 'delete', 'DELETE /observability/scores', {
+    description: 'Delete scores by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete scores for an organization and resource',
+        command: `mastra api score delete '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}'`,
+      },
+    ],
+  });
+
+  const feedback = api.command('feedback').description('Delete observability feedback');
+  addAction(feedback, 'delete', 'DELETE /observability/feedback', {
+    description: 'Delete feedback by ID',
+    input: 'required',
+    examples: [
+      {
+        description: 'Delete feedback for an organization',
+        command: `mastra api feedback delete '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}'`,
+      },
+    ],
   });
 
   const dataset = api.command('dataset').description('Create, list, and inspect datasets');

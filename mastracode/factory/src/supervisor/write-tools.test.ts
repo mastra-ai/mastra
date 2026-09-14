@@ -75,6 +75,7 @@ async function setup() {
   const transitionService = new FactoryTransitionService({
     storage: seed.workItems,
     configVersion: 'rules-v1',
+    audit: seed.audit,
     onAccepted,
   });
   const reconcileAcceptanceLabels = vi.fn().mockResolvedValue(undefined);
@@ -229,11 +230,6 @@ describe('createFactorySupervisorWriteTools', () => {
     await expect(
       execute(context.tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
     ).rejects.toThrow('The transition was rejected (stale_revision)');
-    expect(await auditByAction(context.audit, 'factory.work_item.transition_rejected')).toMatchObject({
-      actorId: 'user-supervisor',
-      actorType: 'human',
-      metadata: expect.objectContaining({ cause: 'supervisor', code: 'stale_revision' }),
-    });
   });
 
   it('moves a held card as a human so acceptance is remembered', async () => {

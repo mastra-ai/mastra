@@ -1,3 +1,4 @@
+import type { GeneratedItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
@@ -16,18 +17,13 @@ import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Sparkles, Trash2, Plus } from 'lucide-react';
+import { Sparkles, Trash2, Plus, X, RotateCcw } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 
 import { useGenerationTasks } from '../context/generation-context';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
-
-interface GeneratedItem {
-  input: unknown;
-  groundTruth?: unknown;
-}
 
 interface AgentContext {
   description?: string;
@@ -58,10 +54,6 @@ function buildDefaultPrompt(agentContext?: AgentContext): string {
   return parts.join(' ');
 }
 
-/**
- * Config-only dialog for generating dataset items.
- * On Generate click, the dialog closes and generation runs in background via GenerationProvider.
- */
 export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: GenerateConfigDialogProps) {
   const { provider: ctxProvider, model: ctxModel } = usePlaygroundModel();
   const [localProvider, setLocalProvider] = useState(ctxProvider);
@@ -90,7 +82,7 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
       count,
       agentContext,
       generateFn: async params => {
-        const result = (await generateItems.mutateAsync(params)) as { items: GeneratedItem[] };
+        const result = await generateItems.mutateAsync(params);
         return { items: result.items ?? [] };
       },
     });
@@ -168,13 +160,12 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
             )}
           </div>
         </DialogBody>
-        <DialogFooter className="px-6">
+        <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
-            <Button onClick={() => handleClose(false)}>Cancel</Button>
-            <Button variant="primary" onClick={handleGenerate} disabled={!modelId}>
-              <Icon>
-                <Sparkles />
-              </Icon>
+            <Button icon={<X />} onClick={() => handleClose(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleGenerate} disabled={!modelId} icon={<Sparkles />}>
               Generate
             </Button>
           </div>
@@ -184,10 +175,6 @@ export function GenerateConfigDialog({ datasetId, agentContext, onDismiss }: Gen
   );
 }
 
-/**
- * Review dialog for generated items.
- * Receives items directly and allows the user to select and add them to the dataset.
- */
 export function GenerateReviewDialog({
   datasetId,
   items: initialItems,
@@ -300,7 +287,7 @@ export function GenerateReviewDialog({
                 </Txt>
               </div>
               {onStartOver && (
-                <Button variant="ghost" size="sm" onClick={onStartOver}>
+                <Button icon={<RotateCcw />} variant="ghost" size="sm" onClick={onStartOver}>
                   Start over
                 </Button>
               )}
@@ -330,7 +317,7 @@ export function GenerateReviewDialog({
                           <Txt variant="ui-xs" className="text-neutral3 font-medium">
                             Input
                           </Txt>
-                          <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+                          <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
                             {JSON.stringify(item.input, null, 2)}
                           </pre>
                         </div>
@@ -339,7 +326,7 @@ export function GenerateReviewDialog({
                             <Txt variant="ui-xs" className="text-neutral3 font-medium">
                               Ground Truth
                             </Txt>
-                            <pre className="text-neutral5 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
+                            <pre className="text-neutral5 bg-surface1 text-ui-sm mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 wrap-break-word whitespace-pre-wrap">
                               {JSON.stringify(item.groundTruth, null, 2)}
                             </pre>
                           </div>
@@ -352,9 +339,11 @@ export function GenerateReviewDialog({
             </ScrollArea>
           </div>
         </DialogBody>
-        <DialogFooter className="px-6">
+        <DialogFooter className="px-4">
           <div className="flex justify-end gap-2">
-            <Button onClick={() => handleClose(false)}>Cancel</Button>
+            <Button icon={<X />} onClick={() => handleClose(false)}>
+              Cancel
+            </Button>
             <Button
               variant="primary"
               onClick={handleAddSelected}
@@ -381,15 +370,13 @@ export function GenerateReviewDialog({
   );
 }
 
-/** Keep the old export name as an alias for backward compat in agent-playground-datasets.tsx */
 export { GenerateConfigDialog as GenerateItemsDialog };
 
 function formatItemPreview(input: unknown): string {
   if (typeof input === 'string') return input.slice(0, 80);
   if (typeof input === 'object' && input !== null) {
-    const obj = input as Record<string, unknown>;
-    const first = Object.values(obj)[0];
-    if (typeof first === 'string') return first.slice(0, 80);
+    const firstValue = Object.values(input)[0];
+    if (typeof firstValue === 'string') return firstValue.slice(0, 80);
     return JSON.stringify(input).slice(0, 80);
   }
   return String(input).slice(0, 80);

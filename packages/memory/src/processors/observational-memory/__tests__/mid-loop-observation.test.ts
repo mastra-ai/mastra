@@ -705,6 +705,87 @@ describe('Mid-Loop Observation', () => {
       expect(record?.activeObservations).toBeFalsy();
     });
 
+    // Regression for #23315: a provider tool call abandoned by a terminal model
+    // error is reconciled to `output-error`. The OM deferred-check keys only on
+    // state === 'call', so a reconciled abandoned call must NOT permanently block
+    // observation — otherwise buffering is deferred forever.
+    it('observes at step 0 when the only tool call was reconciled to output-error (abandoned)', async () => {
+      const observerSpy = mockCallObserver(om);
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'memory');
+      const abandonedToolMsg: MastraDBMessage = {
+        id: 'abandoned-tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              providerExecuted: true,
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'tc-1',
+                toolName: 'web_search',
+                args: {},
+                errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
+              },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+      messageList.add(abandonedToolMsg, 'response');
+
+      await processor.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).toHaveBeenCalled();
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+    });
+
+    // Regression for #23315: reconciling abandoned calls must not weaken the guard
+    // for genuinely live pending calls. A real `call` still defers observation even
+    // when a reconciled `output-error` sits next to it.
+    it('still defers observation while a live pending call remains alongside a reconciled output-error', async () => {
+      const observerSpy = mockCallObserver(om);
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'memory');
+      const mixedToolMsg: MastraDBMessage = {
+        id: 'mixed-tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              providerExecuted: true,
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'tc-done',
+                toolName: 'web_search',
+                args: {},
+                errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
+              },
+            } as any,
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'tc-live', toolName: 'test-tool', args: {} },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+      messageList.add(mixedToolMsg, 'response');
+
+      await processor.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).not.toHaveBeenCalled();
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeFalsy();
+    });
+
     it('keeps the freshly observed giant message in context and in the input bucket', async () => {
       mockCallObserver(om);
       const sealSpy = vi.spyOn(om, 'sealMessagesForBuffering');

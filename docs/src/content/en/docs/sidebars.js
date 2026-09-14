@@ -73,9 +73,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/code-mode',
               label: 'Code Mode',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -109,9 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'workflows/dynamic-workflows',
               label: 'Dynamic Workflows',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -315,9 +309,20 @@ const sidebars = {
           },
           items: [
             {
-              type: 'doc',
-              id: 'connections/mcp',
-              label: 'MCP',
+              type: 'category',
+              label: 'Tools & MCP',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'connections/mcp',
+                  label: 'MCP',
+                },
+                {
+                  type: 'doc',
+                  id: 'connections/connect-mcp-client',
+                  label: 'Connect your MCP client to Mastra (draft)',
+                },
+              ],
             },
             {
               type: 'doc',
@@ -471,9 +476,6 @@ const sidebars = {
               type: 'doc',
               id: 'auth/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -522,9 +524,6 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -724,9 +723,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/trace-intelligence',
       label: 'Trace Intelligence',
-      customProps: {
-        tags: ['new'],
-      },
     },
     {
       type: 'doc',

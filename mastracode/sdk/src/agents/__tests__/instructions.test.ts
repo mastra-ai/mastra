@@ -58,6 +58,24 @@ describe('getDynamicInstructions', () => {
     );
   });
 
+  it('uses a configured co-author identity', async () => {
+    const prompt = await getDynamicInstructions({
+      requestContext: {
+        get: vi.fn(key =>
+          key === 'controller'
+            ? {
+                getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+                session: { modeId: 'build' },
+              }
+            : undefined,
+        ),
+      },
+      coAuthor: { name: 'mastracode', email: 'mastracode@example.test' },
+    });
+
+    expect(prompt).toContain('Co-Authored-By: mastracode <mastracode@example.test>');
+  });
+
   it('never leaks the host cwd, branch, or instruction files into a session without a project', async () => {
     const { getCurrentGitBranchAsync } = await import('../../utils/project.js');
     const { loadAgentInstructions } = await import('../prompts/agent-instructions.js');

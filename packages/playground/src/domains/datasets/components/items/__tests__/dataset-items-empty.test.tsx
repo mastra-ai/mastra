@@ -36,18 +36,39 @@ describe('DatasetItems empty state', () => {
     expect(link.getAttribute('target')).toBe('_blank');
   });
 
+  it('does not render the search field when the dataset has no items', () => {
+    renderEmpty();
+
+    expect(screen.queryByRole('textbox', { name: 'Search items' })).toBeNull();
+  });
+
+  it('keeps the search field when a search matches no items', () => {
+    renderEmpty({ searchQuery: 'nothing', onSearchChange: () => {} });
+
+    expect(screen.getByRole('textbox', { name: 'Search items' })).not.toBeNull();
+  });
+
   it('wires the add and import actions', () => {
     const onAddClick = vi.fn();
     const onImportClick = vi.fn();
     const onImportJsonClick = vi.fn();
     renderEmpty({ onAddClick, onImportClick, onImportJsonClick });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New item' }));
     fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
     fireEvent.click(screen.getByRole('button', { name: 'Import JSON' }));
 
     expect(onAddClick).toHaveBeenCalledTimes(1);
     expect(onImportClick).toHaveBeenCalledTimes(1);
     expect(onImportJsonClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the add item action when pressing C', () => {
+    const onAddClick = vi.fn();
+    renderEmpty({ onAddClick });
+
+    fireEvent.keyDown(window, { key: 'c' });
+
+    expect(onAddClick).toHaveBeenCalledTimes(1);
   });
 });

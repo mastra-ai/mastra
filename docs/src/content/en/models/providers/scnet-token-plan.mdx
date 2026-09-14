@@ -7,7 +7,7 @@ description: "Browse SCNet Token Plan model IDs, capabilities, and context windo
 
 # <img src="https://models.dev/logos/scnet-token-plan.svg" alt="SCNet Token Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SCNet Token Plan
 
-Access 20 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
+Access 18 SCNet Token Plan models through Mastra's model router. Authentication is handled automatically using the `SCNET_API_KEY` environment variable.
 
 Learn more in the [SCNet Token Plan documentation](https://www.scnet.cn/ac/openapi/doc/2.0/moduleapi/plans/token-plan.html).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "scnet-token-plan/DeepSeek-V3.2"
+  model: "scnet-token-plan/DeepSeek-V4-Flash"
 });
 
 // Generate a response
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "scnet-token-plan/DeepSeek-V3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
   {
     "model": "scnet-token-plan/DeepSeek-V4-Flash",
     "imageInput": false,
@@ -214,18 +202,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "scnet-token-plan/MiMo-V2.5-Pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "scnet-token-plan/MiniMax-M2.5",
     "imageInput": false,
     "audioInput": false,
@@ -300,7 +276,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.scnet.cn/api/llm/v1",
-    id: "scnet-token-plan/DeepSeek-V3.2",
+    id: "scnet-token-plan/DeepSeek-V4-Flash",
     apiKey: process.env.SCNET_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -319,7 +295,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "scnet-token-plan/Qwen3.8-Max"
-      : "scnet-token-plan/DeepSeek-V3.2";
+      : "scnet-token-plan/DeepSeek-V4-Flash";
   }
 });
 ```

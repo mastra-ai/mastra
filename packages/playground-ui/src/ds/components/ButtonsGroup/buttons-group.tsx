@@ -158,12 +158,11 @@ const buttonsGroupTextVariants = cva(
         xs: controlSizeClasses.xs,
         sm: controlSizeClasses.sm,
         md: controlSizeClasses.md,
-        default: controlSizeClasses.default,
         lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
-      size: 'default',
+      size: 'md',
     },
   },
 );
@@ -173,7 +172,7 @@ export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(
-  ({ className, size = 'default', ...props }, ref) => {
+  ({ className, size = 'md', ...props }, ref) => {
     return (
       <div
         ref={ref}

@@ -1,5 +1,5 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export interface ScorerSelectorProps {
@@ -7,7 +7,7 @@ export interface ScorerSelectorProps {
   setSelectedScorers: (scorers: string[]) => void;
   disabled?: boolean;
   container?: React.RefObject<HTMLElement | null>;
-  label?: string;
+  label?: React.ReactNode;
   helperText?: string;
 }
 
@@ -29,20 +29,22 @@ export function ScorerSelector({
     }));
 
   return (
-    <div className="grid gap-2">
-      {label ? <Label>{label}</Label> : null}
-      {helperText ? <p className="text-muted-foreground text-xs">{helperText}</p> : null}
-      <Combobox
-        multiple
-        options={options}
-        value={selectedScorers}
-        onValueChange={setSelectedScorers}
-        placeholder="Select scorers..."
-        searchPlaceholder="Search scorers..."
-        emptyText="No scorers available"
-        disabled={disabled || isLoading}
-        container={container}
-      />
-    </div>
+    <FieldBlock.Layout layout="vertical">
+      <FieldBlock.Column>
+        {label ? <FieldBlock.Label name="scorers">{label}</FieldBlock.Label> : null}
+        <Combobox
+          multiple
+          options={options}
+          value={selectedScorers}
+          onValueChange={setSelectedScorers}
+          placeholder="Select scorers..."
+          searchPlaceholder="Search scorers..."
+          emptyText="No scorers available"
+          disabled={disabled || isLoading}
+          container={container}
+        />
+        {helperText ? <FieldBlock.HelpText>{helperText}</FieldBlock.HelpText> : null}
+      </FieldBlock.Column>
+    </FieldBlock.Layout>
   );
 }

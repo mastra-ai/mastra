@@ -96,7 +96,7 @@ export class InMemoryMCPServersStorage extends MCPServersStorage {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StorageMCPServerType['status'] }),
+      ...(status !== undefined && { status }),
       ...(metadata !== undefined && {
         metadata: { ...existingConfig.metadata, ...metadata },
       }),
