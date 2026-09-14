@@ -91,7 +91,7 @@ export function MCPClientToolPreview({
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-full items-center justify-center p-8 text-center">{children}</div>;
+  return <div className="flex h-full items-center justify-center p-5 text-center">{children}</div>;
 }
 
 function ToolList({
@@ -118,7 +118,7 @@ function ToolList({
         </Txt>
       </div>
 
-      <div className="flex flex-col gap-2 pt-6">
+      <div className="flex flex-col gap-2 pt-4">
         {tools.map(tool => {
           const isSelected = tool.name in selectedTools;
           const isDisabled = !onDescriptionChange || !isSelected;

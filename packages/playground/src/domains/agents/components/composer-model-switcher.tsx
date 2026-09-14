@@ -49,12 +49,7 @@ export const ComposerModelSwitcher = () => {
 
   // Admin locked the picker — surface a non-interactive chip instead.
   if (policy.active && policy.pickerVisible === false) {
-    const lockedLabel =
-      policy.default && policy.default.provider && policy.default.modelId
-        ? `${policy.default.provider}/${policy.default.modelId}`
-        : selectedProvider && selectedModel
-          ? `${selectedProvider}/${selectedModel}`
-          : 'Locked by admin';
+    const lockedLabel = selectedProvider && selectedModel ? `${selectedProvider}/${selectedModel}` : 'Locked by admin';
     return (
       <div
         className="border-border1 bg-surface3 text-ui-xs text-neutral6 flex items-center gap-1.5 rounded-md border px-2 py-1"
@@ -98,12 +93,16 @@ export const ComposerModelWarning = () => {
   const selection = usePlaygroundModelOptional();
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
-  const { models: allowedModels } = useAgentBuilderAllowedModels();
+  const {
+    models: allowedModels,
+    isLoading: allowedModelsLoading,
+    isError: allowedModelsError,
+  } = useAgentBuilderAllowedModels();
 
   if (providersLoading || !selection) return null;
 
   const providers = dataProviders?.providers || [];
-  const { provider, model } = selection;
+  const { provider, model, modelWarning } = selection;
   const currentModelProvider = cleanProviderId(provider);
   const currentProvider = findProviderById(providers, currentModelProvider);
   const selectedModel = model;
@@ -112,11 +111,13 @@ export const ComposerModelWarning = () => {
     Boolean(currentModelProvider && selectedModel) &&
     policy.active &&
     policy.allowed !== undefined &&
+    !allowedModelsLoading &&
+    !allowedModelsError &&
     !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === selectedModel);
 
   const showProviderWarning = currentProvider && !currentProvider.connected;
 
-  if (!stale && !showProviderWarning) return null;
+  if (!modelWarning && !stale && !showProviderWarning) return null;
 
   const envVar =
     currentProvider && Array.isArray(currentProvider.envVar)
@@ -125,7 +126,7 @@ export const ComposerModelWarning = () => {
 
   return (
     <div className="flex flex-col gap-1 px-3 pb-1.5">
-      {stale && (
+      {(modelWarning || stale) && (
         <div
           className="text-accent6 text-ui-sm flex max-w-full min-w-0 items-start gap-1"
           data-testid="composer-model-stale-warning"
@@ -133,10 +134,14 @@ export const ComposerModelWarning = () => {
         >
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
-            <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
-              {provider}/{selectedModel}
-            </code>{' '}
-            is no longer allowed by admin policy. Pick a different model.
+            {modelWarning || (
+              <>
+                <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
+                  {provider}/{selectedModel}
+                </code>{' '}
+                is no longer allowed by admin policy. Pick a different model.
+              </>
+            )}
           </span>
         </div>
       )}

@@ -37,12 +37,11 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   // `controller`. We link them here so a single `session` override drives both.
   const { session: sessionOverride, controller: agentControllerOverride, ...rest } = overrides as any;
   const session = {
-    followUps: { count: vi.fn(() => 0) },
     getCurrentRunId: vi.fn(() => null),
     stream: { isActive: vi.fn(() => false) },
     sendSignal: vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
     sendMessage: vi.fn().mockResolvedValue(undefined),
-    displayState: { get: vi.fn(() => ({ isRunning: false })) },
+    displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 0 })) },
     thread: { create: vi.fn().mockResolvedValue({ id: 'thread-new' }) },
     mode: { switch: vi.fn().mockResolvedValue(undefined) },
     ...(sessionOverride ?? {}),
@@ -897,7 +896,7 @@ describe('MastraTUI queueing', () => {
 
   it('waits for controller-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
-      session: { followUps: { count: vi.fn(() => 1) } } as any,
+      session: { displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 1 })) } } as any,
       pendingQueuedActions: ['message'],
       pendingFollowUpMessages: [{ content: 'queued' }],
     });

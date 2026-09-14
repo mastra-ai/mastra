@@ -61,9 +61,7 @@ export function ReviewItemCard({
     }
   })();
 
-  const scoresEntries: Array<[string, number]> = item.scores
-    ? (Object.entries(item.scores) as Array<[string, number]>)
-    : [];
+  const scoresEntries: Array<[string, number]> = item.scores ? Object.entries(item.scores) : [];
 
   return (
     <div

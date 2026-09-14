@@ -94,7 +94,6 @@ values
     await runtime.waitForScreenText(/E2E quiet loaded history fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E quiet loaded history fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Quiet loaded history answer begins/i, terminal, 8_000);
     await runtime.waitForScreenText(/▐view▌src\/quiet-mode-e2e\.ts/i, terminal, 8_000);
     await runtime.waitForScreenText(/QUIET_MODE_LOADED_PREVIEW/i, terminal, 8_000);

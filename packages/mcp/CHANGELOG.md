@@ -1,5 +1,25 @@
 # @mastra/mcp
 
+## 1.18.0-alpha.1
+
+### Minor Changes
+
+- Added `MastraApiMCPServer` to expose supported Mastra server operations from the `mastra api` CLI as MCP tools. The server reads the target API's input schemas and forwards authentication. All non-GET operations, including agent, workflow, experiment, and tool execution, are marked as potentially destructive so MCP clients can ask for confirmation. Factory commands aren't included. ([#23077](https://github.com/mastra-ai/mastra/pull/23077))
+
+  ```typescript
+  import { MastraApiMCPServer } from '@mastra/mcp';
+
+  const operations = await MastraApiMCPServer.create({
+    url: 'https://my-mastra-server.example.com',
+    headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN}` },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+
 ## 1.17.4-alpha.0
 
 ### Patch Changes

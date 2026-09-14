@@ -255,7 +255,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
             "import { testRoute } from '@/api/route/test';",
             "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
           )
-          .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+          .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute,');
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
           writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
@@ -368,6 +368,49 @@ export const environmentRoute = registerApiRoute('/environment', {
         const originalPackageSource = await readFile(packageSource, 'utf-8');
         const originalAppRoute = await readFile(appRoute, 'utf-8');
 
+        const readServerInstance = async () => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10_000);
+          try {
+            const instanceIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+            while (!controller.signal.aborted) {
+              const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
+              expect(page.status).toBe(200);
+              const html = await page.text();
+              const htmlId = html.match(/window\.MASTRA_DEV_SERVER_INSTANCE_ID = "([^"]+)";/)?.[1];
+              expect(htmlId).toMatch(instanceIdPattern);
+              const response = await fetch(`http://localhost:${port}/refresh-events`, { signal: controller.signal });
+              expect(response.status).toBe(200);
+              if (!response.body) throw new Error('Missing refresh stream');
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              let event = '';
+              try {
+                while (!event.includes('\n\n')) {
+                  const chunk = await reader.read();
+                  if (chunk.done) throw new Error('Refresh stream ended before the handshake');
+                  event += decoder.decode(chunk.value, { stream: true });
+                }
+              } finally {
+                await reader.cancel();
+              }
+              expect(event).toContain('data: connected');
+              const id = event.match(/^id: (.+)$/m)?.[1];
+              expect(id).toMatch(instanceIdPattern);
+              if (htmlId === id) {
+                expect(html).toContain(`window.MASTRA_DEV_SERVER_INSTANCE_ID = "${id}";`);
+                return id;
+              }
+              // A restart between requests is valid; retry both snapshots, not just the stream.
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new Error('Timed out waiting for matching Studio HTML and refresh-stream generations');
+          } finally {
+            clearTimeout(timeout);
+            controller.abort();
+          }
+        };
+
         const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
           const started = Date.now();
           let lastBody: { value: string; app: string } | undefined;
@@ -394,6 +437,8 @@ export const environmentRoute = registerApiRoute('/environment', {
             body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
           );
           expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+          const initialInstance = await readServerInstance();
+          expect(await readServerInstance()).toBe(initialInstance);
 
           // 2. Edit workspace package only
           await writeFile(packageSource, `export const valueC = 'c-AFTER';\n`);
@@ -401,6 +446,11 @@ export const environmentRoute = registerApiRoute('/environment', {
             body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
           );
           expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+          // A browser reconnecting after this broadcast must still detect the restart.
+          await fetch(`http://localhost:${port}/__refresh`, { method: 'POST' });
+          const packageInstance = await readServerInstance();
+          expect(packageInstance).not.toBe(initialInstance);
+          expect(await readServerInstance()).toBe(packageInstance);
 
           // 3. Edit app only — package AFTER must still be present (no stale optimizer cache)
           await writeFile(appRoute, originalAppRoute.replace('App value is BEFORE.', 'App value is AFTER.'));
@@ -716,6 +766,63 @@ export const mastra = new Mastra({
           // default 5s timeout is tighter than the server's own worst-case bounds.
         } finally {
           // Never leave the drain server running if an assertion failed.
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'lets an in-flight evented workflow run finish before the generated server exits on SIGTERM',
+      async () => {
+        // The route starts the run without awaiting it and responds at once, so
+        // there is no open HTTP connection for the request drain to hold the
+        // process open. Only `mastra.shutdown({ drainTimeout })` — which the
+        // generated server must forward `server.drainTimeout` into — keeps
+        // pubsub alive long enough for the step to finish and print its marker.
+        const drainPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const drainController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: drainController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: drainPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: drainController, proc: server });
+
+        let stdout = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+
+        try {
+          const maxAttempts = 60;
+          for (let i = 0; i < maxAttempts; i++) {
+            try {
+              const res = await fetch(`http://localhost:${drainPort}/api/tools`);
+              if (res.ok) break;
+            } catch {
+              // Server not ready yet
+            }
+            if (i === maxAttempts - 1) {
+              throw new Error('Workflow drain test server failed to start within timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const response = await fetch(`http://localhost:${drainPort}/shutdown-drain-workflow`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(stdout).not.toContain('shutdown-drain-workflow:finished');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(stdout).toContain('shutdown-drain-workflow:finished');
+        } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         }

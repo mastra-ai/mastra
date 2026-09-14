@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { paginationInfoSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema } from './common';
 
 // ============================================================================
 // JSON Schema Types (for inputSchema/groundTruthSchema fields)
@@ -262,10 +262,7 @@ export const datasetAndItemIdPathParams = z.object({
 // Query Parameter Schemas
 // ============================================================================
 
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
+export const paginationQuerySchema = createPagePaginationSchema(10);
 
 export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
   tags: z
@@ -280,11 +277,31 @@ export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
     .describe('Only return results that have all of these tags'),
 });
 
+const targetTypeQuerySchema = z
+  .enum(['agent', 'workflow', 'scorer', 'processor'])
+  .optional()
+  .describe('Only return records attached to targets of this type');
+
+export const listDatasetsQuerySchema = paginationQuerySchema.extend({
+  targetType: targetTypeQuerySchema,
+  targetIds: z
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(id => id !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
+    .describe('Only return datasets attached to at least one of these target IDs'),
+});
+
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   experimentSetId: z.string().optional(),
   comparisonId: z.string().optional(),
   variantId: z.string().optional(),
   trialIndex: z.coerce.number().int().min(0).optional(),
+  targetType: targetTypeQuerySchema,
+  targetId: z.string().optional().describe('Only return experiments run against this target ID'),
 });
 
 export const tenancyQuerySchema = z.object({
@@ -292,9 +309,7 @@ export const tenancyQuerySchema = z.object({
   projectId: z.string().optional().describe('Restrict lookup to the given project'),
 });
 
-export const listItemsQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
+export const listItemsQuerySchema = createPagePaginationSchema(10).extend({
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
   search: z.string().optional(),
 });

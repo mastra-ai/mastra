@@ -101,7 +101,7 @@ async function mockPartialThread(page: Page) {
 async function openPartialThread(page: Page) {
   await mockPartialThread(page);
   await page.goto(`/traces?traceId=${TRACE_ID}`);
-  await expect(page.getByRole('heading', { name: 'Messages' })).toBeVisible();
+  await expect(page.getByTestId('messages-panel')).toBeVisible();
 }
 
 /**

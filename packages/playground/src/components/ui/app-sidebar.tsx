@@ -241,7 +241,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
+            <hr className="bg-border1 mx-3 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

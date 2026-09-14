@@ -1,6 +1,6 @@
 {
   "name": "@mastra/daytona",
-  "version": "0.10.1-alpha.0",
+  "version": "0.11.0-alpha.1",
   "description": "Daytona cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -50,7 +50,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.60.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

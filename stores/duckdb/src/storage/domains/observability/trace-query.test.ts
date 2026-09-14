@@ -1,14 +1,24 @@
-import { encodeTraceQueryCursor, parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
-import type { TrustedTraceQueryPlan } from '@mastra/core/storage';
+import {
+  encodeTraceQueryCursor,
+  parseQueryThreadsInput,
+  parseTraceQueryRequest,
+  planThreadQuery,
+  planTraceQuery,
+} from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
-import { compileDuckDBTraceQuery, queryTraces } from './trace-query';
+import { compileDuckDBThreadQuery, compileDuckDBTraceQuery, queryThreads, queryTraces } from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
 function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
   return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
+}
+
+function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan {
+  return planThreadQuery(parseQueryThreadsInput({ traces: { timeRange: TIME_RANGE }, ...input }));
 }
 
 describe('DuckDB advanced trace query', () => {
@@ -277,6 +287,84 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values.at(-1)).toBe(5);
   });
 
+  it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
+    const metadataKey = ` actor'role `;
+    const metadataValue = `clinician' OR TRUE --`;
+    const compiled = compileDuckDBThreadQuery(
+      threadPlan({
+        traces: {
+          timeRange: TIME_RANGE,
+          where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+        },
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: `metadata.${metadataKey}` }, right: { literal: metadataValue } },
+                    { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+                  ],
+                },
+              },
+            },
+            {
+              traces: {
+                none: {
+                  feedback: {
+                    some: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        page: { limit: 4 },
+      }),
+    );
+
+    expect(compiled.sql.match(/current_spans AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/current_scores AS/g)).toHaveLength(1);
+    expect(compiled.sql.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.sql).toContain('eligible_roots AS');
+    expect(compiled.sql).toContain('SELECT *\n      FROM root_scope r');
+    expect(compiled.sql).toContain('SELECT 1 FROM eligible_roots r');
+    expect(compiled.sql).toContain('r.threadId = t.threadId');
+    expect(compiled.sql).toContain('NOT EXISTS (');
+    expect(compiled.sql).not.toContain(metadataKey);
+    expect(compiled.sql).not.toContain(metadataValue);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'medication_lookup',
+      `$.${JSON.stringify(metadataKey)}`,
+      `$.${JSON.stringify(metadataKey)}`,
+      metadataValue,
+      0.6,
+      'clinical-review',
+      5,
+    ]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
+  it('applies the thread cursor after qualification and fetches one lookahead row', () => {
+    const first = threadPlan({ page: { limit: 1 } });
+    const after = threadPlan({
+      page: {
+        limit: 1,
+        after: encodeTraceQueryCursor(first, { result: 'threads', threadId: 'thread-1' }),
+      },
+    });
+    const compiled = compileDuckDBThreadQuery(after);
+
+    expect(compiled.sql).toContain('FROM qualified_threads\nWHERE threadId > ?');
+    expect(compiled.sql).toContain('ORDER BY threadId ASC');
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {
@@ -285,6 +373,20 @@ describe('DuckDB advanced trace query', () => {
     } as unknown as TrustedTraceQueryPlan;
 
     expect(() => compileDuckDBTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const thread = threadPlan({
+      where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },
+    });
+    const invalidThread = {
+      ...thread,
+      where: {
+        type: 'relation',
+        collection: 'traces',
+        quantifier: 'some',
+        predicate: { type: 'comparison', field: 'rawSql', operator: 'eq', value: 'x' },
+      },
+    } as unknown as TrustedThreadQueryPlan;
+    expect(() => compileDuckDBThreadQuery(invalidThread)).toThrow('Unsupported trusted trace-query field');
   });
 
   it('returns fixed records and computes the next cursor from the last visible row', async () => {
@@ -302,6 +404,15 @@ describe('DuckDB advanced trace query', () => {
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+  });
+
+  it('returns fixed thread identities and computes the next cursor from the last visible row', async () => {
+    const query = vi.fn().mockResolvedValue([{ threadId: 'thread-1' }, { threadId: 'thread-2' }]);
+
+    const response = await queryThreads({ query } as unknown as DuckDBConnection, threadPlan({ page: { limit: 1 } }));
+
+    expect(response).toEqual({ threads: [{ threadId: 'thread-1' }], page: { next: expect.any(String) } });
+    expect(Object.keys(response.threads[0]!)).toEqual(['threadId']);
   });
 });
 

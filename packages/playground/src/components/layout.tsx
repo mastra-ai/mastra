@@ -6,7 +6,14 @@ import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout'
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { AppShell } from '@mastra/playground-ui/new/layout/app-shell';
+import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { Search } from 'lucide-react';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
@@ -15,6 +22,7 @@ import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
 import {
   RouteHeader,
@@ -24,6 +32,7 @@ import {
   useRouteHeader,
   useRouteHeaderCrumbsOverride,
 } from '@/lib/route-header';
+import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -59,6 +68,63 @@ function MobileNavbar() {
   );
 }
 
+// First visit: the panel starts collapsed; `useDefaultLayout` persists later widths.
+const SIDE_PANEL_COLLAPSED_LAYOUT = { 'studio-frame': 100, 'route-side-panel': 0 };
+
+/**
+ * Hosts the page-registered side panel next to the Studio frame (outside the
+ * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
+ * renders under the same `Panel` so crossing the breakpoint never remounts it.
+ */
+export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
+  const isMobile = useIsMobile();
+  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
+  const { defaultLayout, onLayoutChange } = useDefaultLayout({
+    id: 'studio-frame-layout-v1',
+    storage: localStorage,
+  });
+
+  return (
+    <div className="relative flex min-h-0 flex-1">
+      <PanelGroup
+        className="min-h-0 flex-1"
+        orientation="horizontal"
+        defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
+        onLayoutChange={onLayoutChange}
+      >
+        <Panel id="studio-frame" className={cn('min-w-0', className)}>
+          {children}
+        </Panel>
+        {hasPanel && !isMobile && (
+          <>
+            <PanelSeparator />
+            <CollapsiblePanel
+              id="route-side-panel"
+              ref={panelHandle}
+              direction="right"
+              collapsible
+              collapsedSize={0}
+              hideExpandButton
+              minSize={320}
+              maxSize="50%"
+              defaultSize={380}
+              className="min-w-0"
+              onResize={size => onPanelResize(size.inPixels)}
+            >
+              <RouteSidePanelSlot className="h-full min-h-0 py-1.5 pr-1.5 lg:py-2 lg:pr-2" />
+            </CollapsiblePanel>
+          </>
+        )}
+      </PanelGroup>
+      {hasPanel && isMobile && (
+        <PanelDrawer direction="right" label="Open details panel">
+          <RouteSidePanelSlot className="h-full min-h-0" />
+        </PanelDrawer>
+      )}
+    </div>
+  );
+}
+
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
@@ -74,24 +140,20 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <NavigationCommand />
       <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
         {shouldShowSidebar && <AppSidebar />}
-        <div className="flex h-full min-h-0 flex-col">
-          {shouldShowSidebar && <MobileNavbar />}
-          <PageHeadingContext.Provider value={pageHeading}>
-            <div
-              className={cn(
-                'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
-                shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
-              )}
-            >
-              {shouldShowSidebar && <RouteHeader />}
-              <div className="min-h-0 overflow-y-auto">
-                <AuthRequired>
-                  <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-                </AuthRequired>
-              </div>
-            </div>
-          </PageHeadingContext.Provider>
-        </div>
+        <AppShell
+          mainLabel={pageHeading ?? 'Page content'}
+          mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
+          routeHeader={shouldShowSidebar ? <RouteHeader /> : undefined}
+          renderFrame={({ children: frame, className }) => (
+            <PageHeadingContext.Provider value={pageHeading}>
+              <StudioFrame className={className}>{frame}</StudioFrame>
+            </PageHeadingContext.Provider>
+          )}
+        >
+          <AuthRequired>
+            <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+          </AuthRequired>
+        </AppShell>
       </div>
     </>
   );
@@ -107,9 +169,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
             <MainSidebarProvider>
+              <SidebarShortcuts />
               <RouteHeaderActionsProvider>
                 <RouteHeaderCrumbsProvider>
-                  <LayoutContent>{children}</LayoutContent>
+                  <RouteSidePanelProvider>
+                    <LayoutContent>{children}</LayoutContent>
+                  </RouteSidePanelProvider>
                 </RouteHeaderCrumbsProvider>
               </RouteHeaderActionsProvider>
             </MainSidebarProvider>

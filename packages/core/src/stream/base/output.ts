@@ -358,6 +358,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
+    if (options.logger) {
+      this.__setLogger(options.logger);
+    }
     this.#options = options;
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;

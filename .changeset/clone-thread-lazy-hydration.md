@@ -5,17 +5,16 @@
 '@mastra/pg': patch
 ---
 
-Avoid loading every message payload into the Node heap when cloning a thread for a forked subagent.
+Added `copyThread()` so a thread and its messages can be duplicated without loading every message payload into the Node heap. Fixes #23434.
 
-`memory.cloneThread()` previously parsed and accumulated all source message payloads into memory, then discarded them on the fork path where only the new thread id is needed. `StorageCloneThreadInput.options` now accepts `hydrateMessages` (default `true`); when `false`, the LibSQL, Postgres, and in-memory adapters copy message rows inside the database via `INSERT … SELECT` and return an empty `clonedMessages` array. `Memory.cloneThread` re-enables hydration when semantic recall is active so embeddings still work, and forked subagents now clone with `hydrateMessages: false`. Fixes #23434.
-
-Callers can opt into lazy hydration directly:
+`memory.cloneThread()` keeps its existing signature and still returns `clonedMessages`, but the copy now happens inside the database first (via `INSERT … SELECT` on LibSQL and Postgres) and the messages are read back afterwards only because the caller asked for them. Forked subagents and other callers that only need the new thread id use the new `memory.copyThread()`, which never returns message content. When semantic recall is enabled, the copied messages are still read back to generate embeddings, but in batches of 100 instead of all at once.
 
 ```ts
-const { messageIdMap } = await memory.cloneThread({
-  sourceThreadId,
-  newThreadId,
-  resourceId,
-  options: { hydrateMessages: false },
-});
+// Same as before: returns the copied messages.
+const { thread: clonedThread, clonedMessages } = await memory.cloneThread({ sourceThreadId });
+
+// New: copy without returning message payloads.
+const { thread: copiedThread, messageIdMap } = await memory.copyThread({ sourceThreadId });
 ```
+
+Storage adapters now implement `copyThread()`; the base `cloneThread()` is derived from it. The unreleased `hydrateMessages` option has been removed.

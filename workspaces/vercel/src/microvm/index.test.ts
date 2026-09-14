@@ -1,4 +1,4 @@
-import { Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VercelSandbox } from './index';
 
@@ -238,6 +238,17 @@ describe('VercelSandbox', () => {
 
       expect(createMock).toHaveBeenCalledTimes(1);
       expect(fake.writeFiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects an explicit per-file mode without uploading', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+        SandboxUnsupportedFeatureError,
+      );
+      expect(fake.writeFiles).not.toHaveBeenCalled();
     });
   });
 

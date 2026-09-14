@@ -180,7 +180,7 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -191,9 +191,56 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
 
-      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    describe('given the thread has another trace', () => {
+      const threadedTraceB = {
+        ...threadedTraceSpans,
+        traceId: 'trace-b',
+        spans: threadedTraceSpans.spans.map(span => ({ ...span, traceId: 'trace-b', spanId: 'span-b' })),
+      };
+      const threadTraceList = {
+        spans: [threadedTraceB.spans[0], threadedTraceSpans.spans[0]],
+        pagination: { total: 2, page: 0, perPage: 25, hasMore: false },
+      };
+
+      const setMultiTurnThreadHandlers = () => {
+        setThreadedTraceHandlers();
+        server.use(
+          // The page list keeps its single row; only thread-scoped requests see both turns.
+          http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
+            HttpResponse.json(new URL(request.url).searchParams.get('threadId') ? threadTraceList : traceList),
+          ),
+          http.get(`${TEST_BASE_URL}/api/observability/traces/trace-b`, () => HttpResponse.json(threadedTraceB)),
+          http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+        );
+      };
+
+      it('when "View full thread" is clicked, then the side panel shows every turn at full width, and "Back to trace" restores the trace', async () => {
+        setMultiTurnThreadHandlers();
+
+        const { queryClient } = renderPage('/traces?traceId=trace-a');
+        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'View full thread' }));
+
+        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        expect(dialog().className).toContain('w-full');
+        expect(screen.queryByTestId('messages-panel')).toBeNull();
+        // The page did not navigate away from the traces list.
+        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
+        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+        expect(dialog().className).toContain('w-4/5');
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
     });
 
     it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
@@ -203,7 +250,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
     });
   });

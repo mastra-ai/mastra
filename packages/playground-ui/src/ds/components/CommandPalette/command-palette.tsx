@@ -28,11 +28,11 @@ function CommandPaletteDialog({
       commandClassName={cn(
         // Height lives in `.command-palette-shell` — see command-palette.css.
         'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
-        '[&_[data-slot=command-input-wrapper]]:h-14 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-4 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
+        '[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-3 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
         '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-neutral4 [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-ui-md',
-        '**:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pt-3 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group]]:p-0',
-        '**:[[cmdk-item]]:px-3 **:[[cmdk-item]]:py-2.5',
+        '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-2 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group]]:p-0',
+        '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-1.5',
         commandClassName,
       )}
       {...props}
@@ -77,7 +77,7 @@ function CommandPaletteRail({ children, className, ...props }: CommandPaletteRai
   return (
     <aside
       className={cn(
-        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
+        'command-palette-surface command-palette-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-2 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none',
         className,
       )}
       {...props}
@@ -204,7 +204,7 @@ function CommandPaletteItem({
 
 function CommandPaletteFooter({ label }: { label: string }) {
   return (
-    <div className="command-palette-footer text-ui-xs text-neutral3 pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pt-5 pb-2">
+    <div className="command-palette-footer text-ui-xs text-neutral3 pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-3 pt-3 pb-2">
       <span className="truncate">{label}</span>
       <span className="flex shrink-0 items-center gap-1.5">
         <Kbd size="sm">↑</Kbd>

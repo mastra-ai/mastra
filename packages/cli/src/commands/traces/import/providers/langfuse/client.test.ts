@@ -45,6 +45,29 @@ describe('LangfuseClient', () => {
     );
   });
 
+  it('retries when a successful response body fails while streaming', async () => {
+    const failedBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new TypeError('stream interrupted'));
+      },
+    });
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(failedBody))
+      .mockResolvedValueOnce(Response.json({ data: [observation], meta: { cursor: null } }));
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const onRetry = vi.fn();
+    const client = new LangfuseClient(options, { fetch, sleep, maxAttempts: 2 });
+
+    await expect(client.getObservationsPage({ fields: 'core', limit: 1000 }, onRetry)).resolves.toEqual({
+      data: [observation],
+      cursor: null,
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
   it('builds a bounded Observations API v2 request', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
@@ -84,9 +107,9 @@ describe('LangfuseClient', () => {
       .mockResolvedValueOnce(Response.json({ data: [], meta: { cursor: null } }));
     const sleep = vi.fn().mockResolvedValue(undefined);
     const onRetry = vi.fn();
-    const client = new LangfuseClient(options, { fetch, sleep, onRetry });
+    const client = new LangfuseClient(options, { fetch, sleep });
 
-    await client.getObservationsPage({ fields: 'core', limit: 1000 });
+    await client.getObservationsPage({ fields: 'core', limit: 1000 }, onRetry);
 
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(rateLimit.cancel).toHaveBeenCalledOnce();

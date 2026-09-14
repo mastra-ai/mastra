@@ -11,6 +11,7 @@ import type {
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
@@ -448,6 +449,11 @@ export class MockMemory extends MastraMemory {
   async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.cloneThread(args);
+  }
+
+  override async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.copyThread(args);
   }
 
   async updateThreadResourceId({

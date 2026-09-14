@@ -506,6 +506,78 @@ describe('UnixSocketPubSub', () => {
     expect(goodCb).toHaveBeenCalledTimes(1);
   });
 
+  describe('membership ack timeout', () => {
+    /**
+     * Simulates a broker running an older protocol version: it accepts
+     * connections and subscribe/unsubscribe frames but never sends
+     * `subscribed`/`unsubscribed` acks.
+     */
+    async function startLegacyBroker(path: string): Promise<{ close: () => Promise<void> }> {
+      const sockets = new Set<net.Socket>();
+      const server = net.createServer(socket => {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => {});
+        socket.on('data', () => {}); // swallow frames, never ack
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, resolve);
+      });
+      return {
+        close: () => {
+          sockets.forEach(socket => socket.destroy());
+          return new Promise(resolve => server.close(() => resolve()));
+        },
+      };
+    }
+
+    it('rejects an invalid membershipAckTimeoutMs option', async () => {
+      const path = await socketPath();
+      for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => new UnixSocketPubSub(path, { membershipAckTimeoutMs: value })).toThrow(
+          'membershipAckTimeoutMs must be a positive finite number',
+        );
+      }
+    });
+
+    it('subscribe resolves best-effort when the broker never acks', async () => {
+      const path = await socketPath('legacy.sock');
+      const legacyBroker = await startLegacyBroker(path);
+      try {
+        const client = new UnixSocketPubSub(path, { membershipAckTimeoutMs: 100 });
+        pubsubs.push(client);
+        await expect(
+          Promise.race([
+            client.subscribe('topic-a', vi.fn()),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('subscribe hung past ack timeout')), 2000)),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        await legacyBroker.close();
+      }
+    });
+
+    it('unsubscribe resolves best-effort when the broker never acks', async () => {
+      const path = await socketPath('legacy-unsub.sock');
+      const legacyBroker = await startLegacyBroker(path);
+      try {
+        const client = new UnixSocketPubSub(path, { membershipAckTimeoutMs: 100 });
+        pubsubs.push(client);
+        const cb = vi.fn();
+        await client.subscribe('topic-a', cb);
+        await expect(
+          Promise.race([
+            client.unsubscribe('topic-a', cb),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('unsubscribe hung past ack timeout')), 2000)),
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        await legacyBroker.close();
+      }
+    });
+  });
+
   describe('inbound frame size limit', () => {
     const LIMIT = 64 * 1024;
 

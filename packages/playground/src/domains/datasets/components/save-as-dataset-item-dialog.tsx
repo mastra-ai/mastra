@@ -9,7 +9,7 @@ import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { DatabaseIcon } from 'lucide-react';
+import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -287,10 +287,11 @@ export function SaveAsDatasetItemDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={handleCancel}>
+            <Button icon={<X />} type="button" variant="outline" onClick={handleCancel}>
               Cancel
             </Button>
             <Button
+              icon={<Check />}
               type="submit"
               variant="default"
               disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
