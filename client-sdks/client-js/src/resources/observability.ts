@@ -9,9 +9,7 @@ import type {
   ListTracesLightResponse,
   QueryThreadsInput,
   QueryThreadsResult,
-  TraceQueryGroupResponse,
   TraceQueryRequest,
-  TraceQueryResponse,
   TraceQueryTraceResponse,
   ListBranchesArgs,
   ListBranchesResponse,
@@ -128,9 +126,6 @@ export interface LegacyGetTracesResponse {
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
 export type QueryTracesInput = Omit<TraceQueryRequest, 'group'> & { group?: never };
-export type LegacyGroupedTraceQueryInput = TraceQueryRequest & {
-  group: NonNullable<TraceQueryRequest['group']>;
-};
 export type QueryTraceThreadsInput = QueryThreadsInput;
 export type QueryTraceThreadsResult = QueryThreadsResult;
 
@@ -251,14 +246,7 @@ export class Observability extends BaseResource {
    * @param params - Advanced trace query, including its required time range
    * @returns Matching lightweight traces
    */
-  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse>;
-  /** @deprecated Use {@link queryTraceThreads} for querying thread identities. */
-  queryTraces(params: LegacyGroupedTraceQueryInput): Promise<TraceQueryGroupResponse>;
-  /** Compatibility overload for requests whose optional grouping is not statically known. */
-  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse>;
-  queryTraces(
-    params: QueryTracesInput | LegacyGroupedTraceQueryInput | TraceQueryRequest,
-  ): Promise<TraceQueryResponse> {
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryTraceResponse> {
     return this.request('/observability/traces/query', { method: 'POST', body: params });
   }
 

@@ -12,4 +12,4 @@ const result = await mastraClient.queryTraceThreads({
 });
 ```
 
-New `queryTraces()` calls return trace results statically. Legacy grouped calls remain available through a deprecated grouped-result overload.
+`queryTraces()` remains trace-only, while `queryTraceThreads()` returns observability-derived thread identities.

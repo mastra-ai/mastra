@@ -425,15 +425,13 @@ A thread query returns distinct non-null thread IDs in ordinal ascending order:
 }
 ```
 
-`queryTraces({ group: { by: ['threadId'] } })` remains available for compatibility, but it's deprecated and will be removed in the next major release. Use `queryTraceThreads()` for new thread-grouping queries. Legacy grouped trace queries return `{ groups: [{ threadId }], page }` and don't support thread-level predicates.
-
 Related evidence isn't embedded in either response. Use the trace-detail and branch APIs to load spans after selecting a result.
 
 ## Pagination and errors
 
 Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker. Thread queries always use raw ordinal `threadId` ascending order. Callers can't override it.
 
-Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, grouping, or ordering returns `409`. Trace, legacy group, and thread cursors aren't interchangeable. A malformed cursor returns `400`.
+Cursors are bound to the operation, accepted normalized query, authorization state, and ordering. Reusing a cursor after changing the trace selection, predicates, or ordering returns `409`. Trace and thread cursors aren't interchangeable. A malformed cursor returns `400`.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
@@ -450,7 +448,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or grouping by fields other than `threadId`.
+Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, counts, measures, or custom grouping.
 
 ## Related
 
