@@ -36,15 +36,10 @@ export const ViewTopBar = ({
     <div data-testid="agent-builder-view-top-bar">
       <Header className="h-10 min-h-10 gap-2 overflow-hidden px-2">
         <Breadcrumb label="Agent navigation" className="min-w-0 flex-1 overflow-hidden" listClassName="min-w-0">
-          <Crumb
-            as={Link}
-            to="/agent-builder/agents"
-            className="max-w-[18rem]"
-            data-testid="agent-builder-back-to-list"
-          >
+          <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
             Agent list
           </Crumb>
-          <Crumb as="span" isCurrent className="max-w-[28rem]" data-testid="agent-builder-title">
+          <Crumb as="span" isCurrent data-testid="agent-builder-title">
             <AgentBuilderTitle />
           </Crumb>
         </Breadcrumb>

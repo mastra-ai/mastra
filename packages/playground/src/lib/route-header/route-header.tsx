@@ -38,7 +38,6 @@ export function RouteHeader() {
                 as={linkable ? Link : 'span'}
                 to={linkable ? def.to : undefined}
                 isCurrent={isCurrent}
-                className={isCurrent ? 'max-w-[28rem]' : 'max-w-[18rem]'}
                 icon={IconComponent ? <IconComponent /> : undefined}
                 action={Action ? <Action /> : undefined}
               >
