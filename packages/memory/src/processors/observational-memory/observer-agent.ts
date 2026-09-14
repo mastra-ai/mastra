@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
@@ -977,9 +978,86 @@ function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
   return undefined;
 }
 
+type ObserverToolInvocation = MastraToolInvocation;
+
+type ObserverToolExchange = {
+  firstOccurrence: number;
+  signature?: ObserverToolInvocation;
+  terminal?: ObserverToolInvocation & { occurrence: number };
+};
+
+type ObserverToolFormattingState = {
+  exchanges: Map<string, ObserverToolExchange>;
+  emittedCalls: Set<string>;
+  emittedOutcomes: Set<string>;
+  nextOccurrence: number;
+};
+
+function isCallLikeToolInvocation(invocation: ObserverToolInvocation): boolean {
+  return (
+    invocation.state === 'call' ||
+    invocation.state === 'partial-call' ||
+    invocation.state === 'approval-requested' ||
+    invocation.state === 'approval-responded'
+  );
+}
+
+function isTerminalToolInvocation(invocation: ObserverToolInvocation): boolean {
+  return invocation.state === 'result' || invocation.state === 'output-error' || invocation.state === 'output-denied';
+}
+
+function createObserverToolFormattingState(messages: MastraDBMessage[]): ObserverToolFormattingState {
+  const exchanges = new Map<string, ObserverToolExchange>();
+  let occurrence = 0;
+
+  for (const message of messages) {
+    if (typeof message.content === 'string' || !Array.isArray(message.content?.parts)) {
+      continue;
+    }
+
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation') {
+        continue;
+      }
+
+      const invocation = part.toolInvocation;
+      if (!isCallLikeToolInvocation(invocation) && !isTerminalToolInvocation(invocation)) {
+        occurrence++;
+        continue;
+      }
+
+      const exchange = exchanges.get(invocation.toolCallId) ?? { firstOccurrence: occurrence };
+      if (isCallLikeToolInvocation(invocation) && (invocation.args !== undefined || exchange.signature === undefined)) {
+        exchange.signature = invocation;
+      }
+      if (isTerminalToolInvocation(invocation)) {
+        exchange.terminal = { ...invocation, occurrence };
+      }
+      exchanges.set(invocation.toolCallId, exchange);
+      occurrence++;
+    }
+  }
+
+  for (const exchange of exchanges.values()) {
+    if (exchange.terminal?.args !== undefined) {
+      exchange.signature = exchange.terminal;
+    } else if (!exchange.signature && exchange.terminal) {
+      exchange.signature = exchange.terminal;
+    }
+  }
+
+  return {
+    exchanges,
+    emittedCalls: new Set(),
+    emittedOutcomes: new Set(),
+    nextOccurrence: 0,
+  };
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
+  toolFormatting: ObserverToolFormattingState,
   options?: ObserverFormatOptions,
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
@@ -1022,6 +1100,23 @@ function formatObserverMessage(
 
       if (part.type === 'tool-invocation') {
         const inv = part.toolInvocation;
+        const occurrence = toolFormatting.nextOccurrence++;
+        const exchange = toolFormatting.exchanges.get(inv.toolCallId);
+
+        if (
+          exchange &&
+          occurrence === exchange.firstOccurrence &&
+          exchange.signature &&
+          !toolFormatting.emittedCalls.has(inv.toolCallId)
+        ) {
+          toolFormatting.emittedCalls.add(inv.toolCallId);
+          pushLine(
+            `Tool Call ${exchange.signature.toolName}`,
+            maybeTruncate(JSON.stringify(exchange.signature.args, null, 2) ?? 'undefined', maxLen),
+            partCreatedAt,
+          );
+        }
+
         if (inv.state === 'result') {
           const { value: resultForObserver } = resolveToolResultValue(
             part as { providerMetadata?: Record<string, any> },
@@ -1035,18 +1130,58 @@ function formatObserverMessage(
           if (extractedAttachments.length > 0) {
             attachments.push(...extractedAttachments);
           }
-          pushLine(
-            `Tool Result ${inv.toolName}`,
-            maybeTruncate(
-              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
-              maxLen,
-            ),
-            partCreatedAt,
-          );
+
+          if (exchange?.terminal?.occurrence === occurrence && !toolFormatting.emittedOutcomes.has(inv.toolCallId)) {
+            toolFormatting.emittedOutcomes.add(inv.toolCallId);
+            const hasResult =
+              resultWithoutAttachments !== undefined &&
+              (typeof resultWithoutAttachments !== 'string' || resultWithoutAttachments.trim().length > 0);
+            const body = inv.isError
+              ? hasResult
+                ? formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens })
+                : inv.errorText?.trim()
+                  ? inv.errorText
+                  : 'Tool execution failed'
+              : hasResult
+                ? formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens })
+                : '[empty result]';
+            pushLine(
+              `${inv.isError ? 'Tool Error' : 'Tool Result'} ${inv.toolName}`,
+              maybeTruncate(body, maxLen),
+              partCreatedAt,
+            );
+          }
           return;
         }
 
-        pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+        if (exchange?.terminal?.occurrence === occurrence && !toolFormatting.emittedOutcomes.has(inv.toolCallId)) {
+          toolFormatting.emittedOutcomes.add(inv.toolCallId);
+          if (inv.state === 'output-error') {
+            pushLine(
+              `Tool Error ${inv.toolName}`,
+              maybeTruncate(inv.errorText?.trim() ? inv.errorText : 'Tool execution failed', maxLen),
+              partCreatedAt,
+            );
+          } else if (inv.state === 'output-denied') {
+            pushLine(
+              `Tool Denied ${inv.toolName}`,
+              maybeTruncate(
+                inv.approval?.reason?.trim() ? inv.approval.reason : 'Tool call was not approved by the user',
+                maxLen,
+              ),
+              partCreatedAt,
+            );
+          }
+          return;
+        }
+
+        if (!exchange) {
+          pushLine(
+            `Tool Call ${inv.toolName}`,
+            maybeTruncate(JSON.stringify(inv.args, null, 2) ?? 'undefined', maxLen),
+            partCreatedAt,
+          );
+        }
         return;
       }
 
@@ -1091,11 +1226,12 @@ function formatObserverMessage(
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
+  const toolFormatting = createObserverToolFormattingState(messages);
   const sections: string[] = [];
   let context: ObserverFormattingContext = {};
 
   for (const message of messages) {
-    const formatted = formatObserverMessage(message, counter, options);
+    const formatted = formatObserverMessage(message, counter, toolFormatting, options);
     if (formatted.lines.length === 0) {
       continue;
     }
@@ -1127,11 +1263,12 @@ function appendFormattedObserverMessage(
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
+  const toolFormatting = createObserverToolFormattingState(messages);
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
   let context: ObserverFormattingContext = {};
   messages.forEach(message => {
-    const formatted = formatObserverMessage(message, counter, options);
+    const formatted = formatObserverMessage(message, counter, toolFormatting, options);
     if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
     context = appendFormattedObserverMessage(content, formatted, context);
   });
@@ -1190,10 +1327,11 @@ export function buildMultiThreadObserverHistoryMessage(
     if (!messages || messages.length === 0) return;
 
     const threadContent: any[] = [];
+    const toolFormatting = createObserverToolFormattingState(messages);
     let context: ObserverFormattingContext = {};
     let hasVisibleContent = false;
     messages.forEach(message => {
-      const formatted = formatObserverMessage(message, counter, options);
+      const formatted = formatObserverMessage(message, counter, toolFormatting, options);
       if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
       context = appendFormattedObserverMessage(threadContent, formatted, context);
       hasVisibleContent = true;

@@ -1779,6 +1779,9 @@ export class TokenCounter {
 
       if (state === 'result') {
         extraMessageDelta++;
+        const signature = this.countToolCallSignature(part, invocation);
+        tokens += signature.tokens;
+        overheadDelta += signature.overheadDelta;
         const { value: resultForCounting, usingStoredModelOutput } = this.resolveToolResultForTokenCounting(
           part,
           invocation.result,
@@ -1810,14 +1813,22 @@ export class TokenCounter {
         // A declined approval carries no tool result; count its denial reason like a small result
         // so token accounting stays consistent.
         extraMessageDelta++;
-        const reason = invocation.approval?.reason ?? 'Tool call was not approved by the user';
+        const signature = this.countToolCallSignature(part, invocation);
+        tokens += signature.tokens;
+        overheadDelta += signature.overheadDelta;
+        const reason = invocation.approval?.reason?.trim()
+          ? invocation.approval.reason
+          : 'Tool call was not approved by the user';
         tokens += this.readOrPersistPartEstimate(part, 'tool-result-denied', reason);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 
       if (state === 'output-error') {
         extraMessageDelta++;
-        const errorMessage = typeof invocation.errorText === 'string' ? invocation.errorText : 'Tool execution failed';
+        const signature = this.countToolCallSignature(part, invocation);
+        tokens += signature.tokens;
+        overheadDelta += signature.overheadDelta;
+        const errorMessage = invocation.errorText?.trim() ? invocation.errorText : 'Tool execution failed';
         tokens += this.readOrPersistPartEstimate(part, 'tool-result-error', errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }

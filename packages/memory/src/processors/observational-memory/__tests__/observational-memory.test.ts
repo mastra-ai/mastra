@@ -1,12 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { createSkill } from '@mastra/core/skills';
+import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Memory } from '../../../index';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import {
@@ -39,6 +43,7 @@ import {
   buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   formatMessagesForObserver,
+  formatMultiThreadMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
   sanitizeObservationLines,
@@ -143,6 +148,35 @@ function createTestMessage(content: string, role: 'user' | 'assistant' = 'user',
     type: 'text',
     createdAt: new Date(),
   };
+}
+
+function createToolInvocationMessage(
+  parts: Array<Record<string, unknown>>,
+  id = `tool-msg-${Math.random().toString(36).slice(2)}`,
+  threadId = 'tool-thread',
+): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    threadId,
+    resourceId: 'tool-resource',
+    createdAt: new Date('2024-12-04T10:30:00Z'),
+    content: { format: 2, parts },
+  } as unknown as MastraDBMessage;
+}
+
+function observerTextContent(message: CoreMessage): string {
+  return (message.content as Array<{ type: string; text?: string }>)
+    .filter(part => part.type === 'text')
+    .map(part => part.text ?? '')
+    .join('');
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStringValues);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStringValues);
+  return [];
 }
 
 function createTestMessages(count: number, baseContent = 'Test message'): MastraDBMessage[] {
@@ -1752,6 +1786,493 @@ describe('Observer Agent Helpers', () => {
       expect(loneHighSurrogate.test(serialized)).toBe(false);
       expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
+
+    it('renders canonical completed tool arguments and results exactly once', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'canonical-1',
+            toolName: 'lookup',
+            args: { query: 'alpha' },
+            result: { answer: 'done' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^  "query": "alpha"$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^  "answer": "done"$/gm) ?? []).length).toBe(1);
+    });
+
+    it.each([
+      ['normal', false],
+      ['reversed', true],
+    ])('normalizes split call/result parts in %s order', (_label, reversed) => {
+      const call = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+            },
+          },
+        ],
+        'split-call',
+      );
+      const result = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'split-1',
+              toolName: 'lookup',
+              args: { query: 'split' },
+              result: 'split-result',
+            },
+          },
+        ],
+        'split-result',
+      );
+
+      const formatted = formatMessagesForObserver(reversed ? [result, call] : [call, result]);
+      const callIndex = formatted.indexOf('Tool Call lookup');
+      const resultIndex = formatted.indexOf('Tool Result lookup');
+
+      expect(callIndex).toBeGreaterThanOrEqual(0);
+      expect(resultIndex).toBeGreaterThan(callIndex);
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: split-result$/gm) ?? []).length).toBe(1);
+    });
+
+    it('collapses partial and approval transitions using the terminal arguments', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'partial-call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'partial' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'call' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-requested',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-requested' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'approval-responded',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'approval-responded' },
+            approval: { id: 'approval-1', approved: true },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'transition-1',
+            toolName: 'search',
+            args: { query: 'terminal' },
+            result: 'complete',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call search(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((formatted.match(/^Tool Result search(?: \([^)]*\))?: complete$/gm) ?? []).length).toBe(1);
+      expect(formatted).toContain('"query": "terminal"');
+      expect(formatted).not.toContain('"query": "partial"');
+      expect(formatted).not.toContain('"query": "approval-responded"');
+    });
+
+    it('keeps repeated tool names distinct by tool call ID and uses the latest terminal outcome', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one' },
+            result: 'stale-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-1',
+            toolName: 'lookup',
+            args: { query: 'one-final' },
+            result: 'final-one',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeat-2',
+            toolName: 'lookup',
+            args: { query: 'two' },
+            result: 'final-two',
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call lookup(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(2);
+      expect((formatted.match(/^Tool Result lookup(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+      expect(formatted).not.toContain('stale-one');
+      expect(formatted).toContain('final-one');
+      expect(formatted).toContain('final-two');
+      expect(formatted).toContain('"query": "one-final"');
+      expect(formatted).toContain('"query": "two"');
+    });
+
+    it('renders error and denial terminal states with visible fallbacks', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-1',
+            toolName: 'write',
+            args: { path: '/tmp/a' },
+            errorText: 'disk full',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-2',
+            toolName: 'write',
+            args: { path: '/tmp/b' },
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-error',
+            toolCallId: 'error-3',
+            toolName: 'write',
+            args: { path: '/tmp/missing-error' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-1',
+            toolName: 'remove',
+            args: { path: '/tmp/c' },
+            approval: { id: 'approval-1', approved: false, reason: 'protected file' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-2',
+            toolName: 'remove',
+            args: { path: '/tmp/d' },
+            approval: { id: 'approval-2', approved: false, reason: '' },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-denied',
+            toolCallId: 'denied-3',
+            toolName: 'remove',
+            args: { path: '/tmp/missing-denial' },
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Call (?:write|remove)(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(6);
+      expect((formatted.match(/^Tool Error write(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Denied remove(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect(formatted).toContain('disk full');
+      expect((formatted.match(/: Tool execution failed$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('protected file');
+      expect((formatted.match(/: Tool call was not approved by the user$/gm) ?? []).length).toBe(2);
+    });
+
+    it('renders errored results and empty successful results without dropping terminal events', () => {
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-body',
+            toolName: 'fetch',
+            args: { url: 'body' },
+            result: 'raw provider failure',
+            isError: true,
+            errorText: 'ignored fallback',
+          },
+          providerMetadata: { mastra: { modelOutput: 'stored provider failure' } },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-text',
+            toolName: 'fetch',
+            args: { url: 'errorText' },
+            result: '',
+            isError: true,
+            errorText: 'network failure',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'result-error-fallback',
+            toolName: 'fetch',
+            args: { url: 'fallback' },
+            isError: true,
+            errorText: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'empty-string',
+            toolName: 'fetch',
+            args: { url: 'empty' },
+            result: '',
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'undefined-result',
+            toolName: 'fetch',
+            args: { url: 'undefined' },
+            result: undefined,
+          },
+        },
+      ]);
+
+      const formatted = formatMessagesForObserver([message]);
+
+      expect((formatted.match(/^Tool Error fetch(?: \([^)]*\))?: /gm) ?? []).length).toBe(3);
+      expect((formatted.match(/^Tool Result fetch(?: \([^)]*\))?: \[empty result\]$/gm) ?? []).length).toBe(2);
+      expect(formatted).toContain('stored provider failure');
+      expect(formatted).not.toContain('raw provider failure');
+      expect(formatted).not.toContain('ignored fallback');
+      expect(formatted).toContain('network failure');
+      expect(formatted).toContain('Tool execution failed');
+    });
+
+    it('scopes tool-call deduplication per thread across all observer assembly paths', () => {
+      const first = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'first-skill' },
+              result: 'first instructions',
+            },
+          },
+        ],
+        'thread-one-message',
+        'thread-one',
+      );
+      const second = createToolInvocationMessage(
+        [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'shared-id',
+              toolName: 'skill',
+              args: { name: 'second-skill' },
+              result: 'second instructions',
+            },
+          },
+        ],
+        'thread-two-message',
+        'thread-two',
+      );
+      const byThread = new Map([
+        ['thread-one', [first]],
+        ['thread-two', [second]],
+      ]);
+      const threadOrder = ['thread-one', 'thread-two'];
+
+      const singleText = formatMessagesForObserver([first]);
+      const singleHistory = observerTextContent(buildObserverHistoryMessage([first]));
+      const multiText = formatMultiThreadMessagesForObserver(byThread, threadOrder);
+      const multiHistory = observerTextContent(buildMultiThreadObserverHistoryMessage(byThread, threadOrder));
+
+      for (const text of [singleText, singleHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: first instructions$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^  "name": "first-skill"$/gm) ?? []).length).toBe(1);
+      }
+      for (const text of [multiText, multiHistory]) {
+        expect((text.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(2);
+        expect((text.match(/^Tool Result skill(?: \([^)]*\))?: /gm) ?? []).length).toBe(2);
+        expect((text.match(/^  "name": "first-skill"$/gm) ?? []).length).toBe(1);
+        expect((text.match(/^  "name": "second-skill"$/gm) ?? []).length).toBe(1);
+      }
+    });
+  });
+
+  it('preserves skill activation arguments in observer history', async () => {
+    const skillName = 'observer-provenance-skill';
+    const skillInstructions = '# Observer Provenance Skill\n\nAlways preserve the activated skill identity.';
+    const threadId = `observer-skill-thread-${randomUUID()}`;
+    const resourceId = `observer-skill-resource-${randomUUID()}`;
+    const observerPrompts: unknown[] = [];
+    const actorToolSets: unknown[] = [];
+    let actorCallCount = 0;
+
+    const observerModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        observerPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'observation' },
+            {
+              type: 'text-delta',
+              id: 'observation',
+              delta: '<observations>\n- The requested skill was activated.\n</observations>',
+            },
+            { type: 'text-end', id: 'observation' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+    const actorModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        actorToolSets.push(tools);
+        actorCallCount += 1;
+        return {
+          content:
+            actorCallCount === 1
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: 'activate-observer-provenance-skill',
+                    toolName: 'skill',
+                    input: JSON.stringify({ name: skillName }),
+                  },
+                ]
+              : [{ type: 'text' as const, text: 'Skill activated.' }],
+          finishReason: actorCallCount === 1 ? ('tool-calls' as const) : ('stop' as const),
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          rawCall: { rawPrompt: prompt, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: {
+        lastMessages: 20,
+        semanticRecall: false,
+        observationalMemory: {
+          enabled: true,
+          scope: 'thread',
+          observation: { model: observerModel, messageTokens: 1, bufferTokens: false },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'observer-skill-agent',
+      instructions: 'Activate the requested skill.',
+      model: actorModel,
+      memory,
+      skills: [
+        createSkill({
+          name: skillName,
+          description: 'Proves skill activation provenance reaches the Observer.',
+          instructions: skillInstructions,
+        }),
+      ],
+    });
+
+    try {
+      const response = await agent.generate('Activate the observer provenance skill.', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 2,
+      });
+      await memory.settled();
+
+      const registeredToolNames = actorToolSets.flatMap(tools => {
+        if (Array.isArray(tools)) {
+          return tools
+            .map(tool => (tool && typeof tool === 'object' && 'name' in tool ? String(tool.name) : ''))
+            .filter(Boolean);
+        }
+        return tools && typeof tools === 'object' ? Object.keys(tools) : [];
+      });
+      const skillResult = response.toolResults.find(result => result.payload.toolName === 'skill')?.payload.result;
+      const observerPrompt = collectStringValues(observerPrompts).join('\n');
+
+      expect(actorCallCount).toBe(2);
+      expect(registeredToolNames).toContain('skill');
+      expect(skillResult).toBe(skillInstructions);
+      expect((observerPrompt.match(/^Tool Call skill(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((observerPrompt.match(new RegExp(`^  "name": "${skillName}"$`, 'gm')) ?? []).length).toBe(1);
+      expect(
+        (observerPrompt.match(/^Tool Result skill(?: \([^)]*\))?: # Observer Provenance Skill$/gm) ?? []).length,
+      ).toBe(1);
+      expect(observerPrompt.split(skillInstructions).length - 1).toBe(1);
+    } finally {
+      BufferingCoordinator.asyncBufferingOps.clear();
+      BufferingCoordinator.lastBufferedBoundary.clear();
+      BufferingCoordinator.lastBufferedAtTime.clear();
+      BufferingCoordinator.reflectionBufferCycleIds.clear();
+    }
   });
 
   describe('buildObserverHistoryMessage', () => {
@@ -1839,6 +2360,58 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('Tool Result screenshot');
       expect(joinedText).toContain('[Image #1: image/png]');
       expect(joinedText).not.toContain(base64);
+    });
+
+    it('formatMessagesForObserver preserves attachments from superseded terminal records while rendering only the latest outcome', () => {
+      const base64 = 'C'.repeat(1500);
+      const message = createToolInvocationMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/old' },
+            result: {},
+          },
+          providerMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [
+                  { type: 'text', text: 'superseded outcome' },
+                  { type: 'image-data', data: base64, mediaType: 'image/png' },
+                ],
+              },
+            },
+          },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'repeated-terminal',
+            toolName: 'screenshot',
+            args: { url: 'https://example.com/final' },
+            result: 'latest outcome',
+          },
+        },
+      ]);
+
+      const historyMessage = buildObserverHistoryMessage([message]);
+      const content = historyMessage.content as Array<{ type: string; text?: string; image?: string }>;
+      const joinedText = content
+        .filter(part => part.type === 'text')
+        .map(part => part.text ?? '')
+        .join('\n');
+
+      expect(content.filter(part => part.type === 'image')).toHaveLength(1);
+      expect(content.find(part => part.type === 'image')?.image).toBe(`data:image/png;base64,${base64}`);
+      expect(joinedText).not.toContain('superseded outcome');
+      expect(joinedText).toContain('latest outcome');
+      expect(joinedText).toContain('"url": "https://example.com/final"');
+      expect((joinedText.match(/^Tool Call screenshot(?: \([^)]*\))?: \{$/gm) ?? []).length).toBe(1);
+      expect((joinedText.match(/^Tool Result screenshot(?: \([^)]*\))?: latest outcome$/gm) ?? []).length).toBe(1);
     });
 
     it('should hoist URL and media tool-result blocks into observer input attachments', () => {
