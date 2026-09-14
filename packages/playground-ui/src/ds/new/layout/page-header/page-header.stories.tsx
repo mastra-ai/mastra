@@ -244,6 +244,19 @@ export const LegacyProps: Story = {
   ),
 };
 
+export const LegacyLoading: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader
+        title="Legacy header"
+        description="The legacy prop API remains supported."
+        icon={<BotIcon strokeWidth={2.5} />}
+        isLoading
+      />
+    </StoryFrame>
+  ),
+};
+
 export const Empty: Story = {
   render: () => (
     <StoryFrame>

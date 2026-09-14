@@ -1,14 +1,13 @@
 import { createElement } from 'react';
 import type { ComponentPropsWithRef } from 'react';
 
-import type { FontSizes } from '../../tokens';
 import { cn } from '@/lib/utils';
 
 export type TxtElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
 
 export type TxtProps<TElement extends TxtElement = 'p'> = {
   as?: TElement;
-  variant?: keyof typeof FontSizes;
+  variant?: keyof typeof variants;
   font?: 'mono';
 } & ComponentPropsWithRef<TElement>;
 
@@ -23,6 +22,8 @@ const variants = {
   'header-md': 'text-header-md leading-header-md',
   'header-lg': 'text-header-lg leading-header-lg',
   'header-xl': 'text-header-xl leading-header-xl',
+  title: 'text-ui-md leading-ui-md font-semibold text-neutral6',
+  caption: 'text-ui-sm leading-ui-sm text-neutral3',
 };
 
 const fonts = {

@@ -39,6 +39,16 @@ describe('PageHeader', () => {
     expect(markup).toContain('Legacy icon');
   });
 
+  it('hides legacy content while loading', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader title="Legacy title" description="Legacy description" icon="Legacy icon" isLoading />,
+    );
+
+    expect(markup).not.toContain('Legacy title');
+    expect(markup).not.toContain('Legacy description');
+    expect(markup).not.toContain('Legacy icon');
+  });
+
   it('supports beside metadata', () => {
     const markup = renderToStaticMarkup(<PageHeader.Meta beside>Live</PageHeader.Meta>);
 
