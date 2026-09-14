@@ -7433,13 +7433,7 @@ export class Agent<
       model: options.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
     })) as MastraLLMVNext;
 
-    const resolvedModel = llm.getModel();
-    const isGatewayModel =
-      typeof resolvedModel === 'object' &&
-      resolvedModel !== null &&
-      'gatewayId' in resolvedModel &&
-      resolvedModel.gatewayId === 'mastra';
-    if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
+    if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 
