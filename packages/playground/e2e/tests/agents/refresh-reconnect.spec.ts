@@ -3,10 +3,12 @@ import { expect, test } from '@playwright/test';
 const chatPath = '/agents/weather-agent/threads/new';
 const agentDetails = /\/api\/agents\/weather-agent(?:\?.*)?$/;
 
-for (const hasHandshake of [true, false]) {
-  test.describe(hasHandshake ? 'After an established refresh connection' : 'Before the first refresh handshake', () => {
+test.describe('Studio refresh connection', () => {
+  for (const hasHandshake of [true, false]) {
     test.describe('when the server restarts while disconnected', () => {
-      test('recovers the stale chat without receiving a refresh broadcast', async ({ page }) => {
+      test(`recovers the stale chat ${hasHandshake ? 'after an established connection' : 'before the first handshake'} without a broadcast`, async ({
+        page,
+      }) => {
         let generation = 'dev-before-restart';
         let removed = false;
         let documents = 0;
@@ -84,5 +86,68 @@ for (const hasHandshake of [true, false]) {
         }
       });
     });
-  });
-}
+  }
+
+  for (const legacy of [false, true]) {
+    test.describe('when the server explicitly requests a refresh', () => {
+      test(`reloads the chat ${legacy ? 'without instance IDs from an older server' : 'with a matching dev-server instance ID'}`, async ({
+        page,
+      }) => {
+        const generation = legacy ? '' : 'stable-dev-server';
+        let documents = 0;
+        let connections = 0;
+        let sendRefresh!: () => void;
+        let markReconnected!: () => void;
+        const refreshGate = new Promise<void>(resolve => {
+          sendRefresh = resolve;
+        });
+        const reconnected = new Promise<void>(resolve => {
+          markReconnected = resolve;
+        });
+
+        await page.route(`**${chatPath}`, async route => {
+          const response = await route.fetch();
+          const html = await response.text();
+          documents++;
+          await route.fulfill({
+            response,
+            body: html.replace(
+              /(window\.MASTRA_DEV_SERVER_INSTANCE_ID\s*=\s*)[^;]*;/,
+              (_match, assignment) => `${assignment}${JSON.stringify(generation)};`,
+            ),
+          });
+        });
+        await page.route('**/refresh-events', async route => {
+          const connection = ++connections;
+          if (connection === 3) {
+            markReconnected();
+            await refreshGate;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: 'text/event-stream',
+            body: `${generation ? `id: ${generation}\n` : ''}data: connected\n\n${connection === 3 ? 'data: refresh\n\n' : ''}`,
+          });
+        });
+
+        try {
+          await page.goto(chatPath);
+          const composer = page.getByPlaceholder('Enter your message...');
+          await composer.fill('Keep my draft while reconnecting');
+          await reconnected;
+          // Initial and same-server (or legacy) handshakes must preserve the document.
+          expect(documents).toBe(1);
+          await expect(composer).toHaveValue('Keep my draft while reconnecting');
+          const reloaded = page.waitForEvent('framenavigated', frame => frame === page.mainFrame());
+          sendRefresh();
+          await reloaded;
+          await expect(composer).toBeVisible();
+          expect(documents).toBe(2);
+        } finally {
+          sendRefresh();
+          await page.unrouteAll({ behavior: 'ignoreErrors' });
+        }
+      });
+    });
+  }
+});
