@@ -11,11 +11,11 @@ describe('package exports', () => {
     }
   });
 
-  it('publishes the new tabbed container entrypoint', () => {
-    expect(packageJson.exports['./new/layout/tabbed-container']).toEqual({
+  it('publishes the tabbed container layout entrypoint', () => {
+    expect(packageJson.exports['./layout/tabbed-container']).toEqual({
       import: {
-        types: './dist/new/layout/tabbed-container.d.ts',
-        default: './dist/new/layout/tabbed-container.es.js',
+        types: './dist/layout/tabbed-container.d.ts',
+        default: './dist/layout/tabbed-container.es.js',
       },
     });
   });

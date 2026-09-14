@@ -6,7 +6,7 @@ import type { DataListSortDirection } from '@/ds/components/DataList/data-list';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof TabbedContainer> = {
-  title: 'New/Layout/TabbedContainer',
+  title: 'Layout/TabbedContainer',
   component: TabbedContainer,
   parameters: {
     layout: 'padded',

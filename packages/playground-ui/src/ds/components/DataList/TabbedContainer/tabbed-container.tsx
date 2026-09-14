@@ -5,4 +5,4 @@ export {
   type TabbedContainerPanelProps,
   type TabbedContainerProps,
   type TabbedContainerSearchProps,
-} from '@/ds/new/layout/tabbed-container';
+} from '@/ds/layout/tabbed-container';

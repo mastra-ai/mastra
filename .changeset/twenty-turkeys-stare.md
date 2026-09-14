@@ -2,10 +2,10 @@
 '@mastra/playground-ui': minor
 ---
 
-Adds `TabbedContainer` at `@mastra/playground-ui/new/layout/tabbed-container`. The existing DataList entrypoint still exports the same component.
+Adds `TabbedContainer` at `@mastra/playground-ui/layout/tabbed-container`. The existing DataList entrypoint still exports the same component.
 
 ```tsx
-import { TabbedContainer } from '@mastra/playground-ui/new/layout/tabbed-container';
+import { TabbedContainer } from '@mastra/playground-ui/layout/tabbed-container';
 
 <TabbedContainer defaultTab="overview">
   <TabbedContainer.Panel value="overview" label="Overview">
