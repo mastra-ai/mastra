@@ -5918,6 +5918,9 @@ importers:
       use-debounce:
         specifier: ^10.1.0
         version: 10.1.1(react@19.2.7)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
       zustand:
         specifier: ^5.0.12
         version: 5.0.13(@types/react@19.2.17)(immer@11.1.9)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
