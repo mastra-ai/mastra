@@ -492,7 +492,21 @@ export const useChat = ({
       // A delayed terminal event must not finish another run's message, clear
       // its approvals, or trigger its completion callback.
       if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
-      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+      const runId = 'runId' in chunk && typeof chunk.runId === 'string' ? chunk.runId : undefined;
+      setMessages(prev => {
+        const metadata = { mode: 'stream' as const, runId };
+        const next = accumulateChunk({ chunk, conversation: prev, metadata });
+        // A resumed response can already exist in history; explicit framing
+        // establishes ownership even when the accumulator deduplicates it.
+        if ((chunk.type === 'start' || chunk.type === 'step-start') && chunk.payload?.messageId && runId) {
+          return next.map(message =>
+            message.id === chunk.payload.messageId && message.role === 'assistant'
+              ? { ...message, content: { ...message.content, metadata: { ...message.content.metadata, ...metadata } } }
+              : message,
+          );
+        }
+        return next;
+      });
 
       const streamedTasks = extractTasksFromToolResultChunk(chunk) ?? extractTasksFromSignalChunk(chunk);
       if (streamedTasks !== undefined) {
@@ -979,6 +993,7 @@ export const useChat = ({
     const agent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
     const runId = uuid();
+    _currentRunId.current = runId;
 
     const response = await agent.network(coreUserMessages, {
       model,
@@ -1006,7 +1021,9 @@ export const useChat = ({
     // consumer for side-effects (OM, working memory, thread list, errors).
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1222,6 +1239,7 @@ export const useChat = ({
         '[approveNetworkToolCall] approveNetworkToolCall can only be called after a network stream has started',
       );
 
+    _currentRunId.current = networkRunId;
     setIsRunning(true);
     setNetworkToolCallApprovals(prev => ({
       ...prev,
@@ -1236,7 +1254,9 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1255,6 +1275,7 @@ export const useChat = ({
         '[declineNetworkToolCall] declineNetworkToolCall can only be called after a network stream has started',
       );
 
+    _currentRunId.current = networkRunId;
     setIsRunning(true);
     setNetworkToolCallApprovals(prev => ({
       ...prev,
@@ -1269,7 +1290,9 @@ export const useChat = ({
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev =>
+          accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network', runId: networkRunId } }),
+        );
         void onNetworkChunk?.(chunk);
       },
     });
@@ -1279,6 +1302,7 @@ export const useChat = ({
   };
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
+    if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
     const coreUserMessages = [nextMessage];
 
@@ -1333,6 +1357,7 @@ export const useChat = ({
     setMessages,
     sendMessage,
     isRunning,
+    activeRunId: isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined,
     isAwaitingToolApproval,
     messages,
     tasks,

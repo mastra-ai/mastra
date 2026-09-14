@@ -1,6 +1,5 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
-import '@/ds/primitives/focus.css';
 
 import { cn } from '@/lib/utils';
 import './switch.css';
@@ -23,10 +22,13 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     const onIcon = checkedIcon ?? icon;
     const offIcon = uncheckedIcon ?? icon;
 
-    // A native button keeps the consumer's id and click target on the visible switch.
+    // Base UI's Switch.Root defaults to a `<span>` and forwards `id` to its
+    // hidden checkbox input. Render a native `<button>` (with `nativeButton`) so
+    // the consumer's `id` — and the click target — lands on the visible control,
+    // matching the previous Radix behavior.
     const renderProps =
       asChild && React.isValidElement(children)
-        ? { render: children }
+        ? { render: children as React.ReactElement }
         : { render: <button type="button" />, nativeButton: true };
 
     return (
@@ -35,10 +37,10 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         data-slot="switch"
         className={cn(
           'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
-          'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
+          'duration-normal transition-colors ease-out-custom motion-reduce:transition-none',
           'hover:bg-neutral6/[0.18]',
           'active:bg-neutral6/[0.22]',
-          'ds-focus ds-focus-orbit ds-focus-within',
+          'focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
           'data-[checked]:bg-neutral6/[0.92]',
           'data-[checked]:hover:bg-neutral6',
           'data-[checked]:active:bg-neutral5',
@@ -54,7 +56,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           data-slot="switch-thumb"
           className={cn(
             'switch-thumb-motion pointer-events-none relative block h-4 w-5 rounded-full bg-neutral6',
-            'transition-[background-color,translate,width,transform] duration-normal ease-out-custom motion-reduce:transition-none',
+            'duration-normal transition-[background-color,translate,width,transform] ease-out-custom motion-reduce:transition-none',
             'group-active/switch:w-6 group-data-[disabled]/switch:w-5',
             'data-[checked]:translate-x-3 data-[checked]:bg-surface1 data-[unchecked]:translate-x-0',
             'group-active/switch:data-[checked]:translate-x-2',
@@ -80,7 +82,7 @@ function SwitchThumbIcon({
 }) {
   const iconClassName = cn(
     'absolute inset-0 flex items-center justify-center text-surface1',
-    'transition-[color,opacity] duration-normal ease-out-custom motion-reduce:transition-none',
+    'duration-normal transition-[color,opacity] ease-out-custom motion-reduce:transition-none',
     '[&_svg]:stroke-2.5 [&_svg]:size-2.5',
   );
 

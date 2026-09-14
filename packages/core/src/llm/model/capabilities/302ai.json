@@ -18,6 +18,7 @@
     "claude-sonnet-4-6",
     "claude-sonnet-4-6-thinking",
     "claude-sonnet-5",
+    "deepseek-flash",
     "doubao-seed-1-6-thinking-250715",
     "doubao-seed-1-6-vision-250815",
     "doubao-seed-1-8-251215",
@@ -108,6 +109,7 @@
     "claude-sonnet-4-5-20250929-thinking",
     "claude-sonnet-4-6",
     "claude-sonnet-4-6-thinking",
+    "deepseek-flash",
     "deepseek-v3.2",
     "deepseek-v3.2-thinking",
     "doubao-seed-1-6-thinking-250715",
@@ -180,6 +182,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "deepseek-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
