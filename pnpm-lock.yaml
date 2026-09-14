@@ -5295,6 +5295,9 @@ importers:
       '@modelcontextprotocol/server-legacy':
         specifier: 2.0.0
         version: 2.0.0(express@5.2.1(supports-color@10.2.2))
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0

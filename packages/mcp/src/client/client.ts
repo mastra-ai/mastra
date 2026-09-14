@@ -35,6 +35,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { validateInputSchema } from './input-schema-validation';
 import type {
   FetchLike,
   LogHandler,
@@ -1236,12 +1237,6 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  private convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): JSONSchema7 {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
-  }
-
   /**
    * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
    * returns the full CallToolResult envelope when there is no structuredContent (and for
@@ -1372,6 +1367,21 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    const inputSchema = validateInputSchema(tool.inputSchema);
+    if (!inputSchema.success) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchema.reason };
+      this.log('warning', 'Skipping MCP tool with invalid input schema', details);
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchema.reason}`,
+          details,
+        });
+      }
+      return undefined;
+    }
     {
       try {
         // Resolve requireToolApproval for this tool
@@ -1427,7 +1437,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
-          inputSchema: this.convertInputSchema(tool.inputSchema),
+          inputSchema: inputSchema.schema,
           outputSchema: this.convertOutputSchema(tool.outputSchema),
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri

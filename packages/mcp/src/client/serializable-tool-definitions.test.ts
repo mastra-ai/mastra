@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
+import { MastraError } from '@mastra/core/error';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
@@ -23,7 +24,7 @@ import { MCPClient } from './configuration.js';
 
 let port = 0;
 
-async function setupTestServer() {
+async function setupTestServer(malformedCatalog = false) {
   const httpServer: HttpServer = createServer();
   const mcpServer = new McpServer(
     { name: 'test-definitions-server', version: '3.1.4' },
@@ -57,9 +58,29 @@ async function setupTestServer() {
     }),
   );
 
+  const listRequests = vi.fn();
+  const httpRequests = vi.fn();
+  if (malformedCatalog) {
+    // Bypass Zod registration so the malformed schema reaches the client over the real transport.
+    mcpServer.server.setRequestHandler('tools/list', async () => {
+      listRequests();
+      return {
+        tools: [
+          { name: 'greet', inputSchema: { type: 'object', properties: { name: { type: 'string' } } } },
+          {
+            name: 'get_l2_book',
+            inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+          },
+          { name: 'measure', inputSchema: { type: 'object', properties: { city: { type: 'string' } } } },
+        ],
+      };
+    });
+  }
+
   // Stateless mode: SDK 1.27+ requires a new transport per request, and it lets several
   // clients talk to this server, which the cold-worker hydration test depends on.
   httpServer.on('request', async (req: any, res: any) => {
+    httpRequests();
     await mcpServer.close().catch(() => {});
     const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
@@ -74,7 +95,7 @@ async function setupTestServer() {
     });
   });
 
-  return { httpServer, mcpServer, baseUrl };
+  return { httpServer, mcpServer, baseUrl, listRequests, httpRequests };
 }
 
 describe('serializable MCP tool definitions (issue #20527)', () => {
@@ -247,5 +268,166 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
     });
+  });
+});
+
+describe('malformed MCP tool catalogs (issue #23731)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  const clients: MCPClient[] = [];
+  const logger = vi.fn();
+
+  beforeEach(async () => {
+    logger.mockClear();
+    testServer = await setupTestServer(true);
+  });
+
+  afterEach(async () => {
+    await Promise.all(clients.map(client => client.disconnect()));
+    clients.length = 0;
+    await testServer.mcpServer.close();
+    await new Promise<void>((resolve, reject) => {
+      testServer.httpServer.close(error => (error ? reject(error) : resolve()));
+      testServer.httpServer.closeAllConnections();
+    });
+    vi.restoreAllMocks();
+  });
+
+  function createClient() {
+    const client = new MCPClient({
+      id: `malformed-defs-${randomUUID()}`,
+      servers: { weather: { url: testServer.baseUrl, logger } },
+    });
+    clients.push(client);
+    return client;
+  }
+
+  it.each(['listTools', 'listToolsets'] as const)(
+    '%s filters a malformed HTTP tool between healthy siblings and executes a healthy tool',
+    async method => {
+      const client = createClient();
+      const tools = method === 'listTools' ? await client.listTools() : (await client.listToolsets()).weather;
+      const greetKey = method === 'listTools' ? 'weather_greet' : 'greet';
+      const measureKey = method === 'listTools' ? 'weather_measure' : 'measure';
+
+      expect(Object.keys(tools)).toEqual([greetKey, measureKey]);
+      const warnings = logger.mock.calls.map(([entry]) => entry).filter(entry => entry.level === 'warning');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({ serverName: 'weather' });
+      expect(JSON.stringify(warnings[0])).toContain('get_l2_book');
+      expect(JSON.stringify(warnings[0])).toContain('/properties/required');
+      expect(tools[greetKey].inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' })).toMatchObject({
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      });
+      expect(tools[measureKey].inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' })).toMatchObject({
+        type: 'object',
+        properties: { city: { type: 'string' } },
+      });
+      expect(await tools[greetKey].execute!({ name: 'Ada' }, {})).toMatchObject({
+        content: [{ type: 'text', text: 'Hello, Ada!' }],
+      });
+    },
+  );
+
+  it('preserves the raw catalog but filters malformed cached definitions without connection or rediscovery', async () => {
+    const definitions = await createClient().listToolDefinitions();
+    expect(Object.keys(definitions.weather)).toEqual(['greet', 'get_l2_book', 'measure']);
+    expect(definitions.weather.get_l2_book.inputSchema).toEqual({
+      type: 'object',
+      properties: { coin: { type: 'string' }, required: ['coin'] },
+    });
+    const cached = JSON.parse(JSON.stringify(definitions));
+    const worker = createClient();
+    testServer.httpRequests.mockClear();
+    testServer.listRequests.mockClear();
+
+    const tools = await worker.toolsFromDefinitions({ definitions: cached });
+
+    expect(Object.keys(tools)).toEqual(['weather_greet', 'weather_measure']);
+    const warnings = logger.mock.calls.map(([entry]) => entry).filter(entry => entry.level === 'warning');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ serverName: 'weather' });
+    expect(JSON.stringify(warnings[0])).toContain('get_l2_book');
+    expect(cached).toEqual(definitions);
+    expect(testServer.httpRequests).not.toHaveBeenCalled();
+    expect(testServer.listRequests).not.toHaveBeenCalled();
+    expect(tools.weather_greet.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' })).toMatchObject({
+      type: 'object',
+      properties: { name: { type: 'string' } },
+    });
+    expect(await tools.weather_greet.execute!({ name: 'Grace' }, {})).toMatchObject({
+      content: [{ type: 'text', text: 'Hello, Grace!' }],
+    });
+    expect(testServer.httpRequests).toHaveBeenCalled();
+    expect(testServer.listRequests).not.toHaveBeenCalled();
+  });
+
+  it('returns no server error when every discovered tool is invalid', async () => {
+    testServer.mcpServer.server.setRequestHandler('tools/list', async () => ({
+      tools: [{ name: 'bad', inputSchema: { type: 'object', properties: { required: ['coin'] } } }],
+    }));
+
+    const result = await createClient().listToolsWithErrors();
+
+    expect(result.tools).toEqual({});
+    expect(result.errors).toEqual({});
+    expect(result.errorDetails).toEqual({});
+    expect(logger.mock.calls.filter(([entry]) => entry.level === 'warning')).toHaveLength(1);
+  });
+
+  it('continues bulk hydration across an all-invalid server and preserves wrapped healthy schemas', async () => {
+    const definitions = await createClient().listToolDefinitions();
+    const worker = new MCPClient({
+      id: `multi-server-${randomUUID()}`,
+      servers: {
+        broken: { url: testServer.baseUrl, logger },
+        healthy: { url: testServer.baseUrl, logger },
+      },
+    });
+    clients.push(worker);
+    const cached = JSON.parse(
+      JSON.stringify({
+        broken: { bad: definitions.weather.get_l2_book },
+        healthy: {
+          greet: {
+            ...definitions.weather.greet,
+            inputSchema: { jsonSchema: definitions.weather.greet.inputSchema },
+          },
+          bad: {
+            ...definitions.weather.get_l2_book,
+            inputSchema: { jsonSchema: definitions.weather.get_l2_book.inputSchema },
+          },
+          measure: definitions.weather.measure,
+        },
+      }),
+    );
+    testServer.httpRequests.mockClear();
+
+    const tools = await worker.toolsFromDefinitions({ definitions: cached });
+
+    expect(Object.keys(tools)).toEqual(['healthy_greet', 'healthy_measure']);
+    expect(testServer.httpRequests).not.toHaveBeenCalled();
+    expect(logger.mock.calls.filter(([entry]) => entry.level === 'warning')).toHaveLength(2);
+  });
+
+  it('does not swallow unrelated failures during bulk hydration', async () => {
+    const definitions = await createClient().listToolDefinitions();
+    const failure = new Error('unrelated hydration failure');
+    vi.spyOn(InternalMastraMCPClient.prototype, 'toolFromDefinition').mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    await expect(createClient().toolsFromDefinitions({ definitions })).rejects.toBe(failure);
+  });
+
+  it('rejects explicit hydration with the dedicated error before connecting', async () => {
+    const definitions = await createClient().listToolDefinitions();
+    const worker = createClient();
+    testServer.httpRequests.mockClear();
+
+    const hydration = worker.toolFromDefinition({ serverName: 'weather', definition: definitions.weather.get_l2_book });
+    await expect(hydration).rejects.toBeInstanceOf(MastraError);
+    await expect(hydration).rejects.toMatchObject({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' });
+    expect(testServer.httpRequests).not.toHaveBeenCalled();
   });
 });
