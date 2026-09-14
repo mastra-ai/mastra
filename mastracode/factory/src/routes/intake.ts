@@ -76,7 +76,7 @@ async function relocateSourceCards({
   factoryProjectId,
   sourceId,
   targetBoard,
-  sourceIds,
+  attributionSourceIds,
 }: {
   workItems: Pick<WorkItemsStorage, 'list' | 'update' | 'supersedeDecisionsForWorkItem'>;
   integration: IntakeIntegration;
@@ -86,7 +86,7 @@ async function relocateSourceCards({
   factoryProjectId: string;
   sourceId: string;
   targetBoard: string;
-  sourceIds: string[];
+  attributionSourceIds: string[];
 }): Promise<{ moved: number; skipped: number }> {
   if (!boardRegistry.has(targetBoard)) return { moved: 0, skipped: 0 };
 
@@ -96,7 +96,14 @@ async function relocateSourceCards({
   for (let page = 0; page < REBIND_MAX_PAGES; page += 1) {
     const result = await withTimeout(
       integration.id,
-      () => integration.intake.listItems({ orgId, userId, sourceIds, cursor }),
+      () =>
+        integration.intake.listItems({
+          orgId,
+          userId,
+          sourceIds: [sourceId],
+          attributionSourceIds,
+          cursor,
+        }),
       deadline - Date.now(),
     );
     for (const item of result.items) {
@@ -474,7 +481,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   integrationIds: [binding.integrationId],
                 });
                 const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
-                const sourceIds = configuredSourceIds.includes(binding.sourceId)
+                const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
                   ? configuredSourceIds
                   : [binding.sourceId];
                 relocated = await relocateSourceCards({
@@ -485,7 +492,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                   userId: tenant.userId,
                   factoryProjectId: binding.factoryProjectId,
                   sourceId: binding.sourceId,
-                  sourceIds,
+                  attributionSourceIds,
                   targetBoard: nextBoard,
                 });
               } catch (error) {

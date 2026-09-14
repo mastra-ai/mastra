@@ -366,7 +366,10 @@ describe('intake configuration', () => {
 
       expect(response.status).toBe(200);
       expect(linear.listItems).toHaveBeenCalledWith(
-        expect.objectContaining({ sourceIds: ['project-1', 'linear-team:team-1'] }),
+        expect.objectContaining({
+          sourceIds: ['linear-team:team-1'],
+          attributionSourceIds: ['project-1', 'linear-team:team-1'],
+        }),
       );
       expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
       const items = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
