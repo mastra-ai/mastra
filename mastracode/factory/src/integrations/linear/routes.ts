@@ -451,6 +451,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         const identifier = c.req.param('identifier');
         if (!ISSUE_IDENTIFIER_RE.test(identifier)) return c.json({ error: 'invalid_identifier' }, 400);
+        const issueId = c.req.query('issueId');
+        if (issueId !== undefined && (issueId.length === 0 || issueId.length > 512)) {
+          return c.json({ error: 'invalid_issue_id' }, 400);
+        }
+        const issueReference = issueId ?? identifier;
         const factoryProjectId = c.req.query('factoryProjectId');
         if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
           return c.json({ error: 'invalid_factory_project_id' }, 400);
@@ -484,11 +489,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         try {
           const accessToken = await linear.getFreshAccessToken(connection);
-          const issue = await linear.fetchIssueDetail(accessToken, identifier, selectedIds, routedSourceIds);
+          const issue = await linear.fetchIssueDetail(accessToken, issueReference, selectedIds, routedSourceIds);
           const winningSourceId = issue ? winningLinearSourceId(linear, selectedIds, issue) : null;
           const isRouted = winningSourceId != null && routedSourceIds.includes(winningSourceId);
           // Reads exactly like an issue that doesn't exist.
-          if (!issue || !isRouted) {
+          if (!issue || issue.identifier !== identifier || !isRouted) {
             return c.json({ error: 'issue_not_found' }, 404);
           }
           return c.json({

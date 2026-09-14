@@ -48,13 +48,17 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined) {
   });
 }
 
-export function useLinearIssueDetail(factoryProjectId: string | undefined, identifier: string | undefined) {
+export function useLinearIssueDetail(
+  factoryProjectId: string | undefined,
+  identifier: string | undefined,
+  issueId: string | undefined,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.linearIssue(factoryProjectId, identifier),
+    queryKey: queryKeys.linearIssue(factoryProjectId, identifier, issueId),
     queryFn:
       factoryProjectId !== undefined && identifier !== undefined
-        ? () => getLinearIssue(baseUrl, factoryProjectId, identifier)
+        ? () => getLinearIssue(baseUrl, factoryProjectId, identifier, issueId)
         : skipToken,
     staleTime: DETAIL_STALE_MS,
   });

@@ -679,7 +679,9 @@ describe('issue detail route', () => {
   });
 
   it("returns the issue's description for a board card", async () => {
-    const res = await buildApp(org1()).request(`/web/linear/issues/ENG-42?factoryProjectId=${projectA}`);
+    const res = await buildApp(org1()).request(
+      `/web/linear/issues/ENG-42?factoryProjectId=${projectA}&issueId=issue-1`,
+    );
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -688,7 +690,39 @@ describe('issue detail route', () => {
       url: 'https://linear.app/acme/issue/ENG-42',
       description: 'The sync runs the wrong way.',
     });
-    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'ENG-42', ['proj-1'], ['proj-1']);
+    expect(fetchIssueDetail).toHaveBeenCalledWith('linear-token', 'issue-1', ['proj-1'], ['proj-1']);
+  });
+  it('uses the issue UUID when routed workspaces share an identifier', async () => {
+    await seed.intake.saveConfig({
+      orgId: 'org1',
+      userId: 'u1',
+      config: { linear: { enabled: true, sourceIds: ['proj-1', 'proj-2'] } },
+    });
+    await seed.intake.setBinding({
+      orgId: 'org1',
+      integrationId: 'linear',
+      sourceId: 'proj-2',
+      factoryProjectId: projectA,
+      board: 'work',
+    });
+    fetchIssueDetail.mockImplementation(async (_token: string, issueReference: string) =>
+      issueReference === 'issue-2'
+        ? { ...issueDetail, id: 'issue-2', projectId: 'proj-2', description: 'The second workspace issue.' }
+        : issueDetail,
+    );
+
+    const res = await buildApp(org1()).request(
+      `/web/linear/issues/ENG-42?factoryProjectId=${projectA}&issueId=issue-2`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ identifier: 'ENG-42', description: 'The second workspace issue.' });
+    expect(fetchIssueDetail).toHaveBeenCalledWith(
+      'linear-token',
+      'issue-2',
+      ['proj-1', 'proj-2'],
+      ['proj-1', 'proj-2'],
+    );
   });
 
   it('hides a project issue from a team routed to another Factory project', async () => {

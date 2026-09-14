@@ -43,8 +43,8 @@ export const queryKeys = {
   linearIssuesAll: () => ['linear', 'issues'] as const,
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
-  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
-    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
+  linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueId: string | undefined) =>
+    ['linear', 'issue', factoryProjectId ?? null, identifier ?? null, issueId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>

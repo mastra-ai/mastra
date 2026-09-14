@@ -140,8 +140,10 @@ export async function getLinearIssue(
   baseUrl: string,
   factoryProjectId: string,
   identifier: string,
+  issueId?: string,
 ): Promise<LinearIssueDetail> {
   const params = new URLSearchParams({ factoryProjectId });
+  if (issueId) params.set('issueId', issueId);
   return getLinearResource<LinearIssueDetail>(
     baseUrl,
     `/web/linear/issues/${encodeURIComponent(identifier)}?${params.toString()}`,
