@@ -207,25 +207,10 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
 });
 
 /**
- * Empty serialized MessageList. `map-final-output` now calls
- * `runDurableFinishSideEffects` directly, which deserializes this state.
+ * Empty serialized MessageList so map-final-output can run finish side effects.
  * These tests only care about span ends, not processors.
  */
-const emptyMessageListState = {
-  messages: [],
-  systemMessages: [],
-  taggedSystemMessages: {},
-  memoryInfo: null,
-  _agentNetworkAppend: false,
-  memoryMessages: [],
-  newUserMessages: [],
-  newResponseMessages: [],
-  userContextMessages: [],
-  memoryMessagesPersisted: [],
-  newUserMessagesPersisted: [],
-  newResponseMessagesPersisted: [],
-  userContextMessagesPersisted: [],
-};
+const emptyMessageListState = new MessageList().serialize();
 
 describe('createInngestDurableAgenticWorkflow final span ends', () => {
   it('ends the model span with usage on attributes and the agent span with text only', async () => {
@@ -327,10 +312,9 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
 });
 
 /**
- * #23815 / #22450: map-final-output already runs inside wrapDurableOperation, so
+ * #23815: map-final-output already runs inside wrapDurableOperation, so
  * wrapping runDurableFinishSideEffects in engine.step.run is a nested Inngest
- * step. Invoke the helper directly. These tests call the mapping with a live
- * processor in the run registry; a source-string grep is not enough.
+ * step. Invoke the helper directly with a live processor in the run registry.
  */
 describe('createInngestDurableAgenticWorkflow finish side effects (#23815)', () => {
   const runId = 'run-finish-direct';
