@@ -89,9 +89,9 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
-      # Without --since, validation does not need Git history or require a new changeset.
+      # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
-        run: pnpm changeset-cli status
+        run: pnpm changeset-cli status --since origin/main
 
   lint:
     name: Lint
