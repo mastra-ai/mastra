@@ -706,6 +706,21 @@ describe('PIIDetector', () => {
       },
     );
 
+    it('should propagate the processor tripwire when legacy detection returns no object', async () => {
+      const model = setupMockModel(createMockPIIResult());
+      const detector = new PIIDetector({ model, detectionTypes: ['name'], strategy: 'block', errorStrategy: 'strict' });
+      vi.spyOn((detector as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict PII failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Alice lives nearby')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('PII detection failed because the internal model call failed');
+    });
+
     it('should not emit buffered text when strict streaming model detection fails', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',

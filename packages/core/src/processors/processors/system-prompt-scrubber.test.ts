@@ -428,6 +428,23 @@ describe('SystemPromptScrubber', () => {
       expect(abort).toHaveBeenCalledWith('System prompt detection failed because the internal model call failed');
     });
 
+    it('should propagate the processor tripwire when legacy detection returns no object', async () => {
+      processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
+      vi.spyOn((processor as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict system prompt failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        processor.processOutputResult({
+          messages: [createTestMessage('Unchecked output')],
+          abort: abort as any,
+        }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('System prompt detection failed because the internal model call failed');
+    });
+
     it('should not emit a stream part when strict model detection fails', async () => {
       processor = new SystemPromptScrubber({ model: mockModel, errorStrategy: 'strict' });
       vi.spyOn(mockModel, 'doGenerate').mockRejectedValueOnce(new Error('provider failure'));

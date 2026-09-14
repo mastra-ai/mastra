@@ -619,6 +619,21 @@ describe('LanguageDetector', () => {
       expect(abort).toHaveBeenCalledWith('Language detection failed because the internal model call failed');
     });
 
+    it('should propagate the processor tripwire when legacy detection returns no object', async () => {
+      const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
+      const detector = new LanguageDetector({ model, targetLanguages: ['English'], errorStrategy: 'strict' });
+      vi.spyOn((detector as any).detectionAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict language failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        detector.processInput({ messages: [createTestMessage('Some text content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Language detection failed because the internal model call failed');
+    });
+
     it('should handle empty message array', async () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({

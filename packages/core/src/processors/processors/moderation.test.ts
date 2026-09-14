@@ -473,6 +473,21 @@ describe('ModerationProcessor', () => {
       },
     );
 
+    it('should propagate the processor tripwire when legacy moderation returns no object', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(false) });
+      const moderator = new ModerationProcessor({ model, errorStrategy: 'strict' });
+      vi.spyOn((moderator as any).moderationAgent, 'generateLegacy').mockResolvedValue({ object: undefined });
+      const tripwire = new TripWire('strict moderation failure');
+      const abort = vi.fn(() => {
+        throw tripwire;
+      });
+
+      await expect(
+        moderator.processInput({ messages: [createTestMessage('Test content')], abort: abort as any }),
+      ).rejects.toBe(tripwire);
+      expect(abort).toHaveBeenCalledWith('Moderation failed because the internal model call failed');
+    });
+
     it('should not emit a stream part when strict model moderation fails', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',

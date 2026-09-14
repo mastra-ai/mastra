@@ -338,6 +338,9 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
           ...observabilityContext,
         });
 
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
         result = response.object as SystemPromptDetectionResult;
       }
 

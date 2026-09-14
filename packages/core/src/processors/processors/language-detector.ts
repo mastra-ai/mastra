@@ -330,7 +330,10 @@ export class LanguageDetector implements Processor<'language-detector'> {
           ...observabilityContext,
         });
 
-        result = response.object!;
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
         const response = await this.detectionAgent.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(schema),
@@ -340,6 +343,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
           ...observabilityContext,
         });
 
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
         result = response.object as LanguageDetectionResult;
       }
 
