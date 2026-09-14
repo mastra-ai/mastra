@@ -291,14 +291,14 @@ describe('intake configuration', () => {
       expect(again.find(i => i.id === resting.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     });
 
-    it('moves only team-owned cards when an overlapping project wins attribution', async () => {
+    it('preserves selected project precedence when rebinding an unselected team', async () => {
       const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
       await seed.intake.saveConfig({
         orgId: 'org1',
         userId: 'u1',
         config: {
           github: { enabled: true, sourceIds: null },
-          linear: { enabled: true, sourceIds: ['project-1', 'linear-team:team-1'] },
+          linear: { enabled: true, sourceIds: ['project-1'] },
         },
       });
       const externalSource = (identifier: string) => ({

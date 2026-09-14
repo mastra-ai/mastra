@@ -483,7 +483,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
                 const configuredSourceIds = config[binding.integrationId]?.sourceIds ?? [];
                 const attributionSourceIds = configuredSourceIds.includes(binding.sourceId)
                   ? configuredSourceIds
-                  : [binding.sourceId];
+                  : [...configuredSourceIds, binding.sourceId];
                 relocated = await relocateSourceCards({
                   workItems,
                   integration,
