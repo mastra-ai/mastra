@@ -47,13 +47,7 @@ export type CrumbDef = CrumbBase &
       }
   );
 
-export interface DocsLink {
-  href: string;
-  label?: string;
-}
-
 export type CrumbsResolver = CrumbDef[] | ((ctx: CrumbCtx) => CrumbDef[]);
-export type DocsResolver = DocsLink | ((ctx: CrumbCtx) => DocsLink | undefined);
 
 export interface RouteHeaderHandle {
   /**
@@ -62,6 +56,4 @@ export interface RouteHeaderHandle {
    * match's params/pathname so dynamic crumbs can pull from URL params.
    */
   crumbs?: CrumbsResolver;
-  /** Docs link rendered on the right of the bar. Deepest match wins. */
-  docs?: DocsResolver;
 }
