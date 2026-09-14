@@ -3,6 +3,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { AuthCapabilities } from '../types';
+import { getClientQueryKey } from './get-client-query-key';
 
 /**
  * Makes a request to the auth capabilities endpoint.
@@ -63,7 +64,7 @@ export function useAuthCapabilities() {
   const client = useMastraClient();
 
   return useQuery<AuthCapabilities>({
-    queryKey: ['auth', 'capabilities', client.options],
+    queryKey: ['auth', 'capabilities', getClientQueryKey(client)],
     queryFn: () => makeAuthCapabilitiesRequest(client),
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false, // Don't retry auth requests

@@ -146,5 +146,18 @@ describe('StudioSettingsPage', () => {
 
       await waitFor(() => expect(capabilityRequests).toContain('Bearer secret'));
     });
+
+    it('does not retain the header value in query keys', async () => {
+      const { capabilityRequests, queryClient } = await renderSettingsPage();
+
+      saveAuthorizationHeader('Bearer query-key-secret');
+
+      await waitFor(() => expect(capabilityRequests).toContain('Bearer query-key-secret'));
+      const queryKeys = queryClient
+        .getQueryCache()
+        .getAll()
+        .map(query => query.queryKey);
+      expect(JSON.stringify(queryKeys)).not.toContain('Bearer query-key-secret');
+    });
   });
 });
