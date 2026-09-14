@@ -378,7 +378,7 @@ export class AudioStreamManager {
       return {
         realtime_input: {
           audio: {
-            mime_type: 'audio/pcm',
+            mime_type: `audio/pcm;rate=${this.audioConfig.inputSampleRate}`,
             data: audioData,
           },
         },
