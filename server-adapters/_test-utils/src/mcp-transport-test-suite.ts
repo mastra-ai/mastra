@@ -205,7 +205,12 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
         };
         const ordinary = await fetch(`${base}/ordinary/execute`, init);
         expect(ordinary.status).toBe(200);
-        expect(await ordinary.json()).toEqual({ result: { protocolVersion: '2026-07-28', hasLegacyContext: false } });
+        expect(await ordinary.json()).toEqual({
+          result: {
+            protocolVersion: '2026-07-28',
+            elicitation: 'elicitation.sendRequest is not available on a 2026-07-28 server',
+          },
+        });
         const suspended = await fetch(`${base}/interaction/execute`, init);
         expect(suspended.status).toBe(200);
         expect(await suspended.json()).toEqual({

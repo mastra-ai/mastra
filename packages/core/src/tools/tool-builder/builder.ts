@@ -717,7 +717,6 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
-              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
@@ -738,7 +737,6 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
-              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,
@@ -749,12 +747,11 @@ export class CoreToolBuilder extends MastraBase {
                 suspendPayload,
               },
             };
-          } else if (execOptions.mcp || execOptions.mcpv2) {
+          } else if (execOptions.mcp) {
             // MCP execution context
             toolContext = {
               ...baseContext,
-              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
-              ...(execOptions.mcpv2 ? { mcpv2: execOptions.mcpv2 } : {}),
+              mcp: execOptions.mcp,
             };
           } else {
             // Direct execution or unknown context

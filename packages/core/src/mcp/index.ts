@@ -7,7 +7,6 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
 import { slugify } from '../utils/slugify';
-import type { MCPRequestContextV2 } from './request-v2';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -20,7 +19,6 @@ import type {
   ServerInfo,
 } from './types';
 export * from './types';
-export * from './request-v2';
 export type { MCPToolType } from '../tools';
 
 /**
@@ -310,8 +308,8 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param toolId The ID/name of the tool to execute.
    * @param args The arguments to pass to the tool's execute function.
    * @param executionContext Optional context for the tool execution (e.g., messages, toolCallId).
-   * On a 2026-07-28 server, `mcpv2` carries the protocol request facilities and a continuation
-   * passes the previous round's `resumeData` and `suspendPayload`; the server supplies `suspend`.
+   * On a 2026-07-28 server a continuation passes the previous round's `resumeData` and
+   * `suspendPayload`; the server supplies `context.suspend` and `context.mcp`.
    * @returns A promise that resolves to the result of the tool execution. A server with
    * `mcpVersion === 2` resolves to a `MCPToolExecutionResultV2` so a tool that suspended for
    * input is reported instead of being mistaken for a completed call.
@@ -324,7 +322,6 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       messages?: any[];
       toolCallId?: string;
       requestContext?: RequestContext;
-      mcpv2?: MCPRequestContextV2;
       resumeData?: unknown;
       suspendPayload?: unknown;
     },

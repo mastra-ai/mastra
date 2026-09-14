@@ -1,11 +1,43 @@
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPRequestContextV2, MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
+import type { MCPServerHTTPOptions, MCPToolExecutionResultV2 } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { InternalCoreTool } from '@mastra/core/tools';
+import type { InternalCoreTool, MCPToolExecutionContext } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import { z } from 'zod/v4';
+
+const unavailable = (feature: string) => async (): Promise<never> => {
+  throw new Error(`${feature} is not available on a 2026-07-28 server`);
+};
+
+/** The `context.mcp` a 2026-07-28 server builds: the 1.x shape, with server-initiated requests throwing. */
+function requestContext2026(): MCPToolExecutionContext {
+  const signal = new AbortController().signal;
+  return {
+    protocolVersion: '2026-07-28',
+    extra: {
+      signal,
+      requestId: 'rest',
+      sendNotification: unavailable('extra.sendNotification'),
+      sendRequest: unavailable('extra.sendRequest'),
+      mcpReq: {
+        id: 'rest',
+        method: 'tools/call',
+        requestState: () => undefined,
+        signal,
+        send: unavailable('mcpReq.send'),
+        notify: unavailable('mcpReq.notify'),
+        log: unavailable('mcpReq.log'),
+        elicitInput: unavailable('mcpReq.elicitInput'),
+        requestSampling: unavailable('mcpReq.requestSampling'),
+      },
+    },
+    elicitation: { sendRequest: unavailable('elicitation.sendRequest') },
+    log: async () => {},
+    progress: async () => {},
+  };
+}
 
 /** Exercises adapter dispatch, not MCP wire-protocol conformance. */
 export class NativeMCPFixture extends MCPServerBase {
@@ -20,8 +52,13 @@ export class NativeMCPFixture extends MCPServerBase {
           id: 'native-fixture-ordinary',
           description: 'Ordinary execution',
           execute: async (_input, context) => ({
-            protocolVersion: context.mcpv2?.protocolVersion ?? null,
-            hasLegacyContext: 'mcp' in context,
+            protocolVersion: context.mcp?.protocolVersion ?? null,
+            elicitation: await context
+              .mcp!.elicitation.sendRequest({ message: 'x', requestedSchema: { type: 'object', properties: {} } })
+              .then(
+                () => 'answered',
+                (error: Error) => error.message,
+              ),
           }),
         }),
         interaction: createTool({
@@ -43,7 +80,7 @@ export class NativeMCPFixture extends MCPServerBase {
     });
   }
 
-  // Converts tools like the 1.x package does; the mcpv2 context flows through CoreToolBuilder.
+  // Converts tools like the 1.x package does; `context.mcp` flows through CoreToolBuilder.
   convertTools(tools: ToolsInput) {
     const converted: Record<string, InternalCoreTool> = {};
     for (const [name, tool] of Object.entries(tools)) {
@@ -64,20 +101,14 @@ export class NativeMCPFixture extends MCPServerBase {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
     let suspension: { payload: unknown } | undefined;
-    const round: MCPRequestContextV2 = executionContext.mcpv2 ?? {
-      protocolVersion: '2026-07-28',
-      requestId: 'rest',
-      signal: new AbortController().signal,
-      log: async () => {},
-      progress: async () => {},
-    };
+    const mcp = requestContext2026();
     const output = await tool.execute(args, {
       // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
       toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
-      abortSignal: round.signal,
-      mcpv2: round,
+      abortSignal: mcp.extra.signal,
+      mcp,
       suspend: async (payload: unknown) => void (suspension = { payload }),
       resumeData: executionContext.resumeData,
       suspendPayload: executionContext.suspendPayload,

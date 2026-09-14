@@ -4,7 +4,6 @@ import { Mastra } from '../../mastra';
 import { createTool } from '../../tools';
 import type { MCPToolExecutionContext } from '../../tools';
 import { createStep } from '../../workflows';
-import type { MCPRequestContextV2 } from '../index';
 
 /**
  * A tool that asks for confirmation is one ordinary `createTool`: the same
@@ -36,29 +35,23 @@ const confirm = createTool({
     void confirmed;
     // @ts-expect-error a suspend payload must match the suspend schema
     await context.suspend?.({ phase: 'other' });
-    if (context.mcpv2) {
-      const round = context.mcpv2;
-      const version: '2026-07-28' = round.protocolVersion;
-      void version;
-      await round.log('info', 'charging', { amount });
-      await round.progress({ progress: 1, total: 2 });
-      const trace: unknown = round._meta?.traceparent;
-      void trace;
-      // @ts-expect-error suspend/resume are not nested under the request context
-      round.suspend;
-      // @ts-expect-error the v2 request context carries no raw input responses
-      round.inputResponses;
-      // @ts-expect-error the v2 request context carries no opaque request state
-      round.requestState;
-      // @ts-expect-error the v2 request context has no legacy push handle
-      round.extra;
-    }
     if (context.mcp) {
-      // The `@mastra/mcp` 1.x context is untouched: no narrowing needed, no suspend.
-      const legacy: MCPToolExecutionContext = context.mcp;
-      legacy.extra.requestId;
-      // @ts-expect-error legacy contexts cannot suspend
-      context.mcp.suspend;
+      // One `context.mcp` shape for 1.x and 2026-07-28 servers; no narrowing needed for the shared members.
+      const mcp: MCPToolExecutionContext = context.mcp;
+      const version: '2026-07-28' | undefined = mcp.protocolVersion;
+      void version;
+      await mcp.log?.('info', 'charging', { amount });
+      await mcp.progress?.({ progress: 1, total: 2 });
+      const trace: unknown = mcp.extra._meta?.traceparent;
+      void trace;
+      mcp.extra.requestId;
+      mcp.extra.signal.aborted;
+      // @ts-expect-error suspend/resume are not nested under mcp
+      mcp.suspend;
+      // @ts-expect-error raw input responses are not exposed to tools
+      mcp.inputResponses;
+      // @ts-expect-error opaque request state is not exposed to tools
+      mcp.requestState;
     }
     return { charged: context.suspendPayload?.amount ?? amount };
   },
@@ -69,12 +62,11 @@ new Mastra().addTool(confirm);
 new Agent({ id: 'agent', name: 'Agent', model: 'openai/gpt-5', instructions: '', tools: { confirm } });
 createStep(confirm);
 
-/** The 1.x and 2.x request facilities share signatures, so a tool using only log/progress needs no change. */
-export async function sameLogAndProgressShape(legacy: MCPToolExecutionContext, current: MCPRequestContextV2) {
-  const log: MCPRequestContextV2['log'] = legacy.log!;
-  const progress: MCPRequestContextV2['progress'] = legacy.progress!;
-  void log;
-  void progress;
-  await current.log('info', 'same shape', { ok: true });
-  await current.progress({ progress: 1 });
+/** A tool written against 1.x that only reads `extra` and logs still compiles unchanged. */
+export async function legacyStyleTool(context: { mcp?: MCPToolExecutionContext }) {
+  if (!context.mcp) return;
+  await context.mcp.log?.('info', 'same shape', { requestId: context.mcp.extra.requestId });
+  await context.mcp.progress?.({ progress: 1 });
+  // Still typed (deprecated): a 2026-07-28 server throws from these at runtime.
+  await context.mcp.elicitation.sendRequest({ message: 'x', requestedSchema: { type: 'object', properties: {} } });
 }

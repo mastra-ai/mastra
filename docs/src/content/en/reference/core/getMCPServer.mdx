@@ -62,7 +62,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server')
 
 Both `@mastra/mcp` 1.x and 2.x servers extend the same `MCPServerBase` from `@mastra/core/mcp`. A 2.x server sets `mcpVersion` to `2`, while 1.x servers leave it undefined and need no new properties or methods. The differences are limited to what the 2026-07-28 protocol changed: `startSSE` and `startHonoSSE` are optional (only 1.x implements the standalone SSE transport, and both are deprecated), and a server with `mcpVersion` set to `2` resolves `executeTool` to a `MCPToolExecutionResultV2` that reports a suspended tool rather than a bare result.
 
-The 1.x-only surfaces are marked `@deprecated` and are removed in the next major release of `@mastra/core`: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, `MCPServerContext`, `MCPToolExecutionContext` and `context.mcp`.
+The 1.x-only surfaces are marked `@deprecated` and are removed in the next major release of `@mastra/core`: `startSSE`, `startHonoSSE`, `MCPServerSSEOptions`, `MCPServerHonoSSEOptions`, `MCPServerHTTPOptions.options`, and on `context.mcp` the members `elicitation`, `extra.sendNotification` and `extra.sendRequest`.
 
 ### Tools that ask for input
 
@@ -93,9 +93,11 @@ On a 2026-07-28 server and in direct execution, `suspend`, `resumeData` and `sus
 
 Each round is a separate request. `resumeData` carries only the current round's answer, validated against `resumeSchema`, and `suspendPayload` carries what the tool last suspended with. Because the framework never replays earlier rounds, handlers branch on explicit named phases, every round is re-authorized, and writes rely on domain-owned idempotency. `suspendPayload` is also handed back to tools resumed by agents and workflows.
 
-### The `mcpv2` context
+### The `mcp` context
 
-When an `@mastra/mcp` 2.x server executes a tool, `context.mcpv2` is an `MCPRequestContextV2` with the per-request facilities: `protocolVersion: '2026-07-28'`, `requestId`, `signal`, the request's `_meta`, and request-scoped `log(level, message, data?)` and `progress({ progress, total?, message? })`. `log` and `progress` keep the `@mastra/mcp` 1.x signatures, so a tool that only uses them works unchanged on either version. The legacy `context.mcp` shape is never present on a 2.x server. The `v2` suffix is temporary: the next major release of `@mastra/core` renames it to `context.mcp`.
+Both server versions hand a tool the same `context.mcp` (`MCPToolExecutionContext`): `extra` with the request's `signal`, `requestId`, `authInfo` and `_meta`, plus `log(level, message, data?)` and `progress({ progress, total?, message? })`. A tool that only uses these works unchanged on either version. A 2026-07-28 server also sets `context.mcp.protocolVersion` to `'2026-07-28'`.
+
+The 2026-07-28 protocol removed server-initiated requests, so on a 2.x server the deprecated members `elicitation.sendRequest`, `extra.sendRequest` and `extra.sendNotification` throw with a message naming the replacement instead of doing nothing. A 1.x server keeps providing them as before. To ask the user for input, call `context.suspend()` and read `context.resumeData`.
 
 ### Registration and execution
 

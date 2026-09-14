@@ -8,15 +8,17 @@ import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { standardSchemaToJSONSchema } from '../schema';
 import { createTool } from '../tools';
-import type { InternalCoreTool } from '../tools';
+import type { InternalCoreTool, MCPToolExecutionContext } from '../tools';
 import { makeCoreTool } from '../utils';
 import { Workflow } from '../workflows';
 import { MCPServerBase } from './index';
-import type { MCPRequestContextV2, MCPToolExecutionResultV2 } from './index';
+import type { MCPToolExecutionResultV2 } from './index';
 
 class NativeServer extends MCPServerBase {
   override readonly mcpVersion = 2 as const;
-  // Converts tools the way the 1.x package does, so the mcpv2 context flows through CoreToolBuilder.
+  /** The protocol request the next `executeTool` runs in; a real server derives it from the wire. */
+  currentRequest?: MCPToolExecutionContext;
+  // Converts tools the way the 1.x package does, so `context.mcp` flows through CoreToolBuilder.
   convertTools(tools: ToolsInput) {
     const converted: Record<string, InternalCoreTool> = {};
     for (const [name, tool] of Object.entries(tools)) {
@@ -37,14 +39,14 @@ class NativeServer extends MCPServerBase {
     const tool = this.convertedTools[toolId];
     if (!tool?.execute) throw new Error(`Tool ${toolId} not found`);
     let suspension: { payload: unknown } | undefined;
-    const round = executionContext.mcpv2 ?? request();
+    const mcp = this.currentRequest ?? request();
     const output = await tool.execute(args, {
       // Same idiom as the 1.x package: an empty toolCallId keeps CoreToolBuilder on the MCP path.
       toolCallId: '',
       messages: [],
       requestContext: executionContext.requestContext,
-      abortSignal: round.signal,
-      mcpv2: round,
+      abortSignal: mcp.extra.signal,
+      mcp,
       suspend: async (payload: unknown) => void (suspension = { payload }),
       resumeData: executionContext.resumeData,
       suspendPayload: executionContext.suspendPayload,
@@ -125,13 +127,36 @@ class LegacyServer extends MCPServerBase {
   }
 }
 
-function request(): MCPRequestContextV2 {
+const unavailable = (feature: string) => async (): Promise<never> => {
+  throw new Error(`${feature} is not available on a 2026-07-28 server`);
+};
+
+/** The `context.mcp` a 2026-07-28 server builds: same shape as 1.x, server-initiated requests throw. */
+function request(overrides: Partial<MCPToolExecutionContext> = {}): MCPToolExecutionContext {
+  const signal = new AbortController().signal;
   return {
     protocolVersion: '2026-07-28',
-    requestId: 'round',
-    signal: new AbortController().signal,
+    extra: {
+      signal,
+      requestId: 'round',
+      sendNotification: unavailable('extra.sendNotification'),
+      sendRequest: unavailable('extra.sendRequest'),
+      mcpReq: {
+        id: 'round',
+        method: 'tools/call',
+        requestState: () => undefined,
+        signal,
+        send: unavailable('mcpReq.send'),
+        notify: unavailable('mcpReq.notify'),
+        log: unavailable('mcpReq.log'),
+        elicitInput: unavailable('mcpReq.elicitInput'),
+        requestSampling: unavailable('mcpReq.requestSampling'),
+      },
+    },
+    elicitation: { sendRequest: unavailable('elicitation.sendRequest') },
     log: async () => {},
     progress: async () => {},
+    ...overrides,
   };
 }
 
@@ -257,22 +282,31 @@ describe('MCP v1/v2 registry boundaries', () => {
     expect(mastra.getMCPServerById('shared', 'missing')).toBeUndefined();
   });
 
-  it('passes auth, cancellation, observability and the v2 request context to tools', async () => {
+  it('passes auth, cancellation and the same context.mcp shape as 1.x to tools', async () => {
     const requestContext = new RequestContext();
     requestContext.set('tenant', 'north');
     const round = request();
     const execute = vi.fn(async (_input, received) => {
       expect(received.requestContext.get('tenant')).toBe('north');
-      expect(received.abortSignal).toBe(round.signal);
-      expect(received.mcpv2).toBe(round);
-      expect(received.mcpv2).not.toHaveProperty('suspend');
+      expect(received.abortSignal).toBe(round.extra.signal);
+      expect(received.mcp).toBe(round);
+      expect(received.mcp?.protocolVersion).toBe('2026-07-28');
+      expect(received.mcp?.log).toBeTypeOf('function');
+      expect(received.mcp?.progress).toBeTypeOf('function');
+      // Server-initiated requests no longer exist: the 1.x members stay on the type but throw here.
+      await expect(
+        received.mcp!.elicitation.sendRequest({ message: 'x', requestedSchema: { type: 'object', properties: {} } }),
+      ).rejects.toThrow('elicitation.sendRequest is not available on a 2026-07-28 server');
+      await expect(received.mcp!.extra.sendRequest({ method: 'ping' })).rejects.toThrow('not available');
+      // Suspend/resume is the top-level primitive, not something nested under mcp.
       expect(received.suspend).toBeTypeOf('function');
-      expect(received).not.toHaveProperty('mcp');
+      expect(received.mcp).not.toHaveProperty('suspend');
       return 1;
     });
     const ordinary = createTool({ id: 'ordinary', description: 'Ordinary', execute });
     const server = new NativeServer({ name: 'Modern', version: '2', tools: { ordinary } });
-    expect(await server.executeTool('ordinary', {}, { requestContext, mcpv2: round })).toEqual({
+    server.currentRequest = round;
+    expect(await server.executeTool('ordinary', {}, { requestContext })).toEqual({
       status: 'completed',
       output: 1,
     });
@@ -283,7 +317,7 @@ describe('MCP v1/v2 registry boundaries', () => {
     const confirm = suspendingTool();
     const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
 
-    const first = await server.executeTool('confirm', { amount: 990 }, { mcpv2: request() });
+    const first = await server.executeTool('confirm', { amount: 990 });
     expect(first).toMatchObject({
       status: 'suspended',
       suspendPayload: { phase: 'confirm', amount: 990 },
@@ -294,16 +328,15 @@ describe('MCP v1/v2 registry boundaries', () => {
       'confirm',
       { amount: 990 },
       {
-        mcpv2: request(),
         resumeData: { confirmed: true },
         suspendPayload: { phase: 'confirm', amount: 990 },
       },
     );
     expect(resumed).toEqual({ status: 'completed', output: { charged: 990 } });
 
-    await expect(
-      server.executeTool('confirm', { amount: 990 }, { mcpv2: request(), resumeData: { confirmed: false } }),
-    ).rejects.toThrow('declined');
+    await expect(server.executeTool('confirm', { amount: 990 }, { resumeData: { confirmed: false } })).rejects.toThrow(
+      'declined',
+    );
   });
 
   it('runs tools without a protocol request (REST route) and still surfaces suspension', async () => {
@@ -316,11 +349,7 @@ describe('MCP v1/v2 registry boundaries', () => {
   it('validates the resume data and suspend payload against the declared schemas', async () => {
     const confirm = suspendingTool();
     const server = new NativeServer({ name: 'Modern', version: '2', tools: { confirm } });
-    const invalidResume = await server.executeTool(
-      'confirm',
-      { amount: 1 },
-      { mcpv2: request(), resumeData: { confirmed: 'yes' } },
-    );
+    const invalidResume = await server.executeTool('confirm', { amount: 1 }, { resumeData: { confirmed: 'yes' } });
     expect(invalidResume.status).toBe('completed');
     expect((invalidResume as { output: { error: boolean } }).output).toMatchObject({ error: true });
   });

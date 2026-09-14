@@ -1,4 +1,5 @@
 import type * as http from 'node:http';
+import type { JSONSchema7 } from 'json-schema';
 import type { ToolsInput, Agent } from '../agent';
 import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
 import type { RequestContext } from '../request-context';
@@ -343,3 +344,13 @@ export interface ServerDetailInfo extends ServerInfo {
   /** Information about remote access points for this server. */
   remotes?: RemoteInfo[];
 }
+
+/**
+ * What `executeTool` resolves to on a server with `mcpVersion === 2`. A tool that
+ * calls `context.suspend(payload)` is reported as `suspended` together with the
+ * payload and its `resumeSchema` (as JSON Schema) so the caller can ask for
+ * exactly that input; otherwise the tool's output is returned as `completed`.
+ */
+export type MCPToolExecutionResultV2 =
+  | { status: 'completed'; output: unknown }
+  | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };
