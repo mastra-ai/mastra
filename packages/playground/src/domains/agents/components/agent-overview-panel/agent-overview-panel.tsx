@@ -1,18 +1,17 @@
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Card } from '@mastra/playground-ui/components/Card';
-import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import CodeMirror, { EditorView } from '@uiw/react-codemirror';
-import { Folder, GaugeIcon, Globe } from 'lucide-react';
+import { Boxes, Folder, GaugeIcon, Globe, Radio } from 'lucide-react';
 import { useAgent } from '../../hooks/use-agent';
 import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
 import { useChannelPlatforms } from '../../hooks/use-channels';
@@ -31,6 +30,7 @@ import {
 import { AgentMetadataModelList } from '../agent-metadata/agent-metadata-model-list';
 import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
+import { AgentSystemPrompt } from './agent-system-prompt';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useRouteSidePanel } from '@/lib/route-side-panel';
 
@@ -63,7 +63,6 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
-  const codemirrorTheme = useCodemirrorTheme();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { data: channelPlatforms } = useChannelPlatforms();
 
@@ -102,7 +101,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   return (
     <>
       {agent.modelList && (
-        <AgentMetadataSection title="Models">
+        <AgentMetadataSection title="Models" icon={<Boxes />}>
           <AgentMetadataModelList
             modelList={agent.modelList}
             updateModelInModelList={updateModelInModelList}
@@ -114,7 +113,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {networkAgents.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Agents" count={networkAgents.length} />}
-          icon={<AgentIcon className="text-accent1/80" />}
+          icon={<AgentIcon />}
           hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
         >
           <AgentMetadataNetworkList agents={networkAgents} />
@@ -123,7 +122,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Tools" count={tools.length} />}
-        icon={<ToolsIcon className="text-accent6/80" />}
+        icon={<ToolsIcon />}
         hint={{
           link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
           title: 'Using Tools and MCP documentation',
@@ -134,7 +133,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Workflows" count={workflows.length} />}
-        icon={<WorkflowIcon className="text-accent3/80" />}
+        icon={<WorkflowIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
       >
         <AgentMetadataWorkflowList workflows={workflows} />
@@ -143,7 +142,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {workspaceTools.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Workspace Tools" count={workspaceTools.length} />}
-          icon={<Folder className="text-accent1/80" />}
+          icon={<Folder />}
           hint={{
             link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
             title: 'Workspace tools documentation',
@@ -156,7 +155,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {browserTools.length > 0 && (
         <AgentMetadataSection
           title={<SectionTitleWithCount title="Browser Tools" count={browserTools.length} />}
-          icon={<Globe className="text-badge-cyan/80" />}
+          icon={<Globe />}
           hint={{
             link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
             title: 'Browser tools documentation',
@@ -169,7 +168,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
         <AgentMetadataSection
           title="Processors"
-          icon={<ProcessorIcon className="text-accent5/80" />}
+          icon={<ProcessorIcon />}
           hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
         >
           <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
@@ -178,34 +177,28 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
 
       <AgentMetadataSection
         title={<SectionTitleWithCount title="Skills" count={skills.length} />}
-        icon={<SkillIcon className="text-accent2/80" />}
+        icon={<SkillIcon />}
         hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
       >
         <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Scorers" icon={<GaugeIcon className="text-neutral3" />}>
+      <AgentMetadataSection title="Scorers" icon={<GaugeIcon />}>
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
 
-      <AgentMetadataSection title="Memory">
+      <AgentMetadataSection title="Memory" icon={<MemoryIcon />}>
         <AgentMemoryConfig agentId={agentId} />
       </AgentMetadataSection>
 
       {hasChannels && (
-        <AgentMetadataSection title="Channels">
+        <AgentMetadataSection title="Channels" icon={<Radio />}>
           <AgentChannels agentId={agentId} />
         </AgentMetadataSection>
       )}
 
-      <AgentMetadataSection title="System Prompt">
-        <CodeMirror
-          className="border-border1 rounded-md border"
-          value={extractPrompt(agent.instructions)}
-          editable={false}
-          extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
-          theme={codemirrorTheme}
-        />
+      <AgentMetadataSection title="System Prompt" icon={<PromptIcon />}>
+        <AgentSystemPrompt instructions={extractPrompt(agent.instructions)} />
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
             <Notice.Message>
