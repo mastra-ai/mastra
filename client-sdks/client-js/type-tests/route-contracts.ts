@@ -29,6 +29,15 @@ import type {
   ResponsesResponse,
   RouteRequest,
   RouteResponse,
+  StoredAgentResponse,
+  ListStoredAgentsParams,
+  StoredSkillResponse,
+  ListStoredSkillsResponse,
+  StoredWorkspaceResponse,
+  ListStoredWorkspacesParams,
+  StoredMCPClientResponse,
+  StoredScorerResponse,
+  StoredPromptBlockResponse,
 } from '../src/index.js';
 
 type Equal<Actual, Expected> =
@@ -131,6 +140,27 @@ type _ScoreListInput = Expect<
   ListScoresByRunIdParams extends PathParams<'GET /scores/run/:runId'> & QueryParams<'GET /scores/run/:runId'>
     ? true
     : false
+>;
+type _StoredAgent = Expect<Equal<StoredAgentResponse['id'], RouteResponse<'GET /stored/agents/:storedAgentId'>['id']>>;
+type _StoredAgentListInput = Expect<
+  Equal<ListStoredAgentsParams['favoritedOnly'], QueryParams<'GET /stored/agents'>['favoritedOnly']>
+>;
+type _StoredSkill = Expect<Equal<StoredSkillResponse['id'], RouteResponse<'GET /stored/skills/:storedSkillId'>['id']>>;
+type _StoredSkillList = Expect<Equal<ListStoredSkillsResponse['total'], RouteResponse<'GET /stored/skills'>['total']>>;
+type _StoredWorkspace = Expect<
+  Equal<StoredWorkspaceResponse['id'], RouteResponse<'GET /stored/workspaces/:storedWorkspaceId'>['id']>
+>;
+type _StoredWorkspaceListInput = Expect<
+  Equal<ListStoredWorkspacesParams['page'], QueryParams<'GET /stored/workspaces'>['page']>
+>;
+type _StoredMcpClient = Expect<
+  Equal<StoredMCPClientResponse['id'], RouteResponse<'GET /stored/mcp-clients/:storedMCPClientId'>['id']>
+>;
+type _StoredScorer = Expect<
+  Equal<StoredScorerResponse['id'], RouteResponse<'GET /stored/scorers/:storedScorerId'>['id']>
+>;
+type _StoredPromptBlock = Expect<
+  Equal<StoredPromptBlockResponse['id'], RouteResponse<'GET /stored/prompt-blocks/:storedPromptBlockId'>['id']>
 >;
 
 void scoreRequest;

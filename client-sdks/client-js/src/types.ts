@@ -1036,71 +1036,12 @@ export type StoredAgentDurableConfig =
 /**
  * Stored agent data returned from API
  */
-export interface StoredAgentResponse {
-  // Thin agent record fields
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  author?: ResolvedAuthor;
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  // Version snapshot config fields (resolved from active version)
-  name: string;
-  description?: string;
-  instructions: string | AgentInstructionBlock[];
-  model: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
-  requestContextSchema?: Record<string, unknown>;
-  durable?: StoredAgentDurableConfig;
-  // Favorites (EE feature, present when `favorites` feature is enabled)
-  isFavorited?: boolean;
-  favoriteCount?: number;
-}
+export type StoredAgentResponse = GeneratedResponse<'GET /stored/agents/:storedAgentId'>;
 
 /**
  * Parameters for listing stored agents
  */
-export interface ListStoredAgentsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  status?: 'draft' | 'published' | 'archived';
-  authorId?: string;
-  /**
-   * Restrict the list to public records. Only `'public'` is accepted by the
-   * server filter; private records are surfaced via the default scope-aware
-   * filter (caller's own rows + legacy unowned).
-   */
-  visibility?: 'public';
-  metadata?: Record<string, unknown>;
-  /** When true, only return agents favorited by the caller (or by `pinFavoritedFor`). */
-  favoritedOnly?: boolean;
-  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
-  pinFavoritedFor?: string;
-}
+export type ListStoredAgentsParams = GeneratedRequest<QueryParams<'GET /stored/agents'>>;
 
 /**
  * Response from favorite / unfavorite mutations.
@@ -1113,13 +1054,7 @@ export interface FavoriteToggleResponse {
 /**
  * Response for listing stored agents
  */
-export interface ListStoredAgentsResponse {
-  agents: StoredAgentResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredAgentsResponse = GeneratedResponse<'GET /stored/agents'>;
 
 /**
  * Parameters for cloning an agent to a stored agent
@@ -1143,51 +1078,7 @@ export interface CloneAgentParams {
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
-export interface CreateStoredAgentParams {
-  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
-  id?: string;
-  authorId?: string;
-  /** Visibility of the agent. Defaults to 'private'. */
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  instructions: string | AgentInstructionBlock[];
-  model: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  /** Browser config. `true` = use admin default, `false` = no browser. */
-  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
-  requestContextSchema?: Record<string, unknown>;
-  /**
-   * Run this agent with durable execution once it is hydrated by the server.
-   * Cache and pubsub are inherited from the server's Mastra instance — without
-   * distributed backends durability is process-local.
-   */
-  durable?: StoredAgentDurableConfig;
-  /**
-   * Publish the initial version so the agent resolves at `status: 'published'`.
-   * Defaults to true when omitted. Pass false to stage the agent as an unpublished
-   * draft — useful when overriding a code-defined agent, whose code definition keeps
-   * serving traffic until the override is published.
-   */
-  autoPublish?: boolean;
-}
+export type CreateStoredAgentParams = GeneratedRequest<Body<'POST /stored/agents'>>;
 
 /**
  * Parameters for updating a stored agent
@@ -1202,63 +1093,17 @@ export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
   inspectOnly?: boolean;
 };
 
-export interface ExportStoredAgentResponse {
-  agentId: string;
-  fileName: string;
-  content: string;
-  config: Record<string, unknown>;
-}
+export type ExportStoredAgentResponse = GeneratedResponse<'POST /stored/agents/:storedAgentId/export'>;
 
-export interface OpenStoredAgentChangeRequestResponse {
-  id?: string | number;
-  url: string;
-  ref?: string;
-}
+export type OpenStoredAgentChangeRequestResponse =
+  GeneratedResponse<'POST /stored/agents/:storedAgentId/change-request'>;
 
-export interface UpdateStoredAgentParams {
-  authorId?: string;
-  /** Visibility of the agent. */
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  instructions?: string | AgentInstructionBlock[];
-  model?: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  /** Browser config. `true` = use admin default, `false` = no browser. */
-  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
-  requestContextSchema?: Record<string, unknown>;
-  /** Run this agent with durable execution once it is hydrated by the server. */
-  durable?: StoredAgentDurableConfig;
-  /** Optional message describing the changes for the auto-created version */
-  changeMessage?: string;
-  /** Immediately activate the auto-created version. Defaults to false when omitted. */
-  autoPublish?: boolean;
-}
+export type UpdateStoredAgentParams = GeneratedRequest<Body<'PATCH /stored/agents/:storedAgentId'>>;
 
 /**
  * Response for deleting a stored agent
  */
-export interface DeleteStoredAgentResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredAgentResponse = GeneratedResponse<'DELETE /stored/agents/:storedAgentId'>;
 
 /**
  * A single agent that references another agent as a sub-agent. Includes both
@@ -1275,10 +1120,7 @@ export interface StoredAgentDependent {
  * `hiddenCount` aggregates dependents the caller cannot read; it is only
  * non-zero when the target agent is public.
  */
-export interface StoredAgentDependentsResponse {
-  dependents: StoredAgentDependent[];
-  hiddenCount: number;
-}
+export type StoredAgentDependentsResponse = GeneratedResponse<'GET /stored/agents/:storedAgentId/dependents'>;
 
 // ============================================================================
 // Stored Scorer Definition Types
@@ -1309,110 +1151,32 @@ export type StoredScorerType =
 /**
  * Stored scorer definition data returned from API
  */
-export interface StoredScorerResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  type: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
+export type StoredScorerResponse = GeneratedResponse<'GET /stored/scorers/:storedScorerId'>;
 
 /**
  * Parameters for listing stored scorer definitions
  */
-export interface ListStoredScorersParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredScorersParams = GeneratedRequest<QueryParams<'GET /stored/scorers'>>;
 
 /**
  * Response for listing stored scorer definitions
  */
-export interface ListStoredScorersResponse {
-  scorerDefinitions: StoredScorerResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredScorersResponse = GeneratedResponse<'GET /stored/scorers'>;
 
 /**
  * Parameters for creating a stored scorer definition
  */
-export interface CreateStoredScorerParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  type: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
+export type CreateStoredScorerParams = GeneratedRequest<Body<'POST /stored/scorers'>>;
 
 /**
  * Parameters for updating a stored scorer definition
  */
-export interface UpdateStoredScorerParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  type?: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
+export type UpdateStoredScorerParams = GeneratedRequest<Body<'PATCH /stored/scorers/:storedScorerId'>>;
 
 /**
  * Response for deleting a stored scorer definition
  */
-export interface DeleteStoredScorerResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredScorerResponse = GeneratedResponse<'DELETE /stored/scorers/:storedScorerId'>;
 
 // ============================================================================
 // Stored MCP Client Types
@@ -1433,74 +1197,32 @@ export interface StoredMCPServerConfig {
 /**
  * Stored MCP client data returned from API
  */
-export interface StoredMCPClientResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  servers: Record<string, StoredMCPServerConfig>;
-}
+export type StoredMCPClientResponse = GeneratedResponse<'GET /stored/mcp-clients/:storedMCPClientId'>;
 
 /**
  * Parameters for listing stored MCP clients
  */
-export interface ListStoredMCPClientsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredMCPClientsParams = GeneratedRequest<QueryParams<'GET /stored/mcp-clients'>>;
 
 /**
  * Response for listing stored MCP clients
  */
-export interface ListStoredMCPClientsResponse {
-  mcpClients: StoredMCPClientResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredMCPClientsResponse = GeneratedResponse<'GET /stored/mcp-clients'>;
 
 /**
  * Parameters for creating a stored MCP client
  */
-export interface CreateStoredMCPClientParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  servers: Record<string, StoredMCPServerConfig>;
-}
+export type CreateStoredMCPClientParams = GeneratedRequest<Body<'POST /stored/mcp-clients'>>;
 
 /**
  * Parameters for updating a stored MCP client
  */
-export interface UpdateStoredMCPClientParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  servers?: Record<string, StoredMCPServerConfig>;
-}
+export type UpdateStoredMCPClientParams = GeneratedRequest<Body<'PATCH /stored/mcp-clients/:storedMCPClientId'>>;
 
 /**
  * Response for deleting a stored MCP client
  */
-export interface DeleteStoredMCPClientResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredMCPClientResponse = GeneratedResponse<'DELETE /stored/mcp-clients/:storedMCPClientId'>;
 
 // ============================================================================
 // Agent Version Types
@@ -1907,98 +1629,32 @@ export interface StoredSkillFileNode {
 /**
  * Stored skill data returned from API
  */
-export interface StoredSkillResponse {
-  id: string;
-  status: string;
-  authorId?: string;
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  instructions: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-  // Favorites (EE feature, present when `favorites` feature is enabled)
-  isFavorited?: boolean;
-  favoriteCount?: number;
-}
+export type StoredSkillResponse = GeneratedResponse<'GET /stored/skills/:storedSkillId'>;
 
 /**
  * Parameters for listing stored skills
  */
-export interface ListStoredSkillsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  /**
-   * Restrict the list to public records. Only `'public'` is accepted by the
-   * server filter; private records are surfaced via the default scope-aware
-   * filter (caller's own rows + legacy unowned).
-   */
-  visibility?: 'public';
-  metadata?: Record<string, unknown>;
-  /** When true, only return skills favorited by the caller (or by `pinFavoritedFor`). */
-  favoritedOnly?: boolean;
-  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
-  pinFavoritedFor?: string;
-}
+export type ListStoredSkillsParams = GeneratedRequest<QueryParams<'GET /stored/skills'>>;
 
 /**
  * Response for listing stored skills
  */
-export interface ListStoredSkillsResponse {
-  skills: StoredSkillResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredSkillsResponse = GeneratedResponse<'GET /stored/skills'>;
 
 /**
  * Parameters for creating a stored skill
  */
-export interface CreateStoredSkillParams {
-  id?: string;
-  authorId?: string;
-  /** Visibility of the skill. Defaults to 'private'. */
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  name: string;
-  /** Required by the server: description of what the skill does and when to use it. */
-  description: string;
-  instructions: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-}
+export type CreateStoredSkillParams = GeneratedRequest<Body<'POST /stored/skills'>>;
 
 /**
  * Parameters for updating a stored skill
  */
-export interface UpdateStoredSkillParams {
-  authorId?: string;
-  /** Visibility of the skill. */
-  visibility?: 'private' | 'public';
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  instructions?: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-}
+export type UpdateStoredSkillParams = GeneratedRequest<Body<'PATCH /stored/skills/:storedSkillId'>>;
 
 /**
  * Response for deleting a stored skill
  */
-export interface DeleteStoredSkillResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredSkillResponse = GeneratedResponse<'DELETE /stored/skills/:storedSkillId'>;
 
 // ============================================================================
 // Stored Workspace Types
@@ -2024,55 +1680,17 @@ export interface StoredSandboxConfig {
 /**
  * Stored workspace data returned from API
  */
-export interface StoredWorkspaceResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  filesystem?: StoredFilesystemConfig;
-  sandbox?: StoredSandboxConfig;
-  mounts?: Record<string, StoredFilesystemConfig>;
-  skills?: string[];
-  tools?: {
-    enabled?: boolean;
-    requireApproval?: boolean;
-    tools?: Record<string, { enabled?: boolean; requireApproval?: boolean }>;
-  };
-  autoSync?: boolean;
-  operationTimeout?: number;
-  /** Whether this workspace is registered at runtime (only present in list responses) */
-  runtimeRegistered?: boolean;
-}
+export type StoredWorkspaceResponse = GeneratedResponse<'GET /stored/workspaces/:storedWorkspaceId'>;
 
 /**
  * Parameters for listing stored workspaces
  */
-export interface ListStoredWorkspacesParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredWorkspacesParams = GeneratedRequest<QueryParams<'GET /stored/workspaces'>>;
 
 /**
  * Response for listing stored workspaces
  */
-export interface ListStoredWorkspacesResponse {
-  workspaces: StoredWorkspaceResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredWorkspacesResponse = GeneratedResponse<'GET /stored/workspaces'>;
 
 // ============================================================================
 // Processor Types
@@ -2536,83 +2154,32 @@ export type CompareExperimentsResponse = GeneratedResponse<'POST /datasets/:data
 /**
  * Stored prompt block data returned from API
  */
-export interface StoredPromptBlockResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  hasDraft?: boolean;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  // Version snapshot config fields (resolved from active version)
-  name: string;
-  description?: string;
-  content: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type StoredPromptBlockResponse = GeneratedResponse<'GET /stored/prompt-blocks/:storedPromptBlockId'>;
 
 /**
  * Parameters for listing stored prompt blocks
  */
-export interface ListStoredPromptBlocksParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  status?: 'draft' | 'published' | 'archived';
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredPromptBlocksParams = GeneratedRequest<QueryParams<'GET /stored/prompt-blocks'>>;
 
 /**
  * Response for listing stored prompt blocks
  */
-export interface ListStoredPromptBlocksResponse {
-  promptBlocks: StoredPromptBlockResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredPromptBlocksResponse = GeneratedResponse<'GET /stored/prompt-blocks'>;
 
 /**
  * Parameters for creating a stored prompt block
  */
-export interface CreateStoredPromptBlockParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  content: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type CreateStoredPromptBlockParams = GeneratedRequest<Body<'POST /stored/prompt-blocks'>>;
 
 /**
  * Parameters for updating a stored prompt block
  */
-export interface UpdateStoredPromptBlockParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  content?: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type UpdateStoredPromptBlockParams = GeneratedRequest<Body<'PATCH /stored/prompt-blocks/:storedPromptBlockId'>>;
 
 /**
  * Response for deleting a stored prompt block
  */
-export interface DeleteStoredPromptBlockResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredPromptBlockResponse = GeneratedResponse<'DELETE /stored/prompt-blocks/:storedPromptBlockId'>;
 
 // ============================================================================
 // Prompt Block Version Types
