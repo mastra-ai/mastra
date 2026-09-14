@@ -17,7 +17,9 @@ export function WorkflowSwitcherAction() {
   const { workflowId } = useParams<{ workflowId: string }>();
   if (!workflowId) return null;
 
-  return <WorkflowCombobox value={workflowId} variant="ghost" size="icon-sm" aria-label="Switch workflow" />;
+  return (
+    <WorkflowCombobox value={workflowId} variant="ghost" size="icon-sm" align="end" aria-label="Switch workflow" />
+  );
 }
 
 export function WorkflowRunCrumb() {

@@ -16,6 +16,7 @@ export interface ProcessorComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function ProcessorCombobox({
@@ -29,6 +30,7 @@ export function ProcessorCombobox({
   variant,
   size,
   'aria-label': ariaLabel,
+  align,
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();
@@ -76,6 +78,7 @@ export function ProcessorCombobox({
       variant={variant}
       size={size}
       aria-label={ariaLabel}
+      align={align}
     />
   );
 }

@@ -21,5 +21,5 @@ export function AgentSwitcherAction() {
   const { agentId } = useParams<{ agentId: string }>();
   if (!agentId) return null;
 
-  return <AgentCombobox value={agentId} variant="ghost" size="icon-sm" aria-label="Switch agent" />;
+  return <AgentCombobox value={agentId} variant="ghost" size="icon-sm" align="end" aria-label="Switch agent" />;
 }

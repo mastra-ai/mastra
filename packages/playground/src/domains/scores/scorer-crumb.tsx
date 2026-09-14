@@ -17,7 +17,7 @@ export function ScorerSwitcherAction() {
   const { scorerId } = useParams<{ scorerId: string }>();
   if (!scorerId) return null;
 
-  return <ScorerCombobox value={scorerId} variant="ghost" size="icon-sm" aria-label="Switch scorer" />;
+  return <ScorerCombobox value={scorerId} variant="ghost" size="icon-sm" align="end" aria-label="Switch scorer" />;
 }
 
 export function StoredScorerCrumb() {

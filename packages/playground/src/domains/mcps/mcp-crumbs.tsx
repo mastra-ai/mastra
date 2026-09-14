@@ -17,7 +17,9 @@ export function McpServerSwitcherAction() {
   const { serverId } = useParams<{ serverId: string }>();
   if (!serverId) return null;
 
-  return <MCPServerCombobox value={serverId} variant="ghost" size="icon-sm" aria-label="Switch MCP server" />;
+  return (
+    <MCPServerCombobox value={serverId} variant="ghost" size="icon-sm" align="end" aria-label="Switch MCP server" />
+  );
 }
 
 export function McpServerToolCrumb() {

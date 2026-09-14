@@ -34,6 +34,8 @@ type ComboboxSharedProps = {
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
   'aria-label'?: string;
+  /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
+  align?: 'start' | 'center' | 'end';
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
@@ -85,6 +87,7 @@ export function Combobox(props: ComboboxProps) {
     container,
     error,
     'aria-label': ariaLabel,
+    align = 'start',
     allowCustomValue = false,
     onInputValueChange,
   } = props;
@@ -140,7 +143,7 @@ export function Combobox(props: ComboboxProps) {
 
       <BaseCombobox.Portal container={resolvedContainer}>
         <BaseCombobox.Positioner
-          align="start"
+          align={align}
           sideOffset={4}
           positionMethod={FLOATING_POSITION_METHOD}
           className={comboboxStyles.positioner}

@@ -18,6 +18,7 @@ export interface DatasetComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   'aria-label'?: string;
+  align?: ComboboxProps['align'];
   container?: ComboboxProps['container'];
 }
 
@@ -32,6 +33,7 @@ export function DatasetCombobox({
   variant,
   size,
   'aria-label': ariaLabel,
+  align,
   container,
 }: DatasetComboboxProps) {
   const { data, isLoading, isError, error } = useDatasets();
@@ -71,6 +73,7 @@ export function DatasetCombobox({
       variant={variant}
       size={size}
       aria-label={ariaLabel}
+      align={align}
       container={container}
     />
   );

@@ -21,5 +21,5 @@ export function DatasetSwitcherAction() {
   const { datasetId } = useParams<{ datasetId: string }>();
   if (!datasetId) return null;
 
-  return <DatasetCombobox value={datasetId} variant="ghost" size="icon-sm" aria-label="Switch dataset" />;
+  return <DatasetCombobox value={datasetId} variant="ghost" size="icon-sm" align="end" aria-label="Switch dataset" />;
 }

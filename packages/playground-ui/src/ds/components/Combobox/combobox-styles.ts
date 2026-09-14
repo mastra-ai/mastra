@@ -92,7 +92,7 @@ export const comboboxStyles = {
    * Popup container — shared menu popup, but the search row sits edge-to-edge
    * above the list, so padding/scrolling move to the list itself.
    */
-  popup: cn(menuPopupClass, 'max-h-none w-max max-w-(--available-width) overflow-hidden p-0'),
+  popup: cn(menuPopupClass, 'max-h-none overflow-hidden p-0'),
 
   /** Positioner */
   positioner: cn(menuPositionerClass, 'pointer-events-auto'),
