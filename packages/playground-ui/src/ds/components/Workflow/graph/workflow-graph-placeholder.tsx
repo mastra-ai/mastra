@@ -6,7 +6,7 @@ export type WorkflowGraphPlaceholderProps = { isLoading: true } | { isLoading?: 
 export function WorkflowGraphPlaceholder(props: WorkflowGraphPlaceholderProps) {
   if (props.isLoading) {
     return (
-      <div className="h-full p-4">
+      <div className="p-4">
         <Skeleton className="h-full" />
       </div>
     );

@@ -10,7 +10,7 @@ describe('WorkflowConditionCard', () => {
     it('opens a condition function and closes its dialog', async () => {
       render(<WorkflowConditionCard conditions={[{ type: 'when', fnString: 'input.approved' }]} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'View condition function' }));
+      fireEvent.click(screen.getByText((_, element) => element?.tagName === 'PRE'));
 
       expect(screen.getByRole('dialog', { name: 'Condition Function' })).not.toBeNull();
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
@@ -24,7 +24,9 @@ describe('WorkflowConditionCard', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand condition' }));
 
-      expect(await screen.findByRole('button', { name: 'View condition function' })).not.toBeNull();
+      expect((await screen.findByText((_, element) => element?.tagName === 'PRE')).textContent).toContain(
+        'output.hasMore',
+      );
       expect(screen.getByRole('button', { name: 'Collapse condition' })).not.toBeNull();
     });
   });

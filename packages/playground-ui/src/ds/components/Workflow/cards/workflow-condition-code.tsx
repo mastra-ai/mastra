@@ -20,25 +20,23 @@ export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCo
   <div className="px-3">
     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <button
-          type="button"
+        <pre
           className={cn(
-            'relative w-full cursor-pointer rounded-lg bg-surface4! p-3 text-left font-mono text-ui-sm wrap-break-word whitespace-pre-wrap',
+            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-ui-sm bg-surface4! whitespace-pre-wrap wrap-break-word',
             className,
           )}
-          aria-label="View condition function"
           onClick={onOpen}
           style={style}
         >
           {tokens.map((line, i) => (
-            <span key={i} {...getLineProps({ line })} className="block">
+            <div key={i} {...getLineProps({ line })}>
               <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
               {line.map((token, key) => (
                 <span key={key} {...getTokenProps({ token })} />
               ))}
-            </span>
+            </div>
           ))}
-        </button>
+        </pre>
       )}
     </Highlight>
   </div>

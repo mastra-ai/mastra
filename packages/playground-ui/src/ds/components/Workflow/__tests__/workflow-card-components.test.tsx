@@ -93,7 +93,7 @@ describe('workflow card UI components', () => {
     expect(card.textContent).toContain('input.value > 0');
     expect(screen.getByRole('button', { name: 'Input' })).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'View condition function' }));
+    fireEvent.click(screen.getByText((_, element) => element?.tagName === 'PRE'));
 
     expect(onConditionClick).toHaveBeenCalledTimes(1);
     expect(onConditionClick).toHaveBeenCalledWith(condition);
