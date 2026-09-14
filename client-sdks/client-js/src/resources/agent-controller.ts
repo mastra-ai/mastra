@@ -6,8 +6,9 @@ import type {
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
+import type { StorageListMessagesOutput } from '@mastra/core/storage';
 
+import type { QueryParams, RouteResponse } from '../route-types.generated.js';
 import type {
   AgentControllerActiveRun,
   AgentControllerAvailableModel,
@@ -49,7 +50,10 @@ type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentCont
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 
-type AgentControllerModernListMessagesOptions = Omit<StorageListMessagesInput, 'threadId' | 'resourceId'> & {
+type AgentControllerModernListMessagesOptions = Omit<
+  QueryParams<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'sessionScope' | 'limit'
+> & {
   limit?: never;
 };
 
@@ -71,7 +75,10 @@ export type AgentControllerListMessagesOptions =
 /** A page of hydrated Agent Controller thread messages. */
 export type AgentControllerListMessagesResult = StorageListMessagesOutput;
 
-type SerializedAgentControllerListMessagesResult = Omit<StorageListMessagesOutput, 'messages'> & {
+type SerializedAgentControllerListMessagesResult = Omit<
+  RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages'>,
+  'messages'
+> & {
   messages: SerializedMastraDBMessage[];
 };
 

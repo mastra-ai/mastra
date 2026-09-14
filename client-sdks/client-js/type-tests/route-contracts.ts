@@ -38,6 +38,12 @@ import type {
   StoredMCPClientResponse,
   StoredScorerResponse,
   StoredPromptBlockResponse,
+  BuilderSettingsResponse,
+  InfrastructureStatusResponse,
+  BuilderRegistrySearchResponse,
+  BuilderRegistryInstallBody,
+  AgentControllerSessionState,
+  AgentControllerThreadInfo,
 } from '../src/index.js';
 
 type Equal<Actual, Expected> =
@@ -162,7 +168,25 @@ type _StoredScorer = Expect<
 type _StoredPromptBlock = Expect<
   Equal<StoredPromptBlockResponse['id'], RouteResponse<'GET /stored/prompt-blocks/:storedPromptBlockId'>['id']>
 >;
-
+type _BuilderSettings = Expect<Equal<BuilderSettingsResponse, RouteResponse<'GET /editor/builder/settings'>>>;
+type _BuilderInfrastructure = Expect<
+  Equal<InfrastructureStatusResponse, RouteResponse<'GET /editor/builder/infrastructure'>>
+>;
+type _BuilderRegistrySearch = Expect<
+  Equal<BuilderRegistrySearchResponse, RouteResponse<'GET /editor/builder/registries/:registryId/search'>>
+>;
+type _BuilderRegistryInstall = Expect<
+  BuilderRegistryInstallBody extends Body<'POST /editor/builder/registries/:registryId/install'> ? true : false
+>;
+type _AgentControllerSession = Expect<
+  Equal<AgentControllerSessionState, RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>>
+>;
+type _AgentControllerThread = Expect<
+  Equal<
+    AgentControllerThreadInfo,
+    RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number]
+  >
+>;
 void scoreRequest;
 void createResponse;
 void createConversation;
