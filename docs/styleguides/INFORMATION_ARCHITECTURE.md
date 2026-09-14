@@ -1,1 +1,0 @@
-../../.claude/skills/mastra-docs/references/INFORMATION_ARCHITECTURE.md

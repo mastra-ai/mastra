@@ -1,9 +1,0 @@
-extends: substitution
-message: "Use 'select' or 'open' instead of '%s' for accessibility."
-level: warning
-ignorecase: true
-swap:
-  click: select
-  click on: select
-  clicked: selected
-  clicking: selecting

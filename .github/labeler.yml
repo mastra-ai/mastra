@@ -1,5 +1,0 @@
-# See https://github.com/actions/labeler
-
-Documentation:
-  - changed-files:
-      - any-glob-to-any-file: docs/**

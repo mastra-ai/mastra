@@ -1,6 +1,0 @@
-packages:
-  - '.'
-
-allowBuilds:
-  esbuild: true
-  snyk: false

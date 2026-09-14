@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/mastra/*"],
-      "@custom-lodash/*": ["../../packages/lodash-test/src/*"]
-    }
-  }
-}

@@ -1,8 +1,0 @@
-node_modules
-.env
-.mastra
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
-src/mastra/public/

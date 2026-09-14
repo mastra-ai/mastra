@@ -1,1 +1,0 @@
-../../.mastracode/commands/document.md

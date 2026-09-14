@@ -1,1 +1,0 @@
-../../.claude/skills/mastra-docs/references/AUTHORING_WORKFLOW.md

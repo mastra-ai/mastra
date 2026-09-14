@@ -1,5 +1,0 @@
-{
-  "attachment": ["glm-5.3-flash-fp4", "kimi-k3"],
-  "temperature": ["glm-5.3-flash-fp4", "glm-5.3-fp4", "gpt-oss-120b"],
-  "structuredOutput": ["glm-5.3-flash-fp4", "glm-5.3-fp4", "gpt-oss-120b", "kimi-k3"]
-}

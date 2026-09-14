@@ -1,8 +1,0 @@
-{
-  "extends": "../../../../tsconfig.node.json",
-  "compilerOptions": {
-    "moduleResolution": "bundler"
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", ".mastra"]
-}

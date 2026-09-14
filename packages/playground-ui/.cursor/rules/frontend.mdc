@@ -1,6 +1,0 @@
----
-globs: packages/playground-ui/src/**
-alwaysApply: false
----
-
-AGENTS.md

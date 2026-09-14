@@ -1,8 +1,0 @@
-.docItemContainer header + *,
-.docItemContainer article > *:first-child {
-  margin-top: 0;
-}
-
-.docItemCol {
-  max-width: 100% !important;
-}

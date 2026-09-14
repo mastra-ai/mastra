@@ -1,8 +1,0 @@
-{
-  "name": "@inner/subpath-only",
-  "version": "1.0.0",
-  "type": "module",
-  "exports": {
-    "./value": "./src/value.js"
-  }
-}

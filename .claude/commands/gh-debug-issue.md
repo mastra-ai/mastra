@@ -1,1 +1,0 @@
-../../.mastracode/commands/gh-debug-issue.md

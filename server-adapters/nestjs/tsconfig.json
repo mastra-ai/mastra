@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.node.json",
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  },
-  "include": ["src/**/*", "tsdown.config.ts"],
-  "exclude": ["node_modules", "**/*.test.ts", "src/__tests__/**/*"]
-}

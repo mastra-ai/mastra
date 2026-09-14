@@ -1,5 +1,0 @@
-packages:
-  - '.'
-
-catalog:
-  tsx: ^4.23.1

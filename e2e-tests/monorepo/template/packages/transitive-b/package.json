@@ -1,9 +1,0 @@
-{
-  "name": "@inner/transitive-b",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "src/index.js",
-  "dependencies": {
-    "@inner/transitive-c": "workspace:*"
-  }
-}

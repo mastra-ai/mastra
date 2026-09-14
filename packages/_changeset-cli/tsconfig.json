@@ -1,4 +1,0 @@
-{
-  "extends": "../../tsconfig.node.json",
-  "exclude": ["node_modules", "**/*.test.ts", "src/public/**/*.ts", "dist/**", "eslint.config.js"]
-}
