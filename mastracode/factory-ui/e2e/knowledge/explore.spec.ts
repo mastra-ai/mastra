@@ -93,7 +93,20 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
     if (url.pathname.endsWith('/web/github/subscriptions')) return route.fulfill({ json: { subscriptions: [] } });
     if (url.pathname.endsWith('/knowledge/search')) {
-      return route.fulfill({ json: { results: [], truncated: false } });
+      return route.fulfill({
+        json: {
+          results: [
+            {
+              id: 'payments',
+              name: 'Payments Service',
+              kind: 'service',
+              type: 'node',
+              rung: 'resource',
+            },
+          ],
+          truncated: false,
+        },
+      });
     }
     if (url.pathname.endsWith('/knowledge/scopes')) {
       return route.fulfill({
@@ -299,8 +312,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
 
   // Search results remain above the open details flyout after returning search
   // to the page header.
-  const headerSearch = page.getByRole('textbox', { name: 'Search knowledge' });
-  await headerSearch.fill('zz');
+  const headerSearch = page.getByRole('combobox', { name: 'Search knowledge' });
+  await headerSearch.fill('payments');
   const searchResults = page.getByRole('listbox', { name: 'Knowledge search results' });
   await expect(searchResults).toBeVisible();
   const resultsAreTopmost = await searchResults.evaluate(element => {
@@ -309,7 +322,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     return topmost === element || (topmost !== null && element.contains(topmost));
   });
   expect(resultsAreTopmost).toBe(true);
-  await headerSearch.press('Escape');
+  await headerSearch.press('ArrowDown');
+  await headerSearch.press('Enter');
+  await expect(page).toHaveURL(/node=payments/);
+  await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   // The graph pane must actually have height — a broken flex chain renders
   // nodes at zero height while visibility checks on their text still pass.
@@ -337,10 +353,10 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   // identity scopes and declared structure use one name + kind-chip treatment.
   await page.getByRole('tab', { name: 'explore' }).click();
   const scopeTree = page.getByRole('complementary', { name: 'Knowledge scopes' });
-  const search = page.getByRole('textbox', { name: 'Search knowledge' });
+  const search = page.getByRole('combobox', { name: 'Search knowledge' });
   await expect(search).toBeVisible();
   await expect(search).toHaveAttribute('placeholder', 'Search');
-  await expect(scopeTree.getByRole('textbox', { name: 'Search knowledge' })).toHaveCount(0);
+  await expect(scopeTree.getByRole('combobox', { name: 'Search knowledge' })).toHaveCount(0);
   await expect(scopeTree.getByText('Your access')).toBeHidden();
   await expect(scopeTree.getByText('Knowledge structure')).toBeHidden();
   await expect(scopeTree.getByRole('button', { name: /mastra org 2/ })).toBeVisible();
@@ -360,22 +376,48 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
   );
   await expect(featureScopeNode.getByLabel('3 direct members')).toHaveCount(0);
-  const memoryBadge = page
-    .locator('[data-testid="knowledge-node"][data-node-id="memory-scope"]')
-    .getByLabel('1 direct members');
+  const memoryScopeNode = page.locator('[data-testid="knowledge-node"][data-node-id="memory-scope"]');
+  await expect(memoryScopeNode).toHaveCSS('cursor', 'pointer');
+  const memoryBadge = memoryScopeNode.getByLabel('1 direct members');
   await expect(memoryBadge).toBeVisible();
-  const badgeColors = await memoryBadge.evaluate(element => {
-    const probe = document.createElement('span');
-    probe.style.backgroundColor = 'var(--neutral3)';
-    document.body.append(probe);
-    const colors = {
-      actual: getComputedStyle(element).backgroundColor,
-      expected: getComputedStyle(probe).backgroundColor,
+  const badgeContrast = await memoryBadge.evaluate(element => {
+    const html = document.documentElement;
+    const originalClassName = html.className;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Expected a canvas rendering context');
+
+    const luminance = (cssColor: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = cssColor;
+      context.fillRect(0, 0, 1, 1);
+      const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data;
+      const [linearRed = 0, linearGreen = 0, linearBlue = 0] = [red, green, blue].map(channel => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * linearRed + 0.7152 * linearGreen + 0.0722 * linearBlue;
     };
-    probe.remove();
-    return colors;
+    const measure = () => {
+      const style = getComputedStyle(element);
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    };
+
+    html.classList.remove('light');
+    html.classList.add('dark');
+    const dark = measure();
+    html.classList.remove('dark');
+    html.classList.add('light');
+    const light = measure();
+    html.className = originalClassName;
+    return { dark, light };
   });
-  expect(badgeColors.actual).toBe(badgeColors.expected);
+  expect(badgeContrast.dark).toBeGreaterThanOrEqual(4.5);
+  expect(badgeContrast.light).toBeGreaterThanOrEqual(4.5);
   await featureScopeNode.hover();
   const scopeHover = page.getByTestId('knowledge-hover-card');
   await expect(scopeHover).toContainText('Content nodes1');
