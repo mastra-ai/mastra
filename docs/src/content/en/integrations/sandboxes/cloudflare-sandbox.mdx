@@ -78,6 +78,31 @@ await workspace.sandbox?.writeFiles?.([
 ])
 ```
 
+## Read files
+
+Read a single file back from `/workspace` as raw bytes. Relative paths resolve under `/workspace`, and absolute paths must also resolve within it.
+
+```typescript
+const bytes = await workspace.sandbox?.readFile?.('src/index.ts')
+const source = new TextDecoder().decode(bytes)
+```
+
+## Persist and restore the workspace
+
+`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Store the archive between sessions to resume work after a container sleeps or is recreated.
+
+```typescript
+// Back up before the container can sleep
+const archive = await workspace.sandbox?.persistWorkspace?.({ excludes: ['node_modules'] })
+await myStorage.put('workspace-backup', archive)
+
+// Later, on a fresh or reconnected sandbox
+const archive = await myStorage.get('workspace-backup')
+await workspace.sandbox?.hydrateWorkspace?.(archive)
+```
+
+For bucket mounts and execution sessions, use the corresponding `CloudflareSandboxBridgeClient` methods (`mountBucket`, `unmountBucket`, `createSession`, `deleteSession`) directly.
+
 ## Constructor parameters
 
 <PropertiesTable
