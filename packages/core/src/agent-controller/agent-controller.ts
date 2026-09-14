@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
-import { isUserAuthoredMessage } from '../agent/signals';
+import { isUserAuthoredMessage, mastraDBMessageToSignal } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
@@ -15,7 +15,7 @@ import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import { RequestContext } from '../request-context';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
@@ -1087,6 +1087,105 @@ export class AgentController<TState = {}> {
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
     };
+  }
+
+  #pendingMessageEdits = new Set<string>();
+
+  /**
+   * Start an edited copy of a saved conversation. The original thread and its
+   * effects remain intact. Only messages before the selected user message are
+   * copied; thread summaries are rebuilt and resource memory remains shared.
+   */
+  async editMessage({
+    resourceId,
+    sourceThreadId,
+    messageId,
+    content,
+    newThreadId,
+    newSessionScope,
+    requestContext,
+  }: {
+    resourceId: string;
+    sourceThreadId: string;
+    messageId: string;
+    content: string;
+    newThreadId: string;
+    newSessionScope: string;
+    requestContext?: RequestContext;
+  }): Promise<AgentControllerThread> {
+    if (this.#pendingMessageEdits.has(newThreadId)) throw new Error('Edited thread is already being created');
+    this.#pendingMessageEdits.add(newThreadId);
+    try {
+      if (!content.trim()) throw new Error('The edited message must not be empty');
+      if (!newThreadId || !newSessionScope) throw new Error('An edited copy requires its own thread and session scope');
+      await this.initStorage();
+      const store = await this.getMemoryStorage();
+      const source = await store.getThreadById({ threadId: sourceThreadId });
+      if (!source || source.resourceId !== resourceId) throw new Error('Source thread not found');
+      if (await store.getThreadById({ threadId: newThreadId })) throw new Error('Edited thread already exists');
+      if (await this.getSessionByResource(resourceId, newSessionScope))
+        throw new Error('Edited session already exists');
+      const { messages } = await store.listMessages({
+        threadId: sourceThreadId,
+        resourceId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      const index = messages.findIndex(message => message.id === messageId);
+      const original = messages[index];
+      if (!original || !isUserAuthoredMessage(original)) throw new Error('User message not found');
+      const originalContents = mastraDBMessageToSignal({ ...original, type: 'user' }).contents;
+      const files = typeof originalContents === 'string' ? [] : originalContents.filter(part => part.type === 'file');
+      const { workingMemory: _workingMemory, ...metadata } = source.metadata ?? {};
+      const editedMetadata = { ...metadata, editedFrom: { threadId: sourceThreadId, messageId } };
+      let thread: StorageThreadType;
+      if (index === 0) {
+        // Empty ID filters mean "no filter" in several stores. Create an empty
+        // thread explicitly, so editing the first message never copies the future.
+        const now = new Date();
+        thread = await store.saveThread({
+          thread: {
+            id: newThreadId,
+            resourceId,
+            title: source.title,
+            metadata: editedMetadata,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+      } else {
+        const cloned = await store.cloneThread({
+          sourceThreadId,
+          newThreadId,
+          resourceId,
+          title: source.title,
+          metadata: editedMetadata,
+          options: { messageFilter: { messageIds: messages.slice(0, index).map(message => message.id) } },
+        });
+        thread = cloned.thread;
+      }
+      const context = new RequestContext(requestContext?.entries());
+      context.set(MASTRA_THREAD_ID_KEY, newThreadId);
+      const session = await this.createSession({
+        resourceId,
+        id: newThreadId,
+        ownerId: this.id,
+        scope: newSessionScope,
+        threadId: newThreadId,
+        requestContext: context,
+      });
+      if (session.thread.getId() !== newThreadId) throw new Error('Edited session did not bind the requested thread');
+      await session.sendSignal(
+        {
+          content: [{ type: 'text', text: content }, ...files],
+          requestContext: context,
+        },
+        { requireDelivery: true },
+      ).accepted;
+      return { ...thread, title: thread.title ?? '' };
+    } finally {
+      this.#pendingMessageEdits.delete(newThreadId);
+    }
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
