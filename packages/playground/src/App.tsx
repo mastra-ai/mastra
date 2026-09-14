@@ -37,7 +37,6 @@ import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
 import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
 import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
-import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
 import AgentEvaluate from './pages/agents/agent-evaluate';
@@ -484,7 +483,7 @@ export const routes: RouteObject[] = [
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
           { path: 'threads/:threadId', element: <AgentThread /> },
-          { path: 'overview', element: <Agent /> },
+          { path: 'overview', loader: legacyAgentSettingsLoader },
           { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
             ? [
@@ -496,9 +495,9 @@ export const routes: RouteObject[] = [
           { path: 'traces', element: <AgentTraces /> },
           {
             // Channels is configuration, not a tool tab: it now lives in the
-            // agent settings view. Keep old links working.
+            // agent overview side panel. Keep old links working.
             path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview?tab=channels`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
           },
         ],
       },

@@ -7,39 +7,18 @@ import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import '@/ds/primitives/focus.css';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-/**
- * Select migrated from `@radix-ui/react-select` to Base UI (`@base-ui/react/select`).
- *
- * The public API (`Select`, `SelectGroup`, `SelectValue`, `SelectTrigger`,
- * `SelectContent`, `SelectItem`) is intentionally kept stable so existing
- * consumers do not need changes.
- *
- * Notable behavioral differences vs. Radix that consumers should be aware of:
- * - `onValueChange` now receives a second `eventDetails` argument. Existing
- *   handlers typed as `(value: string) => void` keep working (extra arg ignored).
- * - The dropdown no longer overlaps the trigger by default
- *   (`alignItemWithTrigger={false}`), matching the previous Radix `popper`
- *   positioning behavior.
- *
- * Implementation note: unlike Radix, Base UI's `Select.Value` can only resolve
- * a selected value to its label once the popup has mounted (it reads labels
- * from rendered items). To preserve the Radix behavior where the trigger shows
- * the selected label even while closed, `Select` auto-derives an `items` map
- * from the `SelectItem`s declared inside `SelectContent` and passes it to
- * `Select.Root`. Consumers can still pass an explicit `items` prop to override.
- */
 type SelectItemNode = React.ReactElement<{ value: unknown; children?: React.ReactNode }>;
 
 function isSelectItem(node: React.ReactNode): node is SelectItemNode {
   return React.isValidElement(node) && (node.type as { displayName?: string })?.displayName === 'SelectItem';
 }
 
-/** Recursively collect `{ value, label }` pairs from declared `SelectItem`s. */
 function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; label: React.ReactNode }>): void {
   React.Children.forEach(children, child => {
     if (!React.isValidElement(child)) return;
@@ -55,16 +34,13 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
 type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
-/**
- * `onValueChange` is intentionally narrowed to a non-null value: these selects
- * always hold a value once changed, which keeps existing `(value) => void`
- * consumer handlers valid (Base UI's own callback type is `Value | null`).
- */
+/** Preserves the non-null onValueChange signature used by existing consumers. */
 type SelectProps<Value = string> = Omit<SelectRootProps<Value>, 'onValueChange'> & {
   onValueChange?: (value: Value, eventDetails: SelectChangeDetails) => void;
 };
 
 function Select<Value = string>({ children, items, onValueChange, ...props }: SelectProps<Value>) {
+  // Base UI needs item labels before the popup mounts to display the closed selection.
   const derivedItems = React.useMemo(() => {
     if (items != null) return items;
     const acc: Array<{ value: unknown; label: React.ReactNode }> = [];
@@ -90,24 +66,11 @@ export type SelectValueProps = Omit<SelectPrimitive.Value.Props, 'className'> & 
   className?: string;
 };
 
-/**
- * Displays the selected value. Radix's `Select.Value` took a `placeholder`
- * prop and rendered the selected item's text automatically; Base UI's
- * `Select.Value` behaves the same way (renders the value, falls back to
- * `placeholder` when nothing is selected), so this is a thin passthrough.
- */
 const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ className, ...props }, ref) => (
   <SelectPrimitive.Value ref={ref} className={cn('truncate', className)} {...props} />
 ));
 SelectValue.displayName = 'SelectValue';
 
-/**
- * A select is a form field, so it reuses the same button looks consumers see
- * everywhere: `default` (the Button's filled default surface — the default
- * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
- * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
- * one intentionally NOT offered (a field is not a call-to-action).
- */
 export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
 
@@ -120,6 +83,7 @@ export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'
 function normalizeSelectTriggerVariant(
   variant: SelectTriggerVariant | SelectTriggerLegacyVariant,
 ): SelectTriggerVariant {
+  // Legacy primary stays accepted but renders with form-field emphasis.
   return variant === 'primary' ? 'default' : variant;
 }
 
@@ -131,15 +95,9 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
       <SelectPrimitive.Trigger
         ref={ref}
         data-slot="select-trigger"
-        // A select = a button + a trailing chevron: reuse the Button recipe
-        // (variant colors, size = height/text/padding/radius, unified border
-        // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
-          // Fill the field and push the value left / chevron right (Button's
-          // base centers its content with `justify-center`).
           'w-full justify-between',
-          // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-neutral3',
           '[&>span]:truncate',
@@ -148,13 +106,8 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         {...props}
       >
         {children}
-        {/* `SelectPrimitive.Icon` renders the provided element in place of its
-            default `<span>`, so the chevron would land as a *direct* `<svg>`
-            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
-            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
-            would distort and mis-position it. Wrapping it in a `<span>` keeps
-            the svg one level deep so those rules can't reach it, leaving the
-            chevron pinned at the right edge at its intended size and opacity. */}
+
+        {/* Keep the chevron nested so Button's direct-SVG styles cannot distort it. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
@@ -173,13 +126,8 @@ type SelectContentPositionerProps = Omit<SelectPositionerProps, keyof SelectPopu
 export type SelectContentProps = Omit<SelectPopupProps, 'className'> &
   SelectContentPositionerProps & {
     className?: string;
-    /**
-     * Kept for API compatibility with the previous Radix API. Radix supported
-     * `position="popper" | "item-aligned"`; Base UI always uses popper-style
-     * positioning so this prop is accepted but has no effect.
-     */
+    /** Ignored compatibility prop from Radix; use Base UI positioning props instead. */
     position?: 'popper' | 'item-aligned';
-    /** Optional portal container, forwarded to `Select.Portal`. */
     container?: HTMLElement | null;
   };
 
@@ -207,8 +155,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     },
     ref,
   ) => {
-    // Default to the nearest SideDialog/Drawer popup so the dropdown stays
-    // interactive inside a modal drawer; an explicit `container` still wins.
+    // Keep the popup inside the modal's interaction boundary unless a container overrides it.
     const resolvedContainer = usePortalContainer(container);
     const positionerProps: SelectContentPositionerProps = {
       side,

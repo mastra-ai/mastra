@@ -22,6 +22,8 @@ export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
   /** Key shown in the expand button tooltip when the caller binds a shortcut to `toggle()`. */
   expandShortcut?: string;
+  /** Skip the floating "Expand panel" button when the caller provides its own expand control. */
+  hideExpandButton?: boolean;
   ref?: Ref<CollapsiblePanelHandle>;
 }
 
@@ -30,6 +32,7 @@ export const CollapsiblePanel = ({
   children,
   direction,
   expandShortcut,
+  hideExpandButton = false,
   className,
   onResize,
   style,
@@ -48,10 +51,17 @@ export const CollapsiblePanel = ({
   const internalPanelRef = usePanelRef();
   const panelRef = externalPanelRef ?? internalPanelRef;
 
+  const collapsedThreshold = typeof collapsedSize === 'number' ? collapsedSize : 0;
+  // Read the live size: `isCollapsed` only updates after the library's first `onResize`,
+  // so a toggle fired right after mount would otherwise act on stale state.
+  const isPanelCollapsed = (panel: NonNullable<typeof panelRef.current>) =>
+    panel.getSize().inPixels <= collapsedThreshold;
+
   const collapse = () => {
     const panel = panelRef.current;
     if (!panel) return;
-    sizeBeforeCollapseRef.current = panel.getSize().inPixels;
+    // Never remember a collapsed width as the restore target.
+    if (!isPanelCollapsed(panel)) sizeBeforeCollapseRef.current = panel.getSize().inPixels;
     panel.collapse();
   };
 
@@ -66,7 +76,11 @@ export const CollapsiblePanel = ({
     panel.resize(target);
   };
 
-  const toggle = () => (isCollapsed ? expand() : collapse());
+  const toggle = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    return isPanelCollapsed(panel) ? expand() : collapse();
+  };
 
   useImperativeHandle(ref, () => ({ collapse, expand, toggle }));
 
@@ -102,7 +116,7 @@ export const CollapsiblePanel = ({
         {children}
       </div>
 
-      {isCollapsed && (
+      {isCollapsed && !hideExpandButton && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button

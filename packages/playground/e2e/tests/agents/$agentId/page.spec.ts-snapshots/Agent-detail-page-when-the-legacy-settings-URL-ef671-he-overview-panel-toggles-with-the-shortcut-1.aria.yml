@@ -1,5 +1,4 @@
-- heading "Capabilities" [level=3]
-- paragraph: Everything this agent can call at runtime
+- heading "Overview" [level=2]
 - heading "Agents 1" [level=3]:
   - text: ""
   - link:
@@ -7,7 +6,7 @@
 - list:
   - listitem:
     - link "Sub Agent":
-      - /url: /agents/subAgent/overview
+      - /url: /agents/subAgent/threads/new
       - img
       - text: ""
 - heading "Tools 2" [level=3]:
@@ -42,8 +41,6 @@
 - paragraph: No skills
 - heading "Scorers" [level=3]
 - paragraph: No Scorers
-- heading "System Prompt" [level=3]
-- textbox
 - heading "Memory" [level=3]
 - button "General" [expanded]
 - term: Memory Enabled
@@ -52,3 +49,5 @@
 - definition: /\d+/
 - term: Auto-generate Titles
 - definition: "Yes"
+- heading "System Prompt" [level=3]
+- textbox
