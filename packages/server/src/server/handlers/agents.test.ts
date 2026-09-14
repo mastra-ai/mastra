@@ -316,6 +316,39 @@ describe('getProvidersHandler', () => {
     expect(result.providers).toEqual([]);
   });
 
+  it('should show a provider as connected when a registered gateway authenticates it without an env var', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const oauthGateway = {
+      id: 'oauth-gateway',
+      name: 'OAuth Gateway',
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      resolveAuth: () => ({ bearerToken: 'oauth-token', source: 'gateway' as const }),
+      fetchProviders: vi.fn().mockResolvedValue({
+        'github-copilot': {
+          name: 'GitHub Copilot',
+          models: ['gpt-4.1'],
+          apiKeyEnvVar: '',
+          gateway: 'oauth-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn().mockResolvedValue(''),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const mastra = new Mastra({ gateways: { 'oauth-gateway': oauthGateway } });
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'oauth-gateway/github-copilot')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
+  });
+
   it('should correctly show custom gateway providers as connected', async () => {
     // Mock a custom gateway provider in the registry
     (global as any).__MOCK_PROVIDER_REGISTRY__ = {

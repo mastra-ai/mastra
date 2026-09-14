@@ -11,7 +11,7 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways, GatewayManager } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -319,6 +319,23 @@ export function isProviderConnected(providerId: string, customProviders?: Record
     return envVars.some(envVar => !!process.env[envVar]);
   }
   return envVars.every(envVar => !!process.env[envVar]);
+}
+
+function createProviderConnectionChecker(
+  mastra: Context['mastra'],
+  customProviders?: Record<string, ProviderConfig>,
+): (providerId: string, modelId: string | undefined) => Promise<boolean> {
+  const gatewayManager = new GatewayManager(Object.values(mastra?.listGateways() ?? {}));
+  return async (providerId, modelId) => {
+    if (isProviderConnected(providerId, customProviders)) return true;
+    if (!modelId) return false;
+    try {
+      return await gatewayManager.hasAuth(`${providerId}/${modelId}`);
+    } catch {
+      // hasAuth rethrows real gateway failures; one broken gateway must not empty the catalog
+      return false;
+    }
+  };
 }
 
 export interface SerializedProcessor {
@@ -1746,18 +1763,19 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     }
   }
 
-  return Object.entries(allProviders).map(([id, provider]) => {
-    return {
+  const isConnected = createProviderConnectionChecker(mastra, allProviders);
+  return Promise.all(
+    Object.entries(allProviders).map(async ([id, provider]) => ({
       id,
       name: provider.name,
       label: (provider as any).label || provider.name,
       description: (provider as any).description || '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders),
+      connected: await isConnected(id, provider.models[0]),
       docUrl: provider.docUrl,
       models: [...provider.models],
-    };
-  });
+    })),
+  );
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({
@@ -3507,7 +3525,11 @@ Return your response as JSON with exactly these two fields:
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
 // Helper to find the first model with a connected provider
-async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+async function findConnectedModel(
+  agent: Agent,
+  mastra: Context['mastra'],
+): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  const isConnected = createProviderConnectionChecker(mastra);
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
@@ -3515,7 +3537,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (await isConnected(model.provider, model.modelId)) {
           return model;
         }
       }
@@ -3525,7 +3547,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (await isConnected(defaultModel.provider, defaultModel.modelId)) {
     return defaultModel;
   }
   return null;
@@ -3549,7 +3571,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
       const agent = await getAgentFromSystem({ mastra, agentId });
 
       // Find the first model with a connected provider (similar to how chat works)
-      const model = await findConnectedModel(agent);
+      const model = await findConnectedModel(agent, mastra);
       if (!model) {
         throw new HTTPException(400, {
           message:
