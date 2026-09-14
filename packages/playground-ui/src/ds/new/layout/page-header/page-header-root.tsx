@@ -30,7 +30,7 @@ export function PageHeaderRoot({
     >
       {useLegacyApi ? (
         <>
-          {icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
+          {!isLoading && icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
           <PageHeaderTitle isLoading={isLoading}>{title}</PageHeaderTitle>
           {description !== undefined && (
             <PageHeaderDescription isLoading={isLoading}>{description}</PageHeaderDescription>
