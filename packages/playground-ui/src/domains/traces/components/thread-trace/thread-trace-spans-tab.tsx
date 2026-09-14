@@ -5,7 +5,7 @@ import type { ComponentProps } from 'react';
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
 import { useTraceSpans } from '../../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
-import { TraceTimeline } from '../trace-timeline';
+import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';
 import { THREAD_TRACE_SPANS_TAB } from './thread-trace-row';
 import { useThreadTraceRow } from './thread-trace-row-context';
@@ -72,7 +72,7 @@ export function ThreadTraceSpansTab({
         {...props}
       >
         <div ref={timelineRef} className={cn('px-4 pt-2 pb-4', timelineClassName)}>
-          <TraceTimeline
+          <TraceSpanTree
             hierarchicalSpans={hierarchicalSpans}
             selectedSpanId={selectedSpanId}
             featuredSpanIds={featuredSpanIds}
@@ -84,7 +84,7 @@ export function ThreadTraceSpansTab({
           />
         </div>
         {overflows && isClamped && (
-          <div className="from-surface1 via-surface1/80 absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t to-transparent pb-2">
+          <div className="absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-linear-to-t from-surface1 via-surface1/80 to-transparent pb-2">
             <Button icon={<ChevronDown />} variant="ghost" size="sm" onClick={() => setExpanded(true)}>
               Show more
             </Button>
