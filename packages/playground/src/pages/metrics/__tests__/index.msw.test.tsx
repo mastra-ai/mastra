@@ -164,7 +164,7 @@ describe('Metrics storage support', () => {
   });
 
   describe('when storage capabilities are still loading', () => {
-    it('waits for support before requesting dashboard data', async () => {
+    it('shows a loading state until support allows dashboard requests', async () => {
       let release = () => {};
       const pending = new Promise<void>(resolve => {
         release = resolve;
@@ -182,12 +182,17 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
 
       await waitFor(() => expect(onPackages).toHaveBeenCalled());
-      const metricsWhileLoading = onMetrics.mock.calls.length;
-      const discoveryWhileLoading = onDiscovery.mock.calls.length;
-      await act(async () => release());
+      try {
+        expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Add Filter' }).hasAttribute('disabled')).toBe(true);
+        expect(onMetrics).not.toHaveBeenCalled();
+        expect(onDiscovery).not.toHaveBeenCalled();
+      } finally {
+        await act(async () => release());
+      }
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(metricsWhileLoading).toBe(0);
-      expect(discoveryWhileLoading).toBe(0);
+      expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
       expect(screen.getByText('Total Agent Runs')).toBeTruthy();

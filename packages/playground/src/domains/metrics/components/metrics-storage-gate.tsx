@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { NoDataPageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -19,7 +20,16 @@ const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
 export function MetricsStorageGate({ children }: { children: ReactNode }) {
   const { supportsMetrics, isLoading, error } = useObservabilityStorageCapabilities();
 
-  if (isLoading) return undefined;
+  if (isLoading) {
+    return (
+      <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery} isLoading>
+        <div className="flex h-full items-center justify-center gap-2">
+          <Spinner aria-label="Loading storage capabilities" />
+          <span className="text-ui-sm text-neutral4">Loading storage capabilities</span>
+        </div>
+      </MetricsPageLayout>
+    );
+  }
   if (error) {
     return (
       <NoDataPageLayout>
