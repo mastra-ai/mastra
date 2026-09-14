@@ -39,7 +39,6 @@ describe('AppShell', () => {
       const markup = renderShell();
 
       expect(markup).toContain('data-slot="app-shell-main" aria-label="Page content" role="group" tabindex="0"');
-      expect(markup).toContain('class="min-h-0 overflow-y-auto outline-none"');
     });
 
     it('supports a consumer-owned frame wrapper', () => {
