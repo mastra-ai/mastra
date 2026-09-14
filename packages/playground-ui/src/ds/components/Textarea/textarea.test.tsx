@@ -20,9 +20,9 @@ describe('Textarea', () => {
   });
 
   it.each([
+    ['xs', 'text-ui-xs'],
     ['sm', 'text-ui-sm'],
     ['md', 'text-ui-smd'],
-    ['default', 'text-ui-smd'],
     ['lg', 'text-ui-md'],
   ] as const)('reads at the %s size', (size, expected) => {
     render(<Textarea size={size} placeholder="Description" />);
