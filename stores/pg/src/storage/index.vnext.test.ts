@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createObservabilityVNextTests, normalizeTraceQueryResponse } from '@internal/storage-test-utils';
+import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
 import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { Pool } from 'pg';
@@ -96,10 +97,26 @@ describe('PostgresStoreVNext', () => {
       });
     });
 
-    it('advertises metrics and logs independently of its constructor name', () => {
+    it('advertises trace and thread queries with or without delta polling', () => {
       const observability = store.stores.observability as ObservabilityStoragePostgresVNext;
+      const originalFeatures = new Set(coreFeatures);
 
-      expect(observability.getFeatures()).toEqual(expect.arrayContaining(['metrics', 'logs']));
+      try {
+        coreFeatures.add('observability-delta-polling');
+        expect(observability.getFeatures()).toEqual([
+          'metrics',
+          'logs',
+          'delta-polling',
+          'trace-query',
+          'thread-query',
+        ]);
+
+        coreFeatures.delete('observability-delta-polling');
+        expect(observability.getFeatures()).toEqual(['metrics', 'logs', 'trace-query', 'thread-query']);
+      } finally {
+        coreFeatures.clear();
+        for (const feature of originalFeatures) coreFeatures.add(feature);
+      }
     });
   });
 
@@ -207,6 +224,7 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
       label: 'Postgres vNext',
       preferredStrategy: 'event-sourced',
       traceQuery: true,
+      threadQuery: true,
     },
     cleanup: async storage => {
       await storage.dangerouslyClearAll();

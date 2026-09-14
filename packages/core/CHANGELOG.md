@@ -1,5 +1,83 @@
 # @mastra/core
 
+## 1.67.0-alpha.4
+
+### Minor Changes
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+- Exported `validateToolInput` from `@mastra/core/tools` (alongside the existing `validateToolOutput`) for validating a value against a tool's input schema: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { validateToolInput } from '@mastra/core/tools';
+
+  const { data, error } = validateToolInput(myTool.inputSchema, input, myTool.id);
+  if (error) {
+    // error is a ValidationError describing the schema mismatch
+  }
+  ```
+
+### Patch Changes
+
+- Added persisted error parts for failed agent turns so thread history retains terminal failures. ([#23867](https://github.com/mastra-ai/mastra/pull/23867))
+
+  ```typescript
+  const memory = await agent.getMemory();
+  const { messages } = await memory!.recall({ threadId: 'thread-123', perPage: false });
+
+  for (const message of messages) {
+    for (const part of message.content.parts ?? []) {
+      if (part.type === 'error') {
+        console.error(part.error.name, part.error.message);
+      }
+    }
+  }
+  ```
+
+- Updated Session follow-ups to share the Agent-owned thread queue and pending count across collaborators. Steering retains its abort-then-send behavior without clearing queued follow-ups. Session cleanup preserves submitted messages while cancelling unfinished local preparation. ([#23235](https://github.com/mastra-ai/mastra/pull/23235))
+
+  **Breaking change:** replace `subscribeQueuedMessages({ resourceId, threadId }, listener)` with `subscribeThreadEvents({ resourceId, threadId }, listener)`. The listener now receives a typed event instead of a `{ count }` snapshot:
+
+  ```typescript
+  const unsubscribe = agent.subscribeThreadEvents({ resourceId, threadId }, event => {
+    if (event.type === 'queue-count-changed') {
+      console.log(event.count);
+    }
+  });
+  ```
+
+  This API currently reports only local pending queue counts, not composite thread state or individual message lifecycle events. Explicit cancellation remains available by signal ID or optional queue owner. Observation and cancellation apply only to local pending messages, not running or remote work.
+
+- Reduced TypeScript memory usage for applications that define many tools with Zod schemas. ([#23677](https://github.com/mastra-ai/mastra/pull/23677))
+
+- `summarizeNotifications()` now counts notification sources whose names collide with `Object.prototype` members (for example `__proto__`, `constructor`, `toString`) as ordinary own numeric properties. The per-source and per-priority accumulators are seeded with null-prototype objects, so a `__proto__` source is no longer silently dropped from the summary and `constructor`/`toString` sources no longer produce non-numeric string counts. Fixes #23693. ([#23700](https://github.com/mastra-ai/mastra/pull/23700))
+
+- Honor the configured logger and error strategy when structured output uses a separate model. Handled validation failures now warn through the agent logger or return the configured fallback without misleading error-level console logs. Preserve fallback metadata on structured output results. ([#23849](https://github.com/mastra-ai/mastra/pull/23849))
+
+- Reject non-finite, fractional, and negative numeric pagination inputs while preserving defaults, zero-sized pages, and fetch-all pagination. Throw a clear error when directly creating a subagent tool without any subagent definitions. ([#23846](https://github.com/mastra-ai/mastra/pull/23846))
+
+- Fixed notification delivery policy so a `source` named after a JavaScript `Object.prototype` member (such as `constructor`, `toString`, or `hasOwnProperty`) no longer bypasses your configured `priorities` and `default`. Previously such a source resolved an inherited function and was delivered even when `default: 'discard'` was set. Source and priority lookups now only match keys you explicitly configured. Fixes #23694. ([#23701](https://github.com/mastra-ai/mastra/pull/23701))
+
+- Updated dependencies [[`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac)]:
+  - @mastra/schema-compat@1.3.10-alpha.1
+
 ## 1.67.0-alpha.3
 
 ### Minor Changes

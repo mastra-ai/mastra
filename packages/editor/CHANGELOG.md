@@ -1,5 +1,40 @@
 # @mastra/editor
 
+## 0.15.0-alpha.3
+
+### Minor Changes
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+### Patch Changes
+
+- Preserve code-defined scorers when stored scorer definitions are updated, deleted, or evicted from the Editor cache. Only remove stored-owned runtime registrations at the exact definition key. ([#23837](https://github.com/mastra-ai/mastra/pull/23837))
+
+- Preserve static per-tool workspace settings when hydrating stored workspaces and snapshotting runtime workspaces. Per-tool enablement, approval requirements, and read-before-write controls now round-trip between storage and runtime configuration shapes without being silently dropped. Dynamic settings remain unpersisted. ([#23838](https://github.com/mastra-ai/mastra/pull/23838))
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`d3841b9`](https://github.com/mastra-ai/mastra/commit/d3841b96d7e6dc4ec42d9fc8a4000deb34b7f590), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`88f72e5`](https://github.com/mastra-ai/mastra/commit/88f72e51408ece9f80246b0b7c8beba3bee9f631), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+  - @mastra/mcp@1.18.0-alpha.1
+  - @mastra/schema-compat@1.3.10-alpha.1
+  - @mastra/memory@1.30.0-alpha.3
+
 ## 0.14.6-alpha.2
 
 ### Patch Changes

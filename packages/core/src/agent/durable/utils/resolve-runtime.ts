@@ -193,7 +193,11 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   const registryModel = globalEntry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
   const hasHydratedEntry =
     !!globalEntry && globalEntry.isPlaceholder !== true && !!registryModel && registryModel.__metadataOnly !== true;
-  let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
+  // Prefer the full toolset over `tools`: after the first step `tools` holds the
+  // per-step snapshot the model was shown (possibly narrowed by processors such
+  // as ToolSearchProcessor), and seeding from it would drop every tool the
+  // processors withheld on the previous step (issue #22933).
+  let tools: Record<string, CoreTool> = globalEntry?.baseTools ?? globalEntry?.tools ?? {};
   let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
   let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
   let workspace: Workspace | undefined = globalEntry?.workspace;

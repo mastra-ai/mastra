@@ -1,6 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import * as coreStorage from '@mastra/core/storage';
 import type {
+  QueryThreadsResult,
   TraceQueryCanonicalField,
   TraceQueryFeedbackField,
   TraceQueryField,
@@ -8,6 +9,8 @@ import type {
   TraceQueryResponse,
   TraceQueryScoreField,
   TraceQuerySpanField,
+  TrustedThreadPredicate,
+  TrustedThreadQueryPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryPredicate,
   TrustedTraceQueryScalarPredicate,
@@ -21,6 +24,11 @@ type FieldDefinition = { sql: string; parameterType: ClickHouseParameterType };
 type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type QueryParams = Record<string, string | number>;
 type SqlFragment = { sql: string; params: QueryParams };
+type RelatedCollection = 'spans' | 'scores' | 'feedback';
+type TraceSelection = {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+};
 
 const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
@@ -186,8 +194,8 @@ function compileFeedbackScalarPredicate(
 
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores' | 'feedback'>(),
-): Set<'spans' | 'scores' | 'feedback'> {
+  collections = new Set<RelatedCollection>(),
+): Set<RelatedCollection> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -195,6 +203,21 @@ function collectRelationCollections(
     for (const arg of predicate.args) collectRelationCollections(arg, collections);
   } else if (predicate.type === 'not') {
     collectRelationCollections(predicate.arg, collections);
+  }
+  return collections;
+}
+
+function collectThreadRelationCollections(
+  predicate: TrustedThreadPredicate | undefined,
+  collections: Set<RelatedCollection>,
+): Set<RelatedCollection> {
+  if (!predicate) return collections;
+  if (predicate.type === 'relation') {
+    collectRelationCollections(predicate.predicate, collections);
+  } else if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) collectThreadRelationCollections(arg, collections);
+  } else {
+    collectThreadRelationCollections(predicate.arg, collections);
   }
   return collections;
 }
@@ -233,16 +256,34 @@ function compilePredicate(predicate: TrustedTraceQueryPredicate, parameters: Par
   return compileScalarPredicate(predicate, TRACE_FIELDS, parameters, true);
 }
 
+function compileThreadPredicate(predicate: TrustedThreadPredicate, parameters: ParameterBuilder): string {
+  if (predicate.type === 'relation') {
+    const existence = `EXISTS (
+      SELECT 1 FROM eligible_roots r
+      WHERE r.threadId = t.threadId
+        AND (${compilePredicate(predicate.predicate, parameters)})
+    )`;
+    return predicate.quantifier === 'some' ? existence : `NOT ${existence}`;
+  }
+  if (predicate.type === 'boolean') {
+    const parts = predicate.args.map(arg => `(${compileThreadPredicate(arg, parameters)})`);
+    return parts.join(predicate.operator === 'and' ? ' AND ' : ' OR ');
+  }
+  return `NOT (${compileThreadPredicate(predicate.arg, parameters)})`;
+}
+
 export interface CompiledClickHouseTraceQuery {
   query: string;
   query_params: QueryParams;
 }
 
-export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
-  const parameters = new ParameterBuilder();
-  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
-  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
-  const relationCollections = collectRelationCollections(plan.where);
+function compileClickHouseTraceScope(
+  selection: TraceSelection,
+  relationCollections: Set<RelatedCollection>,
+  parameters: ParameterBuilder,
+): string[] {
+  const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const ctes = [
     `current_roots AS (
     SELECT * FROM (
@@ -334,6 +375,14 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
   )`);
   }
 
+  return ctes;
+}
+
+export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const relationCollections = collectRelationCollections(plan.where);
+  const ctes = compileClickHouseTraceScope(plan, relationCollections, parameters);
+
   const predicate = plan.where ? compilePredicate(plan.where, parameters) : '1';
   ctes.push(`candidates AS (
     SELECT ${TRACE_SELECT}
@@ -373,6 +422,45 @@ SELECT *
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, traceId ASC
+LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
+export function compileClickHouseThreadQuery(plan: TrustedThreadQueryPlan): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const relationCollections = collectRelationCollections(plan.traces.where);
+  collectThreadRelationCollections(plan.where, relationCollections);
+  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters);
+
+  const eligibility = plan.traces.where ? compilePredicate(plan.traces.where, parameters) : '1';
+  ctes.push(`eligible_roots AS (
+    SELECT *
+    FROM root_scope r
+    WHERE ${eligibility}
+  )`);
+  ctes.push(`thread_ids AS (
+    SELECT threadId
+    FROM eligible_roots
+    WHERE isNotNull(threadId)
+    GROUP BY threadId
+  )`);
+
+  const threadPredicate = plan.where ? compileThreadPredicate(plan.where, parameters) : '1';
+  ctes.push(`qualified_threads AS (
+    SELECT t.threadId
+    FROM thread_ids t
+    WHERE ${threadPredicate}
+  )`);
+
+  const pageCondition = plan.cursor ? `WHERE threadId > ${parameters.add(plan.cursor.threadId, 'String')}` : '';
+  const limit = parameters.add(plan.limit + 1, 'UInt64');
+  return {
+    query: `WITH ${ctes.join(',\n')}
+SELECT threadId
+FROM qualified_threads
+${pageCondition}
+ORDER BY threadId ASC
 LIMIT ${limit}`,
     query_params: parameters.params,
   };
@@ -455,6 +543,25 @@ export async function queryTraces(
               sortValue: last[plan.orderBy.field],
               traceId: last.traceId,
             })
+          : null,
+    },
+  });
+}
+
+export async function queryThreads(
+  client: ClickHouseClient,
+  plan: TrustedThreadQueryPlan,
+  timeoutMs: number,
+): Promise<QueryThreadsResult> {
+  const rows = await runWithClickHouseTraceQueryTimeout(client, timeoutMs, compileClickHouseThreadQuery(plan));
+  const threads = rows.slice(0, plan.limit).map(row => ({ threadId: String(row.threadId) }));
+  const last = threads.at(-1);
+  return coreStorage.queryThreadsResultSchema.parse({
+    threads,
+    page: {
+      next:
+        rows.length > plan.limit && last
+          ? coreStorage.encodeTraceQueryCursor(plan, { result: 'threads', threadId: last.threadId })
           : null,
     },
   });

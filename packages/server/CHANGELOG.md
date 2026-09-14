@@ -1,5 +1,41 @@
 # @mastra/server
 
+## 1.67.0-alpha.4
+
+### Minor Changes
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+### Patch Changes
+
+- Scope dataset and experiment listings to a target entity server-side. ([#23869](https://github.com/mastra-ai/mastra/pull/23869))
+
+  - `@mastra/server`: `GET /datasets` accepts `targetType` and `targetIds` query params; `GET /experiments` and `GET /datasets/:datasetId/experiments` accept `targetType` and `targetId`. The filters are forwarded to storage, which already supported them.
+  - `@mastra/client-js`: `listDatasets()`, `listExperiments()` and `listDatasetExperiments()` accept the same target filters.
+  - Studio: the Datasets, Experiments and Review queue pages read `?targetType=` / `?targetId=` from the URL and expose a Target filter in their toolbars, so the global pages can show the same scoped view as an agent's Evaluate / Review tabs.
+
+- Fixed parsing of request bodies supplied as `undefined` to preserve whole-schema defaults and optional values while supporting defaults for bodyless object fields. The empty-object fallback is limited to object schemas, so omitted required record bodies remain invalid. When no fallback succeeds, validation retains the original missing-input error. Explicit null and other falsy JSON values are validated without being replaced. ([#23893](https://github.com/mastra-ai/mastra/pull/23893))
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+
 ## 1.67.0-alpha.3
 
 ### Patch Changes

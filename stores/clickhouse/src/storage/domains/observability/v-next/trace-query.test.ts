@@ -1,21 +1,27 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   encodeTraceQueryCursor,
+  parseQueryThreadsInput,
   parseTraceQueryRequest,
+  planThreadQuery,
   planTraceQuery,
   TraceQueryExecutionError,
 } from '@mastra/core/storage';
-import type { TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';
-import { compileClickHouseTraceQuery, queryTraces } from './trace-query';
+import { compileClickHouseThreadQuery, compileClickHouseTraceQuery, queryThreads, queryTraces } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
 function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
   return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
+}
+
+function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan {
+  return planThreadQuery(parseQueryThreadsInput({ traces: { timeRange: TIME_RANGE }, ...input }));
 }
 
 describe('ClickHouse advanced trace query', () => {
@@ -290,6 +296,88 @@ describe('ClickHouse advanced trace query', () => {
     expect(Object.values(compiled.query_params).at(-1)).toBe(5);
   });
 
+  it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
+    const metadataKey = ` actor'role `;
+    const metadataValue = `clinician' OR TRUE`;
+    const compiled = compileClickHouseThreadQuery(
+      threadPlan({
+        traces: {
+          timeRange: TIME_RANGE,
+          where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+        },
+        where: {
+          op: 'and',
+          args: [
+            {
+              traces: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: `metadata.${metadataKey}` }, right: { literal: metadataValue } },
+                    { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+                  ],
+                },
+              },
+            },
+            {
+              traces: {
+                none: {
+                  feedback: {
+                    some: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        page: { limit: 4 },
+      }),
+    );
+
+    expect(compiled.query.match(/current_spans AS/g)).toHaveLength(1);
+    expect(compiled.query.match(/current_scores AS/g)).toHaveLength(1);
+    expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.query.match(/FROM mastra_trace_roots/g)).toHaveLength(1);
+    expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
+    expect(compiled.query).toContain('eligible_roots AS');
+    expect(compiled.query).toContain('SELECT *\n    FROM root_scope r');
+    expect(compiled.query).toContain('SELECT 1 FROM eligible_roots r');
+    expect(compiled.query).toContain('r.threadId = t.threadId');
+    expect(compiled.query).toContain('NOT EXISTS (');
+    expect(compiled.query).not.toContain(metadataKey);
+    expect(compiled.query).not.toContain(metadataValue);
+    expect(Object.values(compiled.query_params)).toEqual([
+      '2026-01-01 00:00:00.000',
+      '2026-01-02 00:00:00.000',
+      'medication_lookup',
+      metadataKey,
+      metadataValue,
+      0.6,
+      'clinical-review',
+      5,
+    ]);
+  });
+
+  it('applies the thread cursor after qualification and fetches one lookahead row', () => {
+    const first = threadPlan({ page: { limit: 1 } });
+    const after = threadPlan({
+      page: {
+        limit: 1,
+        after: encodeTraceQueryCursor(first, { result: 'threads', threadId: 'thread-1' }),
+      },
+    });
+    const compiled = compileClickHouseThreadQuery(after);
+
+    expect(compiled.query).toContain('FROM qualified_threads\nWHERE threadId > {trace_query_3:String}');
+    expect(compiled.query).toContain('ORDER BY threadId ASC');
+    expect(Object.values(compiled.query_params)).toEqual([
+      '2026-01-01 00:00:00.000',
+      '2026-01-02 00:00:00.000',
+      'thread-1',
+      2,
+    ]);
+  });
+
   it('fails closed when a trusted plan contains an unmapped field', () => {
     const trusted = plan({ where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } });
     const invalid = {
@@ -298,6 +386,20 @@ describe('ClickHouse advanced trace query', () => {
     } as unknown as TrustedTraceQueryPlan;
 
     expect(() => compileClickHouseTraceQuery(invalid)).toThrow('Unsupported trusted trace-query field');
+
+    const thread = threadPlan({
+      where: { traces: { some: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } } } },
+    });
+    const invalidThread = {
+      ...thread,
+      where: {
+        type: 'relation',
+        collection: 'traces',
+        quantifier: 'some',
+        predicate: { type: 'comparison', field: 'rawSql', operator: 'eq', value: 'x' },
+      },
+    } as unknown as TrustedThreadQueryPlan;
+    expect(() => compileClickHouseThreadQuery(invalidThread)).toThrow('Unsupported trusted trace-query field');
   });
 
   it('fails closed when a trusted plan contains an unmapped order field', () => {
@@ -328,6 +430,23 @@ describe('ClickHouse advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+  });
+
+  it('reuses the execution timeout and returns fixed thread identities with a next cursor', async () => {
+    const json = vi.fn().mockResolvedValue([{ threadId: 'thread-1' }, { threadId: 'thread-2' }]);
+    const query = vi.fn().mockResolvedValue({ json });
+
+    const response = await queryThreads(
+      { query } as unknown as ClickHouseClient,
+      threadPlan({ page: { limit: 1 } }),
+      15_000,
+    );
+
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({ clickhouse_settings: expect.objectContaining({ max_execution_time: 15 }) }),
+    );
+    expect(response).toEqual({ threads: [{ threadId: 'thread-1' }], page: { next: expect.any(String) } });
+    expect(Object.keys(response.threads[0]!)).toEqual(['threadId']);
   });
 
   it('normalizes ClickHouse execution timeouts without exposing driver details', async () => {

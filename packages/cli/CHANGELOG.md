@@ -1,5 +1,48 @@
 # mastra
 
+## 1.30.0-alpha.5
+
+### Patch Changes
+
+- Replaced the agent **Overview** tab in Studio with a collapsible side panel. ([#23870](https://github.com/mastra-ai/mastra/pull/23870))
+
+  The models, capabilities (agents, tools, workflows, processors, skills, scorers), memory, channels and system prompt of an agent are now shown in a resizable panel on the right of the Studio frame. Toggle it with the panel button in the top-right header on any agent page (Chat, Editor, Evaluate, Review, Traces); its open state and width are remembered across reloads. Long lists show the first 10 items with a `+N` button to reveal the rest.
+
+  Opening `/agents/:agentId` (and the old `/overview` and `/settings` URLs) now lands on the agent chat.
+
+  Press `]` to toggle the overview panel from the keyboard (tooltips on the header button show the shortcut). The **Share** action in the agent header is now an icon button.
+
+- Added the Studio Workflow Builder backend. Configure the editor with the new `workflowBuilder` option to enable a hidden, editor-owned agent that authors persisted workflow definitions: ([#23493](https://github.com/mastra-ai/mastra/pull/23493))
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { MastraEditor } from '@mastra/editor';
+
+  const mastra = new Mastra({
+    editor: new MastraEditor({
+      workflowBuilder: {
+        enabled: true,
+        model: 'openai/gpt-5.5', // optional, this is the default
+        lastMessages: 100, // optional, raise or lower how much authoring history the agent recalls
+      },
+    }),
+  });
+  ```
+
+  The server exposes two new endpoints for it: `GET /editor/workflow-builder/settings` reports availability and the admin model policy, and `POST /editor/workflow-builder/stream` streams responses from the builder agent. Access is gated by the `stored-workflows:read` and `stored-workflows:write` permissions, and the `stored:<action>` permission umbrella now also matches `stored-workflows:<action>`, so roles granted `stored` access can use the stored-workflow endpoints.
+
+- Added a Delete button to the prompt block editor in Studio so you can remove stored prompt blocks directly from the UI. Previously the delete endpoint existed but no UI consumed it, forcing a manual API call. A confirmation dialog guards against accidental deletion, and you are returned to the prompt blocks list once a block is deleted. Fixes #22356. ([#23703](https://github.com/mastra-ai/mastra/pull/23703))
+
+- Added "go to" keyboard shortcuts in Studio for every sidebar page: press `g` then a letter to jump there. For example, `g` then `a` opens Agents, `g` then `w` opens Workflows, `g` then `t` opens Traces, `g` then `p` opens Prompts, `g` then `l` opens Logs and `g` then `,` opens Settings. Inside an agent page, `g` then `t` opens that agent's traces instead of the global traces page. ([#23831](https://github.com/mastra-ai/mastra/pull/23831))
+
+- Improved the Studio Settings page with a theme toggle and separate rows for the instance URL, API prefix, and request headers. ([#23747](https://github.com/mastra-ai/mastra/pull/23747))
+
+- Improved the Traces page in Studio: "View full thread" now opens the thread's full conversation (every turn with its messages and spans) inside the trace side panel, anchored on the current trace, instead of navigating away to the agent thread page. A "Back to trace" button returns to the trace timeline, and selecting another trace falls back to the trace panel automatically. ([#23900](https://github.com/mastra-ai/mastra/pull/23900))
+
+- Updated dependencies [[`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`df14b5d`](https://github.com/mastra-ai/mastra/commit/df14b5d12374137db86f92061f8714b28473672e), [`fff3361`](https://github.com/mastra-ai/mastra/commit/fff33614a3376676797cb9b5a5c5b090b026fa0e), [`ffe16f1`](https://github.com/mastra-ai/mastra/commit/ffe16f17447449b7155f1f15992e3c9e5f6511ac), [`04c11b3`](https://github.com/mastra-ai/mastra/commit/04c11b3cd698fa37af8fad466dc2bf6fa0d5494d), [`ad5ac69`](https://github.com/mastra-ai/mastra/commit/ad5ac69bcd037bfb85c3399d8b39d9364931ad1b), [`e83dfad`](https://github.com/mastra-ai/mastra/commit/e83dfade569ee5aea688de9f2bb8bf8db0a653a7), [`6bb122c`](https://github.com/mastra-ai/mastra/commit/6bb122c5147b612c0fe7f173f940933066c4cfcc), [`7f6d101`](https://github.com/mastra-ai/mastra/commit/7f6d101044eefc0d776a555b45dbea1c0d5224c4)]:
+  - @mastra/core@1.67.0-alpha.4
+  - @mastra/deployer@1.67.0-alpha.4
+
 ## 1.30.0-alpha.4
 
 ### Minor Changes

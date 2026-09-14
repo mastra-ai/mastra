@@ -13,7 +13,7 @@ export function PageHeaderMeta({ beside = false, className, ...props }: PageHead
       data-placement={beside ? 'beside' : 'below'}
       className={cn(
         'flex min-w-0 flex-wrap items-center gap-2',
-        beside ? 'col-start-2 row-start-1 self-center justify-self-start' : 'col-span-3 col-start-1',
+        beside ? 'col-start-[meta] row-start-1 self-center justify-self-start' : 'col-[title/end]',
         className,
       )}
       {...props}

@@ -1,11 +1,11 @@
 const clients = new Set<ReadableStreamDefaultController>();
 let hotReloadDisabled = false;
 
-export function handleClientsRefreshRequest(abortSignal: AbortSignal): Response {
+export function handleClientsRefreshRequest(abortSignal: AbortSignal, devServerInstanceId?: string): Response {
   const stream = new ReadableStream({
     start(controller) {
       clients.add(controller);
-      controller.enqueue('data: connected\n\n');
+      controller.enqueue(`${devServerInstanceId ? `id: ${devServerInstanceId}\n` : ''}data: connected\n\n`);
 
       abortSignal.addEventListener('abort', () => {
         clients.delete(controller);
