@@ -9,6 +9,7 @@ import type {
   StorageListScorerDefinitionsResolvedOutput,
 } from '@mastra/core/storage';
 
+import { isStoredScorerRegistration } from '../scorer-registry-ownership';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 
@@ -21,7 +22,9 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
   StorageResolvedScorerDefinitionType
 > {
   protected override onCacheEvict(id: string): void {
-    this.mastra?.removeScorer(id);
+    if (isStoredScorerRegistration(this.mastra?.listScorers(), id)) {
+      this.mastra?.removeScorer(id);
+    }
   }
 
   /**

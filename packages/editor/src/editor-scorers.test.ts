@@ -216,6 +216,29 @@ describe('Scorer Definition CRUD (LibSQL)', () => {
     expect(fetched?.instructions).toBe('Rate how helpful the response is.');
   });
 
+  it('should preserve a code-defined scorer when clearing a stored definition with the same ID', async () => {
+    const codeScorer = createScorer({
+      id: 'shared-scorer',
+      description: 'Code-defined scorer',
+    }).generateScore(() => 0.8);
+    mastra = new Mastra({ storage, editor, scorers: { 'shared-scorer': codeScorer } });
+    await storage.init();
+
+    await editor.scorer.create({
+      id: 'shared-scorer',
+      name: 'Stored scorer',
+      type: 'llm-judge',
+      model: { provider: 'openai', name: 'gpt-4' },
+      instructions: 'Stored instructions',
+    });
+
+    expect(mastra.listScorers()['shared-scorer']).toBe(codeScorer);
+
+    editor.scorer.clearCache('shared-scorer');
+
+    expect(mastra.listScorers()['shared-scorer']).toBe(codeScorer);
+  });
+
   it('should create a preset scorer definition and retrieve it', async () => {
     const created = await editor.scorer.create({
       id: 'my-bias-checker',
