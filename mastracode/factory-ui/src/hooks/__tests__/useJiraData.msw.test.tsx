@@ -52,7 +52,14 @@ const readyStatus: JiraStatus = {
   configured: true,
   site: 'acme.atlassian.net',
   sites: ['acme.atlassian.net'],
-  connections: [{ id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' }],
+  connections: [
+    {
+      id: 'a1b_acme',
+      integrationId: 'factory-jira',
+      status: 'active',
+      accountLabel: 'acme.atlassian.net',
+    },
+  ],
   reason: 'ready',
 };
 

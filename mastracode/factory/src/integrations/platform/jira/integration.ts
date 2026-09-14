@@ -63,6 +63,7 @@ interface JiraPageCursor {
 
 const ISSUE_COMMENTS_MAX_PAGES = 20;
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+const PLATFORM_JIRA_PROVIDER_CONFIG_KEY = 'factory-jira';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const JIRA_CONNECTION_TOKEN_PREFIX = 'jira-connection:';
 const JIRA_ISSUE_REF_PREFIX = 'jira-issue:';
@@ -89,17 +90,10 @@ function stateTypeFromCategory(key: string | undefined): string | null {
 
 export interface PlatformJiraIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
-  /**
-   * Deployment-wide Jira connection. Every organization served by this
-   * Factory instance uses this connection, so use a separate deployment for
-   * each Jira tenant.
-   */
-  connectionId?: string;
 }
 
 export class PlatformJiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
-  readonly #connection: PlatformIntegrationConnection;
   readonly #clientConfig: PlatformApiClientConfig;
   readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
@@ -110,17 +104,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: PlatformJiraIntegrationConfig = {}) {
-    const connectionId = config.connectionId?.trim() || process.env.MASTRA_JIRA_CONNECTION_ID?.trim();
-    if (!connectionId) {
-      throw new Error('PlatformJiraIntegration: missing required MASTRA_JIRA_CONNECTION_ID.');
-    }
-
-    this.#connection = {
-      id: connectionId,
-      integrationId: 'mastra-factory-jira',
-      status: 'active',
-      accountLabel: null,
-    };
     this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
     this.#platformClient = new PlatformApiClient(this.#clientConfig);
     this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
@@ -162,11 +145,21 @@ export class PlatformJiraIntegration implements FactoryIntegration {
 
   clearCaches(): void {
     this.#orgIdByResourceId.clear();
+    this.#cloudIdByConnectionId.clear();
     this.#siteUrlByConnectionId.clear();
   }
 
+  async listConnections(): Promise<PlatformIntegrationConnection[]> {
+    const providerKey = encodeURIComponent(PLATFORM_JIRA_PROVIDER_CONFIG_KEY);
+    const result = await this.#platformClient.request<{ connections: PlatformIntegrationConnection[] }>(
+      'GET',
+      `/v2/connections?providerKey=${providerKey}`,
+    );
+    return result.connections;
+  }
+
   async hasActiveConnections(): Promise<boolean> {
-    return true;
+    return (await this.#activeConnections()).length > 0;
   }
 
   readonly intake: Intake = {
@@ -182,7 +175,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   async #resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
     if (externalSource.type !== 'issue') return null;
     const reference = decodeIssueReference(externalSource.externalId);
-    if (!reference || reference.connectionId !== this.#connection.id) return null;
+    if (!reference) return null;
     return {
       connection: jiraConnection(reference.connectionId),
       ...(reference.projectId ? { sourceId: encodeSourceId(reference.connectionId, reference.projectId) } : {}),
@@ -368,10 +361,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     if (connectionId) return { context: await this.#connectionContextById(connectionId), issueId };
     const active = await this.#activeConnections();
     if (active.length !== 1) {
-      throw new JiraApiError(
-        'Jira issue reference must identify a connection when multiple sites are connected.',
-        400,
-      );
+      throw new JiraApiError('Jira issue reference must identify a connection when multiple sites are connected.', 400);
     }
     return { context: await this.#connectionContext(active[0]!), issueId };
   }
@@ -397,14 +387,15 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   async #activeConnections(): Promise<PlatformIntegrationConnection[]> {
-    return [this.#connection];
+    return (await this.listConnections()).filter(connection => connection.status === 'active');
   }
 
   async #connectionContextById(connectionId: string): Promise<JiraConnectionContext> {
-    if (connectionId !== this.#connection.id) {
+    const connection = (await this.#activeConnections()).find(candidate => candidate.id === connectionId);
+    if (!connection) {
       throw new JiraApiError('Jira connection is unavailable or requires reauthentication.', 401);
     }
-    return this.#connectionContext(this.#connection);
+    return this.#connectionContext(connection);
   }
 
   async #cloudId(connectionId: string): Promise<string> {
@@ -545,8 +536,7 @@ function decodePageCursor(cursor: string | undefined): JiraPageCursor {
 function normalizeSiteUrl(value: string): string {
   const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   const url = new URL(candidate);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:')
-    throw new JiraApiError('Jira site URL is invalid.', 502);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new JiraApiError('Jira site URL is invalid.', 502);
   return url.origin;
 }
 

@@ -196,16 +196,14 @@ const linear =
     : undefined;
 
 // Jira Cloud intake. A complete direct Basic-auth credential group takes
-// precedence. Otherwise a Platform credential plus MASTRA_JIRA_CONNECTION_ID
-// routes requests through that deployment-wide Platform connection. Partial
-// configuration leaves Jira disabled so the SPA can report the missing setup.
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `factory-jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
-const jiraConnectionId = process.env.MASTRA_JIRA_CONNECTION_ID?.trim();
 const platformJiraConfigured = Boolean(
-  jiraConnectionId &&
-  (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()),
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
 );
 const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
@@ -215,7 +213,7 @@ const jira =
         apiToken: jiraApiToken,
       })
     : platformJiraConfigured
-      ? new PlatformJiraIntegration({ connectionId: jiraConnectionId })
+      ? new PlatformJiraIntegration()
       : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets

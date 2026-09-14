@@ -3,8 +3,8 @@
  *
  * All requests go to the server's `/web/jira/*` routes, which sit behind the
  * WorkOS auth gate and scope stored intake selections to the caller's
- * organization. Provider requests use the deployment-wide Jira connection
- * configured by `MASTRA_JIRA_CONNECTION_ID` through the integrations v2 proxy.
+ * organization. Provider requests use visible Platform connections discovered
+ * by filtering for the `factory-jira` provider configuration key.
  */
 
 export type JiraStatusReason = 'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';

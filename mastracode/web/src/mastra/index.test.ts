@@ -43,7 +43,6 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
       'MASTRA_PLATFORM_ACCESS_TOKEN',
-      'MASTRA_JIRA_CONNECTION_ID',
       'MASTRA_CLOUD_ACCESS_TOKEN',
       'MASTRA_ENVIRONMENT_ID',
       'DATABASE_URL',
@@ -172,7 +171,6 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'JIRA_BASE_URL',
         'JIRA_EMAIL',
         'JIRA_API_TOKEN',
-        'MASTRA_JIRA_CONNECTION_ID',
         'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
@@ -247,16 +245,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(paths).toContain('/auth/linear/connect');
     });
 
-    it('mounts the disabled Jira status route when the Jira group is partially configured', { timeout: 60_000 }, async () => {
-      vi.resetModules();
-      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
-      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
-      vi.stubEnv('JIRA_API_TOKEN', '');
-      const mod = await import('./index.js');
-      expect(mod.mastra).toBeDefined();
-      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-      expect(paths).toContain('/web/jira/status');
-    });
+    it(
+      'mounts the disabled Jira status route when the Jira group is partially configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+        vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+        vi.stubEnv('JIRA_API_TOKEN', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        expect(paths).toContain('/web/jira/status');
+      },
+    );
 
     it('registers the direct Jira integration when the full group is configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
@@ -272,24 +274,19 @@ describe('platform entry (src/mastra/index.ts)', () => {
       );
     });
 
-    it(
-      'mounts the disabled Jira status route when only a Platform Jira connection id is configured',
-      { timeout: 60_000 },
-      async () => {
-        vi.resetModules();
-        vi.stubEnv('MASTRA_JIRA_CONNECTION_ID', 'jira-connection-id');
-        const mod = await import('./index.js');
-        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
-        expect(paths).toContain('/web/jira/status');
-      },
-    );
+    it('does not register Platform Jira without Platform credentials', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/web/jira/status');
+      expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')).toBeUndefined();
+    });
 
     it(
-      'registers the Platform Jira integration when a connection and Platform credential are configured',
+      'registers Platform Jira for automatic discovery when Platform credentials are configured',
       { timeout: 60_000 },
       async () => {
         vi.resetModules();
-        vi.stubEnv('MASTRA_JIRA_CONNECTION_ID', 'jira-connection-id');
         vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
         const mod = await import('./index.js');
         const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
@@ -302,7 +299,6 @@ describe('platform entry (src/mastra/index.ts)', () => {
 
     it('prefers direct Jira credentials when both Jira configurations are complete', { timeout: 60_000 }, async () => {
       vi.resetModules();
-      vi.stubEnv('MASTRA_JIRA_CONNECTION_ID', 'jira-connection-id');
       vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
       vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
       vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');

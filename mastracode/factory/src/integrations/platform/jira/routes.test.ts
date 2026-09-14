@@ -71,8 +71,15 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
     clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
-    connectionId: 'a1b_acme',
   });
+  vi.spyOn(jira, 'listConnections').mockResolvedValue([
+    {
+      id: 'a1b_acme',
+      integrationId: 'factory-jira',
+      status: 'active',
+      accountLabel: 'acme.atlassian.net',
+    },
+  ]);
   vi.spyOn(jira.intake, 'listSources').mockImplementation(listJiraSources);
   vi.spyOn(jira, 'listActiveIssues').mockImplementation(listActiveJiraIssues as never);
   await seed.intake.saveConfig({
@@ -118,16 +125,36 @@ describe('status route', () => {
     });
   });
 
-  it('reports ready with the configured connection', async () => {
+  it('reports ready with discovered Platform Jira connections', async () => {
     const res = await buildApp(org1()).request('/web/jira/status');
     expect(await res.json()).toEqual({
       enabled: true,
       configured: true,
       mode: 'platform',
-      site: null,
-      sites: [],
+      site: 'acme.atlassian.net',
+      sites: ['acme.atlassian.net'],
+      connections: [
+        {
+          id: 'a1b_acme',
+          integrationId: 'factory-jira',
+          status: 'active',
+          accountLabel: 'acme.atlassian.net',
+        },
+      ],
       reason: 'ready',
       diagnostics: { jiraConfigured: true, factoryAuthEnabled: true, appDbConfigured: true },
+    });
+  });
+
+  it('reports not connected when no active Platform Jira connection is discovered', async () => {
+    vi.mocked(jira.listConnections).mockResolvedValueOnce([]);
+    const res = await buildApp(org1()).request('/web/jira/status');
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      configured: false,
+      mode: 'platform',
+      connections: [],
+      reason: 'not_connected',
     });
   });
 

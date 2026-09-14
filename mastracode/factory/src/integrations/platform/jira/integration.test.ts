@@ -12,13 +12,34 @@ import {
 } from './integration.js';
 
 const PLATFORM_BASE = 'https://integrations.example.com';
-const JIRA_CLOUD_ID = 'a436116f-02ce-4520-8fbb-7301462a1674';
+const ACME_CLOUD_ID = 'a436116f-02ce-4520-8fbb-7301462a1674';
+const BETA_CLOUD_ID = 'b436116f-02ce-4520-8fbb-7301462a1674';
 const connection = { type: 'oauth' as const, accessToken: 'platform-managed' };
 
-function integration(connectionId = 'a1b_acme'): PlatformJiraIntegration {
+const connections = [
+  {
+    id: 'a1b_acme',
+    integrationId: 'factory-jira',
+    status: 'active' as const,
+    accountLabel: 'acme.atlassian.net',
+  },
+  {
+    id: 'a1b_beta',
+    integrationId: 'factory-jira',
+    status: 'active' as const,
+    accountLabel: 'beta.atlassian.net',
+  },
+  {
+    id: 'a1b_reauth',
+    integrationId: 'factory-jira',
+    status: 'needs_reauth' as const,
+    accountLabel: null,
+  },
+];
+
+function integration(): PlatformJiraIntegration {
   return new PlatformJiraIntegration({
     clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
-    connectionId,
   });
 }
 
@@ -46,17 +67,26 @@ function issue(key = 'ENG-42', projectId = '1') {
 
 function stubRoutes(
   routes: Array<[string, string, () => Response]>,
-  cloudId: unknown = JIRA_CLOUD_ID,
+  options: {
+    connections?: typeof connections;
+    cloudIdByConnectionId?: Record<string, unknown>;
+  } = {},
 ): ReturnType<typeof vi.fn> {
+  const visibleConnections = options.connections ?? connections;
+  const cloudIdByConnectionId = options.cloudIdByConnectionId ?? {
+    a1b_acme: ACME_CLOUD_ID,
+    a1b_beta: BETA_CLOUD_ID,
+  };
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const target = String(input);
     const method = init?.method ?? 'GET';
-    if (target.endsWith('/context')) {
-      return json({ connection_config: { cloudId }, metadata: null });
+    if (target.endsWith('/v2/connections?providerKey=factory-jira')) {
+      return json({ connections: visibleConnections });
     }
-    if (target.includes('/rest/api/3/serverInfo')) {
-      const site = target.includes('a1b_beta') ? 'beta' : 'acme';
-      return json({ baseUrl: `https://${site}.atlassian.net` });
+    const contextMatch = target.match(/\/v2\/connections\/([^/]+)\/context$/);
+    if (contextMatch) {
+      const connectionId = decodeURIComponent(contextMatch[1]!);
+      return json({ connection_config: { cloudId: cloudIdByConnectionId[connectionId] }, metadata: null });
     }
     const match = routes.find(([expectedMethod, path]) => expectedMethod === method && target.includes(path));
     if (!match) throw new Error(`Unexpected request: ${method} ${target}`);
@@ -68,129 +98,109 @@ function stubRoutes(
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
-describe('PlatformJiraIntegration construction', () => {
-  it('requires MASTRA_JIRA_CONNECTION_ID when no connection is provided', () => {
-    vi.stubEnv('MASTRA_JIRA_CONNECTION_ID', '');
-    expect(
-      () =>
-        new PlatformJiraIntegration({
-          clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
-        }),
-    ).toThrow(/MASTRA_JIRA_CONNECTION_ID/);
-  });
-
-  it('logs initialization without exposing the connection ID', async () => {
+describe('PlatformJiraIntegration discovery', () => {
+  it('constructs without a connection ID and logs initialization without connection details', async () => {
     const infoLog = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const seed = await createFactoryStorageForTests();
 
-    integration('sensitive-connection-id').initialize({ projects: seed.projects, auth: fakeRouteAuth() });
+    integration().initialize({ projects: seed.projects, auth: fakeRouteAuth() });
 
     const logged = String(infoLog.mock.calls[0]?.[0]);
     expect(logged).toContain('[Mastra Factory] INFO Platform Jira integration initialized');
     expect(logged).toContain('"endpointHost":"integrations.example.com"');
-    expect(logged).not.toContain('sensitive-connection-id');
+    expect(logged).not.toContain('a1b_acme');
   });
 
-  it('uses MASTRA_JIRA_CONNECTION_ID without discovering integrations', async () => {
-    vi.stubEnv('MASTRA_JIRA_CONNECTION_ID', 'connection/1');
-    const fetchMock = stubRoutes([
-      [
-        'GET',
-        'connection%2F1/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/project/search',
-        () => json({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: true }),
-      ],
-    ]);
-    const jira = new PlatformJiraIntegration({
-      clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
-    });
+  it('discovers connections by the factory-jira provider configuration key', async () => {
+    const fetchMock = stubRoutes([]);
 
-    await jira.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-
-    const requestedUrls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(requestedUrls).not.toContain(`${PLATFORM_BASE}/v2/connections`);
-    expect(requestedUrls).toEqual(
-      expect.arrayContaining([
-        `${PLATFORM_BASE}/v2/connections/connection%2F1/context`,
-        expect.stringContaining(
-          `/v2/connections/connection%2F1/proxy/ex/jira/${JIRA_CLOUD_ID}/rest/api/3/project/search`,
-        ),
-      ]),
+    await expect(integration().listConnections()).resolves.toEqual(connections);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`,
     );
   });
 
-  it('rejects a Platform Jira context without a valid cloudId before proxying to Atlassian', async () => {
-    const fetchMock = stubRoutes([], 'not-a-cloud-id');
+  it('reports active connections only when a discovered connection is active', async () => {
+    stubRoutes([], { connections: [connections[2]!] });
+    await expect(integration().hasActiveConnections()).resolves.toBe(false);
+  });
 
-    await expect(
-      integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' }),
-    ).rejects.toMatchObject({
+  it('rejects a Platform Jira context without a valid cloudId before proxying to Atlassian', async () => {
+    const fetchMock = stubRoutes([], { cloudIdByConnectionId: { a1b_acme: 'not-a-cloud-id' } });
+
+    await expect(integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' })).rejects.toMatchObject({
       status: 502,
       message: 'Platform Jira connection context is missing a valid cloudId.',
     } satisfies Partial<JiraApiError>);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      `${PLATFORM_BASE}/v2/connections?providerKey=factory-jira`,
+    );
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });
 
 describe('PlatformJiraIntegration over integrations v2', () => {
-  it('lists projects from the configured Jira connection with site-qualified source ids', async () => {
+  it('lists projects from every active Jira connection with site-qualified source ids', async () => {
     stubRoutes([
       [
         'GET',
-        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/project/search',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/project/search`,
         () => json({ values: [{ id: '1', key: 'ENG', name: 'Engineering' }], startAt: 0, isLast: true }),
+      ],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/project/search`,
+        () => json({ values: [{ id: '2', key: 'OPS', name: 'Operations' }], startAt: 0, isLast: true }),
       ],
     ]);
 
     const sources = await integration().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
 
-    expect(sources).toHaveLength(1);
+    expect(sources).toHaveLength(2);
     expect(decodeSourceId(sources[0]!.id)).toEqual({ connectionId: 'a1b_acme', projectId: '1' });
     expect(sources[0]).toMatchObject({
       name: 'Engineering',
       metadata: { key: 'ENG', connectionId: 'a1b_acme', site: 'acme.atlassian.net' },
     });
+    expect(decodeSourceId(sources[1]!.id)).toEqual({ connectionId: 'a1b_beta', projectId: '2' });
   });
 
-  it('pages selected projects through the configured Jira connection', async () => {
+  it('pages selected projects across multiple Jira connections without mixing credentials', async () => {
     const fetchMock = stubRoutes([
-      ['POST', 'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/search/jql', () => json({ issues: [issue('ENG-42', '1')] })],
+      ['POST', `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/search/jql`, () => json({ issues: [issue()] })],
+      [
+        'POST',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/search/jql`,
+        () => json({ issues: [issue('OPS-7', '2')] }),
+      ],
     ]);
-    const sourceIds = [encodeSourceId('a1b_acme', '1')];
+    const jira = integration();
+    const sourceIds = [encodeSourceId('a1b_acme', '1'), encodeSourceId('a1b_beta', '2')];
 
-    const result = await integration().intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds });
-
-    expect(result.items[0]).toMatchObject({
-      title: 'ENG-42: Issue ENG-42',
-      metadata: { site: 'acme.atlassian.net' },
+    const first = await jira.intake.listItems({ orgId: 'org-1', userId: 'user-1', sourceIds });
+    const second = await jira.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds,
+      cursor: first.nextCursor ?? undefined,
     });
-    expect(result.nextCursor).toBeNull();
-    expect(decodeIssueReference(result.items[0]!.source.externalId)).toEqual({
+
+    expect(first.items[0]).toMatchObject({ title: 'ENG-42: Issue ENG-42', metadata: { site: 'acme.atlassian.net' } });
+    expect(second.items[0]).toMatchObject({ title: 'OPS-7: Issue OPS-7', metadata: { site: 'beta.atlassian.net' } });
+    expect(decodeIssueReference(first.items[0]!.source.externalId)).toEqual({
       connectionId: 'a1b_acme',
       issueId: 'ENG-42',
       projectId: '1',
     });
     const proxyCalls = fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes('/proxy/'));
-    expect(proxyCalls.every(url => url.includes('a1b_acme'))).toBe(true);
-  });
-
-  it('rejects source ids for another connection before making a provider request', async () => {
-    const fetchMock = vi.fn<typeof fetch>();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(
-      integration().intake.listItems({
-        orgId: 'org-1',
-        userId: 'user-1',
-        sourceIds: [encodeSourceId('a1b_beta', '2')],
-      }),
-    ).rejects.toMatchObject({ code: 'jira_auth_failed', status: 401 } satisfies Partial<JiraApiError>);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(proxyCalls[0]).toContain('a1b_acme');
+    expect(proxyCalls[1]).toContain('a1b_beta');
   });
 
   it('sanitizes project and label filters before proxying JQL', async () => {
@@ -206,37 +216,27 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     );
   });
 
-  it('resolves persisted issue references for the configured connection', async () => {
+  it('resolves persisted issue references back to their connection and project', async () => {
     vi.stubGlobal('fetch', vi.fn());
-    const reference = encodeIssueReference({ connectionId: 'a1b_acme', issueId: 'ENG-42', projectId: '1' });
-    await expect(
-      integration().intake.resolveIntakeDispatch?.({
-        orgId: 'org-1',
-        externalSource: { type: 'issue', externalId: reference },
-      }),
-    ).resolves.toEqual({
-      connection: { type: 'oauth', accessToken: 'jira-connection:a1b_acme' },
-      sourceId: encodeSourceId('a1b_acme', '1'),
-      issueId: 'ENG-42',
-    });
-  });
-
-  it('ignores persisted issue references for another connection', async () => {
     const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'OPS-7', projectId: '2' });
     await expect(
       integration().intake.resolveIntakeDispatch?.({
         orgId: 'org-1',
         externalSource: { type: 'issue', externalId: reference },
       }),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({
+      connection: { type: 'oauth', accessToken: 'jira-connection:a1b_beta' },
+      sourceId: encodeSourceId('a1b_beta', '2'),
+      issueId: 'OPS-7',
+    });
   });
 
   it('fetches issue detail and comments through the connection encoded in the issue reference', async () => {
     stubRoutes([
-      ['GET', 'a1b_beta/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/OPS-7?', () => json(issue('OPS-7', '2'))],
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/OPS-7?`, () => json(issue('OPS-7', '2'))],
       [
         'GET',
-        'a1b_beta/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/OPS-7/comment',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/OPS-7/comment`,
         () =>
           json({
             comments: [
@@ -259,7 +259,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     ]);
     const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'OPS-7', projectId: '2' });
 
-    const detail = await integration('a1b_beta').intake.getIssue({ connection, issueId: reference });
+    const detail = await integration().intake.getIssue({ connection, issueId: reference });
 
     expect(detail).toMatchObject({
       identifier: 'OPS-7',
@@ -269,27 +269,22 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     expect(detail?.comments[0]?.body).toBe('Details');
   });
 
-  it('uses the configured connection for an unqualified issue key', async () => {
-    stubRoutes([
-      ['GET', 'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42?', () => json(issue())],
-      [
-        'GET',
-        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42/comment',
-        () => json({ comments: [], startAt: 0, maxResults: 50, total: 0 }),
-      ],
-    ]);
+  it('rejects a connection that was not discovered as active factory-jira', async () => {
+    const fetchMock = stubRoutes([]);
+    const reference = encodeIssueReference({ connectionId: 'a1b_gitlab', issueId: 'OPS-7', projectId: '2' });
 
-    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).resolves.toMatchObject({
-      identifier: 'ENG-42',
-      url: 'https://acme.atlassian.net/browse/ENG-42',
-    });
-  });
-
-  it('rejects an issue reference for a different connection', async () => {
-    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'OPS-7', projectId: '2' });
     await expect(integration().intake.getIssue({ connection, issueId: reference })).rejects.toMatchObject({
       code: 'jira_auth_failed',
       status: 401,
+    } satisfies Partial<JiraApiError>);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unqualified issue key when multiple Jira sites are connected', async () => {
+    stubRoutes([]);
+    await expect(integration().intake.getIssue({ connection, issueId: 'ENG-42' })).rejects.toMatchObject({
+      code: 'jira_request_failed',
+      status: 400,
     } satisfies Partial<JiraApiError>);
   });
 
@@ -297,7 +292,7 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     stubRoutes([
       [
         'POST',
-        'a1b_acme/proxy/ex/jira/a436116f-02ce-4520-8fbb-7301462a1674/rest/api/3/issue/ENG-42/comment',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-42/comment`,
         () => json({ id: 'c-1', created: '2026-07-03T00:00:00Z' }),
       ],
     ]);
