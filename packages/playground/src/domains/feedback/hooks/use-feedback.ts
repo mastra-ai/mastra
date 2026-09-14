@@ -1,9 +1,6 @@
-import {
-  isObservabilityUnavailableError,
-  isUnsupportedObservabilityOperationError,
-} from '@mastra/playground-ui/utils/query-utils';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getFeedbackRefetchInterval } from '../utils/feedback-refetch-interval';
 
 const FEEDBACK_PER_PAGE = 20;
 
@@ -43,15 +40,7 @@ export function useFeedbackInboxCount({ enabled }: { enabled: boolean }) {
         orderBy: { field: 'timestamp', direction: 'DESC' },
       }),
     enabled,
-    refetchInterval: query => {
-      if (
-        isUnsupportedObservabilityOperationError(query.state.error, 'feedback') ||
-        isObservabilityUnavailableError(query.state.error)
-      ) {
-        return false;
-      }
-      return 3000;
-    },
+    refetchInterval: getFeedbackRefetchInterval,
   });
 }
 
