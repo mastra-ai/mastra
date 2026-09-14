@@ -1,12 +1,12 @@
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '../../../../hooks/useRepositorySettings';
 import type { FactoryProject } from '../../workspaces/services/github';
-import { SettingsCard } from './SettingsCard';
+
 import { SettingsSubsection } from './SettingsSubsection';
 
 function CommandInput({
@@ -25,7 +25,6 @@ function CommandInput({
   const [draft, setDraft] = useState<string>();
   const current = draft ?? value;
 
-  // The draft survives a failed save, so a rejected command is still there to retry.
   const commit = () => {
     if (current.trim() === value) {
       setDraft(undefined);
@@ -33,7 +32,7 @@ function CommandInput({
     }
     onCommit(current.trim()).then(
       () => setDraft(undefined),
-      // The mutation's onError already reports it; keeping the draft is the retry.
+
       () => {},
     );
   };
@@ -83,9 +82,8 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
       <Txt as="p" variant="ui-xs" className="text-icon3 font-mono">
         {label}
       </Txt>
-      <SettingsCard>
+      <SettingsContainer>
         <SettingsRow
-          variant="factory"
           label="Setup"
           description="Runs in the repository checkout when the session's sandbox first starts, before the agent."
         >
@@ -99,11 +97,7 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
             />
           </div>
         </SettingsRow>
-        <SettingsRow
-          variant="factory"
-          label="Teardown"
-          description="Runs when the session is retired, and again if setup fails."
-        >
+        <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
           <div className="w-full lg:max-w-96">
             <CommandInput
               label={`Teardown command for ${label}`}
@@ -114,7 +108,7 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
             />
           </div>
         </SettingsRow>
-      </SettingsCard>
+      </SettingsContainer>
     </div>
   );
 }

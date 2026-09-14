@@ -1,6 +1,6 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
@@ -10,7 +10,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { CircleSlashIcon, ChevronLeft, Plus, Paperclip, SearchIcon } from 'lucide-react';
+import { CircleSlashIcon, ChevronLeft, Paperclip, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router';
@@ -881,16 +881,16 @@ export function AgentPlaygroundEvaluate({
                     Attach
                   </Button>
                 )}
-                <Button
+                <CreateButton
                   variant="ghost"
                   size="sm"
+                  tooltip="Create a dataset"
                   onClick={() =>
                     void navigate(`/datasets/new?targetType=agent&targetIds=${encodeURIComponent(agentId)}`)
                   }
-                  icon={<Plus />}
                 >
-                  Create
-                </Button>
+                  New dataset
+                </CreateButton>
               </>
             )}
             {activeTab === 'scorers' && (
@@ -905,9 +905,14 @@ export function AgentPlaygroundEvaluate({
                     Attach
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" onClick={() => setDetailView({ type: 'new-scorer' })} icon={<Plus />}>
-                  New
-                </Button>
+                <CreateButton
+                  variant="ghost"
+                  size="sm"
+                  tooltip="Create a scorer"
+                  onClick={() => setDetailView({ type: 'new-scorer' })}
+                >
+                  New scorer
+                </CreateButton>
               </>
             )}
           </div>

@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "alibaba/deepseek-v4.1-flash",
     "alibaba/kimi-k2.5",
     "alibaba/kimi-k3",
     "alibaba/qwen-max",
@@ -233,6 +234,7 @@
   "temperature": [
     "alibaba/deepseek-v4-flash",
     "alibaba/deepseek-v4-pro",
+    "alibaba/deepseek-v4.1-flash",
     "alibaba/glm-5",
     "alibaba/glm-5.2",
     "alibaba/qwen-coder-plus",

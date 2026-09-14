@@ -37,8 +37,7 @@ function createContext(): { ctx: EventHandlerContext; state: TUIState } {
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
     ui: { requestRender: vi.fn() },
     session: {
-      followUps: { count: vi.fn(() => 0) },
-      displayState: { get: vi.fn(() => ({ isRunning: false })) },
+      displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 0 })) },
     },
     gradientAnimator: undefined,
     activeGoalJudge: undefined,

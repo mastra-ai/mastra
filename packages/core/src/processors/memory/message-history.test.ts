@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import { createSignal } from '../../agent/signals';
+import { recordTerminalErrorMessage } from '../../loop/shared/record-terminal-error-message';
 import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
@@ -696,6 +697,135 @@ describe('MessageHistory', () => {
       });
 
       expect(mockStorage.saveMessages).toHaveBeenCalled();
+    });
+
+    it('should persist a user plus error-only assistant through the ordinary path', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const userMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+        id: 'msg-2',
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add([userMessage], `input`);
+
+      // A terminal failure recorded as an `error` part produces a real assistant
+      // response message, so the input-only orphan guard above no longer applies
+      // and no special empty-message rule is needed.
+      recordTerminalErrorMessage({
+        messageList,
+        attemptId: 'msg-3',
+        activeId: 'msg-3',
+        error: new Error('provider exploded'),
+      });
+
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.all.db(),
+        result: {
+          text: '',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      const saved = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(saved[1]?.id).toBe('msg-3');
+      expect(saved[1]?.content.parts).toEqual([
+        {
+          type: 'error',
+          error: { name: 'Error', message: 'provider exploded' },
+          createdAt: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('should preserve partial parts alongside the persisted error part', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const userMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+        id: 'msg-2',
+        createdAt: new Date(),
+      };
+      const partialAssistant: MastraDBMessage = {
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Partial response' }] },
+        id: 'msg-3',
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add([userMessage], `input`).add([partialAssistant], `response`);
+
+      // The response id rotated after the partial output was stored, so the
+      // error part has to land on the attempt's record instead of a new one.
+      recordTerminalErrorMessage({
+        messageList,
+        attemptId: 'msg-3',
+        activeId: 'msg-rotated',
+        error: new Error('stream broke'),
+      });
+
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.all.db(),
+        result: {
+          text: 'Partial response',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      const saved = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+
+      expect(saved.map(message => message.role)).toEqual(['user', 'assistant']);
+      const assistant = saved.find(message => message.role === 'assistant');
+      expect(assistant?.id).toBe('msg-3');
+      expect(assistant?.content.parts.map(part => part.type)).toEqual(['text', 'error']);
+      expect(assistant?.content.parts.find(part => part.type === 'text')).toMatchObject({ text: 'Partial response' });
+      expect(assistant?.content.parts.find(part => part.type === 'error')).toMatchObject({
+        error: { name: 'Error', message: 'stream broke' },
+      });
     });
 
     it('should filter out ONLY system messages', async () => {

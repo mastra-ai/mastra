@@ -1166,6 +1166,7 @@ export type ProviderModelsMap = {
   readonly 'llmgateway-providers': readonly [
     'alibaba/deepseek-v4-flash',
     'alibaba/deepseek-v4-pro',
+    'alibaba/deepseek-v4.1-flash',
     'alibaba/glm-5',
     'alibaba/glm-5.2',
     'alibaba/kimi-k2.5',
@@ -4534,6 +4535,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.7-Max',
     'Qwen/Qwen3.8-2.4T-A95B',
     'Qwen/Qwen3.8-27B',
+    'Qwen/Qwen3.8-Flash',
     'Qwen/Qwen3.8-Max',
     'XiaomiMiMo/MiMo-V2.5',
     'XiaomiMiMo/MiMo-V2.5-Pro',

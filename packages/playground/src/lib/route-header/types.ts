@@ -18,6 +18,11 @@ interface CrumbBase {
   heading?: string;
   to?: string;
   icon?: RouteHeaderIcon;
+  /**
+   * Hook-driven control rendered next to the crumb label (e.g. an icon-only
+   * entity switcher or a copy button). Mounted in the Crumb `action` slot.
+   */
+  Action?: ComponentType;
 }
 
 export type CrumbDef = CrumbBase &

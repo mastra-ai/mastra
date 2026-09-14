@@ -1,6 +1,7 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { WorkflowClock } from '@mastra/playground-ui/components/Workflow';
 import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
 import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -11,7 +12,6 @@ import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lu
 
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
@@ -135,7 +135,7 @@ export function WorkflowNestedNode({
             variant="ui-lg"
             className="text-neutral6 inline-flex w-full items-center justify-between gap-1 font-medium"
           >
-            {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
+            {label} {step?.startedAt && <WorkflowClock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 

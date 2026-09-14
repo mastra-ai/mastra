@@ -1,10 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import { useMemo } from 'react';
 import type { UISpan } from '../types';
-import { spanTypePrefixes, getSpanTypeUi } from './shared';
-import { TraceTimelineSpan } from './trace-timeline-span';
-import { Spinner } from '@/ds/components/Spinner';
-import { cn } from '@/lib/utils';
+import { TimelineTimingCol } from './timeline-timing-col';
+import { TraceSpanTree } from './trace-span-tree';
 
 type TraceTimelineProps = {
   hierarchicalSpans: UISpan[];
@@ -22,92 +19,25 @@ type TraceTimelineProps = {
   leadingSlot?: ReactNode;
 };
 
-export function TraceTimeline({
-  hierarchicalSpans = [],
-  onSpanClick,
-  selectedSpanId,
-  isLoading,
-  fadedTypes,
-  expandedSpanIds,
-  setExpandedSpanIds,
-  featuredSpanIds,
-  revealSpanId,
-  chartWidth = 'default',
-  leadingSlot,
-}: TraceTimelineProps) {
-  const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
-  const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
-
-  const usedSpanTypes = useMemo(() => {
-    const collectTypes = (spans: UISpan[]): Set<string> => {
-      const types = new Set<string>();
-      for (const span of spans) {
-        const prefix = span.type?.toLowerCase().split('_')[0];
-        if (prefix) types.add(prefix);
-        if (span.spans) {
-          for (const t of collectTypes(span.spans)) types.add(t);
-        }
-      }
-      return types;
-    };
-    const types = collectTypes(hierarchicalSpans);
-    const hasOther = [...types].some(t => !spanTypePrefixes.includes(t));
-    const known = spanTypePrefixes.filter(p => p !== 'other' && types.has(p));
-    if (hasOther) known.push('other');
-    return known;
-  }, [hierarchicalSpans]);
-
+/**
+ * @deprecated Use `TraceSpanTree` (hierarchy with duration) or `TraceSpanTimeline` (time bars).
+ * This renders `TraceSpanTree` with the legacy timing bar as the trailing cell.
+ */
+export function TraceTimeline({ chartWidth = 'default', ...props }: TraceTimelineProps) {
   return (
-    <>
-      {isLoading ? (
-        <div
-          className={cn(
-            'flex items-center justify-center gap-3 rounded-md bg-surface3/50 p-3 text-ui-sm text-neutral3',
-            '[&_svg]:size-[1.25em] [&_svg]:opacity-50',
-          )}
-        >
-          <Spinner /> Loading Trace Timeline ...
-        </div>
-      ) : (
-        <>
-          {leadingSlot && <div className="px-2 pt-1.5">{leadingSlot}</div>}
-          {usedSpanTypes.length > 0 && (
-            <div className="flex flex-wrap items-center justify-end gap-3 px-2 py-1.5">
-              {usedSpanTypes.map(type => {
-                const spanUI = getSpanTypeUi(type);
-                return (
-                  <div key={type} className="text-ui-sm text-neutral3 flex shrink-0 items-center gap-1">
-                    <span
-                      className="inline-block size-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: spanUI?.color }}
-                    />
-                    {spanUI?.label || type}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] content-start items-start gap-y-px overflow-hidden py-1">
-            {hierarchicalSpans?.map(span => (
-              <TraceTimelineSpan
-                key={span.id}
-                span={span}
-                siblings={hierarchicalSpans}
-                onSpanClick={onSpanClick}
-                selectedSpanId={selectedSpanId}
-                overallLatency={overallLatency}
-                overallStartTime={overallStartTime}
-                fadedTypes={fadedTypes}
-                featuredSpanIds={featuredSpanIds}
-                revealSpanId={revealSpanId}
-                expandedSpanIds={expandedSpanIds}
-                setExpandedSpanIds={setExpandedSpanIds}
-                chartWidth={chartWidth}
-              />
-            ))}
-          </div>
-        </>
+    <TraceSpanTree
+      {...props}
+      renderTrailing={ctx => (
+        <TimelineTimingCol
+          span={ctx.span}
+          selectedSpanId={ctx.isSelected ? ctx.span.id : undefined}
+          isFaded={ctx.isFaded}
+          overallLatency={ctx.overallLatency}
+          overallStartTime={ctx.overallStartTime}
+          color={ctx.spanUI?.color}
+          chartWidth={chartWidth}
+        />
       )}
-    </>
+    />
   );
 }
